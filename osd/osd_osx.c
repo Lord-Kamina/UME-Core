@@ -18,7 +18,7 @@
 #include <pthread.h>
 
 #include "osdcore.h"
-#include "sdlsync.h"
+#include "mame/src/osd/modules/sync/osdsync.h"
 
 struct hidden_mutex_t {
 	pthread_mutex_t id;
@@ -49,6 +49,15 @@ struct osd_scalable_lock
 	osd_lock            *lock;
 };
 
+//============================================================
+//  osd_getenv
+//============================================================
+/*
+char *osd_getenv(const char *name)
+{
+	return getenv(name);
+}
+*/
 //============================================================
 //   osd_ticks
 //============================================================
@@ -452,15 +461,6 @@ void osd_free(void *ptr)
 #else
 #error "MALLOC_DEBUG not yet supported"
 #endif
-}
-
-//============================================================
-//  osd_getenv
-//============================================================
-
-char *osd_getenv(const char *name)
-{
-	return getenv(name);
 }
 
 //============================================================
