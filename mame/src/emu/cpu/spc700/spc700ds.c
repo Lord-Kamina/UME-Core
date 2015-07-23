@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Karl Stenerud
 /* ======================================================================== */
 /* =============================== COPYRIGHT ============================== */
 /* ======================================================================== */
@@ -8,11 +10,6 @@ SPC700 CPU Emulator V0.90
 Copyright Karl Stenerud
 All rights reserved.
 
-Permission is granted to use this source code for non-commercial purposes.
-To use this code for commercial purposes, you must get permission from the
-author (Karl Stenerud) at karl@higashiyama-unet.ocn.ne.jp.
-
-
 */
 
 #include "emu.h"
@@ -20,7 +17,7 @@ author (Karl Stenerud) at karl@higashiyama-unet.ocn.ne.jp.
 
 
 
-struct opcode_struct
+struct spc700_opcode_struct
 {
 	unsigned char name;
 	unsigned char args[2];
@@ -63,7 +60,7 @@ static const char *const g_opnames[] =
 	"TCLR1", "TSET1", "XCN  "
 };
 
-static const opcode_struct g_opcodes[256] =
+static const spc700_opcode_struct g_opcodes[256] =
 {
 /* 00 */ {NOP    , {IMP , IMP }},
 /* 01 */ {TCALL  , {N0  , IMP }},
@@ -80,7 +77,7 @@ static const opcode_struct g_opcodes[256] =
 /* 0C */ {ASL    , {ABS , IMP }},
 /* 0D */ {PUSH   , {PSW , IMP }},
 /* 0E */ {TSET1  , {ABS , IMP }},
-/* 0F */ {BRK    , {IMM , IMP }},
+/* 0F */ {BRK    , {IMP , IMP }},
 /* 10 */ {BPL    , {REL , IMP }},
 /* 11 */ {TCALL  , {N1  , IMP }},
 /* 12 */ {CLR1   , {DP0 , IMP }},
@@ -342,7 +339,7 @@ INLINE unsigned int read_16_immediate(void)
 
 CPU_DISASSEMBLE( spc700 )
 {
-	const opcode_struct* opcode;
+	const spc700_opcode_struct* opcode;
 	UINT32 flags = 0;
 	char* ptr;
 	int var;
@@ -360,7 +357,14 @@ CPU_DISASSEMBLE( spc700 )
 	else if (opcode->name == RET || opcode->name == RETI)
 		flags = DASMFLAG_STEP_OUT;
 
-	for(i=0;i<2;i++)
+	if (opcode->args[0] == DP && (opcode->args[1] == DP || opcode->args[1] == IMM))
+	{
+		int src = read_8_immediate();
+		int dst = read_8_immediate();
+		sprintf(ptr, "$%02x,%s$%02x", dst, (opcode->args[1] == IMM ? "#" : ""), src);
+		ptr += strlen(ptr);
+	}
+	else for(i=0;i<2;i++)
 	{
 		if(i == 1 && opcode->args[0] != IMP && opcode->args[1] != IMP)
 		{

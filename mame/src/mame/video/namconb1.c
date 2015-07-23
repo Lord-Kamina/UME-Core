@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
 /* video/namconb1.c */
 
 #include "emu.h"
@@ -71,61 +73,30 @@ NB2TilemapCB(running_machine &machine, UINT16 code, int *tile, int *mask )
 	}
 } /* NB2TilemapCB */
 
-static void namconb1_install_palette(running_machine &machine)
-{
-	namconb1_state *state = machine.driver_data<namconb1_state>();
-	int pen, page, dword_offset, byte_offset;
-	UINT32 r,g,b;
-	UINT32 *pSource;
-
-	/**
-	 * This is unnecessarily expensive.  Better would be to mark palette entries dirty as
-	 * they are modified, and only process those that have changed.
-	 */
-	pen = 0;
-	for( page=0; page<4; page++ )
-	{
-		pSource = &state->m_generic_paletteram_32[page*0x2000/4];
-		for( dword_offset=0; dword_offset<0x800/4; dword_offset++ )
-		{
-			r = pSource[dword_offset+0x0000/4];
-			g = pSource[dword_offset+0x0800/4];
-			b = pSource[dword_offset+0x1000/4];
-
-			for( byte_offset=0; byte_offset<4; byte_offset++ )
-			{
-				palette_set_color_rgb( machine, pen++, r>>24, g>>24, b>>24 );
-				r<<=8; g<<=8; b<<=8;
-			}
-		}
-	}
-} /* namconb1_install_palette */
-
 static void
-video_update_common(running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect, int bROZ )
+video_update_common(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int bROZ )
 {
-	namconb1_state *state = machine.driver_data<namconb1_state>();
+	namconb1_state *state = screen.machine().driver_data<namconb1_state>();
 	int pri;
-	namconb1_install_palette(machine);
 
 	if( bROZ )
 	{
 		for( pri=0; pri<16; pri++ )
 		{
-			state->c169_roz_draw(bitmap, cliprect, pri);
+			state->c169_roz_draw(screen, bitmap, cliprect, pri);
 			if( (pri&1)==0 )
 			{
-				namco_tilemap_draw( bitmap, cliprect, pri/2 );
+				namco_tilemap_draw( screen, bitmap, cliprect, pri/2 );
 			}
-			state->c355_obj_draw(bitmap, cliprect, pri );
+			state->c355_obj_draw(screen, bitmap, cliprect, pri );
 		}
 	}
 	else
 	{
 		for( pri=0; pri<8; pri++ )
 		{
-			namco_tilemap_draw( bitmap, cliprect, pri );
-			state->c355_obj_draw(bitmap, cliprect, pri );
+			namco_tilemap_draw( screen, bitmap, cliprect, pri );
+			state->c355_obj_draw(screen, bitmap, cliprect, pri );
 		}
 	}
 } /* video_update_common */
@@ -137,18 +108,16 @@ UINT32 namconb1_state::screen_update_namconb1(screen_device &screen, bitmap_ind1
 	/* compute window for custom screen blanking */
 	rectangle clip;
 	//004a 016a 0021 0101 0144 0020 (nebulas ray)
-	UINT32 xclip = m_generic_paletteram_32[0x1800/4];
-	UINT32 yclip = m_generic_paletteram_32[0x1804/4];
-	clip.min_x = (xclip>>16)    - 0x4a;
-	clip.max_x = (xclip&0xffff) - 0x4a - 1;
-	clip.min_y = (yclip>>16)    - 0x21;
-	clip.max_y = (yclip&0xffff) - 0x21 - 1;
+	clip.min_x = m_c116->get_reg(0) - 0x4a;
+	clip.max_x = m_c116->get_reg(1) - 0x4a - 1;
+	clip.min_y = m_c116->get_reg(2) - 0x21;
+	clip.max_y = m_c116->get_reg(3) - 0x21 - 1;
 	/* intersect with master clip rectangle */
 	clip &= cliprect;
 
-	bitmap.fill(get_black_pen(machine()), cliprect );
+	bitmap.fill(m_palette->black_pen(), cliprect );
 
-	video_update_common( machine(), bitmap, clip, 0 );
+	video_update_common( screen, bitmap, clip, 0 );
 
 	return 0;
 }
@@ -174,23 +143,21 @@ UINT32 namconb1_state::screen_update_namconb2(screen_device &screen, bitmap_ind1
 	/* compute window for custom screen blanking */
 	rectangle clip;
 	//004a016a 00210101 01440020
-	UINT32 xclip = m_generic_paletteram_32[0x1800/4];
-	UINT32 yclip = m_generic_paletteram_32[0x1804/4];
-	clip.min_x = (xclip>>16)    - 0x4b;
-	clip.max_x = (xclip&0xffff) - 0x4b - 1;
-	clip.min_y = (yclip>>16)    - 0x21;
-	clip.max_y = (yclip&0xffff) - 0x21 - 1;
+	clip.min_x = m_c116->get_reg(0) - 0x4b;
+	clip.max_x = m_c116->get_reg(1) - 0x4b - 1;
+	clip.min_y = m_c116->get_reg(2) - 0x21;
+	clip.max_y = m_c116->get_reg(3) - 0x21 - 1;
 	/* intersect with master clip rectangle */
 	clip &= cliprect;
 
-	bitmap.fill(get_black_pen(machine()), cliprect );
+	bitmap.fill(m_palette->black_pen(), cliprect );
 
 	if( memcmp(m_tilemap_tile_bank,m_tilebank32,sizeof(m_tilemap_tile_bank))!=0 )
 	{
 		namco_tilemap_invalidate();
 		memcpy(m_tilemap_tile_bank,m_tilebank32,sizeof(m_tilemap_tile_bank));
 	}
-	video_update_common( machine(), bitmap, clip, 1 );
+	video_update_common( screen, bitmap, clip, 1 );
 	return 0;
 }
 

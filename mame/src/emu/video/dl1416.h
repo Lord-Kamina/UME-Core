@@ -1,8 +1,8 @@
+// license:GPL-2.0+
+// copyright-holders:Dirk Best
 /*****************************************************************************
  *
- * video/dl1416.h
- *
- * DL1416
+ *  DL1416
  *
  * 4-Digit 16-Segment Alphanumeric Intelligent Display
  * with Memory/Decoder/Driver
@@ -14,58 +14,48 @@
 #ifndef DL1416_H_
 #define DL1416_H_
 
-#include "devcb.h"
-
-/***************************************************************************
-    TYPE DEFINITIONS
-***************************************************************************/
-
-struct dl1416_interface
-{
-	devcb_write16 update;
-};
-
 
 /***************************************************************************
     DEVICE CONFIGURATION MACROS
 ***************************************************************************/
 
-#define MCFG_DL1416B_ADD(_tag, _config) \
-	MCFG_DEVICE_ADD(_tag, DL1416B, 0) \
-	MCFG_DEVICE_CONFIG(_config)
-
-#define MCFG_DL1416T_ADD(_tag, _config) \
-	MCFG_DEVICE_ADD(_tag, DL1416T, 0) \
-	MCFG_DEVICE_CONFIG(_config)
+#define MCFG_DL1416_UPDATE_HANDLER(_devcb) \
+	devcb = &dl1416_device::set_update_handler(*device, DEVCB_##_devcb);
 
 
 /***************************************************************************
     FUNCTION PROTOTYPES
 ***************************************************************************/
 
-/* inputs */
-WRITE_LINE_DEVICE_HANDLER( dl1416_wr_w ); /* write enable */
-WRITE_LINE_DEVICE_HANDLER( dl1416_ce_w ); /* chip enable */
-WRITE_LINE_DEVICE_HANDLER( dl1416_cu_w ); /* cursor enable */
-DECLARE_WRITE8_DEVICE_HANDLER( dl1416_data_w );
-
 /* device get info callback */
 class dl1416_device : public device_t
 {
 public:
-	dl1416_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
-	~dl1416_device() { global_free(m_token); }
+	dl1416_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
+	~dl1416_device() {}
 
-	// access to legacy token
-	void *token() const { assert(m_token != NULL); return m_token; }
+	template<class _Object> static devcb_base &set_update_handler(device_t &device, _Object object) { return downcast<dl1416_device &>(device).m_update.set_callback(object); }
+
+	/* inputs */
+	DECLARE_WRITE_LINE_MEMBER( wr_w ); /* write enable */
+	DECLARE_WRITE_LINE_MEMBER( ce_w ); /* chip enable */
+	DECLARE_WRITE_LINE_MEMBER( cu_w ); /* cursor enable */
+	DECLARE_WRITE8_MEMBER( data_w );
+
 protected:
 	// device-level overrides
-	virtual void device_config_complete();
 	virtual void device_start();
 	virtual void device_reset();
+
 private:
 	// internal state
-	void *m_token;
+	int m_write_enable;
+	int m_chip_enable;
+	int m_cursor_enable;
+	devcb_write16 m_update;
+
+	UINT16 m_digit_ram[4]; // holds the digit code for each position
+	UINT8 m_cursor_state[4]; // holds the cursor state for each position, 0=off, 1=on
 };
 
 class dl1416b_device : public dl1416_device

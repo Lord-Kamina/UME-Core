@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Yochizo, Takahiro Nogi
 /***************************************************************************
 
 Super Real Mahjong P2
@@ -62,7 +64,6 @@ Note:
 #include "sound/msm5205.h"
 #include "includes/srmp2.h"
 #include "machine/nvram.h"
-#include "video/seta001.h"
 
 /***************************************************************************
 
@@ -70,44 +71,81 @@ Note:
 
 ***************************************************************************/
 
+void srmp2_state::machine_start()
+{
+	save_item(NAME(m_adpcm_bank));
+	save_item(NAME(m_adpcm_data));
+	save_item(NAME(m_adpcm_sptr));
+	save_item(NAME(m_adpcm_eptr));
+	save_item(NAME(m_iox.mux));
+	save_item(NAME(m_iox.ff));
+	save_item(NAME(m_iox.data));
+}
+
 MACHINE_START_MEMBER(srmp2_state,srmp2)
 {
-	iox_t &iox = m_iox;
+	machine_start();
 
-	iox.reset = 0x1f;
-	iox.ff_event = -1;
-	iox.ff_1 = 0x00;
+	m_iox.reset = 0x1f;
+	m_iox.ff_event = -1;
+	m_iox.ff_1 = 0x00;
 	/* note: protection in srmp1/mjyuugi/ponchin is never checked, assume to be the same */
-	iox.protcheck[0] = 0x60; iox.protlatch[0] = 0x2a;
-	iox.protcheck[1] = -1;   iox.protlatch[1] = -1;
-	iox.protcheck[2] = -1;   iox.protlatch[2] = -1;
-	iox.protcheck[3] = -1;   iox.protlatch[3] = -1;
+	m_iox.protcheck[0] = 0x60; m_iox.protlatch[0] = 0x2a;
+	m_iox.protcheck[1] = -1;   m_iox.protlatch[1] = -1;
+	m_iox.protcheck[2] = -1;   m_iox.protlatch[2] = -1;
+	m_iox.protcheck[3] = -1;   m_iox.protlatch[3] = -1;
+
+	save_item(NAME(m_color_bank));
 }
 
 MACHINE_START_MEMBER(srmp2_state,srmp3)
 {
-	iox_t &iox = m_iox;
+	machine_start();
 
-	iox.reset = 0xc8;
-	iox.ff_event = 0xef;
-	iox.ff_1 = -1;
-	iox.protcheck[0] = 0x49; iox.protlatch[0] = 0xc9;
-	iox.protcheck[1] = 0x4c; iox.protlatch[1] = 0x00;
-	iox.protcheck[2] = 0x1c; iox.protlatch[2] = 0x04;
-	iox.protcheck[3] = 0x45; iox.protlatch[3] = 0x00;
+	m_iox.reset = 0xc8;
+	m_iox.ff_event = 0xef;
+	m_iox.ff_1 = -1;
+	m_iox.protcheck[0] = 0x49; m_iox.protlatch[0] = 0xc9;
+	m_iox.protcheck[1] = 0x4c; m_iox.protlatch[1] = 0x00;
+	m_iox.protcheck[2] = 0x1c; m_iox.protlatch[2] = 0x04;
+	m_iox.protcheck[3] = 0x45; m_iox.protlatch[3] = 0x00;
+
+	membank("bank1")->configure_entries(0, 16, memregion("maincpu")->base(), 0x2000);
+
+	save_item(NAME(m_gfx_bank));
 }
 
 MACHINE_START_MEMBER(srmp2_state,rmgoldyh)
 {
-	iox_t &iox = m_iox;
+	machine_start();
 
-	iox.reset = 0xc8;
-	iox.ff_event = 0xff;
-	iox.ff_1 = -1;
-	iox.protcheck[0] = 0x43; iox.protlatch[0] = 0x9a;
-	iox.protcheck[1] = 0x45; iox.protlatch[1] = 0x00;
-	iox.protcheck[2] = -1;   iox.protlatch[2] = -1;
-	iox.protcheck[3] = -1;   iox.protlatch[3] = -1;
+	m_iox.reset = 0xc8;
+	m_iox.ff_event = 0xff;
+	m_iox.ff_1 = -1;
+	m_iox.protcheck[0] = 0x43; m_iox.protlatch[0] = 0x9a;
+	m_iox.protcheck[1] = 0x45; m_iox.protlatch[1] = 0x00;
+	m_iox.protcheck[2] = -1;   m_iox.protlatch[2] = -1;
+	m_iox.protcheck[3] = -1;   m_iox.protlatch[3] = -1;
+
+	membank("bank1")->configure_entries(0, 32, memregion("maincpu")->base(), 0x2000);
+
+	save_item(NAME(m_gfx_bank));
+}
+
+MACHINE_START_MEMBER(srmp2_state,mjyuugi)
+{
+	machine_start();
+
+	m_iox.reset = 0x1f;
+	m_iox.ff_event = -1;
+	m_iox.ff_1 = 0x00;
+	/* note: protection in srmp1/mjyuugi/ponchin is never checked, assume to be the same */
+	m_iox.protcheck[0] = 0x60; m_iox.protlatch[0] = 0x2a;
+	m_iox.protcheck[1] = -1;   m_iox.protlatch[1] = -1;
+	m_iox.protcheck[2] = -1;   m_iox.protlatch[2] = -1;
+	m_iox.protcheck[3] = -1;   m_iox.protlatch[3] = -1;
+
+	save_item(NAME(m_gfx_bank));
 }
 
 /***************************************************************************
@@ -204,7 +242,7 @@ WRITE8_MEMBER(srmp2_state::srmp3_adpcm_code_w)
 }
 
 
-WRITE_LINE_MEMBER(srmp2_state::srmp2_adpcm_int)
+WRITE_LINE_MEMBER(srmp2_state::adpcm_int)
 {
 	UINT8 *ROM = memregion("adpcm")->base();
 
@@ -267,32 +305,30 @@ UINT8 srmp2_state::iox_key_matrix_calc(UINT8 p_side)
 
 READ8_MEMBER(srmp2_state::iox_mux_r)
 {
-	iox_t &iox = m_iox;
-
 	/* first off check any pending protection value */
 	{
 		int i;
 
 		for(i=0;i<4;i++)
 		{
-			if(iox.protcheck[i] == -1)
+			if(m_iox.protcheck[i] == -1)
 				continue; //skip
 
-			if(iox.data == iox.protcheck[i])
+			if(m_iox.data == m_iox.protcheck[i])
 			{
-				iox.data = 0; //clear write latch
-				return iox.protlatch[i];
+				m_iox.data = 0; //clear write latch
+				return m_iox.protlatch[i];
 			}
 		}
 	}
 
-	if(iox.ff == 0)
+	if(m_iox.ff == 0)
 	{
-		if(iox.mux != 1 && iox.mux != 2 && iox.mux != 4)
+		if(m_iox.mux != 1 && m_iox.mux != 2 && m_iox.mux != 4)
 			return 0xff; //unknown command
 
 		/* both side checks */
-		if(iox.mux == 1)
+		if(m_iox.mux == 1)
 		{
 			UINT8 p1_side = iox_key_matrix_calc(0);
 			UINT8 p2_side = iox_key_matrix_calc(4);
@@ -304,7 +340,7 @@ READ8_MEMBER(srmp2_state::iox_mux_r)
 		}
 
 		/* check individual input side */
-		return iox_key_matrix_calc((iox.mux == 2) ? 0 : 4);
+		return iox_key_matrix_calc((m_iox.mux == 2) ? 0 : 4);
 	}
 
 	return ioport("SERVICE")->read() & 0xff;
@@ -317,7 +353,6 @@ READ8_MEMBER(srmp2_state::iox_status_r)
 
 WRITE8_MEMBER(srmp2_state::iox_command_w)
 {
-	iox_t &iox = m_iox;
 	/*
 	bit wise command port apparently
 	0x01: selects both sides
@@ -325,41 +360,34 @@ WRITE8_MEMBER(srmp2_state::iox_command_w)
 	0x04: selects p2 side
 	*/
 
-	iox.mux = data;
-	iox.ff = 0; // this also set flip flop back to 0
+	m_iox.mux = data;
+	m_iox.ff = 0; // this also set flip flop back to 0
 }
 
 WRITE8_MEMBER(srmp2_state::iox_data_w)
 {
-	iox_t &iox = m_iox;
-	iox.data = data;
+	m_iox.data = data;
 
-	if(data == iox.reset && iox.reset != -1) //resets device
-		iox.ff = 0;
+	if(data == m_iox.reset && m_iox.reset != -1) //resets device
+		m_iox.ff = 0;
 
-	if(data == iox.ff_event && iox.ff_event != -1) // flip flop event
-		iox.ff ^= 1;
+	if(data == m_iox.ff_event && m_iox.ff_event != -1) // flip flop event
+		m_iox.ff ^= 1;
 
-	if(data == iox.ff_1 && iox.ff_1 != -1) // set flip flop to 1
-		iox.ff = 1;
+	if(data == m_iox.ff_1 && m_iox.ff_1 != -1) // set flip flop to 1
+		m_iox.ff = 1;
 }
 
 WRITE8_MEMBER(srmp2_state::srmp3_rombank_w)
 {
 /*
-    ---x xxxx : MAIN ROM bank
+    ---- xxxx : MAIN ROM bank
+    ---x ---- : unknown
     xxx- ---- : ADPCM ROM bank
 */
-
-	UINT8 *ROM = memregion("maincpu")->base();
-	int addr;
-
 	m_adpcm_bank = ((data & 0xe0) >> 5);
 
-	if (data & 0x1f) addr = ((0x10000 + (0x2000 * (data & 0x0f))) - 0x8000);
-	else addr = 0x10000;
-
-	membank("bank1")->set_base(&ROM[addr]);
+	membank("bank1")->set_entry(data & 0x0f);
 }
 
 /**************************************************************************
@@ -382,9 +410,9 @@ WRITE8_MEMBER(srmp2_state::srmp2_irq4_ack_w)
 static ADDRESS_MAP_START( srmp2_map, AS_PROGRAM, 16, srmp2_state )
 	AM_RANGE(0x000000, 0x03ffff) AM_ROM
 	AM_RANGE(0x0c0000, 0x0c3fff) AM_RAM AM_SHARE("nvram")
-	AM_RANGE(0x140000, 0x143fff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecode_r16, spritecode_w16)     /* Sprites Code + X + Attr */
-	AM_RANGE(0x180000, 0x1805ff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spriteylow_r16, spriteylow_w16)     /* Sprites Y */
-	AM_RANGE(0x180600, 0x180607) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritectrl_r16, spritectrl_w16)
+	AM_RANGE(0x140000, 0x143fff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecode_r16, spritecode_w16)     /* Sprites Code + X + Attr */
+	AM_RANGE(0x180000, 0x1805ff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spriteylow_r16, spriteylow_w16)     /* Sprites Y */
+	AM_RANGE(0x180600, 0x180607) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritectrl_r16, spritectrl_w16)
 	AM_RANGE(0x1c0000, 0x1c0001) AM_WRITENOP                        /* ??? */
 	AM_RANGE(0x800000, 0x800001) AM_WRITE(srmp2_flags_w)            /* ADPCM bank, Color bank, etc. */
 	AM_RANGE(0x900000, 0x900001) AM_READ_PORT("SYSTEM")             /* Coinage */
@@ -422,7 +450,7 @@ static ADDRESS_MAP_START( mjyuugi_map, AS_PROGRAM, 16, srmp2_state )
 	AM_RANGE(0x300000, 0x300001) AM_READ8(mjyuugi_irq4_ack_r,0x00ff) /* irq ack lv 4? */
 	AM_RANGE(0x500000, 0x500001) AM_READ_PORT("DSW3-1")             /* DSW 3-1 */
 	AM_RANGE(0x500010, 0x500011) AM_READ_PORT("DSW3-2")             /* DSW 3-2 */
-	AM_RANGE(0x700000, 0x7003ff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x700000, 0x7003ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x800000, 0x800001) AM_READNOP             /* ??? */
 	AM_RANGE(0x900000, 0x900001) AM_READWRITE8(iox_mux_r, iox_command_w,0x00ff) /* key matrix | I/O */
 	AM_RANGE(0x900002, 0x900003) AM_READWRITE8(iox_status_r,iox_data_w,0x00ff)
@@ -431,11 +459,11 @@ static ADDRESS_MAP_START( mjyuugi_map, AS_PROGRAM, 16, srmp2_state )
 	AM_RANGE(0xb00000, 0xb00001) AM_DEVREAD8("aysnd", ay8910_device, data_r, 0x00ff)
 	AM_RANGE(0xb00000, 0xb00003) AM_DEVWRITE8("aysnd", ay8910_device, address_data_w, 0x00ff)
 	AM_RANGE(0xc00000, 0xc00001) AM_WRITENOP                    /* ??? */
-	AM_RANGE(0xd00000, 0xd005ff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spriteylow_r16, spriteylow_w16) /* Sprites Y */
-	AM_RANGE(0xd00600, 0xd00607) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritectrl_r16, spritectrl_w16)
+	AM_RANGE(0xd00000, 0xd005ff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spriteylow_r16, spriteylow_w16) /* Sprites Y */
+	AM_RANGE(0xd00600, 0xd00607) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritectrl_r16, spritectrl_w16)
 
 	AM_RANGE(0xd02000, 0xd023ff) AM_RAM                         /* ??? only writes $00fa */
-	AM_RANGE(0xe00000, 0xe03fff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecode_r16, spritecode_w16) /* Sprites Code + X + Attr */
+	AM_RANGE(0xe00000, 0xe03fff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecode_r16, spritecode_w16) /* Sprites Code + X + Attr */
 	AM_RANGE(0xffc000, 0xffffff) AM_RAM AM_SHARE("nvram")
 ADDRESS_MAP_END
 
@@ -463,11 +491,11 @@ static ADDRESS_MAP_START( srmp3_map, AS_PROGRAM, 8, srmp2_state )
 	AM_RANGE(0x8000, 0x9fff) AM_ROMBANK("bank1")                            /* rom bank */
 	AM_RANGE(0xa000, 0xa7ff) AM_RAM AM_SHARE("nvram")   /* work ram */
 	AM_RANGE(0xa800, 0xa800) AM_WRITENOP                            /* flag ? */
-	AM_RANGE(0xb000, 0xb2ff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spriteylow_r8, spriteylow_w8)
-	AM_RANGE(0xb300, 0xb303) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritectrl_r8, spritectrl_w8)
+	AM_RANGE(0xb000, 0xb2ff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spriteylow_r8, spriteylow_w8)
+	AM_RANGE(0xb300, 0xb303) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritectrl_r8, spritectrl_w8)
 	AM_RANGE(0xb800, 0xb800) AM_WRITENOP                            /* flag ? */
-	AM_RANGE(0xc000, 0xdfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodelow_r8, spritecodelow_w8) /* Sprites Code + X + Attr */
-	AM_RANGE(0xe000, 0xffff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodehigh_r8, spritecodehigh_w8)
+	AM_RANGE(0xc000, 0xdfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodelow_r8, spritecodelow_w8) /* Sprites Code + X + Attr */
+	AM_RANGE(0xe000, 0xffff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodehigh_r8, spritecodehigh_w8)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( srmp3_io_map, AS_IO, 8, srmp2_state )
@@ -487,11 +515,11 @@ static ADDRESS_MAP_START( rmgoldyh_map, AS_PROGRAM, 8, srmp2_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
 	AM_RANGE(0x8000, 0x9fff) AM_ROMBANK("bank1")                            /* rom bank */
 	AM_RANGE(0xa000, 0xafff) AM_RAM AM_SHARE("nvram")   /* work ram */
-	AM_RANGE(0xb000, 0xb2ff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spriteylow_r8, spriteylow_w8)
-	AM_RANGE(0xb300, 0xb303) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritectrl_r8, spritectrl_w8)
+	AM_RANGE(0xb000, 0xb2ff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spriteylow_r8, spriteylow_w8)
+	AM_RANGE(0xb300, 0xb303) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritectrl_r8, spritectrl_w8)
 	AM_RANGE(0xb800, 0xb800) AM_WRITENOP                            /* flag ? */
-	AM_RANGE(0xc000, 0xdfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodelow_r8, spritecodelow_w8) /* Sprites Code + X + Attr */
-	AM_RANGE(0xe000, 0xffff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodehigh_r8, spritecodehigh_w8)
+	AM_RANGE(0xc000, 0xdfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodelow_r8, spritecodelow_w8) /* Sprites Code + X + Attr */
+	AM_RANGE(0xe000, 0xffff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodehigh_r8, spritecodehigh_w8)
 ADDRESS_MAP_END
 
 WRITE8_MEMBER(srmp2_state::rmgoldyh_rombank_w)
@@ -500,16 +528,9 @@ WRITE8_MEMBER(srmp2_state::rmgoldyh_rombank_w)
     ---x xxxx : MAIN ROM bank
     xxx- ---- : ADPCM ROM bank
 */
-
-	UINT8 *ROM = memregion("maincpu")->base();
-	int addr;
-
 	m_adpcm_bank = ((data & 0xe0) >> 5);
 
-	if (data & 0x1f) addr = ((0x10000 + (0x2000 * (data & 0x1f))) - 0x8000);
-	else addr = 0x10000;
-
-	membank("bank1")->set_base(&ROM[addr]);
+	membank("bank1")->set_entry(data & 0x1f);
 }
 
 static ADDRESS_MAP_START( rmgoldyh_io_map, AS_IO, 8, srmp2_state )
@@ -1113,24 +1134,6 @@ INPUT_PORTS_END
 
 ***************************************************************************/
 
-static const ay8910_interface srmp2_ay8910_interface =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSW2"),
-	DEVCB_INPUT_PORT("DSW1"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
-static const msm5205_interface msm5205_config =
-{
-	DEVCB_DRIVER_LINE_MEMBER(srmp2_state,srmp2_adpcm_int),            /* IRQ handler */
-	MSM5205_S48_4B              /* 8 KHz, 4 Bits  */
-};
-
-
 static const gfx_layout charlayout =
 {
 	16, 16,
@@ -1151,11 +1154,6 @@ static GFXDECODE_START( srmp3 )
 	GFXDECODE_ENTRY( "gfx1", 0, charlayout, 0, 32 )
 GFXDECODE_END
 
-static GFXDECODE_START( rmgoldyh )
-	GFXDECODE_ENTRY( "gfx1",        0, charlayout, 0, 32 )
-	GFXDECODE_ENTRY( "gfx_ex",      0, charlayout, 0, 32 )
-GFXDECODE_END
-
 
 static MACHINE_CONFIG_START( srmp2, srmp2_state )
 
@@ -1169,6 +1167,8 @@ static MACHINE_CONFIG_START( srmp2, srmp2_state )
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1177,21 +1177,25 @@ static MACHINE_CONFIG_START( srmp2, srmp2_state )
 	MCFG_SCREEN_SIZE(464, 256-16)
 	MCFG_SCREEN_VISIBLE_AREA(16, 464-1, 8, 256-1-24)
 	MCFG_SCREEN_UPDATE_DRIVER(srmp2_state, screen_update_srmp2)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(srmp2)
-	MCFG_PALETTE_LENGTH(1024)   /* sprites only */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", srmp2)
+	MCFG_PALETTE_ADD("palette", 1024)   /* sprites only */
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
-	MCFG_PALETTE_INIT_OVERRIDE(srmp2_state,srmp2)
+	MCFG_PALETTE_INIT_OWNER(srmp2_state,srmp2)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, 20000000/16)
-	MCFG_SOUND_CONFIG(srmp2_ay8910_interface)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSW2"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSW1"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.40)
 
 	MCFG_SOUND_ADD("msm", MSM5205, 384000)
-	MCFG_SOUND_CONFIG(msm5205_config)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(srmp2_state, adpcm_int))            /* IRQ handler */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)              /* 8 KHz, 4 Bits  */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.45)
 MACHINE_CONFIG_END
 
@@ -1210,6 +1214,9 @@ static MACHINE_CONFIG_START( srmp3, srmp2_state )
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
+	MCFG_SETA001_SPRITE_GFXBANK_CB(srmp2_state, srmp3_gfxbank_callback)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1218,21 +1225,25 @@ static MACHINE_CONFIG_START( srmp3, srmp2_state )
 	MCFG_SCREEN_SIZE(400, 256-16)
 	MCFG_SCREEN_VISIBLE_AREA(16, 400-1, 8, 256-1-24)
 	MCFG_SCREEN_UPDATE_DRIVER(srmp2_state, screen_update_srmp3)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(srmp3)
-	MCFG_PALETTE_LENGTH(512)    /* sprites only */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", srmp3)
+	MCFG_PALETTE_ADD("palette", 512)    /* sprites only */
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
-	MCFG_PALETTE_INIT_OVERRIDE(srmp2_state,srmp3)
+	MCFG_PALETTE_INIT_OWNER(srmp2_state,srmp3)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, 16000000/16)
-	MCFG_SOUND_CONFIG(srmp2_ay8910_interface)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSW2"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSW1"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.20)
 
 	MCFG_SOUND_ADD("msm", MSM5205, 384000)
-	MCFG_SOUND_CONFIG(msm5205_config)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(srmp2_state, adpcm_int))            /* IRQ handler */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)              /* 8 KHz, 4 Bits  */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.45)
 MACHINE_CONFIG_END
 
@@ -1243,8 +1254,6 @@ static MACHINE_CONFIG_DERIVED( rmgoldyh, srmp3 )
 	MCFG_CPU_IO_MAP(rmgoldyh_io_map)
 
 	MCFG_MACHINE_START_OVERRIDE(srmp2_state,rmgoldyh)
-
-	MCFG_GFXDECODE(rmgoldyh)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( mjyuugi, srmp2_state )
@@ -1255,11 +1264,14 @@ static MACHINE_CONFIG_START( mjyuugi, srmp2_state )
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", srmp2_state, irq4_line_assert)
 	MCFG_CPU_PERIODIC_INT_DRIVER(srmp2_state, irq2_line_assert, 15*60)      /* Interrupt times is not understood */
 
-	MCFG_MACHINE_START_OVERRIDE(srmp2_state,srmp2)
+	MCFG_MACHINE_START_OVERRIDE(srmp2_state,mjyuugi)
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
+	MCFG_SETA001_SPRITE_GFXBANK_CB(srmp2_state, srmp3_gfxbank_callback)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1268,19 +1280,23 @@ static MACHINE_CONFIG_START( mjyuugi, srmp2_state )
 	MCFG_SCREEN_SIZE(400, 256-16)
 	MCFG_SCREEN_VISIBLE_AREA(16, 400-1, 0, 256-1-16)
 	MCFG_SCREEN_UPDATE_DRIVER(srmp2_state, screen_update_mjyuugi)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(srmp3)
-	MCFG_PALETTE_LENGTH(512)            /* sprites only */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", srmp3)
+	MCFG_PALETTE_ADD("palette", 512)            /* sprites only */
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, 16000000/16)
-	MCFG_SOUND_CONFIG(srmp2_ay8910_interface)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSW2"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSW1"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.20)
 
 	MCFG_SOUND_ADD("msm", MSM5205, 384000)
-	MCFG_SOUND_CONFIG(msm5205_config)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(srmp2_state, adpcm_int))            /* IRQ handler */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)              /* 8 KHz, 4 Bits  */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.45)
 MACHINE_CONFIG_END
 
@@ -1296,7 +1312,7 @@ MACHINE_CONFIG_END
 
 Super Real Mahjong PI
 (c)1987 Seta
-PO-023
+P0-023
 M6100242A
 860161517
 
@@ -1375,9 +1391,8 @@ ROM_START( srmp2 )
 ROM_END
 
 ROM_START( srmp3 )
-	ROM_REGION( 0x028000, "maincpu", 0 )                    /* 68000 Code */
-	ROM_LOAD( "za0-10.bin", 0x000000, 0x008000, CRC(939d126f) SHA1(7a5c7f7fbee8de11a08194d3c8f10a20f8dc2f0a) )
-	ROM_CONTINUE(           0x010000, 0x018000 )
+	ROM_REGION( 0x020000, "maincpu", 0 )                    /* Z80 Code */
+	ROM_LOAD( "za0-10.bin", 0x000000, 0x020000, CRC(939d126f) SHA1(7a5c7f7fbee8de11a08194d3c8f10a20f8dc2f0a) )
 
 	ROM_REGION( 0x400000, "gfx1", 0 )   /* Sprites */
 	ROM_LOAD16_BYTE( "za0-02.bin", 0x000000, 0x080000, CRC(85691946) SHA1(8b91210b1b6671ba2c9ec6722e5dc40bdf44e4b5) )
@@ -1404,7 +1419,7 @@ Real Mahjong Gold Yumehai
 The game is BET version of Super Real Mahjong P3,
 but the PCB is totally different.
 
-PO-064A
+P0-064A
 
 CPU: Z80
 Sound: AY-3-8910, M5205
@@ -1447,28 +1462,23 @@ CR2032 battery
 ***************************************************************************/
 
 ROM_START( rmgoldyh )
-	ROM_REGION( 0x048000, "maincpu", 0 )                    /* 68000 Code */
-	ROM_LOAD( "zf0_001_001.u2", 0x000000, 0x008000, CRC(ce5b0ba0) SHA1(c499e7dc0e3ffe783204e930356c91ea228baf62) )
-	ROM_CONTINUE(               0x010000, 0x018000 )
-	ROM_LOAD( "zf0_002_002.u3", 0x028000, 0x020000, CRC(e2226425) SHA1(36925c68492a3ea4af19d611a455eae688aaab62) )
+	ROM_REGION( 0x040000, "maincpu", 0 )                    /* Z80 Code */
+	ROM_LOAD( "zf0_001_001.u2", 0x000000, 0x020000, CRC(ce5b0ba0) SHA1(c499e7dc0e3ffe783204e930356c91ea228baf62) )
+	ROM_LOAD( "zf0_002_002.u3", 0x020000, 0x020000, CRC(e2226425) SHA1(36925c68492a3ea4af19d611a455eae688aaab62) )
 
-	ROM_REGION( 0x20000, "gfx_ex", ROMREGION_ERASE00 )  /* extra sprite roms */
-	/* socket 4 is empty */
-	ROM_LOAD16_BYTE( "zf0_3.u72",  0x00001, 0x08000, CRC(771c27a1) SHA1(5c95edcd5e155cbb4448888bba62c98cf8d4b577) )
-	ROM_LOAD16_BYTE( "zf0_2.u71",  0x10000, 0x08000, CRC(b0f548e6) SHA1(84e3acb10ae3669bf65bd8c93273acacb5136737) )
-	ROM_LOAD16_BYTE( "zf0_1.u70",  0x10001, 0x08000, CRC(78ba5d05) SHA1(21cd5ecbd55a5beaece82c974752dac4281b467a) )
-
-	ROM_REGION( 0x800000, "gfx1", 0 )   /* Sprites */
+	ROM_REGION( 0x800000, "gfx1", ROMREGION_ERASE00 )   /* Sprites */
 	ROM_LOAD16_BYTE( "za0-02.u51", 0x000000, 0x080000, CRC(85691946) SHA1(8b91210b1b6671ba2c9ec6722e5dc40bdf44e4b5) )
 	ROM_LOAD16_BYTE( "za0-04.u49", 0x000001, 0x080000, CRC(c06e7a96) SHA1(a2dfb81004ea72bfa21724374eb8533af606a5df) )
 	ROM_LOAD16_BYTE( "za0-01.u52", 0x100000, 0x080000, CRC(95e0d87c) SHA1(34e6c0a95e63cf092092e27c7ba2f649ebf56507) )
 	ROM_LOAD16_BYTE( "za0-03.u50", 0x100001, 0x080000, CRC(7c98570e) SHA1(26e28e67bca9954d62d72260370ea872c6058a10) )
-	ROM_COPY( "gfx_ex",   0x00000, 0x200000, 0x010000 )
+	/* socket 4 is empty */
+	ROM_LOAD16_BYTE( "zf0_3.u72",  0x200001, 0x008000, CRC(771c27a1) SHA1(5c95edcd5e155cbb4448888bba62c98cf8d4b577) )
 	ROM_LOAD16_BYTE( "za0-06.u47", 0x400000, 0x080000, CRC(8b874b0a) SHA1(27fe1ccc2938e1703e484e2925a2f073064cf019) )
 	ROM_LOAD16_BYTE( "za0-08.u45", 0x400001, 0x080000, CRC(3de89d88) SHA1(1e6dabe6aeee6a2613feab26b871c235bf491bfa) )
 	ROM_LOAD16_BYTE( "za0-05.u48", 0x500000, 0x080000, CRC(80d3b4e6) SHA1(d31d3f904ee8463c1efbb1d106eeb3dc0dc42ab8) )
 	ROM_LOAD16_BYTE( "za0-07.u46", 0x500001, 0x080000, CRC(39d15129) SHA1(62b71a82cfc39e6dab3175e03eca5ff92e854f13) )
-	ROM_COPY( "gfx_ex",   0x10000, 0x600000, 0x010000 )
+	ROM_LOAD16_BYTE( "zf0_2.u71",  0x600000, 0x008000, CRC(b0f548e6) SHA1(84e3acb10ae3669bf65bd8c93273acacb5136737) )
+	ROM_LOAD16_BYTE( "zf0_1.u70",  0x600001, 0x008000, CRC(78ba5d05) SHA1(21cd5ecbd55a5beaece82c974752dac4281b467a) )
 
 	ROM_REGION( 0x080000, "adpcm", 0 )              /* Samples */
 	ROM_LOAD( "za0-11.u16", 0x000000, 0x080000, CRC(2248c23f) SHA1(35591b51bb23dfd7fa81a05026e9ec0789bb0dde) )
@@ -1560,11 +1570,11 @@ ROM_END
 
 
 
-GAME( 1987, srmp1,     0,        srmp2,    srmp2, driver_device,    0,       ROT0, "Seta",              "Super Real Mahjong Part 1 (Japan)",  0 )
-GAME( 1987, srmp2,     0,        srmp2,    srmp2, driver_device,    0,       ROT0, "Seta",              "Super Real Mahjong Part 2 (Japan)",  0 )
-GAME( 1988, srmp3,     0,        srmp3,    srmp3, driver_device,    0,       ROT0, "Seta",              "Super Real Mahjong Part 3 (Japan)",  0 )
-GAME( 1988, rmgoldyh,  srmp3,    rmgoldyh, rmgoldyh, driver_device, 0,       ROT0, "Seta (Alba license)",   "Real Mahjong Gold Yumehai / Super Real Mahjong GOLD part.2 [BET] (Japan)",  0 )
-GAME( 1990, mjyuugi,   0,        mjyuugi,  mjyuugi, driver_device,  0,       ROT0, "Visco",             "Mahjong Yuugi (Japan set 1)",        0 )
-GAME( 1990, mjyuugia,  mjyuugi,  mjyuugi,  mjyuugi, driver_device,  0,       ROT0, "Visco",             "Mahjong Yuugi (Japan set 2)",        0 )
-GAME( 1991, ponchin,   0,        mjyuugi,  ponchin, driver_device,  0,       ROT0, "Visco",             "Mahjong Pon Chin Kan (Japan set 1)", 0 )
-GAME( 1991, ponchina,  ponchin,  mjyuugi,  ponchin, driver_device,  0,       ROT0, "Visco",             "Mahjong Pon Chin Kan (Japan set 2)", 0 )
+GAME( 1987, srmp1,     0,        srmp2,    srmp2, driver_device,    0,       ROT0, "Seta",              "Super Real Mahjong Part 1 (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1987, srmp2,     0,        srmp2,    srmp2, driver_device,    0,       ROT0, "Seta",              "Super Real Mahjong Part 2 (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1988, srmp3,     0,        srmp3,    srmp3, driver_device,    0,       ROT0, "Seta",              "Super Real Mahjong Part 3 (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1988, rmgoldyh,  srmp3,    rmgoldyh, rmgoldyh, driver_device, 0,       ROT0, "Seta (Alba license)",   "Real Mahjong Gold Yumehai / Super Real Mahjong GOLD part.2 [BET] (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1990, mjyuugi,   0,        mjyuugi,  mjyuugi, driver_device,  0,       ROT0, "Visco",             "Mahjong Yuugi (Japan set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1990, mjyuugia,  mjyuugi,  mjyuugi,  mjyuugi, driver_device,  0,       ROT0, "Visco",             "Mahjong Yuugi (Japan set 2)", GAME_SUPPORTS_SAVE )
+GAME( 1991, ponchin,   0,        mjyuugi,  ponchin, driver_device,  0,       ROT0, "Visco",             "Mahjong Pon Chin Kan (Japan set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1991, ponchina,  ponchin,  mjyuugi,  ponchin, driver_device,  0,       ROT0, "Visco",             "Mahjong Pon Chin Kan (Japan set 2)", GAME_SUPPORTS_SAVE )

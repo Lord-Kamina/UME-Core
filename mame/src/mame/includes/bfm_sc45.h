@@ -1,4 +1,6 @@
-/* Scorpion 4 + 5 driver releated includes */
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
+/* Scorpion 4 + 5 driver related includes */
 /* mainly used for stuff which is currently shared between sc4 / 5 sets to avoid duplication */
 
 #include "machine/sec.h"
@@ -7,8 +9,55 @@
 #include "machine/bfm_bda.h"
 
 #include "sound/ymz280b.h"
-#include "machine/68681.h"
+#include "machine/mc68681.h"
 #include "machine/nvram.h"
+#include "machine/68307.h"
+#include "machine/68340.h"
+#include "video/bfm_dm01.h"
+
+#define SC45_BUTTON_MATRIX_1_0 IPT_BUTTON1
+#define SC45_BUTTON_MATRIX_1_1 IPT_BUTTON2
+#define SC45_BUTTON_MATRIX_1_2 IPT_BUTTON3
+#define SC45_BUTTON_MATRIX_1_3 IPT_BUTTON4
+#define SC45_BUTTON_MATRIX_1_4 IPT_BUTTON5
+#define SC45_BUTTON_MATRIX_1_5 IPT_BUTTON6
+
+#define SC45_BUTTON_MATRIX_2_0 IPT_BUTTON7
+#define SC45_BUTTON_MATRIX_2_1 IPT_BUTTON8
+#define SC45_BUTTON_MATRIX_2_2 IPT_BUTTON9
+#define SC45_BUTTON_MATRIX_2_3 IPT_BUTTON10
+#define SC45_BUTTON_MATRIX_2_4 IPT_BUTTON11
+#define SC45_BUTTON_MATRIX_2_5 IPT_BUTTON12
+
+#define SC45_BUTTON_MATRIX_7_0 IPT_BUTTON13
+#define SC45_BUTTON_MATRIX_7_1 IPT_BUTTON14
+#define SC45_BUTTON_MATRIX_7_2 IPT_BUTTON15
+#define SC45_BUTTON_MATRIX_7_3 IPT_BUTTON16
+#define SC45_BUTTON_MATRIX_7_4 IPT_MAHJONG_A // having more buttons would make sense and be cleaner but as a temporary solution (these are meant to be driven more by the clickable layouts anyway).....
+#define SC45_BUTTON_MATRIX_7_5 IPT_MAHJONG_B
+
+#define SC45_BUTTON_MATRIX_8_0 IPT_MAHJONG_C
+#define SC45_BUTTON_MATRIX_8_1 IPT_MAHJONG_D
+#define SC45_BUTTON_MATRIX_8_2 IPT_MAHJONG_E
+#define SC45_BUTTON_MATRIX_8_3 IPT_MAHJONG_F
+#define SC45_BUTTON_MATRIX_8_4 IPT_MAHJONG_G
+#define SC45_BUTTON_MATRIX_8_5 IPT_MAHJONG_H
+
+#define SC45_BUTTON_MATRIX_9_0 IPT_MAHJONG_I
+#define SC45_BUTTON_MATRIX_9_1 IPT_MAHJONG_J
+#define SC45_BUTTON_MATRIX_9_2 IPT_MAHJONG_K
+#define SC45_BUTTON_MATRIX_9_3 IPT_MAHJONG_L
+#define SC45_BUTTON_MATRIX_9_4 IPT_MAHJONG_M
+#define SC45_BUTTON_MATRIX_9_5 IPT_MAHJONG_N
+
+#define SC45_BUTTON_MATRIX_10_0 IPT_HANAFUDA_A
+#define SC45_BUTTON_MATRIX_10_1 IPT_HANAFUDA_B
+#define SC45_BUTTON_MATRIX_10_2 IPT_HANAFUDA_C
+#define SC45_BUTTON_MATRIX_10_3 IPT_HANAFUDA_D
+#define SC45_BUTTON_MATRIX_10_4 IPT_HANAFUDA_E
+#define SC45_BUTTON_MATRIX_10_5 IPT_HANAFUDA_F
+
+#define SC45_BUTTON_MATRIX_20_0 IPT_SERVICE1 // green / test
 
 // common base class for things shared between sc4 and sc5
 class bfm_sc45_state : public driver_device
@@ -16,17 +65,18 @@ class bfm_sc45_state : public driver_device
 public:
 	bfm_sc45_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_maincpu(*this, "maincpu"),
 			m_duart(*this, "duart68681"),
 			m_vfd0(*this, "vfd0"),
+			m_dm01(*this, "dm01"),
 			m_ymz(*this, "ymz")
 	{
 	}
 
 public:
-	required_device<legacy_cpu_device> m_maincpu;
-	required_device<duart68681_device> m_duart;
+
+	required_device<mc68681_device> m_duart;
 	optional_device<bfm_bda_t> m_vfd0;
+	optional_device<bfmdm01_device> m_dm01;
 	required_device<ymz280b_device> m_ymz;
 
 	// serial vfd
@@ -38,7 +88,8 @@ public:
 
 	DECLARE_WRITE8_MEMBER(mux_output_w);
 	DECLARE_WRITE8_MEMBER(mux_output2_w);
-
+	void bfm_sc4_reset_serial_vfd();
+	void bfm_sc45_write_serial_vfd(bool cs, bool clock, bool data);
 };
 
 void bfm_sc45_write_serial_vfd(running_machine &machine, bool cs, bool clock, bool data);
@@ -49,8 +100,15 @@ class sc4_state : public bfm_sc45_state
 public:
 	sc4_state(const machine_config &mconfig, device_type type, const char *tag)
 		: bfm_sc45_state(mconfig, type, tag),
+			m_maincpu(*this, "maincpu"),
 			m_cpuregion(*this, "maincpu"),
 			m_nvram(*this, "nvram"),
+			m_reel1(*this, "reel1"),
+			m_reel2(*this, "reel2"),
+			m_reel3(*this, "reel3"),
+			m_reel4(*this, "reel4"),
+			m_reel5(*this, "reel5"),
+			m_reel6(*this, "reel6"),
 			m_io1(*this, "IN-0"),
 			m_io2(*this, "IN-1"),
 			m_io3(*this, "IN-2"),
@@ -61,26 +119,36 @@ public:
 			m_io8(*this, "IN-7"),
 			m_io9(*this, "IN-8"),
 			m_io10(*this, "IN-9"),
-			m_io11(*this, "IN-A"),
-			m_io12(*this, "IN-B")
+			m_io11(*this, "IN-10"),
+			m_io12(*this, "IN-11")
 	{
 		m_chk41addr = -1;
 		m_dochk41 = false;
 	}
 
+	required_device<m68307cpu_device> m_maincpu;
 	required_memory_region m_cpuregion;
 	// devices
 	required_device<nvram_device> m_nvram;
+	optional_device<stepper_device> m_reel1;
+	optional_device<stepper_device> m_reel2;
+	optional_device<stepper_device> m_reel3;
+	optional_device<stepper_device> m_reel4;
+	optional_device<stepper_device> m_reel5;
+	optional_device<stepper_device> m_reel6;
 
 
-	const stepper_interface **m_reel_setup;
-	int m_reel_changed;
-	int m_reels;
 	int m_reel12_latch;
 	int m_reel3_latch;
 	int m_reel4_latch;
 	int m_reel56_latch;
 	int m_optic_pattern;
+	DECLARE_WRITE_LINE_MEMBER(reel1_optic_cb) { if (state) m_optic_pattern |= 0x01; else m_optic_pattern &= ~0x01; }
+	DECLARE_WRITE_LINE_MEMBER(reel2_optic_cb) { if (state) m_optic_pattern |= 0x02; else m_optic_pattern &= ~0x02; }
+	DECLARE_WRITE_LINE_MEMBER(reel3_optic_cb) { if (state) m_optic_pattern |= 0x04; else m_optic_pattern &= ~0x04; }
+	DECLARE_WRITE_LINE_MEMBER(reel4_optic_cb) { if (state) m_optic_pattern |= 0x08; else m_optic_pattern &= ~0x08; }
+	DECLARE_WRITE_LINE_MEMBER(reel5_optic_cb) { if (state) m_optic_pattern |= 0x10; else m_optic_pattern &= ~0x10; }
+	DECLARE_WRITE_LINE_MEMBER(reel6_optic_cb) { if (state) m_optic_pattern |= 0x20; else m_optic_pattern &= ~0x20; }
 	SEC sec;
 
 	int m_meterstatus;
@@ -90,13 +158,24 @@ public:
 
 	UINT16 m_mainram[0x10000/2];
 
-	UINT8 read_input_matrix(running_machine &machine, int row);
+	UINT8 read_input_matrix(int row);
 
+
+	DECLARE_WRITE_LINE_MEMBER(bfmdm01_busy);
 
 	DECLARE_READ16_MEMBER(sc4_mem_r);
 	DECLARE_WRITE16_MEMBER(sc4_mem_w);
 
 	DECLARE_READ16_MEMBER(sc4_cs1_r);
+
+	DECLARE_WRITE_LINE_MEMBER(bfm_sc4_duart_irq_handler);
+	DECLARE_WRITE_LINE_MEMBER(bfm_sc4_duart_txa);
+	DECLARE_READ8_MEMBER(bfm_sc4_duart_input_r);
+	DECLARE_WRITE8_MEMBER(bfm_sc4_duart_output_w);
+
+	DECLARE_WRITE_LINE_MEMBER(m68307_duart_txa);
+	DECLARE_READ8_MEMBER(m68307_duart_input_r);
+	DECLARE_WRITE8_MEMBER(m68307_duart_output_w);
 
 	DECLARE_DRIVER_INIT(sc4);
 	DECLARE_DRIVER_INIT(sc4mbus);
@@ -515,7 +594,17 @@ public:
 	DECLARE_MACHINE_START(sc4);
 	DECLARE_MACHINE_RESET(sc4);
 
-	DECLARE_WRITE_LINE_MEMBER(bfm_sc4_irqhandler);
+
+	void bfm_sc4_68307_porta_w(address_space &space, bool dedicated, UINT8 data, UINT8 line_mask);
+	DECLARE_WRITE8_MEMBER( bfm_sc4_reel3_w );
+	DECLARE_WRITE8_MEMBER( bfm_sc4_reel4_w );
+	void bfm_sc4_68307_portb_w(address_space &space, bool dedicated, UINT16 data, UINT16 line_mask);
+	UINT8 bfm_sc4_68307_porta_r(address_space &space, bool dedicated, UINT8 line_mask);
+	UINT16 bfm_sc4_68307_portb_r(address_space &space, bool dedicated, UINT16 line_mask);
+
+	void find_mbus(UINT16* rom);
+
+
 protected:
 	required_ioport m_io1;
 	required_ioport m_io2;
@@ -547,15 +636,38 @@ public:
 	DECLARE_MACHINE_START(adder4);
 
 	// devices
-	required_device<cpu_device> m_adder4cpu;
+	required_device<m68340cpu_device> m_adder4cpu;
 };
 
 
 MACHINE_CONFIG_EXTERN( sc4 );
 MACHINE_CONFIG_EXTERN( sc4_adder4 );
 MACHINE_CONFIG_EXTERN( sc4dmd );
+MACHINE_CONFIG_EXTERN(sc4_3reel);
+MACHINE_CONFIG_EXTERN(sc4_4reel);
+MACHINE_CONFIG_EXTERN(sc4_4reel_alt);
+MACHINE_CONFIG_EXTERN(sc4_5reel);
+MACHINE_CONFIG_EXTERN(sc4_5reel_alt);
+MACHINE_CONFIG_EXTERN(sc4_200_std);
+MACHINE_CONFIG_EXTERN(sc4_200_alt);
+MACHINE_CONFIG_EXTERN(sc4_200_alta);
+MACHINE_CONFIG_EXTERN(sc4_200_altb);
+MACHINE_CONFIG_EXTERN(sc4_200_5r);
+MACHINE_CONFIG_EXTERN(sc4_200_5ra);
+MACHINE_CONFIG_EXTERN(sc4_200_5rb);
+MACHINE_CONFIG_EXTERN(sc4_200_5rc);
+MACHINE_CONFIG_EXTERN(sc4_200_5rc);
+MACHINE_CONFIG_EXTERN(sc4_200_4r);
+MACHINE_CONFIG_EXTERN(sc4_200_4ra);
+MACHINE_CONFIG_EXTERN(sc4_200_4rb);
+MACHINE_CONFIG_EXTERN(sc4_4reel_200);
+MACHINE_CONFIG_EXTERN(sc4_3reel_200);
+MACHINE_CONFIG_EXTERN(sc4_3reel_200_48);
+MACHINE_CONFIG_EXTERN(sc4_no_reels);
+
 
 INPUT_PORTS_EXTERN( sc4_base );
+INPUT_PORTS_EXTERN( sc4_raw );
 
 #define SC4_JACKPOT_KEY_SETTINGS \
 	PORT_DIPSETTING(    0x00, "No Key" ) \
@@ -574,6 +686,111 @@ INPUT_PORTS_EXTERN( sc4_base );
 	PORT_DIPSETTING(    0x0d, "70GBP" ) \
 	PORT_DIPSETTING(    0x0e, "14" ) \
 	PORT_DIPSETTING(    0x0f, "15" )
+
+
+#define SC4_STANDARD_STAKE_KEY \
+	PORT_MODIFY("IN-3") /* the Stake key */ \
+	PORT_DIPNAME( 0x1c, 0x00, "IN 3-2:4 (Stake Key)" ) \
+	PORT_DIPSETTING(    0x00, "0" ) \
+	PORT_DIPSETTING(    0x04, "1" ) \
+	PORT_DIPSETTING(    0x08, "2" ) \
+	PORT_DIPSETTING(    0x0c, "3" ) \
+	PORT_DIPSETTING(    0x10, "4" ) \
+	PORT_DIPSETTING(    0x14, "5" ) \
+	PORT_DIPSETTING(    0x18, "6" ) \
+	PORT_DIPSETTING(    0x1c, "7" )
+
+#define SC4_STANDARD_SYSBUTS \
+	PORT_MODIFY("IN-20") \
+	PORT_BIT(0x0001, IP_ACTIVE_HIGH, IPT_SERVICE1) PORT_NAME("Green Button (Service?)") /* next to the dips on the MB */ \
+	PORT_DIPNAME( 0x0002, 0x0000, "Door Lock" ) /* DORLOK20.1 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0002, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0004, 0x0000, "Service Door" ) /* SERDOR20.2 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0004, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0008, 0x0000, "Cashbox Door" ) /* CSHDOR20.3 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0008, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0010, 0x0000, "Hopper DMP" ) /* HOPDMP20.4 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0010, DEF_STR( On ) )
+
+
+#define SC4_STANDARD_PERCENT_KEY \
+	PORT_MODIFY("IN-6") /* the %age key */ \
+	PORT_DIPNAME( 0x0f, 0x00, "IN 6-0:3 (Percentage Key)" ) \
+	PORT_DIPSETTING(    0x00, "0" ) \
+	PORT_DIPSETTING(    0x01, "1" ) \
+	PORT_DIPSETTING(    0x02, "2" ) \
+	PORT_DIPSETTING(    0x03, "3" ) \
+	PORT_DIPSETTING(    0x04, "4" ) \
+	PORT_DIPSETTING(    0x05, "5" ) \
+	PORT_DIPSETTING(    0x06, "6" ) \
+	PORT_DIPSETTING(    0x07, "7" ) \
+	PORT_DIPSETTING(    0x08, "8" ) \
+	PORT_DIPSETTING(    0x09, "9" ) \
+	PORT_DIPSETTING(    0x0a, "a" ) \
+	PORT_DIPSETTING(    0x0b, "b" ) \
+	PORT_DIPSETTING(    0x0c, "c" ) \
+	PORT_DIPSETTING(    0x0d, "d" ) \
+	PORT_DIPSETTING(    0x0e, "e" ) \
+	PORT_DIPSETTING(    0x0f, "f" )
+
+#define SC4_STANDARD_BLANK_DIPS \
+	PORT_MODIFY("IN-16") \
+	PORT_DIPNAME( 0x0001, 0x0000, "IN 16-0 (DSW1)"  ) /* DIL1 16.0 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0001, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0002, 0x0000, "IN 16-1 (DSW2)" ) /* DIL2 16.1 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0002, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0004, 0x0000, "IN 16-2 (DSW3)" ) /* DIL3 16.2 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0004, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0008, 0x0000, "IN 16-3 (DSW4)" ) /* DIL4 16.3 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0008, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0010, 0x0000, "IN 16-4 (DSW5)" ) /* DIL5 16.4 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0010, DEF_STR( On ) ) \
+	PORT_MODIFY("IN-17") \
+	PORT_DIPNAME( 0x0001, 0x0000, "IN 17-0 (DSW6)" ) /* DIL6 17.0 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0001, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0002, 0x0000, "IN 17-1 (DSW7)" ) /* DIL7 17.1 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0002, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0004, 0x0000, "IN 17-2 (DSW8)" ) /* DIL8 17.2 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0004, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0008, 0x0000, "IN 17-3 (DSW9)" ) /* DIL9 17.3 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0008, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0010, 0x0000, "IN 17-4 (DSW10)" ) /* DIL10 17.4 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0010, DEF_STR( On ) ) \
+	PORT_MODIFY("IN-18") \
+	PORT_DIPNAME( 0x0001, 0x0000, "IN 18-0 (DSW11)" ) /* DIL11 18.0  */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0001, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0002, 0x0000, "IN 18-1 (DSW12)" ) /* DIL12 18.1 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0002, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0004, 0x0000, "IN 18-2 (DSW13)" ) /* DIL13 18.2 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0004, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0008, 0x0000, "IN 18-3 (DSW14)" ) /* DIL14 18.3 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0008, DEF_STR( On ) ) \
+	PORT_DIPNAME( 0x0010, 0x0000, "IN 18-4 (DSW15)" ) /* DIL15 18.4 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0010, DEF_STR( On ) ) \
+	PORT_MODIFY("IN-19") \
+	PORT_DIPNAME( 0x0001, 0x0000, "IN 19-0 (DSW16)" ) /* DIL9 19.0 */ \
+	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) ) \
+	PORT_DIPSETTING(      0x0001, DEF_STR( On ) )
+
 
 
 #define sc_ivply_others \

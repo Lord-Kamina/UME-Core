@@ -1,8 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*************************************************************************
 
     Super Slams
 
 *************************************************************************/
+
+#include "video/k053936.h"
 
 class suprslam_state : public driver_device
 {
@@ -18,7 +22,9 @@ public:
 		m_spr(*this, "vsystem_spr"),
 		m_audiocpu(*this, "audiocpu"),
 		m_k053936(*this, "k053936"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_screen_videoram;
@@ -58,4 +64,6 @@ public:
 	UINT32 screen_update_suprslam(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	DECLARE_WRITE_LINE_MEMBER(irqhandler);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };

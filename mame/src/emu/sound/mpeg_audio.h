@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 /***************************************************************************
 
     MPEG audio support.  Only layer2 and variants for now.
@@ -48,6 +50,9 @@ public:
 	bool decode_buffer(int &pos, int limit, short *output,
 						int &output_samples, int &sample_rate, int &channels);
 
+
+	// Clear audio buffer
+	void clear();
 
 	// Change the base pointer
 	void set_base(const void *base);

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /*********************************************************************
 
     53c7xx.h
@@ -57,13 +59,13 @@
 #define DSTAT_DFE           0x80
 
 #define MCFG_NCR53C7XX_IRQ_HANDLER(_devcb) \
-	devcb = &ncr53c7xx_device::set_irq_handler(*device, DEVCB2_##_devcb);
+	devcb = &ncr53c7xx_device::set_irq_handler(*device, DEVCB_##_devcb);
 
 #define MCFG_NCR53C7XX_HOST_WRITE(_devcb) \
-	devcb = &ncr53c7xx_device::set_host_write(*device, DEVCB2_##_devcb);
+	devcb = &ncr53c7xx_device::set_host_write(*device, DEVCB_##_devcb);
 
 #define MCFG_NCR53C7XX_HOST_READ(_devcb) \
-	devcb = &ncr53c7xx_device::set_host_read(*device, DEVCB2_##_devcb);
+	devcb = &ncr53c7xx_device::set_host_read(*device, DEVCB_##_devcb);
 
 class ncr53c7xx_device : public nscsi_device,
 							public device_execute_interface
@@ -73,9 +75,9 @@ public:
 	ncr53c7xx_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
 	// static configuration helpers
-	template<class _Object> static devcb2_base &set_irq_handler(device_t &device, _Object object) { return downcast<ncr53c7xx_device &>(device).m_irq_handler.set_callback(object); }
-	template<class _Object> static devcb2_base &set_host_write(device_t &device, _Object object) { return downcast<ncr53c7xx_device &>(device).m_host_write.set_callback(object); }
-	template<class _Object> static devcb2_base &set_host_read(device_t &device, _Object object) { return downcast<ncr53c7xx_device &>(device).m_host_read.set_callback(object); }
+	template<class _Object> static devcb_base &set_irq_handler(device_t &device, _Object object) { return downcast<ncr53c7xx_device &>(device).m_irq_handler.set_callback(object); }
+	template<class _Object> static devcb_base &set_host_write(device_t &device, _Object object) { return downcast<ncr53c7xx_device &>(device).m_host_write.set_callback(object); }
+	template<class _Object> static devcb_base &set_host_read(device_t &device, _Object object) { return downcast<ncr53c7xx_device &>(device).m_host_read.set_callback(object); }
 
 	// our API
 	DECLARE_READ32_MEMBER(read);
@@ -96,14 +98,14 @@ private:
 	{
 		STATE_MASK = 0x00ff,
 		SUB_SHIFT  = 8,
-		SUB_MASK   = 0xff00,
+		SUB_MASK   = 0xff00
 	};
 
 	enum
 	{
 		MODE_I,
 		MODE_T,
-		MODE_D,
+		MODE_D
 	};
 
 	enum scsi_state
@@ -129,7 +131,7 @@ private:
 		SEND_WAIT_SETTLE,
 		RECV_WAIT_SETTLE,
 		RECV_WAIT_REQ_0,
-		RECV_WAIT_REQ_1,
+		RECV_WAIT_REQ_1
 	};
 
 	void update_irqs();
@@ -146,7 +148,7 @@ private:
 		SCRIPTS_IDLE,
 		SCRIPTS_WAIT_MANUAL_START,
 		SCRIPTS_FETCH,
-		SCRIPTS_EXECUTE,
+		SCRIPTS_EXECUTE
 	};
 
 	void set_scripts_state(scripts_state state);
@@ -217,9 +219,9 @@ private:
 	void    (ncr53c7xx_device::*m_scripts_op)();
 
 	// callbacks
-	devcb2_write_line m_irq_handler;
-	devcb2_write32 m_host_write;
-	devcb2_read32 m_host_read;
+	devcb_write_line m_irq_handler;
+	devcb_write32 m_host_write;
+	devcb_read32 m_host_read;
 };
 
 // device type definition

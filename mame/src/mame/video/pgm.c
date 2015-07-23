@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, ElSemi
 /*** Video *******************************************************************/
 /* see drivers/pgm.c for notes on where improvements can be made */
 
@@ -617,15 +619,15 @@ VIDEO_START_MEMBER(pgm_state,pgm)
 	m_aoffset = 0;
 	m_boffset = 0;
 
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(pgm_state::get_pgm_tx_tilemap_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(pgm_state::get_pgm_tx_tilemap_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
 	m_tx_tilemap->set_transparent_pen(15);
 
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(pgm_state::get_pgm_bg_tilemap_tile_info),this), TILEMAP_SCAN_ROWS, 32, 32, 64, 16);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(pgm_state::get_pgm_bg_tilemap_tile_info),this), TILEMAP_SCAN_ROWS, 32, 32, 64, 16);
 	m_bg_tilemap->set_transparent_pen(31);
 	m_bg_tilemap->set_scroll_rows(16 * 32);
 
 	for (i = 0; i < 0x1200 / 2; i++)
-		palette_set_color(machine(), i, MAKE_RGB(0, 0, 0));
+		m_palette->set_pen_color(i, rgb_t(0, 0, 0));
 
 	m_spritebufferram = auto_alloc_array_clear(machine(), UINT16, 0xa00/2);
 
@@ -638,7 +640,7 @@ UINT32 pgm_state::screen_update_pgm(screen_device &screen, bitmap_ind16 &bitmap,
 
 	bitmap.fill(0x3ff, cliprect); // ddp2 igs logo needs 0x3ff
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	m_bg_tilemap->set_scrolly(0, m_videoregs[0x2000/2]);
 
@@ -646,15 +648,15 @@ UINT32 pgm_state::screen_update_pgm(screen_device &screen, bitmap_ind16 &bitmap,
 		m_bg_tilemap->set_scrollx((y + m_videoregs[0x2000 / 2]) & 0x1ff, m_videoregs[0x3000 / 2] + m_rowscrollram[y]);
 
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 2);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 2);
 
-	draw_sprites(bitmap, m_spritebufferram, machine().priority_bitmap);
+	draw_sprites(bitmap, m_spritebufferram, screen.priority());
 
 	m_tx_tilemap->set_scrolly(0, m_videoregs[0x5000/2]);
 	m_tx_tilemap->set_scrollx(0, m_videoregs[0x6000/2]); // Check
 
 
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 
 	return 0;

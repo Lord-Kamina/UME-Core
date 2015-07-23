@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                             -=  SunA 8 Bit Games =-
@@ -90,8 +92,7 @@ TILE_GET_INFO_MEMBER(suna8_state::get_tile_info)
 		code = m_spriteram[ 2 * tile_index + 0 ];
 		attr = m_spriteram[ 2 * tile_index + 1 ];
 	}
-	SET_TILE_INFO_MEMBER(
-			m_page / 8,
+	SET_TILE_INFO_MEMBER(m_page / 8,
 			( (attr & 0x03) << 8 ) + code + m_tiles*0x400,
 			(attr >> 2) & 0xf,
 			TILE_FLIPYX( (attr >> 6) & 3 ));
@@ -174,7 +175,7 @@ WRITE8_MEMBER( suna8_state::brickzn_banked_paletteram_w )
 		b   =   (rgb >>  4) & 0x0f;
 	}
 
-	palette_set_color_rgb(machine(),offset/2,pal4bit(r),pal4bit(g),pal4bit(b));
+	m_palette->set_pen_color(offset/2,pal4bit(r),pal4bit(g),pal4bit(b));
 }
 
 
@@ -196,7 +197,7 @@ void suna8_state::suna8_vh_start_common(int text_dim, GFXBANK_TYPE_T gfxbank_typ
 	}
 
 #if TILEMAPS
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(suna8_state::get_tile_info),this), TILEMAP_SCAN_COLS,
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(suna8_state::get_tile_info),this), TILEMAP_SCAN_COLS,
 
 								8, 8, 0x20*(m_text_dim ? 4 : 16), 0x20);
 
@@ -225,8 +226,8 @@ void suna8_state::draw_normal_sprites(bitmap_ind16 &bitmap,const rectangle &clip
 	int i;
 	int mx = 0; // multisprite x counter
 
-	int max_x = machine().primary_screen->width() - 8;
-	int max_y = machine().primary_screen->height() - 8;
+	int max_x = m_screen->width() - 8;
+	int max_y = m_screen->height() - 8;
 
 	for (i = 0x1d00; i < 0x2000; i += 4)
 	{
@@ -378,9 +379,9 @@ void suna8_state::draw_normal_sprites(bitmap_ind16 &bitmap,const rectangle &clip
 					sy = max_y - sy;    tile_flipy = !tile_flipy;
 				}
 
-				drawgfx_transpen(   bitmap, cliprect, machine().gfx[which],
+				m_gfxdecode->gfx(which)->transpen(bitmap,cliprect,
 							tile + (attr & 0x3)*0x100 + gfxbank,
-							(((attr >> 2) & 0xf) | colorbank) + 0x10 * m_palettebank,    // hardhea2 player2
+							(((attr >> 2) & 0xf) ^ colorbank) + 0x10 * m_palettebank,    // player2 in hardhea2 and sparkman
 							tile_flipx, tile_flipy,
 							sx, sy, 0xf);
 			}
@@ -394,8 +395,8 @@ void suna8_state::draw_text_sprites(bitmap_ind16 &bitmap,const rectangle &clipre
 	UINT8 *spriteram = m_spriteram;
 	int i;
 
-	int max_x = machine().primary_screen->width() - 8;
-	int max_y = machine().primary_screen->height() - 8;
+	int max_x = m_screen->width() - 8;
+	int max_y = m_screen->height() - 8;
 
 	for (i = 0x1900; i < 0x19ff; i += 4)
 	{
@@ -442,7 +443,7 @@ void suna8_state::draw_text_sprites(bitmap_ind16 &bitmap,const rectangle &clipre
 					sy = max_y - sy;    flipy = !flipy;
 				}
 
-				drawgfx_transpen(   bitmap,cliprect,machine().gfx[0],
+				m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 							tile + (attr & 0x3)*0x100 + bank,
 							(attr >> 2) & 0xf,
 							flipx, flipy,
@@ -480,13 +481,13 @@ UINT32 suna8_state::screen_update_suna8(screen_device &screen, bitmap_ind16 &bit
 		if (machine().input().code_pressed_once(KEYCODE_S)) { m_trombank++; machine().tilemap().mark_all_dirty();   }
 
 		m_trombank  &=  0xf;
-		m_page      &=  m_text_dim ? 3 : (machine().gfx[1] ? 15 : 7);
+		m_page      &=  m_text_dim ? 3 : (m_gfxdecode->gfx(1) ? 15 : 7);
 		m_tiles     %=  max_tiles;
 		if (m_tiles < 0) m_tiles += max_tiles;
 
 		m_bg_tilemap->set_scrollx(0, 0x100 * m_page);
 		m_bg_tilemap->set_scrolly(0, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 #if 1
 	popmessage("%02X %02X %02X - p%2X g%02X r%02X",
 						m_rombank, m_palettebank, m_spritebank,
@@ -501,7 +502,7 @@ UINT32 suna8_state::screen_update_suna8(screen_device &screen, bitmap_ind16 &bit
 		draw_normal_sprites(bitmap,cliprect, 0);
 
 		// More normal sprites (second sprite "chip" in sparkman)
-		if (machine().gfx[1])
+		if (m_gfxdecode->gfx(1))
 			draw_normal_sprites(bitmap,cliprect, 1);
 
 		// Text sprites (earlier games only)

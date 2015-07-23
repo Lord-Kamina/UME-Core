@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Derrick Renaud, Couriersud
 #include "emu.h"
 #include "flt_vol.h"
 
@@ -6,11 +8,11 @@
 const device_type FILTER_VOLUME = &device_creator<filter_volume_device>;
 
 //-------------------------------------------------
-//  qsound_device - constructor
+//  filter_volume_device - constructor
 //-------------------------------------------------
 
 filter_volume_device::filter_volume_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, FILTER_VOLUME, "Volume Filter", tag, owner, clock),
+	: device_t(mconfig, FILTER_VOLUME, "Volume Filter", tag, owner, clock, "filter_volume", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_stream(NULL),
 		m_gain(0)

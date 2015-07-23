@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 #include "emu.h"
 #include "cpu/z80/z80.h"
 
@@ -12,7 +14,9 @@ public:
 			m_videoram_2(*this, "videoram_2"),
 			m_attributeram(*this, "attributeram"),
 			m_spriteram(*this, "spriteram"),
-			m_bulletsram(*this, "bulletsram")
+			m_bulletsram(*this, "bulletsram"),
+			m_gfxdecode(*this, "gfxdecode"),
+			m_palette(*this, "palette")
 	{ }
 
 	// in drivers/zodiack.c
@@ -41,12 +45,14 @@ public:
 	required_shared_ptr<UINT8> m_spriteram;
 	required_shared_ptr<UINT8> m_bulletsram;
 
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	// state
 	tilemap_t *m_bg_tilemap;
 	tilemap_t *m_fg_tilemap;
 	UINT8 m_main_nmi_enabled;
 	UINT8 m_sound_nmi_enabled;
-	UINT8 m_flipscreen;
 	bool m_percuss_hardware;
 
 	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles,Frank Palazzolo
 /***********************************************************
 
     Astrocade custom 'IO' chip sound chip driver
@@ -56,7 +58,7 @@ const device_type ASTROCADE = &device_creator<astrocade_device>;
 //-------------------------------------------------
 
 astrocade_device::astrocade_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, ASTROCADE, "Astrocade", tag, owner, clock),
+	: device_t(mconfig, ASTROCADE, "Astrocade", tag, owner, clock, "astrocade", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_stream(NULL),
 		m_master_count(0),

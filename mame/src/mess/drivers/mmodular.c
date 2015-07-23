@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Dirk Verwiebe, Ralf Schaefer, Cowering
 /******************************************************************************
  Mephisto Chess Computers using plugin modules
 
@@ -1077,9 +1079,9 @@ MACHINE_RESET_MEMBER(polgar_state,academy)
 
 PALETTE_INIT_MEMBER(polgar_state,chess_lcd)
 {
-	// palette_set_color(machine(), 0, MAKE_RGB(138, 146, 148)); // some think this is closer, but slightly less readable
-	palette_set_color(machine(), 0, MAKE_RGB(255, 255, 255));
-	palette_set_color(machine(), 1, MAKE_RGB(0, 0, 0));
+	// palette.set_pen_color(0, rgb_t(138, 146, 148)); // some think this is closer, but slightly less readable
+	palette.set_pen_color(0, rgb_t(255, 255, 255));
+	palette.set_pen_color(1, rgb_t(0, 0, 0));
 }
 
 static const gfx_layout chess_charlayout =
@@ -1521,10 +1523,11 @@ static MACHINE_CONFIG_FRAGMENT ( chess_common )
 	MCFG_SCREEN_SIZE(100, 22)
 	MCFG_SCREEN_VISIBLE_AREA(0, 100-1, 0, 22-3)
 	MCFG_SCREEN_UPDATE_DEVICE("hd44780", hd44780_device, screen_update)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT_OVERRIDE(polgar_state,chess_lcd)
+	MCFG_SCREEN_PALETTE("palette")
+	MCFG_PALETTE_ADD("palette", 2)
+	MCFG_PALETTE_INIT_OWNER(polgar_state,chess_lcd)
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
-	MCFG_GFXDECODE(chess_lcd)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", chess_lcd)
 
 	MCFG_HD44780_ADD("hd44780")
 	MCFG_HD44780_LCD_SIZE(2, 16)
@@ -1764,8 +1767,8 @@ ROM_END
 
 ROM_START(academy)
 	ROM_REGION(0x10000,"maincpu",0)
-	ROM_LOAD("acad8000.bin", 0x8000, 0x8000, CRC(A967922B) SHA1(1327903FF89BF96D72C930C400F367AE19E3EC68))
-	ROM_LOAD("acad4000.bin", 0x4000, 0x4000, CRC(EE1222B5) SHA1(98541D87755A7186B69B9723CC4ADBD07F20F0E2))
+	ROM_LOAD("acad8000.bin", 0x8000, 0x8000, CRC(a967922b) SHA1(1327903ff89bf96d72c930c400f367ae19e3ec68))
+	ROM_LOAD("acad4000.bin", 0x4000, 0x4000, CRC(ee1222b5) SHA1(98541d87755a7186b69b9723cc4adbd07f20f0e2))
 ROM_END
 
 ROM_START(megaiv)
@@ -1803,13 +1806,13 @@ ROM_END
 
 ROM_START( lyon32 )
 	ROM_REGION32_BE( 0x20000, "maincpu", 0 )
-	ROM_LOAD("lyon32.bin", 0x00000, 0x20000, CRC(5C128B06) SHA1(954C8F0D3FAE29900CB1E9C14A41A9A07A8E185F))
+	ROM_LOAD("lyon32.bin", 0x00000, 0x20000, CRC(5c128b06) SHA1(954c8f0d3fae29900cb1e9c14a41a9a07a8e185f))
 ROM_END
 
 
 ROM_START(monteciv)
 	ROM_REGION(0x10000,"maincpu",0)
-	ROM_LOAD("mciv.bin", 0x8000, 0x8000, CRC(C4887694) SHA1(7f482d2a40fcb3125266e7a5407da315b4f9b49c))
+	ROM_LOAD("mciv.bin", 0x8000, 0x8000, CRC(c4887694) SHA1(7f482d2a40fcb3125266e7a5407da315b4f9b49c))
 
 ROM_END
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #ifndef _NAOMIG1_H_
 #define _NAOMIG1_H_
 
@@ -5,7 +7,7 @@
 
 #define MCFG_NAOMI_G1_ADD(_tag, type, _irq_cb)                          \
 	MCFG_DEVICE_ADD(_tag, type, 0)                                      \
-	downcast<naomi_g1_device *>(device)->set_irq_cb(DEVCB2_ ## _irq_cb);
+	downcast<naomi_g1_device *>(device)->set_irq_cb(DEVCB_ ## _irq_cb);
 
 class naomi_g1_device : public device_t
 {
@@ -16,7 +18,7 @@ public:
 
 	typedef delegate<void (UINT32 main_adr, void *dma_ptr, UINT32 length, UINT32 size, bool to_mainram)> dma_cb;
 
-	naomi_g1_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	naomi_g1_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 	template<class _cb> void set_irq_cb(_cb cb) { irq_cb.set_callback(cb); }
 	void set_dma_cb(dma_cb _cb) { _dma_cb = _cb; }
 
@@ -62,7 +64,7 @@ private:
 	UINT32 gdstar, gdlen, gddir, gden, gdst;
 
 	emu_timer *timer;
-	devcb2_write8 irq_cb;
+	devcb_write8 irq_cb;
 	dma_cb _dma_cb;
 
 	void dma(void *dma_ptr, UINT32 main_adr, UINT32 size, bool to_mainram);

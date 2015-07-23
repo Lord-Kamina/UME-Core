@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /***************************************************************************
 
     D-Con video hardware.
@@ -10,34 +12,7 @@
 
 /******************************************************************************/
 
-READ16_MEMBER(dcon_state::dcon_control_r)
-{
-	return m_enable;
-}
-
-WRITE16_MEMBER(dcon_state::dcon_control_w)
-{
-	if (ACCESSING_BITS_0_7)
-	{
-		m_enable=data;
-		if ((m_enable&4)==4)
-			m_foreground_layer->enable(0);
-		else
-			m_foreground_layer->enable(1);
-
-		if ((m_enable&2)==2)
-			m_midground_layer->enable(0);
-		else
-			m_midground_layer->enable(1);
-
-		if ((m_enable&1)==1)
-			m_background_layer->enable(0);
-		else
-			m_background_layer->enable(1);
-	}
-}
-
-WRITE16_MEMBER(dcon_state::dcon_gfxbank_w)
+WRITE16_MEMBER(dcon_state::gfxbank_w)
 {
 	if (data&1)
 		m_gfx_bank_select=0x1000;
@@ -45,25 +20,25 @@ WRITE16_MEMBER(dcon_state::dcon_gfxbank_w)
 		m_gfx_bank_select=0;
 }
 
-WRITE16_MEMBER(dcon_state::dcon_background_w)
+WRITE16_MEMBER(dcon_state::background_w)
 {
 	COMBINE_DATA(&m_back_data[offset]);
 	m_background_layer->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(dcon_state::dcon_foreground_w)
+WRITE16_MEMBER(dcon_state::foreground_w)
 {
 	COMBINE_DATA(&m_fore_data[offset]);
 	m_foreground_layer->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(dcon_state::dcon_midground_w)
+WRITE16_MEMBER(dcon_state::midground_w)
 {
 	COMBINE_DATA(&m_mid_data[offset]);
 	m_midground_layer->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(dcon_state::dcon_text_w)
+WRITE16_MEMBER(dcon_state::text_w)
 {
 	COMBINE_DATA(&m_textram[offset]);
 	m_text_layer->mark_tile_dirty(offset);
@@ -76,8 +51,7 @@ TILE_GET_INFO_MEMBER(dcon_state::get_back_tile_info)
 
 	tile&=0xfff;
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			tile,
 			color,
 			0);
@@ -90,8 +64,7 @@ TILE_GET_INFO_MEMBER(dcon_state::get_fore_tile_info)
 
 	tile&=0xfff;
 
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			tile,
 			color,
 			0);
@@ -104,8 +77,7 @@ TILE_GET_INFO_MEMBER(dcon_state::get_mid_tile_info)
 
 	tile&=0xfff;
 
-	SET_TILE_INFO_MEMBER(
-			3,
+	SET_TILE_INFO_MEMBER(3,
 			tile|m_gfx_bank_select,
 			color,
 			0);
@@ -118,8 +90,7 @@ TILE_GET_INFO_MEMBER(dcon_state::get_text_tile_info)
 
 	tile&=0xfff;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile,
 			color,
 			0);
@@ -127,19 +98,24 @@ TILE_GET_INFO_MEMBER(dcon_state::get_text_tile_info)
 
 void dcon_state::video_start()
 {
-	m_background_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(dcon_state::get_back_tile_info),this),TILEMAP_SCAN_ROWS,     16,16,32,32);
-	m_foreground_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(dcon_state::get_fore_tile_info),this),TILEMAP_SCAN_ROWS,16,16,32,32);
-	m_midground_layer =  &machine().tilemap().create(tilemap_get_info_delegate(FUNC(dcon_state::get_mid_tile_info),this), TILEMAP_SCAN_ROWS,16,16,32,32);
-	m_text_layer =       &machine().tilemap().create(tilemap_get_info_delegate(FUNC(dcon_state::get_text_tile_info),this),TILEMAP_SCAN_ROWS,  8,8,64,32);
+	m_background_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(dcon_state::get_back_tile_info),this),TILEMAP_SCAN_ROWS,     16,16,32,32);
+	m_foreground_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(dcon_state::get_fore_tile_info),this),TILEMAP_SCAN_ROWS,16,16,32,32);
+	m_midground_layer =  &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(dcon_state::get_mid_tile_info),this), TILEMAP_SCAN_ROWS,16,16,32,32);
+	m_text_layer =       &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(dcon_state::get_text_tile_info),this),TILEMAP_SCAN_ROWS,  8,8,64,32);
 
 	m_midground_layer->set_transparent_pen(15);
 	m_foreground_layer->set_transparent_pen(15);
 	m_text_layer->set_transparent_pen(15);
 
 	m_gfx_bank_select = 0;
+
+	save_item(NAME(m_gfx_bank_select));
+	save_item(NAME(m_last_gfx_bank));
+	save_item(NAME(m_scroll_ram));
+	save_item(NAME(m_layer_en));
 }
 
-void dcon_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect)
+void dcon_state::draw_sprites( screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect)
 {
 	UINT16 *spriteram16 = m_spriteram;
 	int offs,fx,fy,x,y,color,sprite;
@@ -184,79 +160,79 @@ void dcon_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect)
 			for (ay=0; ay<dy; ay++) {
 				if (!fx && !fy)
 				{
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+ax*16,y+ay*16,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 
 					// wrap around y
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+ax*16,y+ay*16 + 512,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 
 					// wrap around y
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+ax*16,y+ay*16 - 512,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 				}
 				else if (fx && !fy)
 				{
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+(dx-1-ax)*16,y+ay*16,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 
 					// wrap around y
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+(dx-1-ax)*16,y+ay*16 + 512,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 
 					// wrap around y
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+(dx-1-ax)*16,y+ay*16 - 512,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 				}
 				else if (!fx && fy)
 				{
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+ax*16,y+(dy-1-ay)*16,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 
 					// wrap around y
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+ax*16,y+(dy-1-ay)*16 + 512,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 
 					// wrap around y
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+ax*16,y+(dy-1-ay)*16 - 512,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 				}
 				else
 				{
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+(dx-1-ax)*16,y+(dy-1-ay)*16,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 
 					// wrap around y
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+(dx-1-ax)*16,y+(dy-1-ay)*16 + 512,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 
 					// wrap around y
-					pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+					m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						sprite + inc,
 						color,fx,fy,x+(dx-1-ax)*16,y+(dy-1-ay)*16 - 512,
-						machine().priority_bitmap,pri_mask,15);
+						screen.priority(),pri_mask,15);
 				}
 
 				inc++;
@@ -266,7 +242,7 @@ void dcon_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect)
 
 UINT32 dcon_state::screen_update_dcon(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Setup the tilemaps */
 	m_background_layer->set_scrollx(0, m_scroll_ram[0] );
@@ -276,22 +252,29 @@ UINT32 dcon_state::screen_update_dcon(screen_device &screen, bitmap_ind16 &bitma
 	m_foreground_layer->set_scrollx(0, m_scroll_ram[4] );
 	m_foreground_layer->set_scrolly(0, m_scroll_ram[5] );
 
-	if ((m_enable&1)!=1)
-		m_background_layer->draw(bitmap, cliprect, 0,0);
+	if (!(m_layer_en & 1))
+		m_background_layer->draw(screen, bitmap, cliprect, 0,0);
 	else
 		bitmap.fill(15, cliprect); /* Should always be black, not pen 15 */
 
-	m_midground_layer->draw(bitmap, cliprect, 0,1);
-	m_foreground_layer->draw(bitmap, cliprect, 0,2);
-	m_text_layer->draw(bitmap, cliprect, 0,4);
+	if (!(m_layer_en & 2))
+		m_midground_layer->draw(screen, bitmap, cliprect, 0,1);
 
-	draw_sprites(bitmap,cliprect);
+	if (!(m_layer_en & 4))
+		m_foreground_layer->draw(screen, bitmap, cliprect, 0,2);
+
+	if (!(m_layer_en & 8))
+		m_text_layer->draw(screen, bitmap, cliprect, 0,4);
+
+	if (!(m_layer_en & 0x10))
+		draw_sprites(screen, bitmap,cliprect);
+
 	return 0;
 }
 
 UINT32 dcon_state::screen_update_sdgndmps(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Gfx banking */
 	if (m_last_gfx_bank!=m_gfx_bank_select)
@@ -310,15 +293,22 @@ UINT32 dcon_state::screen_update_sdgndmps(screen_device &screen, bitmap_ind16 &b
 	m_text_layer->set_scrollx(0, /*m_scroll_ram[6] + */ 128 );
 	m_text_layer->set_scrolly(0, /*m_scroll_ram[7] + */ 0 );
 
-	if ((m_enable&1)!=1)
-		m_background_layer->draw(bitmap, cliprect, 0,0);
+	if (!(m_layer_en & 1))
+		m_background_layer->draw(screen, bitmap, cliprect, 0,0);
 	else
 		bitmap.fill(15, cliprect); /* Should always be black, not pen 15 */
 
-	m_midground_layer->draw(bitmap, cliprect, 0,1);
-	m_foreground_layer->draw(bitmap, cliprect, 0,2);
-	m_text_layer->draw(bitmap, cliprect, 0,4);
+	if (!(m_layer_en & 2))
+		m_midground_layer->draw(screen, bitmap, cliprect, 0,1);
 
-	draw_sprites(bitmap,cliprect);
+	if (!(m_layer_en & 4))
+		m_foreground_layer->draw(screen, bitmap, cliprect, 0,2);
+
+	if (!(m_layer_en & 8))
+		m_text_layer->draw(screen, bitmap, cliprect, 0,4);
+
+	if (!(m_layer_en & 0x10))
+		draw_sprites(screen, bitmap,cliprect);
+
 	return 0;
 }

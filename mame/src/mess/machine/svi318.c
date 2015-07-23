@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Sean Young,Tomas Karlsson
 /*
 ** Spectravideo SVI-318 and SVI-328
 **
@@ -10,7 +12,6 @@
 #include "includes/svi318.h"
 #include "cpu/z80/z80.h"
 #include "video/tms9928a.h"
-#include "machine/wd17xx.h"
 #include "imagedev/flopdrv.h"
 #include "formats/svi_cas.h"
 #include "sound/ay8910.h"
@@ -25,13 +26,12 @@ enum {
 
 /* Serial ports */
 
-WRITE_LINE_MEMBER(svi318_state::svi318_ins8250_interrupt)
+WRITE_LINE_MEMBER(svi318_state::ins8250_interrupt)
 {
-	if (m_svi.bankLow != SVI_CART)
-	{
+	if (m_bank_low != SVI_CART)
 		m_maincpu->set_input_line(0, (state ? HOLD_LINE : CLEAR_LINE));
-	}
 }
+
 #if 0
 static INS8250_REFRESH_CONNECT( svi318_com_refresh_connected )
 {
@@ -39,72 +39,36 @@ static INS8250_REFRESH_CONNECT( svi318_com_refresh_connected )
 	ins8250_handshake_in(device, UART8250_HANDSHAKE_IN_CTS|UART8250_HANDSHAKE_IN_DSR|UART8250_INPUTS_RING_INDICATOR|UART8250_INPUTS_DATA_CARRIER_DETECT);
 }
 #endif
-const ins8250_interface svi318_ins8250_interface[2]=
-{
-	{
-		DEVCB_NULL,
-		DEVCB_NULL,
-		DEVCB_NULL,
-		DEVCB_DRIVER_LINE_MEMBER(svi318_state,svi318_ins8250_interrupt),
-		DEVCB_NULL,
-		DEVCB_NULL
-	},
-	{
-		DEVCB_NULL,
-		DEVCB_NULL,
-		DEVCB_NULL,
-		DEVCB_DRIVER_LINE_MEMBER(svi318_state,svi318_ins8250_interrupt),
-		DEVCB_NULL,
-		DEVCB_NULL
-	}
-};
-
 
 /* Cartridge */
 
+bool svi318_state::cart_verify(UINT8 *ROM)
+{
+	if (ROM[0] != 0xf3 || ROM[1] != 0x31)
+		return false;
+
+	return true;
+}
+
 DEVICE_IMAGE_LOAD_MEMBER( svi318_state, svi318_cart )
 {
-	UINT8 *p = memregion("user1")->base();
-	UINT32 size;
-
-	if (image.software_entry() == NULL)
-		size = image.length();
-	else
-		size = image.get_software_region_length("rom");
+	UINT32 size = m_cart->common_get_size("rom");
 
 	if (size > 0x8000)
+	{
 		logerror("Cart image %s larger than expected. Please report the issue.\n", image.filename());
-
-	if (image.software_entry() == NULL)
-	{
-		if (image.fread(p, size) != size)
-		{
-			logerror("Can't read file %s\n", image.filename());
-			return IMAGE_INIT_FAIL;
-		}
-	}
-	else
-	{
-		memcpy(p, image.get_software_region("rom"), size);
-	}
-
-	if ( p[0] != 0xf3 || p[1] != 0x31 )
-	{
 		return IMAGE_INIT_FAIL;
 	}
 
-	m_pcart = p;
-	m_pcart_rom_size = size;
+	m_cart->rom_alloc(size, GENERIC_ROM8_WIDTH, ENDIANNESS_LITTLE);
+	m_cart->common_load_rom(m_cart->get_rom_base(), size, "rom");
+
+	if (image.software_entry() == NULL && !cart_verify(m_cart->get_rom_base()))
+		return IMAGE_INIT_FAIL;
 
 	return IMAGE_INIT_PASS;
 }
 
-
-DEVICE_IMAGE_UNLOAD_MEMBER( svi318_state, svi318_cart )
-{
-	m_pcart = NULL;
-	m_pcart_rom_size = 0;
-}
 
 
 /* PPI */
@@ -122,18 +86,15 @@ DEVICE_IMAGE_UNLOAD_MEMBER( svi318_state, svi318_cart )
   8  CASR     Cassette, Read data
 */
 
-READ8_MEMBER(svi318_state::svi318_ppi_port_a_r)
+READ8_MEMBER(svi318_state::ppi_port_a_r)
 {
 	int data = 0x0f;
 
 	if (m_cassette->input() > 0.0038)
-	{
 		data |= 0x80;
-	}
 	if (!m_cassette->exists())
-	{
 		data |= 0x40;
-	}
+
 	data |= m_buttons->read() & 0x30;
 
 	return data;
@@ -152,24 +113,12 @@ READ8_MEMBER(svi318_state::svi318_ppi_port_a_r)
   8  IN7  Keyboard, Column status of selected line
 */
 
-READ8_MEMBER(svi318_state::svi318_ppi_port_b_r)
+READ8_MEMBER(svi318_state::ppi_port_b_r)
 {
-	switch (m_svi.keyboard_row)
-	{
-		case 0:  return m_line0->read();
-		case 1:  return m_line1->read();
-		case 2:  return m_line2->read();
-		case 3:  return m_line3->read();
-		case 4:  return m_line4->read();
-		case 5:  return m_line5->read();
-		case 6:  return m_line6->read();
-		case 7:  return m_line7->read();
-		case 8:  return m_line8->read();
-		case 9:  return m_line9->read();
-		case 10: return m_line10->read();
-	}
-
-	return 0xff;
+	if (m_keyboard_row <= 10)
+		return m_line[m_keyboard_row]->read();
+	else
+		return 0xff;
 }
 
 /*
@@ -185,7 +134,7 @@ READ8_MEMBER(svi318_state::svi318_ppi_port_b_r)
   8  SOUND  Keyboard, Click sound bit (pulse)
 */
 
-WRITE8_MEMBER(svi318_state::svi318_ppi_port_c_w)
+WRITE8_MEMBER(svi318_state::ppi_port_c_w)
 {
 	int val;
 
@@ -205,20 +154,10 @@ WRITE8_MEMBER(svi318_state::svi318_ppi_port_c_w)
 	/* cassette signal write */
 	m_cassette->output((data & 0x20) ? -1.0 : +1.0);
 
-	m_svi.keyboard_row = data & 0x0F;
+	m_keyboard_row = data & 0x0f;
 }
 
-I8255_INTERFACE( svi318_ppi8255_interface )
-{
-	DEVCB_DRIVER_MEMBER(svi318_state,svi318_ppi_port_a_r),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(svi318_state,svi318_ppi_port_b_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(svi318_state,svi318_ppi_port_c_w)
-};
-
-WRITE8_MEMBER(svi318_state::svi318_ppi_w)
+WRITE8_MEMBER(svi318_state::ppi_w)
 {
 	m_ppi->write(space, offset + 2, data);
 }
@@ -239,7 +178,7 @@ WRITE8_MEMBER(svi318_state::svi318_ppi_w)
   8  RIGHT2 Joystick 2, Right
 */
 
-READ8_MEMBER(svi318_state::svi318_psg_port_a_r)
+READ8_MEMBER(svi318_state::psg_port_a_r)
 {
 	return m_joysticks->read();
 }
@@ -260,136 +199,91 @@ READ8_MEMBER(svi318_state::svi318_psg_port_a_r)
  with RAM are disabled.
 */
 
-WRITE8_MEMBER(svi318_state::svi318_psg_port_b_w)
+WRITE8_MEMBER(svi318_state::psg_port_b_w)
 {
-	if ( (m_svi.bank_switch ^ data) & 0x20)
-		set_led_status (machine(), 0, !(data & 0x20) );
+	if ((m_bank_switch ^ data) & 0x20)
+		set_led_status(machine(), 0, !(data & 0x20));
 
-	m_svi.bank_switch = data;
-	svi318_set_banks();
+	m_bank_switch = data;
+	set_banks();
 }
 
 /* Disk drives  */
 
-WRITE_LINE_MEMBER(svi318_state::svi_fdc_intrq_w)
+WRITE_LINE_MEMBER(svi318_state::fdc_intrq_w)
 {
-	m_fdc.irq = state;
+	m_irq = state;
 }
 
-WRITE_LINE_MEMBER(svi318_state::svi_fdc_drq_w)
+WRITE_LINE_MEMBER(svi318_state::fdc_drq_w)
 {
-	m_fdc.drq = state;
+	m_drq = state;
 }
 
-const wd17xx_interface svi_wd17xx_interface =
+WRITE8_MEMBER(svi318_state::fdc_drive_motor_w)
 {
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(svi318_state,svi_fdc_intrq_w),
-	DEVCB_DRIVER_LINE_MEMBER(svi318_state,svi_fdc_drq_w),
-	{FLOPPY_0, FLOPPY_1, NULL, NULL}
-};
+	m_floppy = NULL;
 
-WRITE8_MEMBER(svi318_state::svi318_fdc_drive_motor_w)
-{
-	device_t *fdc = machine().device("wd179x");
-	switch (data & 3)
-	{
-	case 1:
-		wd17xx_set_drive(fdc,0);
-		m_fdc.driveselect = 0;
-		break;
-	case 2:
-		wd17xx_set_drive(fdc,1);
-		m_fdc.driveselect = 1;
-		break;
-	}
+	if (BIT(data, 0)) m_floppy = m_floppy0->get_device();
+	if (BIT(data, 1)) m_floppy = m_floppy1->get_device();
+
+	m_fd1793->set_floppy(m_floppy);
+
+	if (m_floppy0->get_device())
+		m_floppy0->get_device()->mon_w(!BIT(data, 2));
+
+	if (m_floppy1->get_device())
+		m_floppy1->get_device()->mon_w(!BIT(data, 3));
 }
 
-WRITE8_MEMBER(svi318_state::svi318_fdc_density_side_w)
+WRITE8_MEMBER(svi318_state::fdc_density_side_w)
 {
-	device_t *fdc = machine().device("wd179x");
+	m_fd1793->dden_w(BIT(data, 0));
 
-	wd17xx_dden_w(fdc, BIT(data, 0));
-	wd17xx_set_side(fdc, BIT(data, 1));
+	if (m_floppy)
+		m_floppy->ss_w(BIT(data, 1));
 }
 
-READ8_MEMBER(svi318_state::svi318_fdc_irqdrq_r)
+READ8_MEMBER(svi318_state::fdc_irqdrq_r)
 {
 	UINT8 result = 0;
 
-	result |= m_fdc.drq << 6;
-	result |= m_fdc.irq << 7;
+	result |= m_drq << 6;
+	result |= m_irq << 7;
 
 	return result;
 }
 
-MC6845_UPDATE_ROW( svi806_crtc6845_update_row )
+MC6845_UPDATE_ROW( svi318_state::crtc_update_row )
 {
-	svi318_state *state = device->machine().driver_data<svi318_state>();
-	const rgb_t *palette = palette_entry_list_raw(bitmap.palette());
-	int i;
+	const rgb_t *palette = m_palette->palette()->entry_list_raw();
 
-	for( i = 0; i < x_count; i++ )
+	for (int i = 0; i < x_count; i++)
 	{
-		int j;
-		UINT8   data = state->m_svi.svi806_gfx[ state->m_svi.svi806_ram->u8(( ma + i ) & 0x7FF) * 16 + ra ];
+		UINT8 data = m_svi806_gfx[m_svi806_ram[(ma + i) & 0x7ff] * 16 + ra];
 
-		if ( i == cursor_x )
+		if (i == cursor_x)
 		{
-			data = 0xFF;
+			data = 0xff;
 		}
 
-		for( j=0; j < 8; j++ )
+		for (int j = 0; j < 8; j++)
 		{
-			bitmap.pix32(y, i * 8 + j ) = palette[TMS9928A_PALETTE_SIZE + ( ( data & 0x80 ) ? 1 : 0 )];
+			bitmap.pix32(y, i * 8 + j) = palette[TMS9928A_PALETTE_SIZE + BIT(data, 7)];
 			data = data << 1;
 		}
 	}
 }
 
 
-/* 80 column card init */
-void svi318_state::svi318_80col_init()
-{
-	/* 2K RAM, but allocating 4KB to make banking easier */
-	/* The upper 2KB will be set to FFs and will never be written to */
-	m_svi.svi806_ram = machine().memory().region_alloc("gfx2", 0x1000, 1, ENDIANNESS_LITTLE );
-	memset( m_svi.svi806_ram->base(), 0x00, 0x800 );
-	memset( m_svi.svi806_ram->base() + 0x800, 0xFF, 0x800 );
-	m_svi.svi806_gfx = memregion("gfx1")->base();
-}
-
-
 WRITE8_MEMBER(svi318_state::svi806_ram_enable_w)
 {
-	m_svi.svi806_ram_enabled = ( data & 0x01 );
-	svi318_set_banks();
+	m_svi806_ram_enabled = (data & 0x01);
+	set_banks();
 }
 
-VIDEO_START_MEMBER(svi318_state,svi328_806)
-{
-}
-
-MACHINE_RESET_MEMBER(svi318_state,svi328_806)
-{
-	MACHINE_RESET_CALL_MEMBER(svi318);
-
-	svi318_80col_init();
-	m_svi.svi806_present = 1;
-	svi318_set_banks();
-
-	/* Set SVI-806 80 column card palette */
-	palette_set_color_rgb( machine(), TMS9928A_PALETTE_SIZE, 0, 0, 0 );     /* Monochrome black */
-	palette_set_color_rgb( machine(), TMS9928A_PALETTE_SIZE+1, 0, 224, 0 ); /* Monochrome green */
-}
 
 /* Init functions */
-
-void svi318_state::svi318_vdp_interrupt(int i)
-{
-	m_maincpu->set_input_line(0, (i ? HOLD_LINE : CLEAR_LINE));
-}
-
 
 static const UINT8 cc_op[0x100] = {
 	4+1,10+1, 7+1, 6+1, 4+1, 4+1, 7+1, 4+1, 4+1,11+1, 7+1, 6+1, 4+1, 4+1, 7+1, 4+1,
@@ -507,241 +401,259 @@ static const UINT8 cc_ex[0x100] = {
 };
 
 
-DRIVER_INIT_MEMBER(svi318_state,svi318)
+DRIVER_INIT_MEMBER(svi318_state, svi318)
 {
 	/* z80 stuff */
-	z80_set_cycle_tables( m_maincpu, cc_op, cc_cb, cc_ed, cc_xy, cc_xycb, cc_ex );
-
-	memset(&m_svi, 0, sizeof (m_svi) );
-
-	if ( ! strcmp( machine().system().name, "svi318" ) || ! strcmp( machine().system().name, "svi318n" ) )
-	{
-		m_svi.svi318 = 1;
-	}
+	m_maincpu->z80_set_cycle_tables(cc_op, cc_cb, cc_ed, cc_xy, cc_xycb, cc_ex);
 
 	m_maincpu->set_input_line_vector(0, 0xff);
 
 	/* memory */
-	m_svi.empty_bank = auto_alloc_array(machine(), UINT8, 0x8000);
-	memset (m_svi.empty_bank, 0xff, 0x8000);
+	m_empty_bank = auto_alloc_array(machine(), UINT8, 0x8000);
+	memset(m_empty_bank, 0xff, 0x8000);
+
+	m_bank_low_ptr = m_empty_bank;
+	m_bank_high1_ptr = m_empty_bank;
+	m_bank_high2_ptr = m_empty_bank;
 }
 
-MACHINE_START_MEMBER(svi318_state,svi318_ntsc)
+DRIVER_INIT_MEMBER(svi318_state, svi328_806)
 {
+	DRIVER_INIT_CALL(svi318);
+	m_svi806_present = 1;
 }
 
-MACHINE_START_MEMBER(svi318_state,svi318_pal)
+void svi318_state::machine_start()
 {
-}
+	std::string region_tag;
+	m_cart_rom = memregion(region_tag.assign(m_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
+	m_bios_rom = memregion("maincpu");
 
-static void svi318_load_proc(device_image_interface &image)
-{
-	svi318_state *state = image.device().machine().driver_data<svi318_state>();
-	int size;
-	int id = floppy_get_drive(&image.device());
-
-	size = image.length();
-	switch (size)
+	// 80 column card start
+	if (m_svi806_present)
 	{
-	case 172032:    /* SVI-328 SSDD */
-		state->m_fdc.heads[id] = 1;
-		break;
-	case 346112:    /* SVI-328 DSDD */
-		state->m_fdc.heads[id] = 2;
-		break;
-	case 348160:    /* SVI-728 DSDD CP/M */
-		state->m_fdc.heads[id] = 2;
-		break;
+		// 2K RAM, but allocating 4KB to make banking easier
+		// The upper 2KB will be set to FFs and will never be written to
+		m_svi806_ram.resize(0x1000);
+		save_item(NAME(m_svi806_ram));
+		memset(&m_svi806_ram[0], 0x00, 0x800);
+		memset(&m_svi806_ram[0x800], 0xff, 0x800);
+
+		m_svi806_gfx = memregion("gfx1")->base();
+
+		// Set SVI-806 80 column card palette
+		m_palette->set_pen_color(TMS9928A_PALETTE_SIZE, 0, 0, 0);     /* Monochrome black */
+		m_palette->set_pen_color(TMS9928A_PALETTE_SIZE+1, 0, 224, 0); /* Monochrome green */
 	}
+
+	// register for savestates
+	save_item(NAME(m_drq));
+	save_item(NAME(m_irq));
+
+	save_item(NAME(m_bank_switch));
+	save_item(NAME(m_bank_low));
+	save_item(NAME(m_bank_high));
+	save_item(NAME(m_bank_low_read_only));
+	save_item(NAME(m_bank_high1_read_only));
+	save_item(NAME(m_bank_high2_read_only));
+	save_item(NAME(m_keyboard_row));
+	save_item(NAME(m_centronics_busy));
+
+	save_item(NAME(m_svi806_present));
+	save_item(NAME(m_svi806_ram_enabled));
+
+	machine().save().register_postload(save_prepost_delegate(FUNC(svi318_state::postload), this));
 }
 
-MACHINE_RESET_MEMBER(svi318_state,svi318)
+void svi318_state::machine_reset()
 {
-	int drive;
+	m_keyboard_row = 0;
+	m_centronics_busy = 0;
+	m_svi806_present = 0;
+	m_svi806_ram_enabled = 0;
+	m_drq = 0;
+	m_irq = 0;
 
-	m_svi.bank_switch = 0xff;
-	svi318_set_banks();
+	m_bank_low = 0;
+	m_bank_high = 0;
+	m_bank_low_read_only = 0;
+	m_bank_high1_read_only = 0;
+	m_bank_high2_read_only = 0;
 
-	for(drive=0;drive<2;drive++)
-	{
-		floppy_install_load_proc(floppy_get_device(machine(), drive), svi318_load_proc);
-	}
+	m_bank_switch = 0xff;
+	set_banks();
 }
 
 /* Memory */
 
-WRITE8_MEMBER(svi318_state::svi318_writemem1)
+WRITE8_MEMBER(svi318_state::writemem1)
 {
-	if ( m_svi.bankLow_read_only )
+	if (m_bank_low_read_only)
 		return;
 
-	m_svi.bankLow_ptr[offset] = data;
+	m_bank_low_ptr[offset] = data;
 }
 
-WRITE8_MEMBER(svi318_state::svi318_writemem2)
+WRITE8_MEMBER(svi318_state::writemem2)
 {
-	if ( m_svi.bankHigh1_read_only)
+	if (m_bank_high1_read_only)
 		return;
 
-	m_svi.bankHigh1_ptr[offset] = data;
+	m_bank_high1_ptr[offset] = data;
 }
 
-WRITE8_MEMBER(svi318_state::svi318_writemem3)
+WRITE8_MEMBER(svi318_state::writemem3)
 {
-	if ( m_svi.bankHigh2_read_only)
+	if (m_bank_high2_read_only)
 		return;
 
-	m_svi.bankHigh2_ptr[offset] = data;
+	m_bank_high2_ptr[offset] = data;
 }
 
-WRITE8_MEMBER(svi318_state::svi318_writemem4)
+WRITE8_MEMBER(svi318_state::writemem4)
 {
-	if ( m_svi.svi806_ram_enabled )
+	if (m_svi806_ram_enabled)
 	{
-		if ( offset < 0x800 )
-		{
-			m_svi.svi806_ram->u8(offset) = data;
-		}
+		if (offset < 0x800)
+			m_svi806_ram[offset] = data;
 	}
 	else
 	{
-		if ( m_svi.bankHigh2_read_only )
+		if (m_bank_high2_read_only)
 			return;
 
-		m_svi.bankHigh2_ptr[ 0x3000 + offset] = data;
+		m_bank_high2_ptr[0x3000 + offset] = data;
 	}
 }
 
-void svi318_state::svi318_set_banks()
+void svi318_state::set_banks()
 {
-	const UINT8 v = m_svi.bank_switch;
+	const UINT8 v = m_bank_switch;
 	UINT8 *ram = m_ram->pointer();
 	UINT32 ram_size = m_ram->size();
 
-	m_svi.bankLow = ( v & 1 ) ? ( ( v & 2 ) ? ( ( v & 8 ) ? SVI_INTERNAL : SVI_EXPRAM3 ) : SVI_EXPRAM2 ) : SVI_CART;
-	m_svi.bankHigh1 = ( v & 4 ) ? ( ( v & 16 ) ? SVI_INTERNAL : SVI_EXPRAM3 ) : SVI_EXPRAM2;
+	m_bank_low = (v & 1) ? ((v & 2) ? ((v & 8) ? SVI_INTERNAL : SVI_EXPRAM3) : SVI_EXPRAM2) : SVI_CART;
+	m_bank_high = (v & 4) ? ((v & 16) ? SVI_INTERNAL : SVI_EXPRAM3) : SVI_EXPRAM2;
 
-	m_svi.bankLow_ptr = m_svi.empty_bank;
-	m_svi.bankLow_read_only = 1;
+	m_bank_low_ptr = m_empty_bank;
+	m_bank_low_read_only = 1;
 
-	switch( m_svi.bankLow )
+	switch (m_bank_low)
 	{
 	case SVI_INTERNAL:
-		m_svi.bankLow_ptr = memregion("maincpu")->base();
+		m_bank_low_ptr = m_bios_rom->base();
 		break;
 	case SVI_CART:
-		if ( m_pcart )
-		{
-			m_svi.bankLow_ptr = m_pcart;
-		}
+		if (m_cart_rom)
+			m_bank_low_ptr = m_cart_rom->base();
 		break;
 	case SVI_EXPRAM2:
-		if ( ram_size >= 64 * 1024 )
+		if (ram_size >= 64 * 1024)
 		{
-			m_svi.bankLow_ptr = ram + ram_size - 64 * 1024;
-			m_svi.bankLow_read_only = 0;
+			m_bank_low_ptr = ram + ram_size - 64 * 1024;
+			m_bank_low_read_only = 0;
 		}
 		break;
 	case SVI_EXPRAM3:
-		if ( ram_size > 128 * 1024 )
+		if (ram_size > 128 * 1024)
 		{
-			m_svi.bankLow_ptr = ram + ram_size - 128 * 1024;
-			m_svi.bankLow_read_only = 0;
+			m_bank_low_ptr = ram + ram_size - 128 * 1024;
+			m_bank_low_read_only = 0;
 		}
 		break;
 	}
 
-	m_svi.bankHigh1_ptr = m_svi.bankHigh2_ptr = m_svi.empty_bank;
-	m_svi.bankHigh1_read_only = m_svi.bankHigh2_read_only = 1;
+	m_bank_high1_ptr = m_empty_bank;
+	m_bank_high1_read_only = 1;
+	m_bank_high2_ptr = m_empty_bank;
+	m_bank_high2_read_only = 1;
 
-	switch( m_svi.bankHigh1 )
+	switch (m_bank_high)
 	{
 	case SVI_INTERNAL:
-		if ( ram_size == 16 * 1024 )
+		if (ram_size == 16 * 1024)
 		{
-			m_svi.bankHigh2_ptr = ram;
-			m_svi.bankHigh2_read_only = 0;
+			m_bank_high2_ptr = ram;
+			m_bank_high2_read_only = 0;
 		}
 		else
 		{
-			m_svi.bankHigh1_ptr = ram;
-			m_svi.bankHigh1_read_only = 0;
-			m_svi.bankHigh2_ptr = ram + 0x4000;
-			m_svi.bankHigh2_read_only = 0;
+			m_bank_high1_ptr = ram;
+			m_bank_high1_read_only = 0;
+			m_bank_high2_ptr = ram + 0x4000;
+			m_bank_high2_read_only = 0;
 		}
 		break;
 	case SVI_EXPRAM2:
-		if ( ram_size > 64 * 1024 )
+		if (ram_size > 64 * 1024)
 		{
-			m_svi.bankHigh1_ptr = ram + ram_size - 64 * 1024 + 32 * 1024;
-			m_svi.bankHigh1_read_only = 0;
-			m_svi.bankHigh2_ptr = ram + ram_size - 64 * 1024 + 48 * 1024;
-			m_svi.bankHigh2_read_only = 0;
+			m_bank_high1_ptr = ram + ram_size - 64 * 1024 + 32 * 1024;
+			m_bank_high1_read_only = 0;
+			m_bank_high2_ptr = ram + ram_size - 64 * 1024 + 48 * 1024;
+			m_bank_high2_read_only = 0;
 		}
 		break;
 	case SVI_EXPRAM3:
-		if ( ram_size > 128 * 1024 )
+		if (ram_size > 128 * 1024)
 		{
-			m_svi.bankHigh1_ptr = ram + ram_size - 128 * 1024 + 32 * 1024;
-			m_svi.bankHigh1_read_only = 0;
-			m_svi.bankHigh2_ptr = ram + ram_size - 128 * 1024 + 48 * 1024;
-			m_svi.bankHigh2_read_only = 0;
+			m_bank_high1_ptr = ram + ram_size - 128 * 1024 + 32 * 1024;
+			m_bank_high1_read_only = 0;
+			m_bank_high2_ptr = ram + ram_size - 128 * 1024 + 48 * 1024;
+			m_bank_high2_read_only = 0;
 		}
 		break;
 	}
 
 	/* Check for special CART based banking */
-	if ( m_svi.bankLow == SVI_CART && ( v & 0xc0 ) != 0xc0 )
+	if (m_bank_low == SVI_CART && (v & 0xc0 ) != 0xc0)
 	{
-		m_svi.bankHigh1_ptr = m_svi.empty_bank;
-		m_svi.bankHigh1_read_only = 1;
-		m_svi.bankHigh2_ptr = m_svi.empty_bank;
-		m_svi.bankHigh2_read_only = 1;
-		if ( m_pcart && ! ( v & 0x80 ) )
-		{
-			m_svi.bankHigh2_ptr = m_pcart + 0x4000;
-		}
-		if ( m_pcart && ! ( v & 0x40 ) )
-		{
-			m_svi.bankHigh1_ptr = m_pcart;
-		}
+		m_bank_high1_ptr = m_empty_bank;
+		m_bank_high1_read_only = 1;
+		m_bank_high2_ptr = m_empty_bank;
+		m_bank_high2_read_only = 1;
+
+		if (m_cart_rom && !(v & 0x80))
+			m_bank_high2_ptr = m_cart_rom->base() + 0x4000;
+		if (m_cart_rom && !(v & 0x40))
+			m_bank_high1_ptr = m_cart_rom->base();
 	}
 
-	membank("bank1")->set_base(m_svi.bankLow_ptr );
-	membank("bank2")->set_base(m_svi.bankHigh1_ptr );
-	membank("bank3")->set_base(m_svi.bankHigh2_ptr );
+	m_bank1->set_base(m_bank_low_ptr);
+	m_bank2->set_base(m_bank_high1_ptr);
+	m_bank3->set_base(m_bank_high2_ptr);
 
 	/* SVI-806 80 column card specific banking */
-	if ( m_svi.svi806_present )
+	if (m_svi806_present)
 	{
-		if ( m_svi.svi806_ram_enabled )
-		{
-			membank("bank4")->set_base(m_svi.svi806_ram );
-		}
+		if (m_svi806_ram_enabled)
+			m_bank4->set_base(&m_svi806_ram[0]);
 		else
-		{
-			membank("bank4")->set_base(m_svi.bankHigh2_ptr + 0x3000 );
-		}
+			m_bank4->set_base(m_bank_high2_ptr + 0x3000);
 	}
 }
 
+void svi318_state::postload()
+{
+	set_banks();
+}
+
+
 /* External I/O */
 
-READ8_MEMBER(svi318_state::svi318_io_ext_r)
+WRITE_LINE_MEMBER(svi318_state::write_centronics_busy)
 {
-	UINT8 data = 0xff;
-	device_t *device;
+	m_centronics_busy = state;
+}
 
-	if (m_svi.bankLow == SVI_CART)
-	{
+READ8_MEMBER(svi318_state::io_ext_r)
+{
+	if (m_bank_low == SVI_CART)
 		return 0xff;
-	}
 
-	switch( offset )
+	switch (offset)
 	{
 	case 0x12:
-		data = 0xfe | m_centronics->busy_r();
-		break;
+		return 0xfe | m_centronics_busy;
 
 	case 0x20:
 	case 0x21:
@@ -751,65 +663,53 @@ READ8_MEMBER(svi318_state::svi318_io_ext_r)
 	case 0x25:
 	case 0x26:
 	case 0x27:
-		data = m_ins8250_0->ins8250_r(space, offset & 7);
-		break;
+		return m_ins8250_0->ins8250_r(space, offset & 7);
 
 	case 0x28:
 	case 0x29:
-	case 0x2A:
-	case 0x2B:
-	case 0x2C:
-	case 0x2D:
-	case 0x2E:
-	case 0x2F:
-		data = m_ins8250_1->ins8250_r(space, offset & 7);
-		break;
+	case 0x2a:
+	case 0x2b:
+	case 0x2c:
+	case 0x2d:
+	case 0x2e:
+	case 0x2f:
+		return m_ins8250_1->ins8250_r(space, offset & 7);
 
 	case 0x30:
-		device = machine().device("wd179x");
-		data = wd17xx_status_r(device, space, 0);
-		break;
+		return m_fd1793->status_r(space, 0);
+
 	case 0x31:
-		device = machine().device("wd179x");
-		data = wd17xx_track_r(device, space, 0);
-		break;
+		return m_fd1793->track_r(space, 0);
+
 	case 0x32:
-		device = machine().device("wd179x");
-		data = wd17xx_sector_r(device, space, 0);
-		break;
+		return m_fd1793->sector_r(space, 0);
+
 	case 0x33:
-		device = machine().device("wd179x");
-		data = wd17xx_data_r(device, space, 0);
-		break;
+		return m_fd1793->data_r(space, 0);
+
 	case 0x34:
-		data = svi318_fdc_irqdrq_r(space, 0);
-		break;
+		return fdc_irqdrq_r(space, 0);
+
 	case 0x51:
-		device = machine().device("crtc");
-		data = downcast<mc6845_device *>(device)->register_r( space, offset );
-		break;
+		return m_crtc->register_r(space, offset);
 	}
 
-	return data;
+	return 0xff;
 }
 
-WRITE8_MEMBER(svi318_state::svi318_io_ext_w)
+WRITE8_MEMBER(svi318_state::io_ext_w)
 {
-	device_t *device;
-
-	if (m_svi.bankLow == SVI_CART)
-	{
+	if (m_bank_low == SVI_CART)
 		return;
-	}
 
-	switch( offset )
+	switch (offset)
 	{
 	case 0x10:
-		m_centronics->write(space, 0, data);
+		m_cent_data_out->write(space, 0, data);
 		break;
 
 	case 0x11:
-		m_centronics->strobe_w(BIT(data, 0));
+		m_centronics->write_strobe(BIT(data, 0));
 		break;
 
 	case 0x20:
@@ -835,35 +735,29 @@ WRITE8_MEMBER(svi318_state::svi318_io_ext_w)
 		break;
 
 	case 0x30:
-		device = machine().device("wd179x");
-		wd17xx_command_w(device, space, 0, data);
+		m_fd1793->cmd_w(space, 0, data);
 		break;
 	case 0x31:
-		device = machine().device("wd179x");
-		wd17xx_track_w(device, space, 0, data);
+		m_fd1793->track_w(space, 0, data);
 		break;
 	case 0x32:
-		device = machine().device("wd179x");
-		wd17xx_sector_w(device, space, 0, data);
+		m_fd1793->sector_w(space, 0, data);
 		break;
 	case 0x33:
-		device = machine().device("wd179x");
-		wd17xx_data_w(device, space, 0, data);
+		m_fd1793->data_w(space, 0, data);
 		break;
 	case 0x34:
-		svi318_fdc_drive_motor_w(space, 0, data);
+		fdc_drive_motor_w(space, 0, data);
 		break;
 	case 0x38:
-		svi318_fdc_density_side_w(space, 0, data);
+		fdc_density_side_w(space, 0, data);
 		break;
 
 	case 0x50:
-		device = machine().device("crtc");
-		downcast<mc6845_device *>(device)->address_w(space, offset, data);
+		m_crtc->address_w(space, offset, data);
 		break;
 	case 0x51:
-		device = machine().device("crtc");
-		downcast<mc6845_device *>(device)->register_w(space, offset, data);
+		m_crtc->register_w(space, offset, data);
 		break;
 
 	case 0x58:

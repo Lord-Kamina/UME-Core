@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
 Deniam games
@@ -7,10 +9,10 @@ Check archive.org for http://deniam.co.kr
 
 Title            System     Date
 ---------------- ---------- ----------
-GO!GO!           deniam-16b 1995/10/11
+GO!GO!           deniam-16b 1995/10/11 UNDUMPED "Go Go Quiz Song Stop"
 Logic Pro        deniam-16b 1996/10/20
 Karian Cross     deniam-16b 1997/04/17
-LOTTERY GAME     deniam-16c 1997/05/21 UNDUMPED
+LOTTERY GAME     deniam-16c 1997/05/21 UNDUMPED "Bogori (Lottery Game)"
 Logic Pro 2      deniam-16c 1997/06/20
 Propose          deniam-16c 1997/06/21 UNDUMPED
 
@@ -221,15 +223,6 @@ static GFXDECODE_START( deniam )
 GFXDECODE_END
 
 
-WRITE_LINE_MEMBER(deniam_state::irqhandler)
-{
-	/* system 16c doesn't have the sound CPU */
-	if (m_audiocpu != NULL)
-		m_audiocpu->set_input_line(0, state);
-}
-
-
-
 void deniam_state::machine_start()
 {
 	save_item(NAME(m_display_enable));
@@ -279,16 +272,17 @@ static MACHINE_CONFIG_START( deniam16b, deniam_state )
 	//MCFG_SCREEN_VISIBLE_AREA(24*8, 64*8-1, 0*8, 28*8-1) // looks better but doesn't match hardware
 	MCFG_SCREEN_VISIBLE_AREA(24*8-4, 64*8-5, 0*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(deniam_state, screen_update_deniam)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(deniam)
-	MCFG_PALETTE_LENGTH(2048)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", deniam)
+	MCFG_PALETTE_ADD("palette", 2048)
 
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM3812, XTAL_25MHz/6) /* "SM64" ym3812 clone; 4.166470 measured, = 4.166666Mhz verified */
-	MCFG_YM3812_IRQ_HANDLER(WRITELINE(deniam_state, irqhandler))
+	MCFG_YM3812_IRQ_HANDLER(INPUTLINE("audiocpu", 0))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.60)
 
 	MCFG_OKIM6295_ADD("oki", XTAL_25MHz/24, OKIM6295_PIN7_HIGH) /* 1.041620 measured, = 1.0416666Mhz verified */
@@ -311,16 +305,16 @@ static MACHINE_CONFIG_START( deniam16c, deniam_state )
 	//MCFG_SCREEN_VISIBLE_AREA(24*8, 64*8-1, 0*8, 28*8-1) // looks better but doesn't match hardware
 	MCFG_SCREEN_VISIBLE_AREA(24*8-4, 64*8-5, 0*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(deniam_state, screen_update_deniam)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(deniam)
-	MCFG_PALETTE_LENGTH(2048)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", deniam)
+	MCFG_PALETTE_ADD("palette", 2048)
 
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM3812, XTAL_25MHz/6) /* "SM64" ym3812 clone; 4.166470 measured, = 4.166666Mhz verified) */
-	MCFG_YM3812_IRQ_HANDLER(WRITELINE(deniam_state, irqhandler))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.60)
 
 	MCFG_OKIM6295_ADD("oki", XTAL_25MHz/24, OKIM6295_PIN7_HIGH)  /* 1.041620 measured, = 1.0416666Mhz verified */

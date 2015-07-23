@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Tatsuyuki Satoh
 /***************************************************************************
 
   video.c
@@ -25,7 +27,7 @@ PALETTE_INIT_MEMBER(appoooh_state,appoooh)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		UINT8 pen;
 		int bit0, bit1, bit2, r, g, b;
@@ -55,7 +57,7 @@ PALETTE_INIT_MEMBER(appoooh_state,appoooh)
 		bit2 = (color_prom[pen] >> 7) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -64,7 +66,7 @@ PALETTE_INIT_MEMBER(appoooh_state,robowres)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int bit0, bit1, bit2, r, g, b;
 
@@ -88,7 +90,7 @@ PALETTE_INIT_MEMBER(appoooh_state,robowres)
 		bit2 = (color_prom[pen] >> 7) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -104,8 +106,7 @@ TILE_GET_INFO_MEMBER(appoooh_state::get_fg_tile_info)
 {
 	int code = m_fg_videoram[tile_index] + 256 * ((m_fg_colorram[tile_index] >> 5) & 7);
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			code,
 			m_fg_colorram[tile_index] & 0x0f,
 			(m_fg_colorram[tile_index] & 0x10 ) ? TILEMAP_FLIPX : 0
@@ -116,8 +117,7 @@ TILE_GET_INFO_MEMBER(appoooh_state::get_bg_tile_info)
 {
 	int code = m_bg_videoram[tile_index] + 256 * ((m_bg_colorram[tile_index] >> 5) & 7);
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			m_bg_colorram[tile_index] & 0x0f,
 			(m_bg_colorram[tile_index] & 0x10 ) ? TILEMAP_FLIPX : 0
@@ -132,8 +132,8 @@ TILE_GET_INFO_MEMBER(appoooh_state::get_bg_tile_info)
 
 VIDEO_START_MEMBER(appoooh_state,appoooh)
 {
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(appoooh_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(appoooh_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(appoooh_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(appoooh_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 	m_fg_tilemap->set_scrolldy(8, 8);
@@ -143,37 +143,37 @@ VIDEO_START_MEMBER(appoooh_state,appoooh)
 	save_item(NAME(m_priority));
 }
 
-WRITE8_MEMBER(appoooh_state::appoooh_scroll_w)
+WRITE8_MEMBER(appoooh_state::scroll_w)
 {
 	m_scroll_x = data;
 }
 
 
-WRITE8_MEMBER(appoooh_state::appoooh_fg_videoram_w)
+WRITE8_MEMBER(appoooh_state::fg_videoram_w)
 {
 	m_fg_videoram[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(appoooh_state::appoooh_fg_colorram_w)
+WRITE8_MEMBER(appoooh_state::fg_colorram_w)
 {
 	m_fg_colorram[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(appoooh_state::appoooh_bg_videoram_w)
+WRITE8_MEMBER(appoooh_state::bg_videoram_w)
 {
 	m_bg_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(appoooh_state::appoooh_bg_colorram_w)
+WRITE8_MEMBER(appoooh_state::bg_colorram_w)
 {
 	m_bg_colorram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(appoooh_state::appoooh_out_w)
+WRITE8_MEMBER(appoooh_state::out_w)
 {
 	/* bit 0 controls NMI */
 	m_nmi_mask = data & 1;
@@ -191,9 +191,7 @@ WRITE8_MEMBER(appoooh_state::appoooh_out_w)
 
 	/* bit 6 ROM bank select */
 	{
-		UINT8 *RAM = memregion("maincpu")->base();
-
-		membank("bank1")->set_base(&RAM[data&0x40 ? 0x10000 : 0x0a000]);
+		membank("bank1")->set_entry((data&0x40) ? 1 : 0);
 	}
 
 	/* bit 7 unknown (used) */
@@ -221,8 +219,8 @@ void appoooh_state::appoooh_draw_sprites( bitmap_ind16 &dest_bmp, const rectangl
 			sy = 239 - sy;
 			flipx = !flipx;
 		}
-		drawgfx_transpen( dest_bmp, cliprect,
-				gfx,
+
+				gfx->transpen(dest_bmp,cliprect,
 				code,
 				color,
 				flipx,flipy,
@@ -252,8 +250,8 @@ void appoooh_state::robowres_draw_sprites( bitmap_ind16 &dest_bmp, const rectang
 			sy = 239 - sy;
 			flipx = !flipx;
 		}
-		drawgfx_transpen( dest_bmp, cliprect,
-				gfx,
+
+				gfx->transpen(dest_bmp,cliprect,
 				code,
 				color,
 				flipx,flipy,
@@ -264,58 +262,58 @@ void appoooh_state::robowres_draw_sprites( bitmap_ind16 &dest_bmp, const rectang
 
 UINT32 appoooh_state::screen_update_appoooh(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	if (m_priority == 0)    /* fg behind sprites */
-		m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	/* draw sprites */
 	if (m_priority == 1)
 	{
 		/* sprite set #1 */
-		appoooh_draw_sprites(bitmap, cliprect, machine().gfx[2], m_spriteram);
+		appoooh_draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(2), m_spriteram);
 		/* sprite set #2 */
-		appoooh_draw_sprites(bitmap, cliprect, machine().gfx[3], m_spriteram_2);
+		appoooh_draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(3), m_spriteram_2);
 	}
 	else
 	{
 		/* sprite set #2 */
-		appoooh_draw_sprites(bitmap, cliprect, machine().gfx[3], m_spriteram_2);
+		appoooh_draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(3), m_spriteram_2);
 		/* sprite set #1 */
-		appoooh_draw_sprites(bitmap, cliprect, machine().gfx[2], m_spriteram);
+		appoooh_draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(2), m_spriteram);
 	}
 
 	if (m_priority != 0)    /* fg in front of sprites */
-		m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
 
 UINT32 appoooh_state::screen_update_robowres(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	if (m_priority == 0)    /* fg behind sprites */
-		m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	/* draw sprites */
 	if (m_priority == 1)
 	{
 		/* sprite set #1 */
-		robowres_draw_sprites(bitmap, cliprect, machine().gfx[2], m_spriteram);
+		robowres_draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(2), m_spriteram);
 		/* sprite set #2 */
-		robowres_draw_sprites(bitmap, cliprect, machine().gfx[3], m_spriteram_2);
+		robowres_draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(3), m_spriteram_2);
 	}
 	else
 	{
 		/* sprite set #2 */
-		robowres_draw_sprites(bitmap, cliprect, machine().gfx[3], m_spriteram_2);
+		robowres_draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(3), m_spriteram_2);
 		/* sprite set #1 */
-		robowres_draw_sprites(bitmap, cliprect, machine().gfx[2], m_spriteram);
+		robowres_draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(2), m_spriteram);
 	}
 
 	if (m_priority != 0)    /* fg in front of sprites */
-		m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }

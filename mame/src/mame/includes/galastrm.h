@@ -1,7 +1,11 @@
-#include "video/poly.h"
-#include "machine/eeprom.h"
+// license:???
+// copyright-holders:Hau
+#include "machine/eepromser.h"
+#include "video/polylgcy.h"
+#include "video/tc0100scn.h"
+#include "video/tc0480scp.h"
 
-struct tempsprite
+struct gs_tempsprite
 {
 	int gfx;
 	int code,color;
@@ -24,10 +28,23 @@ public:
 		m_ram(*this,"ram"),
 		m_spriteram(*this,"spriteram") ,
 		m_maincpu(*this, "maincpu"),
-		m_eeprom(*this, "eeprom") { }
+		m_eeprom(*this, "eeprom"),
+		m_tc0100scn(*this, "tc0100scn"),
+		m_tc0480scp(*this, "tc0480scp"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette") { }
 
 	required_shared_ptr<UINT32> m_ram;
 	required_shared_ptr<UINT32> m_spriteram;
+
+	required_device<cpu_device> m_maincpu;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
+	required_device<tc0100scn_device> m_tc0100scn;
+	required_device<tc0480scp_device> m_tc0480scp;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 
 	UINT16 m_coin_word;
 	UINT16 m_frame_counter;
@@ -36,11 +53,11 @@ public:
 	int m_tc0610_1_addr;
 	UINT32 m_mem[2];
 	INT16 m_tc0610_ctrl_reg[2][8];
-	struct tempsprite *m_spritelist;
-	struct tempsprite *m_sprite_ptr_pre;
+	struct gs_tempsprite *m_spritelist;
+	struct gs_tempsprite *m_sprite_ptr_pre;
 	bitmap_ind16 m_tmpbitmaps;
 	bitmap_ind16 m_polybitmap;
-	poly_manager *m_poly;
+	legacy_poly_manager *m_poly;
 	int m_rsxb;
 	int m_rsyb;
 	int m_rsxoffs;
@@ -59,10 +76,8 @@ public:
 	INTERRUPT_GEN_MEMBER(galastrm_interrupt);
 	void galastrm_exit();
 	void draw_sprites_pre(int x_offs, int y_offs);
-	void draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, const int *primasks, int priority);
+	void draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, const int *primasks, int priority);
 	void tc0610_rotate_draw(bitmap_ind16 &bitmap, bitmap_ind16 &srcbitmap, const rectangle &clip);
-	required_device<cpu_device> m_maincpu;
-	required_device<eeprom_device> m_eeprom;
 
 protected:
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);

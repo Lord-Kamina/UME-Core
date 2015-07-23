@@ -1,8 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /********************************************************************
 
     Support for Canon X-07 cassette images
 
 ********************************************************************/
+
+#include <assert.h>
 
 #include "x07_cas.h"
 

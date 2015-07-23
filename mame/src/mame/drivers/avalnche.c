@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Balfour
 /***************************************************************************
 
     Atari Avalanche hardware
@@ -61,9 +63,9 @@ UINT32 avalnche_state::screen_update_avalnche(screen_device &screen, bitmap_rgb3
 			pen_t pen;
 
 			if (m_avalance_video_inverted)
-				pen = (data & 0x80) ? RGB_WHITE : RGB_BLACK;
+				pen = (data & 0x80) ? rgb_t::white : rgb_t::black;
 			else
-				pen = (data & 0x80) ? RGB_BLACK : RGB_WHITE;
+				pen = (data & 0x80) ? rgb_t::black : rgb_t::white;
 
 			bitmap.pix32(y, x) = pen;
 
@@ -261,7 +263,7 @@ static MACHINE_CONFIG_START( avalnche, avalnche_state )
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(avalnche)
+	MCFG_DISCRETE_INTF(avalnche)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 

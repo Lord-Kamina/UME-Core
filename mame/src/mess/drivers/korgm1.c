@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese
 /***************************************************************************
 
     Korg M1 (c) 1988
@@ -157,7 +159,7 @@ void korgm1_state::machine_reset()
 }
 
 
-void korgm1_state::palette_init()
+PALETTE_INIT_MEMBER(korgm1_state, korgm1)
 {
 }
 
@@ -177,9 +179,9 @@ static MACHINE_CONFIG_START( korgm1, korgm1_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 32*8-1)
 
-	MCFG_GFXDECODE(korgm1)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", korgm1)
 
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_PALETTE_ADD("palette", 8)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")

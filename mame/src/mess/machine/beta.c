@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic, MetalliC
 /*********************************************************************
 
     beta.h
@@ -7,216 +9,184 @@
     04/05/2008 Created by Miodrag Milanovic
 
 *********************************************************************/
+/*
+BUGS:
+- due to original firmware bug random commands can be sent to FDC instead of SEEK
+
+*/
 #include "emu.h"
-#include "imagedev/flopdrv.h"
 #include "formats/trd_dsk.h"
-#include "machine/wd17xx.h"
 #include "machine/beta.h"
+
 
 /***************************************************************************
     TYPE DEFINITIONS
 ***************************************************************************/
 
-struct beta_disk_state
+
+const device_type BETA_DISK = &device_creator<beta_disk_device>;
+
+beta_disk_device::beta_disk_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
+	: device_t(mconfig, BETA_DISK, "Beta Disk Interface", tag, owner, clock, "betadisk", __FILE__)
+	, m_betadisk_active(0)
+	, m_wd179x(*this, "wd179x")
+	, m_floppy0(*this, "wd179x:0")
+	, m_floppy1(*this, "wd179x:1")
+	, m_floppy2(*this, "wd179x:2")
+	, m_floppy3(*this, "wd179x:3")
 {
-	UINT8 betadisk_status;
-	UINT8 betadisk_active;
-
-	device_t *wd179x;
-};
-
-
-/*****************************************************************************
-    INLINE FUNCTIONS
-*****************************************************************************/
-INLINE beta_disk_state *get_safe_token(device_t *device)
-{
-	assert(device != NULL);
-	assert(device->type() == BETA_DISK);
-
-	return (beta_disk_state *)downcast<beta_disk_device *>(device)->token();
 }
 
+//-------------------------------------------------
+//  device_start - device-specific startup
+//-------------------------------------------------
 
-int betadisk_is_active(device_t *device)
+void beta_disk_device::device_start()
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	return beta->betadisk_active;
 }
 
-void betadisk_enable(device_t *device)
-{
-	beta_disk_state *beta = get_safe_token(device);
+//-------------------------------------------------
+//  device_reset - device-specific reset
+//-------------------------------------------------
 
-	beta->betadisk_active = 1;
+void beta_disk_device::device_reset()
+{
 }
 
-void betadisk_disable(device_t *device)
+int beta_disk_device::is_active()
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	beta->betadisk_active = 0;
+	return m_betadisk_active;
 }
 
-void betadisk_clear_status(device_t *device)
+void beta_disk_device::enable()
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	beta->betadisk_status = 0;
+	m_betadisk_active = 1;
 }
 
-static WRITE_LINE_DEVICE_HANDLER( betadisk_wd179x_intrq_w )
+void beta_disk_device::disable()
 {
-	beta_disk_state *beta = get_safe_token(device->owner());
-
-	if (state)
-		beta->betadisk_status |= (1<<7);
-	else
-		beta->betadisk_status &=~(1<<7);
+	m_betadisk_active = 0;
 }
 
-static WRITE_LINE_DEVICE_HANDLER( betadisk_wd179x_drq_w )
+READ8_MEMBER(beta_disk_device::status_r)
 {
-	beta_disk_state *beta = get_safe_token(device->owner());
-
-	if (state)
-		beta->betadisk_status |= (1<<6);
-	else
-		beta->betadisk_status &=~(1<<6);
-}
-
-static const wd17xx_interface beta_wd17xx_interface =
-{
-	DEVCB_NULL,
-	DEVCB_LINE(betadisk_wd179x_intrq_w),
-	DEVCB_LINE(betadisk_wd179x_drq_w),
-	{FLOPPY_0, FLOPPY_1, FLOPPY_2, FLOPPY_3}
-};
-
-READ8_DEVICE_HANDLER(betadisk_status_r)
-{
-	beta_disk_state *beta = get_safe_token(device);
-
-	if (beta->betadisk_active==1) {
-		return wd17xx_status_r(beta->wd179x, space, offset);
+	if (m_betadisk_active==1) {
+		return m_wd179x->status_r(space, 0);
 	} else {
 		return 0xff;
 	}
 }
 
-READ8_DEVICE_HANDLER(betadisk_track_r)
+READ8_MEMBER(beta_disk_device::track_r)
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	if (beta->betadisk_active==1) {
-		return wd17xx_track_r(beta->wd179x, space, offset);
+	if (m_betadisk_active==1) {
+		return m_wd179x->track_r(space, 0);
 	} else {
 		return 0xff;
 	}
 }
 
-READ8_DEVICE_HANDLER(betadisk_sector_r)
+READ8_MEMBER(beta_disk_device::sector_r)
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	if (beta->betadisk_active==1) {
-		return wd17xx_sector_r(beta->wd179x, space, offset);
+	if (m_betadisk_active==1) {
+		return m_wd179x->sector_r(space, 0);
 	} else {
 		return 0xff;
 	}
 }
 
-READ8_DEVICE_HANDLER(betadisk_data_r)
+READ8_MEMBER(beta_disk_device::data_r)
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	if (beta->betadisk_active==1) {
-		return wd17xx_data_r(beta->wd179x, space, offset);
+	if (m_betadisk_active==1) {
+		return m_wd179x->data_r(space, 0);
 	} else {
 		return 0xff;
 	}
 }
 
-READ8_DEVICE_HANDLER(betadisk_state_r)
+READ8_MEMBER(beta_disk_device::state_r)
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	if (beta->betadisk_active==1) {
-		return beta->betadisk_status;
+	if (m_betadisk_active==1) {
+		UINT8 result = 0x3F;        // actually open bus
+		result |= m_wd179x->drq_r() ? 0x40 : 0;
+		result |= m_wd179x->intrq_r() ? 0x80 : 0;
+		return result;
 	} else {
 		return 0xff;
 	}
 }
 
-WRITE8_DEVICE_HANDLER(betadisk_param_w)
+WRITE8_MEMBER(beta_disk_device::param_w)
 {
-	beta_disk_state *beta = get_safe_token(device);
+	if (m_betadisk_active == 1)
+	{
+		floppy_connector* connectors[] = { m_floppy0, m_floppy1, m_floppy2, m_floppy3 };
 
-	if (beta->betadisk_active==1) {
-		wd17xx_set_drive(beta->wd179x, data & 3);
-		wd17xx_set_side (beta->wd179x,(data & 0x10) ? 0 : 1 );
-		wd17xx_dden_w(beta->wd179x, !BIT(data, 5));
-		if ((data & 0x04) == 0) // reset
+		floppy_image_device* floppy = connectors[data & 3]->get_device();
+
+		m_wd179x->set_floppy(floppy);
+		floppy->ss_w(BIT(data, 4) ? 0 : 1);
+		m_wd179x->dden_w(BIT(data, 6));
+
+		// bit 3 connected to pin 23 "HLT" of FDC and via diode to INDEX
+		//m_wd179x->hlt_w(BIT(data, 3)); // not handled in current wd_fdc
+
+		if (BIT(data, 2) == 0) // reset
 		{
-			wd17xx_reset(beta->wd179x);
+			m_wd179x->reset();
+			floppy->mon_w(ASSERT_LINE);
+		} else {
+			// HACK, FDD motor and RDY FDC pin controlled by HLD pin of FDC
+			floppy->mon_w(CLEAR_LINE);
 		}
-		beta->betadisk_status = (data & 0x3f) | beta->betadisk_status;
 	}
 }
 
-WRITE8_DEVICE_HANDLER(betadisk_command_w)
+WRITE8_MEMBER(beta_disk_device::command_w)
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	if (beta->betadisk_active==1) {
-		wd17xx_command_w(beta->wd179x, space, offset, data);
+	if (m_betadisk_active==1) {
+		m_wd179x->cmd_w(space, 0, data);
 	}
 }
 
-WRITE8_DEVICE_HANDLER(betadisk_track_w)
+WRITE8_MEMBER(beta_disk_device::track_w)
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	if (beta->betadisk_active==1) {
-		wd17xx_track_w(beta->wd179x, space, offset, data);
+	if (m_betadisk_active==1) {
+		m_wd179x->track_w(space, 0, data);
 	}
 }
 
-WRITE8_DEVICE_HANDLER(betadisk_sector_w)
+WRITE8_MEMBER(beta_disk_device::sector_w)
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	if (beta->betadisk_active==1) {
-		wd17xx_sector_w(beta->wd179x, space, offset, data);
+	if (m_betadisk_active==1) {
+		m_wd179x->sector_w(space, 0, data);
 	}
 }
 
-WRITE8_DEVICE_HANDLER(betadisk_data_w)
+WRITE8_MEMBER(beta_disk_device::data_w)
 {
-	beta_disk_state *beta = get_safe_token(device);
-
-	if (beta->betadisk_active==1) {
-		wd17xx_data_w(beta->wd179x, space, offset, data);
+	if (m_betadisk_active==1) {
+		m_wd179x->data_w(space, 0, data);
 	}
 }
 
-static const floppy_interface beta_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_DSHD,
-	LEGACY_FLOPPY_OPTIONS_NAME(trd),
-	NULL,
-	NULL
-};
+FLOPPY_FORMATS_MEMBER(beta_disk_device::floppy_formats)
+	FLOPPY_TRD_FORMAT
+FLOPPY_FORMATS_END
+
+static SLOT_INTERFACE_START( beta_disk_floppies )
+	SLOT_INTERFACE( "drive0", FLOPPY_525_QD )
+	SLOT_INTERFACE( "drive1", FLOPPY_525_QD )
+	SLOT_INTERFACE( "drive2", FLOPPY_525_QD )
+	SLOT_INTERFACE( "drive3", FLOPPY_525_QD )
+SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_FRAGMENT( beta_disk )
-	MCFG_WD2793_ADD("wd179x", beta_wd17xx_interface ) // KR1818VG93
-	MCFG_LEGACY_FLOPPY_4_DRIVES_ADD(beta_floppy_interface)
+	MCFG_KR1818VG93_ADD("wd179x", XTAL_8MHz / 8)
+	MCFG_FLOPPY_DRIVE_ADD("wd179x:0", beta_disk_floppies, "drive0", beta_disk_device::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("wd179x:1", beta_disk_floppies, "drive1", beta_disk_device::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("wd179x:2", beta_disk_floppies, "drive2", beta_disk_device::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("wd179x:3", beta_disk_floppies, "drive3", beta_disk_device::floppy_formats)
 MACHINE_CONFIG_END
 
 ROM_START( beta_disk )
@@ -300,57 +270,6 @@ ROM_START( beta_disk )
 	ROM_LOAD( "trd503.rom",     0x00000, 0x4000, CRC(10751aba) SHA1(21695e3f2a8f796386ce66eea8a246b0ac44810c))
 ROM_END
 
-
-/*-------------------------------------------------
-    DEVICE_START( beta_disk )
--------------------------------------------------*/
-
-static DEVICE_START( beta_disk )
-{
-	beta_disk_state *beta = get_safe_token(device);
-	astring tempstring;
-
-	/* validate arguments */
-	assert(device->tag() != NULL);
-
-	/* find our WD179x */
-	tempstring.printf("%s:%s", device->tag(), "wd179x");
-	beta->wd179x = device->machine().device(tempstring);
-}
-
-/*-------------------------------------------------
-    DEVICE_RESET( beta_disk )
--------------------------------------------------*/
-
-static DEVICE_RESET( beta_disk )
-{
-}
-
-const device_type BETA_DISK = &device_creator<beta_disk_device>;
-
-beta_disk_device::beta_disk_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, BETA_DISK, "Beta Disk Interface", tag, owner, clock, "betadisk", __FILE__)
-{
-	m_token = global_alloc_clear(beta_disk_state);
-}
-
-//-------------------------------------------------
-//  device_start - device-specific startup
-//-------------------------------------------------
-
-void beta_disk_device::device_start()
-{
-	DEVICE_START_NAME( beta_disk )(this);
-}
-
-//-------------------------------------------------
-//  device_reset - device-specific reset
-//-------------------------------------------------
-
-void beta_disk_device::device_reset()
-{
-	DEVICE_RESET_NAME( beta_disk )(this);
-}
 
 //-------------------------------------------------
 //  device_mconfig_additions - return a pointer to

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles,smf
 /*
     CD-DA "Red Book" audio sound hardware handler
     Relies on the actual CD logic and reading in cdrom.c.
@@ -38,6 +40,7 @@ void cdda_device::device_start()
 	m_audio_length = 0;
 	m_audio_samples = 0;
 	m_audio_bptr = 0;
+	m_disc = NULL;
 
 	save_item( NAME(m_audio_playing) );
 	save_item( NAME(m_audio_pause) );
@@ -252,7 +255,7 @@ INT16 cdda_device::get_channel_volume(int channel)
 const device_type CDDA = &device_creator<cdda_device>;
 
 cdda_device::cdda_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, CDDA, "CD/DA", tag, owner, clock),
+	: device_t(mconfig, CDDA, "CD/DA", tag, owner, clock, "cdda", __FILE__),
 		device_sound_interface(mconfig, *this)
 {
 }

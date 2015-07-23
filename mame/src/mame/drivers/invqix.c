@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /***************************************************************************
 
     invqix.c
@@ -117,9 +119,9 @@ as well as Up Right, Cocktail or Flip Screen from the service menu.
 ***************************************************************************/
 
 #include "emu.h"
-#include "cpu/h83002/h8.h"
+#include "cpu/h8/h8s2357.h"
 #include "sound/okim9810.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 
 class invqix_state : public driver_device
 {
@@ -133,21 +135,21 @@ public:
 
 	UINT32 screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 
-	DECLARE_READ8_MEMBER(port3_r);
-	DECLARE_WRITE8_MEMBER(port3_w);
-	DECLARE_READ8_MEMBER(port5_r);
-	DECLARE_WRITE8_MEMBER(port5_w);
-	DECLARE_READ8_MEMBER(port6_r);
-	DECLARE_WRITE8_MEMBER(port6_w);
-	DECLARE_READ8_MEMBER(porta_r);
-	DECLARE_READ8_MEMBER(portg_r);
+	DECLARE_READ16_MEMBER(port3_r);
+	DECLARE_WRITE16_MEMBER(port3_w);
+	DECLARE_READ16_MEMBER(port5_r);
+	DECLARE_WRITE16_MEMBER(port5_w);
+	DECLARE_READ16_MEMBER(port6_r);
+	DECLARE_WRITE16_MEMBER(port6_w);
+	DECLARE_READ16_MEMBER(porta_r);
+	DECLARE_READ16_MEMBER(portg_r);
 
 	DECLARE_WRITE16_MEMBER(vctl_w);
 
 protected:
 	// devices
 	required_device<cpu_device> m_maincpu;
-	required_device<eeprom_device> m_eeprom;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
 	required_shared_ptr<UINT16> m_vram;
 
 	// driver_device overrides
@@ -160,6 +162,7 @@ private:
 
 void invqix_state::video_start()
 {
+	save_item(NAME(m_vctl));
 }
 
 UINT32 invqix_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
@@ -224,42 +227,42 @@ UINT32 invqix_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 	return 0;
 }
 
-READ8_MEMBER(invqix_state::port3_r)
+READ16_MEMBER(invqix_state::port3_r)
 {
-	return (m_eeprom->read_bit() << 5) | 0x03;
+	return (m_eeprom->do_read() << 5) | 0x03;
 }
 
-WRITE8_MEMBER(invqix_state::port3_w)
+WRITE16_MEMBER(invqix_state::port3_w)
 {
-	m_eeprom->set_cs_line(((data >> 2) & 1) ^ 1);
-	m_eeprom->write_bit((data >> 4) & 1);
-	m_eeprom->set_clock_line((data >> 3) & 1);
+	m_eeprom->cs_write((data >> 2) & 1);
+	m_eeprom->di_write((data >> 4) & 1);
+	m_eeprom->clk_write((data >> 3) & 1);
 }
 
-READ8_MEMBER(invqix_state::port5_r)
-{
-	return 0;
-}
-
-WRITE8_MEMBER(invqix_state::port5_w)
-{
-}
-
-READ8_MEMBER(invqix_state::port6_r)
+READ16_MEMBER(invqix_state::port5_r)
 {
 	return 0;
 }
 
-WRITE8_MEMBER(invqix_state::port6_w)
+WRITE16_MEMBER(invqix_state::port5_w)
 {
 }
 
-READ8_MEMBER(invqix_state::porta_r)
+READ16_MEMBER(invqix_state::port6_r)
+{
+	return 0;
+}
+
+WRITE16_MEMBER(invqix_state::port6_w)
+{
+}
+
+READ16_MEMBER(invqix_state::porta_r)
 {
 	return 0xf0;
 }
 
-READ8_MEMBER(invqix_state::portg_r)
+READ16_MEMBER(invqix_state::portg_r)
 {
 	return 0;
 }
@@ -279,15 +282,15 @@ static ADDRESS_MAP_START(invqix_prg_map, AS_PROGRAM, 16, invqix_state)
 	AM_RANGE(0x620004, 0x620005) AM_WRITE(vctl_w)
 ADDRESS_MAP_END
 
-static ADDRESS_MAP_START(invqix_io_map, AS_IO, 8, invqix_state)
-	AM_RANGE(H8_PORT_1, H8_PORT_1) AM_READ_PORT("P1")
-	AM_RANGE(H8_PORT_2, H8_PORT_2) AM_READ_PORT("SYSTEM") AM_WRITENOP
-	AM_RANGE(H8_PORT_3, H8_PORT_3) AM_READWRITE(port3_r, port3_w)
-	AM_RANGE(H8_PORT_4, H8_PORT_4) AM_READ_PORT("P4")
-	AM_RANGE(H8_PORT_5, H8_PORT_5) AM_READWRITE(port5_r, port5_w)
-	AM_RANGE(H8_PORT_6, H8_PORT_6) AM_READWRITE(port6_r, port6_w)
-	AM_RANGE(H8_PORT_A, H8_PORT_A) AM_READ(porta_r)
-	AM_RANGE(H8_PORT_G, H8_PORT_G) AM_READ(portg_r) AM_WRITENOP
+static ADDRESS_MAP_START(invqix_io_map, AS_IO, 16, invqix_state)
+	AM_RANGE(h8_device::PORT_1, h8_device::PORT_1) AM_READ_PORT("P1")
+	AM_RANGE(h8_device::PORT_2, h8_device::PORT_2) AM_READ_PORT("SYSTEM") AM_WRITENOP
+	AM_RANGE(h8_device::PORT_3, h8_device::PORT_3) AM_READWRITE(port3_r, port3_w)
+	AM_RANGE(h8_device::PORT_4, h8_device::PORT_4) AM_READ_PORT("P4")
+	AM_RANGE(h8_device::PORT_5, h8_device::PORT_5) AM_READWRITE(port5_r, port5_w)
+	AM_RANGE(h8_device::PORT_6, h8_device::PORT_6) AM_READWRITE(port6_r, port6_w)
+	AM_RANGE(h8_device::PORT_A, h8_device::PORT_A) AM_READ(porta_r)
+	AM_RANGE(h8_device::PORT_G, h8_device::PORT_G) AM_READ(portg_r) AM_WRITENOP
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START( invqix )
@@ -336,7 +339,7 @@ static MACHINE_CONFIG_START( invqix, invqix_state )
 	MCFG_SCREEN_SIZE(640, 480)
 	MCFG_SCREEN_VISIBLE_AREA(0, 256, 0, 240)
 
-	MCFG_PALETTE_LENGTH(65536)
+	MCFG_PALETTE_ADD("palette", 65536)
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
@@ -344,8 +347,8 @@ static MACHINE_CONFIG_START( invqix, invqix_state )
 	MCFG_SOUND_ROUTE(0, "lspeaker", 0.80)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 0.80)
 
-	MCFG_EEPROM_93C46_ADD("eeprom")
-	MCFG_EEPROM_DEFAULT_VALUE(0)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_DEFAULT_VALUE(0)
 MACHINE_CONFIG_END
 
 ROM_START( invqix )
@@ -359,4 +362,4 @@ ROM_START( invqix )
 	ROM_LOAD16_WORD_SWAP( "93c46.ic6", 0x000000, 0x000080, CRC(564b744e) SHA1(4d9ea7dc253797c513258d07a936dfb63d8ed18c) )
 ROM_END
 
-GAME(2003, invqix, 0, invqix, invqix, driver_device, 0, ROT270, "Taito / Namco", "Space Invaders / Qix Silver Anniversary Edition (Ver. 2.03)", 0)
+GAME( 2003, invqix, 0, invqix, invqix, driver_device, 0, ROT270, "Taito / Namco", "Space Invaders / Qix Silver Anniversary Edition (Ver. 2.03)", GAME_SUPPORTS_SAVE )

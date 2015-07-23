@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
     Exidy Car Polo hardware
@@ -64,7 +66,7 @@
  *
  **************************************************************************/
 
-void carpolo_state::palette_init()
+PALETTE_INIT_MEMBER(carpolo_state, carpolo)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
@@ -91,7 +93,7 @@ void carpolo_state::palette_init()
 	};
 
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		UINT8 pen, r, g, b;
 
@@ -122,15 +124,15 @@ void carpolo_state::palette_init()
 			pen = ((i - 0x38) & 0x01) ? ALPHA_COLOR_BASE   + ((i - 0x38) >> 1) : 0;
 
 		/* red component */
-		r = ((r_voltage[(color_prom[pen] >> 5) & 0x07] - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 255.;
+		r = ((r_voltage[(color_prom[pen] >> 5) & 0x07] - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 255.0f;
 
 		/* green component */
-		g = ((g_voltage[(color_prom[pen] >> 2) & 0x07] - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 255.;
+		g = ((g_voltage[(color_prom[pen] >> 2) & 0x07] - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 255.0f;
 
 		/* blue component */
-		b = ((b_voltage[(color_prom[pen] >> 0) & 0x03] - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 255.;
+		b = ((b_voltage[(color_prom[pen] >> 0) & 0x03] - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 255.0f;
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -165,20 +167,17 @@ void carpolo_state::video_start()
  *
  *************************************/
 
-static void draw_alpha_line(running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect,
+void carpolo_state::draw_alpha_line(bitmap_ind16 &bitmap, const rectangle &cliprect,
 							int alpha_line, int video_line)
 {
-	carpolo_state *state = machine.driver_data<carpolo_state>();
-	int x;
-
-	for (x = 0; x < 32; x++)
+	for (int x = 0; x < 32; x++)
 	{
 		UINT8 code, col;
 
-		code = state->m_alpharam[alpha_line * 32 + x] >> 2;
-		col  = state->m_alpharam[alpha_line * 32 + x] & 0x03;
+		code = m_alpharam[alpha_line * 32 + x] >> 2;
+		col  = m_alpharam[alpha_line * 32 + x] & 0x03;
 
-		drawgfx_transpen(bitmap,cliprect,machine.gfx[2],
+		m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 				code,col,
 				0,0,
 				x*8,video_line*8,0);
@@ -206,13 +205,13 @@ void carpolo_state::draw_sprite(bitmap_ind16 &bitmap, const rectangle &cliprect,
 	x = 240 - x;
 	y = 240 - y;
 
-	drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+	m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 			remapped_code, col,
 			0, flipy,
 			x, y,0);
 
 	/* draw with wrap around */
-	drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+	m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 			remapped_code, col,
 			0, flipy,
 			(INT16)x - 256, y,0);
@@ -262,14 +261,14 @@ UINT32 carpolo_state::screen_update_carpolo(screen_device &screen, bitmap_ind16 
 
 	/* left goal - position determined by bit 6 of the
 	   horizontal and vertical timing PROMs */
-	drawgfxzoom_transpen(bitmap,cliprect,machine().gfx[1],
+	m_gfxdecode->gfx(1)->zoom_transpen(bitmap,cliprect,
 				0,0,
 				0,0,
 				LEFT_GOAL_X,GOAL_Y,
 				0x20000,0x20000,0);
 
 	/* right goal */
-	drawgfxzoom_transpen(bitmap,cliprect,machine().gfx[1],
+	m_gfxdecode->gfx(1)->zoom_transpen(bitmap,cliprect,
 				0,1,
 				1,0,
 				RIGHT_GOAL_X,GOAL_Y,
@@ -292,14 +291,14 @@ UINT32 carpolo_state::screen_update_carpolo(screen_device &screen, bitmap_ind16 
 	   and bit 3 of the vertical timing PROM controls in
 	   which quadrant the line will actually appear */
 
-	draw_alpha_line(machine(), bitmap, cliprect, 0, (0*4+0)*2  );
-	draw_alpha_line(machine(), bitmap, cliprect, 1, (0*4+0)*2+1);
-	draw_alpha_line(machine(), bitmap, cliprect, 2, (3*4+1)*2  );
-	draw_alpha_line(machine(), bitmap, cliprect, 3, (3*4+1)*2+1);
-	draw_alpha_line(machine(), bitmap, cliprect, 4, (1*4+2)*2  );
-	draw_alpha_line(machine(), bitmap, cliprect, 5, (1*4+2)*2+1);
-	draw_alpha_line(machine(), bitmap, cliprect, 6, (0*4+3)*2  );
-	draw_alpha_line(machine(), bitmap, cliprect, 7, (0*4+3)*2+1);
+	draw_alpha_line(bitmap, cliprect, 0, (0*4+0)*2  );
+	draw_alpha_line(bitmap, cliprect, 1, (0*4+0)*2+1);
+	draw_alpha_line(bitmap, cliprect, 2, (3*4+1)*2  );
+	draw_alpha_line(bitmap, cliprect, 3, (3*4+1)*2+1);
+	draw_alpha_line(bitmap, cliprect, 4, (1*4+2)*2  );
+	draw_alpha_line(bitmap, cliprect, 5, (1*4+2)*2+1);
+	draw_alpha_line(bitmap, cliprect, 6, (0*4+3)*2  );
+	draw_alpha_line(bitmap, cliprect, 7, (0*4+3)*2+1);
 
 	return 0;
 }
@@ -358,12 +357,12 @@ int carpolo_state::check_sprite_sprite_collision(int x1, int y1, int code1, int 
 		m_sprite_sprite_collision_bitmap1->fill(0);
 		m_sprite_sprite_collision_bitmap2->fill(0);
 
-		drawgfx_opaque(*m_sprite_sprite_collision_bitmap1,m_sprite_sprite_collision_bitmap1->cliprect(),machine().gfx[0],
+		m_gfxdecode->gfx(0)->opaque(*m_sprite_sprite_collision_bitmap1,m_sprite_sprite_collision_bitmap1->cliprect(),
 				code1,0,
 				0,flipy1,
 				x1,y1);
 
-		drawgfx_opaque(*m_sprite_sprite_collision_bitmap2,m_sprite_sprite_collision_bitmap2->cliprect(),machine().gfx[0],
+		m_gfxdecode->gfx(0)->opaque(*m_sprite_sprite_collision_bitmap2,m_sprite_sprite_collision_bitmap2->cliprect(),
 				code2,0,
 				0,flipy2,
 				x2,y2);
@@ -411,12 +410,12 @@ int carpolo_state::check_sprite_left_goal_collision(int x1, int y1, int code1, i
 		m_sprite_goal_collision_bitmap1->fill(0);
 		m_sprite_goal_collision_bitmap2->fill(0);
 
-		drawgfx_opaque(*m_sprite_goal_collision_bitmap1,m_sprite_goal_collision_bitmap1->cliprect(),machine().gfx[0],
+		m_gfxdecode->gfx(0)->opaque(*m_sprite_goal_collision_bitmap1,m_sprite_goal_collision_bitmap1->cliprect(),
 				code1,0,
 				0,flipy1,
 				x1,y1);
 
-		drawgfxzoom_transpen(*m_sprite_goal_collision_bitmap2,m_sprite_goal_collision_bitmap2->cliprect(),machine().gfx[1],
+		m_gfxdecode->gfx(1)->zoom_transpen(*m_sprite_goal_collision_bitmap2,m_sprite_goal_collision_bitmap2->cliprect(),
 					0,0,
 					0,0,
 					x2,y2,
@@ -468,12 +467,12 @@ int carpolo_state::check_sprite_right_goal_collision(int x1, int y1, int code1, 
 		m_sprite_goal_collision_bitmap1->fill(0);
 		m_sprite_goal_collision_bitmap2->fill(0);
 
-		drawgfx_opaque(*m_sprite_goal_collision_bitmap1,m_sprite_goal_collision_bitmap1->cliprect(),machine().gfx[0],
+		m_gfxdecode->gfx(0)->opaque(*m_sprite_goal_collision_bitmap1,m_sprite_goal_collision_bitmap1->cliprect(),
 				code1,0,
 				0,flipy1,
 				x1,y1);
 
-		drawgfxzoom_transpen(*m_sprite_goal_collision_bitmap2,m_sprite_goal_collision_bitmap2->cliprect(),machine().gfx[1],
+		m_gfxdecode->gfx(1)->zoom_transpen(*m_sprite_goal_collision_bitmap2,m_sprite_goal_collision_bitmap2->cliprect(),
 					0,1,
 					1,0,
 					x2,y2,
@@ -513,7 +512,7 @@ int carpolo_state::check_sprite_border_collision(UINT8 x1, UINT8 y1, int code1, 
 	x1 = 240 - x1;
 	y1 = 240 - y1;
 
-	drawgfx_opaque(*m_sprite_border_collision_bitmap,m_sprite_border_collision_bitmap->cliprect(),machine().gfx[0],
+	m_gfxdecode->gfx(0)->opaque(*m_sprite_border_collision_bitmap,m_sprite_border_collision_bitmap->cliprect(),
 			code1,0,
 			0,flipy1,
 			0,0);

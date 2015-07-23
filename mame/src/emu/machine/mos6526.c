@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     MOS 6526/8520 Complex Interface Adapter emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -129,7 +128,7 @@ const device_type MOS5710 = &device_creator<mos5710_device>;
 
 inline void mos6526_device::update_pa()
 {
-	UINT8 pa = m_pra | ~m_ddra;
+	UINT8 pa = m_pra | (m_pa_in & ~m_ddra);
 
 	if (m_pa != pa)
 	{
@@ -145,7 +144,7 @@ inline void mos6526_device::update_pa()
 
 inline void mos6526_device::update_pb()
 {
-	UINT8 pb = m_prb | ~m_ddrb;
+	UINT8 pb = m_prb | (m_pb_in & ~m_ddrb);
 
 	if (CRA_PBON)
 	{
@@ -180,6 +179,20 @@ inline void mos6526_device::set_cra(UINT8 data)
 	if (!CRA_STARTED && (data & CRA_START))
 	{
 		m_ta_pb6 = 1;
+	}
+
+	// switching to serial output mode causes sp to go high?
+	if (!CRA_SPMODE && BIT(data, 6))
+	{
+		m_bits = 0;
+		m_write_sp(1);
+	}
+
+	// lower sp again when switching back to input?
+	if (CRA_SPMODE && !BIT(data, 6))
+	{
+		m_bits = 0;
+		m_write_sp(0);
 	}
 
 	m_cra = data;
@@ -327,20 +340,17 @@ inline void mos6526_device::write_tod(int offset, UINT8 data)
 
 inline void mos6526_device::serial_input()
 {
-	if (m_count_a0 && !CRA_SPMODE)
+	m_shift <<= 1;
+	m_bits++;
+
+	m_shift |= m_sp;
+
+	if (m_bits == 8)
 	{
-		m_shift <<= 1;
-		m_bits++;
+		m_sdr = m_shift;
+		m_bits = 0;
 
-		m_shift |= m_sp;
-
-		if (m_bits == 8)
-		{
-			m_sdr = m_shift;
-			m_bits = 0;
-
-			m_icr |= ICR_SP;
-		}
+		m_icr |= ICR_SP;
 	}
 }
 
@@ -492,16 +502,8 @@ inline void mos6526_device::clock_pipeline()
 	// timer A pipeline
 	m_count_a3 = m_count_a2;
 
-	switch (CRA_INMODE)
-	{
-	case CRA_INMODE_PHI2:
+	if (CRA_INMODE == CRA_INMODE_PHI2)
 		m_count_a2 = 1;
-		break;
-
-	case CRA_INMODE_CNT:
-		m_count_a2 = m_count_a1;
-		break;
-	}
 
 	m_count_a2 &= CRA_STARTED;
 	m_count_a1 = m_count_a0;
@@ -521,10 +523,6 @@ inline void mos6526_device::clock_pipeline()
 	{
 	case CRB_INMODE_PHI2:
 		m_count_b2 = 1;
-		break;
-
-	case CRB_INMODE_CNT:
-		m_count_b2 = m_count_b1;
 		break;
 
 	case CRB_INMODE_TA:
@@ -565,8 +563,6 @@ inline void mos6526_device::synchronize()
 		m_write_pc(m_pc);
 	}
 
-	serial_input();
-
 	clock_ta();
 
 	serial_output();
@@ -590,11 +586,12 @@ inline void mos6526_device::synchronize()
 //  mos6526_device - constructor
 //-------------------------------------------------
 
-mos6526_device::mos6526_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant)
-	: device_t(mconfig, type, name, tag, owner, clock),
+mos6526_device::mos6526_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant, const char *shortname, const char *source)
+	: device_t(mconfig, type, name, tag, owner, clock, shortname, source),
 		device_execute_interface(mconfig, *this),
 		m_icount(0),
 		m_variant(variant),
+		m_tod_clock(0),
 		m_write_irq(*this),
 		m_write_pc(*this),
 		m_write_cnt(*this),
@@ -607,10 +604,11 @@ mos6526_device::mos6526_device(const machine_config &mconfig, device_type type, 
 }
 
 mos6526_device::mos6526_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MOS6526, "MOS6526", tag, owner, clock),
+	: device_t(mconfig, MOS6526, "MOS6526", tag, owner, clock, "mos6526", __FILE__),
 		device_execute_interface(mconfig, *this),
 		m_icount(0),
 		m_variant(TYPE_6526),
+		m_tod_clock(0),
 		m_write_irq(*this),
 		m_write_pc(*this),
 		m_write_cnt(*this),
@@ -622,13 +620,13 @@ mos6526_device::mos6526_device(const machine_config &mconfig, const char *tag, d
 { }
 
 mos6526a_device::mos6526a_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: mos6526_device(mconfig, MOS6526A, "MOS6526A", tag, owner, clock, TYPE_6526A) { }
+	: mos6526_device(mconfig, MOS6526A, "MOS6526A", tag, owner, clock, TYPE_6526A, "mos6526a", __FILE__) { }
 
 mos8520_device::mos8520_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: mos6526_device(mconfig, MOS8520, "MOS8520", tag, owner, clock, TYPE_8520) { }
+	: mos6526_device(mconfig, MOS8520, "MOS8520", tag, owner, clock, TYPE_8520, "mos8520", __FILE__) { }
 
 mos5710_device::mos5710_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: mos6526_device(mconfig, MOS5710, "MOS5710", tag, owner, clock, TYPE_5710) { }
+	: mos6526_device(mconfig, MOS5710, "MOS5710", tag, owner, clock, TYPE_5710, "mos5710", __FILE__) { }
 
 
 //-------------------------------------------------
@@ -720,6 +718,8 @@ void mos6526_device::device_reset()
 	m_ddrb = 0;
 	m_pa = 0xff;
 	m_pb = 0xff;
+	m_pa_in = 0;
+	m_pb_in = 0;
 
 	m_sp = 1;
 	m_cnt = 1;
@@ -775,15 +775,8 @@ void mos6526_device::device_reset()
 
 void mos6526_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
 {
-	if (!m_tod_stopped)
-	{
-		clock_tod();
-
-		if (m_tod == m_alarm)
-		{
-			m_icr |= ICR_ALARM;
-		}
-	}
+	tod_w(1);
+	tod_w(0);
 }
 
 
@@ -808,16 +801,27 @@ void mos6526_device::execute_run()
 
 READ8_MEMBER( mos6526_device::read )
 {
+	if (space.debugger_access())
+		return 0xff;
+
 	UINT8 data = 0;
 
-	switch (offset)
+	switch (offset & 0x0f)
 	{
 	case PRA:
-		data = (m_read_pa(0) & ~m_ddra) | (m_pra & m_ddra);
+		if (m_ddra != 0xff)
+			data = (m_read_pa(0) & ~m_ddra) | (m_pra & m_ddra);
+		else
+			data = m_read_pa(0) & m_pra;
+		m_pa_in = data;
 		break;
 
 	case PRB:
-		data = (m_read_pb(0) & ~m_ddrb) | (m_prb & m_ddrb);
+		if (m_ddrb != 0xff)
+			data = (m_read_pb(0) & ~m_ddrb) | (m_prb & m_ddrb);
+		else
+			data = m_read_pb(0) & m_prb;
+		m_pb_in = data;
 
 		if (CRA_PBON)
 		{
@@ -919,7 +923,7 @@ READ8_MEMBER( mos8520_device::read )
 {
 	UINT8 data = 0;
 
-	switch (offset)
+	switch (offset & 0x0f)
 	{
 	case TOD_MIN:
 		if (!m_tod_latched)
@@ -948,7 +952,7 @@ READ8_MEMBER( mos8520_device::read )
 
 WRITE8_MEMBER( mos6526_device::write )
 {
-	switch (offset)
+	switch (offset & 0x0f)
 	{
 	case PRA:
 		m_pra = data;
@@ -990,6 +994,12 @@ WRITE8_MEMBER( mos6526_device::write )
 			m_load_a0 = 1;
 		}
 
+		if (CRA_RUNMODE)
+		{
+			m_ta = m_ta_latch;
+			set_cra(m_cra | CRA_START);
+		}
+
 		if (m_load_a2)
 		{
 			m_ta = (data << 8) | (m_ta & 0xff);
@@ -1011,6 +1021,12 @@ WRITE8_MEMBER( mos6526_device::write )
 		if (!CRB_STARTED)
 		{
 			m_load_b0 = 1;
+		}
+
+		if (CRB_RUNMODE)
+		{
+			m_tb = m_tb_latch;
+			set_crb(m_crb | CRB_START);
 		}
 
 		if (m_load_b2)
@@ -1078,7 +1094,7 @@ WRITE8_MEMBER( mos6526_device::write )
 
 WRITE8_MEMBER( mos8520_device::write )
 {
-	switch (offset)
+	switch (offset & 0x0f)
 	{
 	default:
 		mos6526_device::write(space, offset, data);
@@ -1097,62 +1113,12 @@ WRITE8_MEMBER( mos8520_device::write )
 
 
 //-------------------------------------------------
-//  pa_r - port A read
-//-------------------------------------------------
-
-UINT8 mos6526_device::pa_r()
-{
-	return m_pa;
-}
-
-READ8_MEMBER( mos6526_device::pa_r )
-{
-	return pa_r();
-}
-
-
-//-------------------------------------------------
-//  pb_r - port B read
-//-------------------------------------------------
-
-UINT8 mos6526_device::pb_r()
-{
-	return m_pb;
-}
-
-READ8_MEMBER( mos6526_device::pb_r )
-{
-	return pb_r();
-}
-
-
-//-------------------------------------------------
-//  sp_r - serial port read
-//-------------------------------------------------
-
-READ_LINE_MEMBER( mos6526_device::sp_r )
-{
-	return m_sp;
-}
-
-
-//-------------------------------------------------
 //  sp_w - serial port write
 //-------------------------------------------------
 
 WRITE_LINE_MEMBER( mos6526_device::sp_w )
 {
 	m_sp = state;
-}
-
-
-//-------------------------------------------------
-//  cnt_r - serial counter read
-//-------------------------------------------------
-
-READ_LINE_MEMBER( mos6526_device::cnt_r )
-{
-	return m_cnt;
 }
 
 
@@ -1166,8 +1132,13 @@ WRITE_LINE_MEMBER( mos6526_device::cnt_w )
 
 	if (!m_cnt && state)
 	{
-		m_count_a0 = 1;
-		m_count_b0 = 1;
+		serial_input();
+
+		if (CRA_INMODE == CRA_INMODE_CNT)
+			m_ta--;
+
+		if (CRB_INMODE == CRB_INMODE_CNT)
+			m_tb--;
 	}
 
 	m_cnt = state;
@@ -1186,4 +1157,22 @@ WRITE_LINE_MEMBER( mos6526_device::flag_w )
 	}
 
 	m_flag = state;
+}
+
+
+//-------------------------------------------------
+//  tod_w - time-of-day clock write
+//-------------------------------------------------
+
+WRITE_LINE_MEMBER( mos6526_device::tod_w )
+{
+	if (state && !m_tod_stopped)
+	{
+		clock_tod();
+
+		if (m_tod == m_alarm)
+		{
+			m_icr |= ICR_ALARM;
+		}
+	}
 }

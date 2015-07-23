@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Roberto Fresca
 /******************************************************************************
 
     GAME-A-TRON gambling hardware
@@ -45,15 +47,15 @@ TILE_GET_INFO_MEMBER(gatron_state::get_bg_tile_info)
 
 void gatron_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(gatron_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS, 8, 16, 48, 16);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(gatron_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS, 8, 16, 48, 16);
 }
 
 UINT32 gatron_state::screen_update_gat(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
-void gatron_state::palette_init()
+PALETTE_INIT_MEMBER(gatron_state, gatron)
 {
 }

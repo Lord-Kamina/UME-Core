@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Visual 1050 keyboard emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 *********************************************************************/
 
@@ -71,7 +70,7 @@ static const discrete_555_desc v1050_ne555 =
 
 static DISCRETE_SOUND_START( v1050kb )
 	DISCRETE_INPUT_LOGIC(NODE_01)
-	DISCRETE_555_ASTABLE(NODE_02, NODE_01, RES_K(68) /* can't read on schematic */ , RES_K(3), CAP_N(10), &v1050_ne555)
+	DISCRETE_555_ASTABLE(NODE_02, NODE_01, (int) RES_K(68) /* can't read on schematic */ , (int) RES_K(3), (int) CAP_N(10), &v1050_ne555)
 	DISCRETE_OUTPUT(NODE_02, 5000)
 DISCRETE_SOUND_END
 
@@ -88,7 +87,7 @@ static MACHINE_CONFIG_FRAGMENT( v1050_keyboard )
 	// discrete sound
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD(DISCRETE_TAG, DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(v1050kb)
+	MCFG_DISCRETE_INTF(v1050kb)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.80)
 MACHINE_CONFIG_END
 
@@ -318,8 +317,8 @@ v1050_keyboard_device::v1050_keyboard_device(const machine_config &mconfig, cons
 		m_y9(*this, "Y9"),
 		m_ya(*this, "YA"),
 		m_yb(*this, "YB"),
-		m_y(0),
-		m_so(1)
+		m_out_tx_handler(*this),
+		m_y(0)
 {
 }
 
@@ -332,7 +331,6 @@ void v1050_keyboard_device::device_start()
 {
 	// state saving
 	save_item(NAME(m_y));
-	save_item(NAME(m_so));
 }
 
 
@@ -342,6 +340,8 @@ void v1050_keyboard_device::device_start()
 
 void v1050_keyboard_device::device_reset()
 {
+	m_out_tx_handler.resolve_safe();
+	m_out_tx_handler(1);
 }
 
 
@@ -352,16 +352,6 @@ void v1050_keyboard_device::device_reset()
 WRITE_LINE_MEMBER( v1050_keyboard_device::si_w )
 {
 	m_maincpu->set_input_line(MCS48_INPUT_IRQ, state ? CLEAR_LINE : ASSERT_LINE);
-}
-
-
-//-------------------------------------------------
-//  so_r -
-//-------------------------------------------------
-
-READ_LINE_MEMBER( v1050_keyboard_device::so_r )
-{
-	return m_so;
 }
 
 
@@ -428,8 +418,8 @@ WRITE8_MEMBER( v1050_keyboard_device::kb_p2_w )
 	output_set_led_value(0, BIT(data, 5));
 
 	// speaker output
-	discrete_sound_w(m_discrete, space, NODE_01, BIT(data, 6));
+	m_discrete->write(space, NODE_01, BIT(data, 6));
 
 	// serial output
-	m_so = BIT(data, 7);
+	m_out_tx_handler(BIT(data, 7));
 }

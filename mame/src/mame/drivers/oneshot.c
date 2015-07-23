@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Paul Priest
 /* One Shot One Kill & Maddonna
    Driver by David Haywood and Paul Priest
    Dip Switches and Inputs by stephh
@@ -29,6 +31,7 @@ TO DO :
 
 NOTE: An eBay auction of the PCB shows "1996.9.16 PROMAT" on the JAMMA+ adapter for
       One Shot One Kill.  This information was used for the year & manufacturer.
+      Also listed in an Approved Game list on a HK government site as "Promet"
 
 */
 
@@ -101,7 +104,7 @@ WRITE16_MEMBER(oneshot_state::soundbank_w)
 static ADDRESS_MAP_START( oneshot_map, AS_PROGRAM, 16, oneshot_state )
 	AM_RANGE(0x000000, 0x03ffff) AM_ROM
 	AM_RANGE(0x080000, 0x087fff) AM_RAM
-	AM_RANGE(0x0c0000, 0x0c07ff) AM_RAM_WRITE(paletteram_xBBBBBGGGGGRRRRR_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x0c0000, 0x0c07ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x120000, 0x120fff) AM_RAM AM_SHARE("sprites")
 	AM_RANGE(0x180000, 0x180fff) AM_RAM_WRITE(oneshot_mid_videoram_w) AM_SHARE("mid_videoram") // some people , girl etc.
 	AM_RANGE(0x181000, 0x181fff) AM_RAM_WRITE(oneshot_fg_videoram_w) AM_SHARE("fg_videoram") // credits etc.
@@ -326,11 +329,6 @@ static GFXDECODE_START( oneshot )
 	GFXDECODE_ENTRY( "gfx1", 0, oneshot8x8_layout,     0x00, 4  ) /* sprites */
 GFXDECODE_END
 
-WRITE_LINE_MEMBER(oneshot_state::irqhandler)
-{
-	m_audiocpu->set_input_line(0, state ? ASSERT_LINE : CLEAR_LINE);
-}
-
 void oneshot_state::machine_start()
 {
 	save_item(NAME(m_gun_x_p1));
@@ -371,15 +369,16 @@ static MACHINE_CONFIG_START( oneshot, oneshot_state )
 	MCFG_SCREEN_SIZE(32*16, 32*16)
 	MCFG_SCREEN_VISIBLE_AREA(0*16, 20*16-1, 0*16, 15*16-1)
 	MCFG_SCREEN_UPDATE_DRIVER(oneshot_state, screen_update_oneshot)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(oneshot)
-	MCFG_PALETTE_LENGTH(0x400)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", oneshot)
+	MCFG_PALETTE_ADD("palette", 0x400)
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM3812, 3500000)
-	MCFG_YM3812_IRQ_HANDLER(WRITELINE(oneshot_state, irqhandler))
+	MCFG_YM3812_IRQ_HANDLER(INPUTLINE("audiocpu", 0))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
 	MCFG_OKIM6295_ADD("oki", 1056000, OKIM6295_PIN7_HIGH) // clock frequency & pin 7 not verified
@@ -446,6 +445,15 @@ ROM_START( maddonna )
 	ROM_REGION( 0x10000, "user1", 0 )
 	ROM_LOAD( "x1", 0x00000, 0x10000, CRC(6b213183) SHA1(599c59d155d11edb151bfaed1d24ef964462a447) ) // motherboard rom, zooming?
 ROM_END
+
+// The tiles containing the copyright string (tiles 0x3979 onwards) differ in this set.
+// Both versions have tiles containing the 'Tuning - Germany' copyright messages, but
+// the parent set has additional tiles containing the '(c)Copyright 1995' which is shown
+// on the title screen.
+//
+// The lack of these tiles in this set causes all subsequent tiles to be shifted.  It is
+// likely that the correct program roms for this set either don't show '(c)Copyright 1995'
+// or display it using the regular font instead.
 
 ROM_START( maddonnb )
 	ROM_REGION( 0x40000, "maincpu", 0 ) /* 68000 Code */

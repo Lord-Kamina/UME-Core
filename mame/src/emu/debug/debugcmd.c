@@ -1,11 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*********************************************************************
 
     debugcmd.c
 
     Debugger command interface engine.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 *********************************************************************/
 
@@ -53,10 +52,9 @@ struct cheat_map
 
 struct cheat_system
 {
-	char        cpu;
-	UINT64      length;
+	char        cpu[2];
 	UINT8       width;
-	cheat_map * cheatmap;
+	std::vector<cheat_map> cheatmap;
 	UINT8       undo;
 	UINT8       signed_cheat;
 	UINT8       swapped_cheat;
@@ -269,7 +267,7 @@ void debug_command_init(running_machine &machine)
 	}
 
 	/* add all the commands */
-	debug_console_register_command(machine, "help",      CMDFLAG_NONE, 0, 0, 2, execute_help);
+	debug_console_register_command(machine, "help",      CMDFLAG_NONE, 0, 0, 1, execute_help);
 	debug_console_register_command(machine, "print",     CMDFLAG_NONE, 0, 1, MAX_COMMAND_PARAMS, execute_print);
 	debug_console_register_command(machine, "printf",    CMDFLAG_NONE, 0, 1, MAX_COMMAND_PARAMS, execute_printf);
 	debug_console_register_command(machine, "logerror",  CMDFLAG_NONE, 0, 1, MAX_COMMAND_PARAMS, execute_logerror);
@@ -410,6 +408,8 @@ void debug_command_init(running_machine &machine)
 	name = machine.options().debug_script();
 	if (name[0] != 0)
 		debug_cpu_source_script(machine, name);
+
+	cheat.cpu[0] = cheat.cpu[1] = 0;
 }
 
 
@@ -419,8 +419,6 @@ void debug_command_init(running_machine &machine)
 
 static void debug_command_exit(running_machine &machine)
 {
-	if (cheat.length)
-		auto_free(machine, cheat.cheatmap);
 }
 
 
@@ -679,14 +677,8 @@ static void execute_help(running_machine &machine, int ref, int params, const ch
 {
 	if (params == 0)
 		debug_console_printf_wrap(machine, 80, "%s\n", debug_get_help(""));
-	else if (params == 1)
+	else
 		debug_console_printf_wrap(machine, 80, "%s\n", debug_get_help(param[0]));
-	else if (params == 2)
-	{
-		UINT64 width;
-		debug_command_parameter_number(machine, param[1], &width);
-		debug_console_printf_wrap(machine, (int)width, "%s\n", debug_get_help(param[0]));
-	}
 }
 
 
@@ -874,7 +866,7 @@ static void execute_tracelog(running_machine &machine, int ref, int params, cons
 
 static void execute_quit(running_machine &machine, int ref, int params, const char *param[])
 {
-	mame_printf_error("Exited via the debugger\n");
+	osd_printf_error("Exited via the debugger\n");
 	machine.schedule_exit();
 }
 
@@ -1033,7 +1025,7 @@ static void execute_ignore(running_machine &machine, int ref, int params, const 
 	/* if there are no parameters, dump the ignore list */
 	if (params == 0)
 	{
-		astring buffer;
+		std::string buffer;
 
 		/* loop over all executable devices */
 		execute_interface_iterator iter(machine.root_device());
@@ -1042,16 +1034,16 @@ static void execute_ignore(running_machine &machine, int ref, int params, const 
 			/* build up a comma-separated list */
 			if (!exec->device().debug()->observing())
 			{
-				if (!buffer)
-					buffer.printf("Currently ignoring device '%s'", exec->device().tag());
+				if (buffer.empty())
+					strprintf(buffer, "Currently ignoring device '%s'", exec->device().tag());
 				else
-					buffer.catprintf(", '%s'", exec->device().tag());
+					strcatprintf(buffer, ", '%s'", exec->device().tag());
 			}
 
 		/* special message for none */
-		if (!buffer)
-			buffer.printf("Not currently ignoring any devices");
-		debug_console_printf(machine, "%s\n", buffer.cstr());
+		if (buffer.empty())
+			strprintf(buffer, "Not currently ignoring any devices");
+		debug_console_printf(machine, "%s\n", buffer.c_str());
 	}
 
 	/* otherwise clear the ignore flag on all requested CPUs */
@@ -1098,7 +1090,7 @@ static void execute_observe(running_machine &machine, int ref, int params, const
 	/* if there are no parameters, dump the ignore list */
 	if (params == 0)
 	{
-		astring buffer;
+		std::string buffer;
 
 		/* loop over all executable devices */
 		execute_interface_iterator iter(machine.root_device());
@@ -1107,16 +1099,16 @@ static void execute_observe(running_machine &machine, int ref, int params, const
 			/* build up a comma-separated list */
 			if (exec->device().debug()->observing())
 			{
-				if (!buffer)
-					buffer.printf("Currently observing CPU '%s'", exec->device().tag());
+				if (buffer.empty())
+					strprintf(buffer, "Currently observing CPU '%s'", exec->device().tag());
 				else
-					buffer.catprintf(", '%s'", exec->device().tag());
+					strcatprintf(buffer, ", '%s'", exec->device().tag());
 			}
 
 		/* special message for none */
-		if (!buffer)
-			buffer.printf("Not currently observing any devices");
-		debug_console_printf(machine, "%s\n", buffer.cstr());
+		if (buffer.empty())
+			strprintf(buffer, "Not currently observing any devices");
+		debug_console_printf(machine, "%s\n", buffer.c_str());
 	}
 
 	/* otherwise set the ignore flag on all requested CPUs */
@@ -1322,7 +1314,7 @@ static void execute_bpdisenable(running_machine &machine, int ref, int params, c
 static void execute_bplist(running_machine &machine, int ref, int params, const char *param[])
 {
 	int printed = 0;
-	astring buffer;
+	std::string buffer;
 
 	/* loop over all CPUs */
 	device_iterator iter(machine.root_device());
@@ -1334,12 +1326,12 @@ static void execute_bplist(running_machine &machine, int ref, int params, const 
 			/* loop over the breakpoints */
 			for (device_debug::breakpoint *bp = device->debug()->breakpoint_first(); bp != NULL; bp = bp->next())
 			{
-				buffer.printf("%c%4X @ %s", bp->enabled() ? ' ' : 'D', bp->index(), core_i64_hex_format(bp->address(), device->debug()->logaddrchars()));
-				if (astring(bp->condition()) != astring("1"))
-					buffer.catprintf(" if %s", bp->condition());
-				if (astring(bp->action()) != astring(""))
-					buffer.catprintf(" do %s", bp->action());
-				debug_console_printf(machine, "%s\n", buffer.cstr());
+				strprintf(buffer, "%c%4X @ %s", bp->enabled() ? ' ' : 'D', bp->index(), core_i64_hex_format(bp->address(), device->debug()->logaddrchars()));
+				if (std::string(bp->condition()).compare("1") != 0)
+					strcatprintf(buffer, " if %s", bp->condition());
+				if (std::string(bp->action()).compare("") != 0)
+					strcatprintf(buffer, " do %s", bp->action());
+				debug_console_printf(machine, "%s\n", buffer.c_str());
 				printed++;
 			}
 		}
@@ -1485,7 +1477,7 @@ static void execute_wpdisenable(running_machine &machine, int ref, int params, c
 static void execute_wplist(running_machine &machine, int ref, int params, const char *param[])
 {
 	int printed = 0;
-	astring buffer;
+	std::string buffer;
 
 	/* loop over all CPUs */
 	device_iterator iter(machine.root_device());
@@ -1495,20 +1487,21 @@ static void execute_wplist(running_machine &machine, int ref, int params, const 
 			{
 				static const char *const types[] = { "unkn ", "read ", "write", "r/w  " };
 
-				debug_console_printf(machine, "Device '%s' %s space watchpoints:\n", device->tag(), device->debug()->watchpoint_first(spacenum)->space().name());
+				debug_console_printf(machine, "Device '%s' %s space watchpoints:\n", device->tag(),
+																						device->debug()->watchpoint_first(spacenum)->space().name());
 
 				/* loop over the watchpoints */
 				for (device_debug::watchpoint *wp = device->debug()->watchpoint_first(spacenum); wp != NULL; wp = wp->next())
 				{
-					buffer.printf("%c%4X @ %s-%s %s", wp->enabled() ? ' ' : 'D', wp->index(),
+					strprintf(buffer, "%c%4X @ %s-%s %s", wp->enabled() ? ' ' : 'D', wp->index(),
 							core_i64_hex_format(wp->space().byte_to_address(wp->address()), wp->space().addrchars()),
 							core_i64_hex_format(wp->space().byte_to_address_end(wp->address() + wp->length()) - 1, wp->space().addrchars()),
 							types[wp->type() & 3]);
-					if (wp->condition() != NULL)
-						buffer.catprintf(" if %s", wp->condition());
-					if (wp->action() != NULL)
-						buffer.catprintf(" do %s", wp->action());
-					debug_console_printf(machine, "%s\n", buffer.cstr());
+					if (std::string(wp->condition()).compare("1") != 0)
+						strcatprintf(buffer, " if %s", wp->condition());
+					if (std::string(wp->action()).compare("") != 0)
+						strcatprintf(buffer, " do %s", wp->action());
+					debug_console_printf(machine, "%s\n", buffer.c_str());
 					printed++;
 				}
 			}
@@ -1631,7 +1624,7 @@ static void execute_rpdisenable(running_machine &machine, int ref, int params, c
 static void execute_rplist(running_machine &machine, int ref, int params, const char *param[])
 {
 	int printed = 0;
-	astring buffer;
+	std::string buffer;
 
 	/* loop over all CPUs */
 	device_iterator iter(machine.root_device());
@@ -1643,11 +1636,11 @@ static void execute_rplist(running_machine &machine, int ref, int params, const 
 			/* loop over the breakpoints */
 			for (device_debug::registerpoint *rp = device->debug()->registerpoint_first(); rp != NULL; rp = rp->next())
 			{
-				buffer.printf("%c%4X ", rp->enabled() ? ' ' : 'D', rp->index());
-				buffer.catprintf("if %s", rp->condition());
+				strprintf(buffer, "%c%4X ", rp->enabled() ? ' ' : 'D', rp->index());
+				strcatprintf(buffer, "if %s", rp->condition());
 				if (rp->action() != NULL)
-					buffer.catprintf(" do %s", rp->action());
-				debug_console_printf(machine, "%s\n", buffer.cstr());
+					strcatprintf(buffer, " do %s", rp->action());
+				debug_console_printf(machine, "%s\n", buffer.c_str());
 				printed++;
 			}
 		}
@@ -1707,8 +1700,8 @@ static void execute_hotspot(running_machine &machine, int ref, int params, const
 
 static void execute_statesave(running_machine &machine, int ref, int params, const char *param[])
 {
-	astring filename(param[0]);
-	machine.immediate_save(filename);
+	std::string filename(param[0]);
+	machine.immediate_save(filename.c_str());
 	debug_console_printf(machine, "State save attempted.  Please refer to window message popup for results.\n");
 }
 
@@ -1719,8 +1712,8 @@ static void execute_statesave(running_machine &machine, int ref, int params, con
 
 static void execute_stateload(running_machine &machine, int ref, int params, const char *param[])
 {
-	astring filename(param[0]);
-	machine.immediate_load(filename);
+	std::string filename(param[0]);
+	machine.immediate_load(filename.c_str());
 
 	// Clear all PC & memory tracks
 	device_iterator iter(machine.root_device());
@@ -2025,7 +2018,7 @@ static void execute_cheatinit(running_machine &machine, int ref, int params, con
 	}
 
 	/* determine the writable extent of each region in total */
-	for (i = 0; i <= region_count; i++)
+	for (i = 0; i < region_count; i++)
 		if (!cheat_region[i].disabled)
 			for (curaddr = cheat_region[i].offset; curaddr <= cheat_region[i].endoffset; curaddr += cheat.width)
 				if (cheat_address_is_valid(*space, curaddr))
@@ -2040,34 +2033,24 @@ static void execute_cheatinit(running_machine &machine, int ref, int params, con
 	if (ref == 0)
 	{
 		/* initialize new cheat system */
-		if (cheat.cheatmap != NULL)
-			auto_free(machine, cheat.cheatmap);
-		cheat.cheatmap = auto_alloc_array(machine, cheat_map, real_length);
-
-		cheat.length = real_length;
+		cheat.cheatmap.resize(real_length);
 		cheat.undo = 0;
-		cheat.cpu = (params > 3) ? *param[3] : '0';
+		cheat.cpu[0] = (params > 3) ? *param[3] : '0';
 	}
 	else
 	{
 		/* add range to cheat system */
-		if (cheat.cpu == 0)
+		if (cheat.cpu[0] == 0)
 		{
 			debug_console_printf(machine, "Use cheatinit before cheatrange\n");
 			return;
 		}
 
-		if (!debug_command_parameter_cpu_space(machine, &cheat.cpu, AS_PROGRAM, space))
+		if (!debug_command_parameter_cpu_space(machine, cheat.cpu, AS_PROGRAM, space))
 			return;
 
-		cheat_map *newmap = auto_alloc_array(machine, cheat_map, cheat.length + real_length);
-		for (int item = 0; item < cheat.length; item++)
-			newmap[item] = cheat.cheatmap[item];
-		auto_free(machine, cheat.cheatmap);
-		cheat.cheatmap = newmap;
-
-		active_cheat = cheat.length;
-		cheat.length += real_length;
+		active_cheat = cheat.cheatmap.size();
+		cheat.cheatmap.resize(cheat.cheatmap.size() + real_length);
 	}
 
 	/* initialize cheatmap in the selected space */
@@ -2084,7 +2067,10 @@ static void execute_cheatinit(running_machine &machine, int ref, int params, con
 					active_cheat++;
 				}
 
-	debug_console_printf(machine, "%u cheat initialized\n", active_cheat);
+	/* give a detailed init message to avoid searches being mistakingly carried out on the wrong CPU */
+	device_t *cpu = NULL;
+	debug_command_parameter_cpu(machine, cheat.cpu, &cpu);
+	debug_console_printf(machine, "%u cheat initialized for CPU index %s ( aka %s )\n", active_cheat, cheat.cpu, cpu->tag());
 }
 
 
@@ -2118,13 +2104,13 @@ static void execute_cheatnext(running_machine &machine, int ref, int params, con
 		CHEAT_CHANGEDBY
 	};
 
-	if (cheat.cpu == 0)
+	if (cheat.cpu[0] == 0)
 	{
 		debug_console_printf(machine, "Use cheatinit before cheatnext\n");
 		return;
 	}
 
-	if (!debug_command_parameter_cpu_space(machine, &cheat.cpu, AS_PROGRAM, space))
+	if (!debug_command_parameter_cpu_space(machine, cheat.cpu, AS_PROGRAM, space))
 		return;
 
 	if (params > 1 && !debug_command_parameter_number(machine, param[1], &comp_value))
@@ -2161,7 +2147,7 @@ static void execute_cheatnext(running_machine &machine, int ref, int params, con
 	cheat.undo++;
 
 	/* execute the search */
-	for (cheatindex = 0; cheatindex < cheat.length; cheatindex += 1)
+	for (cheatindex = 0; cheatindex < cheat.cheatmap.size(); cheatindex += 1)
 		if (cheat.cheatmap[cheatindex].state == 1)
 		{
 			UINT64 cheat_value = cheat_read_extended(&cheat, *space, cheat.cheatmap[cheatindex].offset);
@@ -2279,10 +2265,10 @@ static void execute_cheatlist(running_machine &machine, int ref, int params, con
 	UINT64 sizemask;
 	FILE *f = NULL;
 
-	if (!debug_command_parameter_cpu_space(machine, &cheat.cpu, AS_PROGRAM, space))
+	if (!debug_command_parameter_cpu_space(machine, cheat.cpu, AS_PROGRAM, space))
 		return;
 
-	if (!debug_command_parameter_cpu(machine, &cheat.cpu, &cpu))
+	if (!debug_command_parameter_cpu(machine, cheat.cpu, &cpu))
 		return;
 
 	if (params > 0)
@@ -2306,7 +2292,7 @@ static void execute_cheatlist(running_machine &machine, int ref, int params, con
 	}
 
 	/* write the cheat list */
-	for (cheatindex = 0; cheatindex < cheat.length; cheatindex += 1)
+	for (cheatindex = 0; cheatindex < cheat.cheatmap.size(); cheatindex += 1)
 	{
 		if (cheat.cheatmap[cheatindex].state == 1)
 		{
@@ -2342,7 +2328,7 @@ static void execute_cheatundo(running_machine &machine, int ref, int params, con
 
 	if (cheat.undo > 0)
 	{
-		for (cheatindex = 0; cheatindex < cheat.length; cheatindex += 1)
+		for (cheatindex = 0; cheatindex < cheat.cheatmap.size(); cheatindex += 1)
 		{
 			if (cheat.cheatmap[cheatindex].undo == cheat.undo)
 			{
@@ -2373,7 +2359,7 @@ static void execute_find(running_machine &machine, int ref, int params, const ch
 	int cur_data_size;
 	int data_count = 0;
 	int found = 0;
-	UINT64 i, j;
+	int j;
 
 	/* validate parameters */
 	if (!debug_command_parameter_number(machine, param[0], &offset))
@@ -2391,7 +2377,7 @@ static void execute_find(running_machine &machine, int ref, int params, const ch
 		cur_data_size = 1;
 
 	/* parse the data parameters */
-	for (i = 2; i < params; i++)
+	for (int i = 2; i < params; i++)
 	{
 		const char *pdata = param[i];
 
@@ -2426,7 +2412,7 @@ static void execute_find(running_machine &machine, int ref, int params, const ch
 	}
 
 	/* now search */
-	for (i = offset; i <= endoffset; i += data_size[0])
+	for (UINT64 i = offset; i <= endoffset; i += data_size[0])
 	{
 		int suboffset = 0;
 		int match = 1;
@@ -2467,9 +2453,9 @@ static void execute_dasm(running_machine &machine, int ref, int params, const ch
 {
 	UINT64 offset, length, bytes = 1;
 	int minbytes, maxbytes, byteswidth;
-	address_space *space;
+	address_space *space, *decrypted_space;
 	FILE *f = NULL;
-	int i, j;
+	int j;
 
 	/* validate parameters */
 	if (!debug_command_parameter_number(machine, param[1], &offset))
@@ -2480,6 +2466,8 @@ static void execute_dasm(running_machine &machine, int ref, int params, const ch
 		return;
 	if (!debug_command_parameter_cpu_space(machine, (params > 4) ? param[4] : NULL, AS_PROGRAM, space))
 		return;
+	if (!debug_command_parameter_cpu_space(machine, (params > 4) ? param[4] : NULL, AS_DECRYPTED_OPCODES, decrypted_space))
+		decrypted_space = space;
 
 	/* determine the width of the bytes */
 	cpu_device *cpudevice = downcast<cpu_device *>(&space->device());
@@ -2501,7 +2489,7 @@ static void execute_dasm(running_machine &machine, int ref, int params, const ch
 	}
 
 	/* now write the data out */
-	for (i = 0; i < length; )
+	for (UINT64 i = 0; i < length; )
 	{
 		int pcbyte = space->address_to_byte(offset + i) & space->bytemask();
 		char output[512], disasm[200];
@@ -2522,8 +2510,8 @@ static void execute_dasm(running_machine &machine, int ref, int params, const ch
 			/* fetch the bytes up to the maximum */
 			for (numbytes = 0; numbytes < maxbytes; numbytes++)
 			{
-				opbuf[numbytes] = debug_read_opcode(*space, pcbyte + numbytes, 1, FALSE);
-				argbuf[numbytes] = debug_read_opcode(*space, pcbyte + numbytes, 1, TRUE);
+				opbuf[numbytes] = debug_read_opcode(*decrypted_space, pcbyte + numbytes, 1);
+				argbuf[numbytes] = debug_read_opcode(*space, pcbyte + numbytes, 1);
 			}
 
 			/* disassemble the result */
@@ -2536,7 +2524,7 @@ static void execute_dasm(running_machine &machine, int ref, int params, const ch
 			int startdex = outdex;
 			numbytes = space->address_to_byte(numbytes);
 			for (j = 0; j < numbytes; j += minbytes)
-				outdex += sprintf(&output[outdex], "%s ", core_i64_hex_format(debug_read_opcode(*space, pcbyte + j, minbytes, FALSE), minbytes * 2));
+				outdex += sprintf(&output[outdex], "%s ", core_i64_hex_format(debug_read_opcode(*decrypted_space, pcbyte + j, minbytes), minbytes * 2));
 			if (outdex - startdex < byteswidth)
 				outdex += sprintf(&output[outdex], "%*s", byteswidth - (outdex - startdex), "");
 			outdex += sprintf(&output[outdex], "  ");
@@ -2584,10 +2572,10 @@ static void execute_trace_internal(running_machine &machine, int ref, int params
 	device_t *cpu;
 	FILE *f = NULL;
 	const char *mode;
-	astring filename = param[0];
+	std::string filename = param[0];
 
 	/* replace macros */
-	filename.replace("{game}", machine.basename());
+	strreplace(filename, "{game}", machine.basename());
 
 	/* validate parameters */
 	if (!debug_command_parameter_cpu(machine, (params > 1) ? param[1] : NULL, &cpu))
@@ -2596,7 +2584,7 @@ static void execute_trace_internal(running_machine &machine, int ref, int params
 		return;
 
 	/* open the file */
-	if (mame_stricmp(filename, "off") != 0)
+	if (core_stricmp(filename.c_str(), "off") != 0)
 	{
 		mode = "w";
 
@@ -2607,7 +2595,7 @@ static void execute_trace_internal(running_machine &machine, int ref, int params
 			filename = filename.substr(2);
 		}
 
-		f = fopen(filename, mode);
+		f = fopen(filename.c_str(), mode);
 		if (!f)
 		{
 			debug_console_printf(machine, "Error opening file '%s'\n", param[0]);
@@ -2618,7 +2606,7 @@ static void execute_trace_internal(running_machine &machine, int ref, int params
 	/* do it */
 	cpu->debug()->trace(f, trace_over, action);
 	if (f)
-		debug_console_printf(machine, "Tracing CPU '%s' to file %s\n", cpu->tag(), filename.cstr());
+		debug_console_printf(machine, "Tracing CPU '%s' to file %s\n", cpu->tag(), filename.c_str());
 	else
 		debug_console_printf(machine, "Stopped tracing on CPU '%s'\n", cpu->tag());
 }
@@ -2661,9 +2649,11 @@ static void execute_traceflush(running_machine &machine, int ref, int params, co
 static void execute_history(running_machine &machine, int ref, int params, const char *param[])
 {
 	/* validate parameters */
-	address_space *space;
+	address_space *space, *decrypted_space;
 	if (!debug_command_parameter_cpu_space(machine, (params > 0) ? param[0] : NULL, AS_PROGRAM, space))
 		return;
+	if (!debug_command_parameter_cpu_space(machine, (params > 0) ? param[0] : NULL, AS_DECRYPTED_OPCODES, decrypted_space))
+		decrypted_space = space;
 
 	UINT64 count = device_debug::HISTORY_SIZE;
 	if (!debug_command_parameter_number(machine, param[1], &count))
@@ -2677,7 +2667,7 @@ static void execute_history(running_machine &machine, int ref, int params, const
 
 	/* loop over lines */
 	int maxbytes = debug->max_opcode_bytes();
-	for (int index = 0; index < count; index++)
+	for (int index = 0; index < (int) count; index++)
 	{
 		offs_t pc = debug->history_pc(-index);
 
@@ -2686,8 +2676,8 @@ static void execute_history(running_machine &machine, int ref, int params, const
 		UINT8 opbuf[64], argbuf[64];
 		for (int numbytes = 0; numbytes < maxbytes; numbytes++)
 		{
-			opbuf[numbytes] = debug_read_opcode(*space, pcbyte + numbytes, 1, false);
-			argbuf[numbytes] = debug_read_opcode(*space, pcbyte + numbytes, 1, true);
+			opbuf[numbytes] = debug_read_opcode(*decrypted_space, pcbyte + numbytes, 1);
+			argbuf[numbytes] = debug_read_opcode(*space, pcbyte + numbytes, 1);
 		}
 
 		char buffer[200];
@@ -2844,11 +2834,11 @@ static void execute_snap(running_machine &machine, int ref, int params, const ch
 			return;
 		}
 
-		astring fname(filename);
-		if (fname.find(0, ".png") == -1)
-			fname.cat(".png");
+		std::string fname(filename);
+		if (fname.find(".png") == -1)
+			fname.append(".png");
 		emu_file file(machine.options().snapshot_directory(), OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS);
-		file_error filerr = file.open(fname);
+		file_error filerr = file.open(fname.c_str());
 
 		if (filerr != FILERR_NONE)
 		{
@@ -3109,13 +3099,13 @@ static void execute_dumpkbd(running_machine &machine, int ref, int params, const
 	}
 
 	// loop through all codes
-	astring buffer = machine.ioport().natkeyboard().dump();
+	std::string buffer = machine.ioport().natkeyboard().dump();
 
 	// and output it as appropriate
 	if (file != NULL)
-		fprintf(file, "%s\n", buffer.cstr());
+		fprintf(file, "%s\n", buffer.c_str());
 	else
-		debug_console_printf(machine, "%s\n", buffer.cstr());
+		debug_console_printf(machine, "%s\n", buffer.c_str());
 
 	// cleanup
 	if (file != NULL)

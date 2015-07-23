@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /*
 C140.c
 
@@ -38,8 +40,8 @@ Unmapped registers:
 */
 /*
     2000.06.26  CAB     fixed compressed pcm playback
-    2002.07.20  R.Belmont   added support for multiple banking types
-    2006.01.08  R.Belmont   added support for NA-1/2 "219" derivative
+    2002.07.20  R. Belmont   added support for multiple banking types
+    2006.01.08  R. Belmont   added support for NA-1/2 "219" derivative
 */
 
 
@@ -85,7 +87,7 @@ INLINE int limit(INT32 in)
 //-------------------------------------------------
 
 c140_device::c140_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, C140, "C140", tag, owner, clock),
+	: device_t(mconfig, C140, "C140", tag, owner, clock, "c140", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_sample_rate(0),
 		m_stream(NULL),
@@ -106,15 +108,11 @@ c140_device::c140_device(const machine_config &mconfig, const char *tag, device_
 
 void c140_device::device_start()
 {
-	const c140_interface *intf = (const c140_interface *)static_config();
-
 	m_sample_rate=m_baserate=clock();
-
-	m_banking_type = intf->banking_type;
 
 	m_stream = stream_alloc(0, 2, m_sample_rate);
 
-	m_pRom=*region();
+	m_pRom = (INT8 *)region()->base();
 
 	/* make decompress pcm table */     //2000.06.26 CAB
 	{
@@ -136,6 +134,26 @@ void c140_device::device_start()
 	/* allocate a pair of buffers to mix into - 1 second's worth should be more than enough */
 	m_mixer_buffer_left = auto_alloc_array(machine(), INT16, 2 * m_sample_rate);
 	m_mixer_buffer_right = m_mixer_buffer_left + m_sample_rate;
+	
+	save_item(NAME(m_REG));
+	
+	for (int i = 0; i < C140_MAX_VOICE; i++)
+	{	
+		save_item(NAME(m_voi[i].ptoffset), i);
+		save_item(NAME(m_voi[i].pos), i);
+		save_item(NAME(m_voi[i].key), i);
+		save_item(NAME(m_voi[i].lastdt), i);
+		save_item(NAME(m_voi[i].prevdt), i);
+		save_item(NAME(m_voi[i].dltdt), i);
+		save_item(NAME(m_voi[i].rvol), i);
+		save_item(NAME(m_voi[i].lvol), i);
+		save_item(NAME(m_voi[i].frequency), i);
+		save_item(NAME(m_voi[i].bank), i);
+		save_item(NAME(m_voi[i].mode), i);
+		save_item(NAME(m_voi[i].sample_start), i);
+		save_item(NAME(m_voi[i].sample_end), i);
+		save_item(NAME(m_voi[i].sample_loop), i);
+	}
 }
 
 
@@ -156,7 +174,7 @@ void c140_device::sound_stream_update(sound_stream &stream, stream_sample_t **in
 	INT32   frequency,delta,offset,pos;
 	INT32   cnt, voicecnt;
 	INT32   lastdt,prevdt,dltdt;
-	float   pbase=(float)m_baserate*2.0 / (float)m_sample_rate;
+	float   pbase=(float)m_baserate*2.0f / (float)m_sample_rate;
 
 	INT16   *lmix, *rmix;
 
@@ -199,7 +217,7 @@ void c140_device::sound_stream_update(sound_stream &stream, stream_sample_t **in
 			sz=ed-st;
 
 			/* Retrieve base pointer to the sample data */
-			pSampleData=(signed char*)((FPTR)m_pRom + find_sample(st, v->bank, i));
+			pSampleData = m_pRom + find_sample(st, v->bank, i);
 
 			/* Fetch back previous data pointers */
 			offset=v->ptoffset;
@@ -331,8 +349,12 @@ void c140_device::sound_stream_update(sound_stream &stream, stream_sample_t **in
 		stream_sample_t *dest2 = outputs[1];
 		for (i = 0; i < samples; i++)
 		{
-			*dest1++ = limit(8*(*lmix++));
-			*dest2++ = limit(8*(*rmix++));
+			INT32 val;
+
+			val = 8 * (*lmix++);
+			*dest1++ = limit(val);
+			val = 8 * (*rmix++);
+			*dest2++ = limit(val);
 		}
 	}
 }
@@ -409,7 +431,7 @@ WRITE8_MEMBER( c140_device::c140_w )
 
 void c140_device::set_base(void *base)
 {
-	m_pRom = base;
+	m_pRom = (INT8 *)base;
 }
 
 

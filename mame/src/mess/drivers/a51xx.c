@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
     A51xx
@@ -122,10 +124,11 @@ static MACHINE_CONFIG_START( a5120, a51xx_state )
 	MCFG_SCREEN_SIZE(640, 480)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 480-1)
 	MCFG_SCREEN_UPDATE_DRIVER(a51xx_state, screen_update_a5120)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(a51xx)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(black_and_white)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", a51xx)
+
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 MACHINE_CONFIG_END
 

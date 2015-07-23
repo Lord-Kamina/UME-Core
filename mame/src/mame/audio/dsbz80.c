@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, Olivier Galibert
 /***************************************************************************
 
   Sega Z80 Digital Sound Board
@@ -11,7 +13,6 @@
 #include "audio/dsbz80.h"
 
 #define Z80_TAG "mpegcpu"
-#define YMZ770_TAG  "ymz770"
 
 static ADDRESS_MAP_START( dsbz80_map, AS_PROGRAM, 8, dsbz80_device )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM AM_REGION(":mpegcpu", 0)
@@ -61,7 +62,7 @@ machine_config_constructor dsbz80_device::device_mconfig_additions() const
 //-------------------------------------------------
 
 dsbz80_device::dsbz80_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
-	device_t(mconfig, DSBZ80, "Sega Z80-based Digital Sound Board", tag, owner, clock),
+	device_t(mconfig, DSBZ80, "Sega Z80-based Digital Sound Board", tag, owner, clock, "dsbz80", __FILE__),
 	device_sound_interface(mconfig, *this),
 	m_ourcpu(*this, Z80_TAG)
 {
@@ -75,7 +76,7 @@ void dsbz80_device::device_start()
 {
 	UINT8 *rom_base = machine().root_device().memregion("mpeg")->base();
 	decoder = new mpeg_audio(rom_base, mpeg_audio::L2, false, 0);
-	machine().sound().stream_alloc(*this, 0, 2, 32000, this);
+	machine().sound().stream_alloc(*this, 0, 2, 32000);
 }
 
 //-------------------------------------------------

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol,Gabriele D'Antona
 
 /*
 
@@ -208,41 +210,18 @@ WRITE8_MEMBER( rm380z_state::keyboard_put )
 
 WRITE8_MEMBER( rm380z_state::disk_0_control )
 {
-	device_t *fdc = machine().device("wd1771");
+	floppy_image_device *floppy = NULL;
 
-	//printf("disk drive port0 write [%x]\n",data);
+	if (BIT(data, 0)) floppy = m_floppy0->get_device();
+	if (BIT(data, 1)) floppy = m_floppy1->get_device();
 
-	// drive port0
-	if (data&0x01)
-	{
-		// drive select bit 0
-		wd17xx_set_drive(fdc,0);
-	}
+	m_fdc->set_floppy(floppy);
 
-	if (data&0x02)
+	if (floppy)
 	{
-		// drive select bit 1
-		wd17xx_set_drive(fdc,1);
-	}
-
-	if (data&0x08)
-	{
-		// motor on
-	}
-
-	// "MSEL (dir/side select bit)"
-	if (data&0x20)
-	{
-		wd17xx_set_side(fdc,1);
-	}
-	else
-	{
-		wd17xx_set_side(fdc,0);
-	}
-
-	// set drive en- (?)
-	if (data&0x40)
-	{
+		// don't know how motor on is connected
+		floppy->mon_w(0);
+		floppy->ss_w(BIT(data, 5));
 	}
 }
 
@@ -274,7 +253,7 @@ void rm380z_state::machine_reset()
 	memset(m_vram,0,RM380Z_SCREENSIZE);
 
 	config_memory_map();
-	wd17xx_reset(machine().device("wd1771"));
+	machine().device("wd1771")->reset();
 
 	init_graphic_chars();
 }

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /*****************************************************************************
  *
  * includes/abc80.h
@@ -7,21 +9,20 @@
 #ifndef __ABC80__
 #define __ABC80__
 
-
-#include "emu.h"
+#include "bus/abcbus/abcbus.h"
+#include "bus/rs232/rs232.h"
 #include "cpu/z80/z80.h"
 #include "cpu/z80/z80daisy.h"
 #include "imagedev/flopdrv.h"
 #include "imagedev/printer.h"
 #include "imagedev/cassette.h"
-#include "machine/abcbus.h"
+#include "imagedev/snapquik.h"
 #include "machine/abc80kb.h"
-#include "machine/abc830.h"
 #include "machine/keyboard.h"
 #include "machine/ram.h"
-#include "machine/serial.h"
 #include "machine/z80pio.h"
 #include "sound/sn76477.h"
+#include "sound/wave.h"
 
 #define ABC80_HTOTAL    384
 #define ABC80_HBEND     35
@@ -57,41 +58,46 @@
 #define Z80PIO_TAG          "cd67"
 #define SN76477_TAG         "g8"
 #define RS232_TAG           "ser"
+#define CASSETTE_TAG        "cassette"
+#define KEYBOARD_TAG        "keyboard"
 #define TIMER_CASSETTE_TAG  "cass"
 
 class abc80_state : public driver_device
 {
 public:
-	abc80_state(const machine_config &mconfig, device_type type, const char *tag)
-		: driver_device(mconfig, type, tag),
-			m_maincpu(*this, Z80_TAG),
-			m_pio(*this, Z80PIO_TAG),
-			m_psg(*this, SN76477_TAG),
-			m_cassette(*this, "cassette"),
-			m_bus(*this, ABCBUS_TAG),
-			m_kb(*this, ABC80_KEYBOARD_TAG),
-			m_ram(*this, RAM_TAG),
-			m_rs232(*this, RS232_TAG),
-			m_rom(*this, Z80_TAG),
-			m_mmu_rom(*this, "mmu"),
-			m_char_rom(*this, "chargen"),
-			m_hsync_prom(*this, "hsync"),
-			m_vsync_prom(*this, "vsync"),
-			m_line_prom(*this, "line"),
-			m_attr_prom(*this, "attr"),
-			m_video_ram(*this, "video_ram"),
-			m_tape_in(1),
-			m_tape_in_latch(1)
+	abc80_state(const machine_config &mconfig, device_type type, const char *tag) :
+		driver_device(mconfig, type, tag),
+		m_maincpu(*this, Z80_TAG),
+		m_pio(*this, Z80PIO_TAG),
+		m_psg(*this, SN76477_TAG),
+		m_cassette(*this, "cassette"),
+		m_bus(*this, ABCBUS_TAG),
+		m_kb(*this, ABC80_KEYBOARD_TAG),
+		m_ram(*this, RAM_TAG),
+		m_rs232(*this, RS232_TAG),
+		m_palette(*this, "palette"),
+		m_rom(*this, Z80_TAG),
+		m_mmu_rom(*this, "mmu"),
+		m_char_rom(*this, "chargen"),
+		m_hsync_prom(*this, "hsync"),
+		m_vsync_prom(*this, "vsync"),
+		m_line_prom(*this, "line"),
+		m_attr_prom(*this, "attr"),
+		m_video_ram(*this, "video_ram"),
+		m_motor(false),
+		m_tape_in(1),
+		m_tape_in_latch(1)
 	{ }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<z80pio_device> m_pio;
 	required_device<sn76477_device> m_psg;
 	required_device<cassette_image_device> m_cassette;
-	required_device<abcbus_slot_device> m_bus;
+	required_device<abcbus_slot_t> m_bus;
 	required_device<abc80_keyboard_device> m_kb;
 	required_device<ram_device> m_ram;
 	required_device<rs232_port_device> m_rs232;
+	required_device<palette_device> m_palette;
 	required_memory_region m_rom;
 	required_memory_region m_mmu_rom;
 	required_memory_region m_char_rom;
@@ -109,6 +115,13 @@ public:
 		TIMER_ID_VSYNC_ON,
 		TIMER_ID_VSYNC_OFF,
 		TIMER_ID_FAKE_KEYBOARD_CLEAR
+	};
+
+	enum
+	{
+		BOFA = 0xfe1c,
+		EOFA = 0xfe1e,
+		HEAD = 0xfe20
 	};
 
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
@@ -132,6 +145,16 @@ public:
 	DECLARE_WRITE_LINE_MEMBER( keydown_w );
 	DECLARE_WRITE8_MEMBER( kbd_w );
 
+	DECLARE_QUICKLOAD_LOAD_MEMBER( bac );
+
+	enum
+	{
+		MMU_XM      = 0x01,
+		MMU_ROM     = 0x02,
+		MMU_VRAMS   = 0x04,
+		MMU_RAM     = 0x08
+	};
+
 	// keyboard state
 	int m_key_data;
 	int m_key_strobe;
@@ -142,6 +165,7 @@ public:
 	int m_blink;
 
 	// cassette state
+	bool m_motor;
 	int m_tape_in;
 	int m_tape_in_latch;
 

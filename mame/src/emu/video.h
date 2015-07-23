@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     video.h
 
     Core MAME video routines.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -90,22 +61,27 @@ public:
 	bool skip_this_frame() const { return m_skipping_this_frame; }
 	int speed_factor() const { return m_speed; }
 	int frameskip() const { return m_auto_frameskip ? -1 : m_frameskip_level; }
-	bool throttled() const { return m_throttle; }
+	bool throttled() const { return m_throttled; }
+	float throttle_rate() const { return m_throttle_rate; }
 	bool fastforward() const { return m_fastforward; }
-	bool is_recording() const { return (m_mngfile != NULL || m_avifile != NULL); }
+	bool is_recording() const { return (m_mng_file != NULL || m_avi_file != NULL); }
 
 	// setters
-	void set_speed_factor(int speed) { m_speed = speed; }
 	void set_frameskip(int frameskip);
-	void set_throttled(bool throttled = true) { m_throttle = throttled; }
+	void set_throttled(bool throttled = true) { m_throttled = throttled; }
+	void set_throttle_rate(float throttle_rate) { m_throttle_rate = throttle_rate; }
 	void set_fastforward(bool ffwd = true) { m_fastforward = ffwd; }
 	void set_output_changed() { m_output_changed = true; }
+
+	// misc
+	void toggle_throttle();
+	void toggle_record_movie();
 
 	// render a frame
 	void frame_update(bool debug = false);
 
 	// current speed helpers
-	astring &speed_text(astring &string);
+	std::string &speed_text(std::string &str);
 	double speed_percent() const { return m_speed_percent; }
 
 	// snapshots
@@ -113,8 +89,8 @@ public:
 	void save_active_screen_snapshots();
 
 	// movies
-	void begin_recording(const char *name, movie_format format = MF_AVI);
-	void end_recording();
+	void begin_recording(const char *name, movie_format format);
+	void end_recording(movie_format format);
 	void add_sound_to_recording(const INT16 *sound, int numsamples);
 
 private:
@@ -135,7 +111,7 @@ private:
 	osd_ticks_t throttle_until_ticks(osd_ticks_t target_ticks);
 	void update_frameskip();
 	void update_refresh_speed();
-	void recompute_speed(attotime emutime);
+	void recompute_speed(const attotime &emutime);
 
 	// snapshot/movie helpers
 	void create_snapshot_bitmap(screen_device *screen);
@@ -167,7 +143,8 @@ private:
 	UINT32              m_overall_valid_counter;    // number of consecutive valid time periods
 
 	// configuration
-	bool                m_throttle;                 // flag: TRUE if we're currently throttled
+	bool                m_throttled;                // flag: TRUE if we're currently throttled
+	float               m_throttle_rate;            // target rate for throttling
 	bool                m_fastforward;              // flag: TRUE if we're currently fast-forwarding
 	UINT32              m_seconds_to_run;           // number of seconds to run before quitting
 	bool                m_auto_frameskip;           // flag: TRUE if we're automatically frameskipping
@@ -188,25 +165,25 @@ private:
 	INT32               m_snap_width;               // width of snapshots (0 == auto)
 	INT32               m_snap_height;              // height of snapshots (0 == auto)
 
-	// movie recording
-	emu_file *          m_mngfile;                  // handle to the open movie file
-	avi_file *          m_avifile;                  // handle to the open movie file
-	attotime            m_movie_frame_period;       // period of a single movie frame
-	attotime            m_movie_next_frame_time;    // time of next frame
-	UINT32              m_movie_frame;              // current movie frame number
+	// movie recording - MNG
+	auto_pointer<emu_file> m_mng_file;              // handle to the open movie file
+	attotime            m_mng_frame_period;         // period of a single movie frame
+	attotime            m_mng_next_frame_time;      // time of next frame
+	UINT32              m_mng_frame;                // current movie frame number
+
+	// movie recording - AVI
+	avi_file *          m_avi_file;                 // handle to the open movie file
+	attotime            m_avi_frame_period;         // period of a single movie frame
+	attotime            m_avi_next_frame_time;      // time of next frame
+	UINT32              m_avi_frame;                // current movie frame number
+
+	// movie recording - dummy
+	bool                m_dummy_recording;          // indicates if snapshot should be created of every frame
 
 	static const UINT8      s_skiptable[FRAMESKIP_LEVELS][FRAMESKIP_LEVELS];
 
 	static const attoseconds_t ATTOSECONDS_PER_SPEED_UPDATE = ATTOSECONDS_PER_SECOND / 4;
 	static const int PAUSED_REFRESH_RATE = 30;
 };
-
-
-
-// ----- debugging helpers -----
-
-// assert if any pixels in the given bitmap contain an invalid palette index
-bool video_assert_out_of_range_pixels(running_machine &machine, bitmap_ind16 &bitmap);
-
 
 #endif  /* __VIDEO_H__ */

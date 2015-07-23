@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Lee Taylor
 /***************************************************************************
 
 Universal board numbers (found on the schematics)
@@ -25,11 +27,15 @@ a physical DSW B but only read when SWA:3,4 are both set to OFF. Currently,
 * In devzone, setting SWA:3,4 on anything but OFF,OFF results in no coins
     accepted at all
 
+cosmicg - background should be blue
+cosmicg - board can operate in b&w mode if there is no PROM, in this case
+          a colour overlay should be used.
+
 ***************************************************************************/
 
 
 #include "emu.h"
-#include "cpu/tms9900/tms9900l.h"
+#include "cpu/tms9900/tms9980a.h"
 #include "cpu/z80/z80.h"
 #include "sound/samples.h"
 #include "sound/dac.h"
@@ -306,13 +312,13 @@ WRITE8_MEMBER(cosmic_state::cosmica_sound_output_w)
 
 READ8_MEMBER(cosmic_state::cosmica_pixel_clock_r)
 {
-	return (machine().primary_screen->vpos() >> 2) & 0x3f;
+	return (m_screen->vpos() >> 2) & 0x3f;
 }
 
 READ8_MEMBER(cosmic_state::cosmicg_port_0_r)
 {
 	/* The top four address lines from the CRTC are bits 0-3 */
-	return (ioport("IN0")->read() & 0xf0) | ((machine().primary_screen->vpos() & 0xf0) >> 4);
+	return (ioport("IN0")->read() & 0xf0) | ((m_screen->vpos() & 0xf0) >> 4);
 }
 
 READ8_MEMBER(cosmic_state::magspot_coinage_dip_r)
@@ -524,7 +530,7 @@ INPUT_PORTS_END
 
 INPUT_CHANGED_MEMBER(cosmic_state::cosmicg_coin_inserted)
 {
-	m_maincpu->set_input_line_and_vector(0, newval ? ASSERT_LINE : CLEAR_LINE, 6);
+	m_maincpu->set_input_line(INT_9980A_LEVEL4, newval? ASSERT_LINE : CLEAR_LINE);
 }
 
 static INPUT_PORTS_START( cosmicg )
@@ -897,13 +903,6 @@ static const char *const cosmica_sample_names[] =
 };
 
 
-static const samples_interface cosmica_samples_interface =
-{
-	13, /* 12 channels */
-	cosmica_sample_names
-};
-
-
 static const char *const panic_sample_names[] =
 {
 	"*panic",
@@ -921,11 +920,6 @@ static const char *const panic_sample_names[] =
 	0
 };
 
-static const samples_interface panic_samples_interface =
-{
-	9,  /* 9 channels */
-	panic_sample_names
-};
 
 static const char *const cosmicg_sample_names[] =
 {
@@ -946,12 +940,6 @@ static const char *const cosmicg_sample_names[] =
 	"cg_gotm",  /* Got Monster */
 	"cg_ext",   /* Coin Extend */
 	0
-};
-
-static const samples_interface cosmicg_samples_interface =
-{
-	9,  /* 9 channels */
-	cosmicg_sample_names
 };
 
 
@@ -976,6 +964,16 @@ MACHINE_RESET_MEMBER(cosmic_state,cosmic)
 	m_color_registers[2] = 0;
 }
 
+MACHINE_RESET_MEMBER(cosmic_state,cosmicg)
+{
+	m_pixel_clock = 0;
+	m_background_enable = 0;
+	m_color_registers[0] = 0;
+	m_color_registers[1] = 0;
+	m_color_registers[2] = 0;
+	m_maincpu->set_input_line(INT_9980A_RESET, ASSERT_LINE);
+	m_maincpu->set_input_line(INT_9980A_RESET, CLEAR_LINE);
+}
 
 static MACHINE_CONFIG_START( cosmic, cosmic_state )
 
@@ -990,6 +988,7 @@ static MACHINE_CONFIG_START( cosmic, cosmic_state )
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 4*8, 28*8-1)
+	MCFG_SCREEN_PALETTE("palette")
 MACHINE_CONFIG_END
 
 TIMER_DEVICE_CALLBACK_MEMBER(cosmic_state::panic_scanline)
@@ -1012,17 +1011,20 @@ static MACHINE_CONFIG_DERIVED( panic, cosmic )
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", cosmic_state, panic_scanline, "screen", 0, 1)
 
 	/* video hardware */
-	MCFG_GFXDECODE(panic)
-	MCFG_PALETTE_LENGTH(16+8*4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", panic)
+	MCFG_PALETTE_ADD("palette", 16+8*4)
+	MCFG_PALETTE_INDIRECT_ENTRIES(16)
+	MCFG_PALETTE_INIT_OWNER(cosmic_state,panic)
 
-	MCFG_PALETTE_INIT_OVERRIDE(cosmic_state,panic)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(cosmic_state, screen_update_panic)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SAMPLES_ADD("samples", panic_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(9)
+	MCFG_SAMPLES_NAMES(panic_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	MCFG_DAC_ADD("dac")
@@ -1037,17 +1039,20 @@ static MACHINE_CONFIG_DERIVED( cosmica, cosmic )
 	MCFG_CPU_PROGRAM_MAP(cosmica_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(cosmica)
-	MCFG_PALETTE_LENGTH(8+16*4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", cosmica)
+	MCFG_PALETTE_ADD("palette", 8+16*4)
+	MCFG_PALETTE_INDIRECT_ENTRIES(8)
+	MCFG_PALETTE_INIT_OWNER(cosmic_state,cosmica)
 
-	MCFG_PALETTE_INIT_OVERRIDE(cosmic_state,cosmica)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(cosmic_state, screen_update_cosmica)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SAMPLES_ADD("samples", cosmica_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(13)
+	MCFG_SAMPLES_NAMES(cosmica_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	MCFG_DAC_ADD("dac")
@@ -1055,20 +1060,17 @@ static MACHINE_CONFIG_DERIVED( cosmica, cosmic )
 
 MACHINE_CONFIG_END
 
-
 static MACHINE_CONFIG_START( cosmicg, cosmic_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", TMS9980L, COSMICG_MASTER_CLOCK/8)
-			/* 9.828 MHz Crystal */
-			/* R Nabet : huh ? This would imply the crystal frequency is somehow divided by 2 before being
-			fed to the tms9904 or tms9980.  Also, I have never heard of a tms9900/9980 operating under
-			1.5MHz.  So, if someone can check this... */
-	MCFG_CPU_PROGRAM_MAP(cosmicg_map)
-	MCFG_CPU_IO_MAP(cosmicg_io_map)
+	MCFG_TMS99xx_ADD("maincpu", TMS9980A, COSMICG_MASTER_CLOCK/8, cosmicg_map, cosmicg_io_map)
+		/* 9.828 MHz Crystal */
+		/* R Nabet : huh ? This would imply the crystal frequency is somehow divided by 2 before being
+		fed to the tms9904 or tms9980.  Also, I have never heard of a tms9900/9980 operating under
+		1.5MHz.  So, if someone can check this... */
 
 	MCFG_MACHINE_START_OVERRIDE(cosmic_state,cosmic)
-	MCFG_MACHINE_RESET_OVERRIDE(cosmic_state,cosmic)
+	MCFG_MACHINE_RESET_OVERRIDE(cosmic_state,cosmicg)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1076,15 +1078,17 @@ static MACHINE_CONFIG_START( cosmicg, cosmic_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 4*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(cosmic_state, screen_update_cosmicg)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(16)
-
-	MCFG_PALETTE_INIT_OVERRIDE(cosmic_state,cosmicg)
+	MCFG_PALETTE_ADD("palette", 16)
+	MCFG_PALETTE_INIT_OWNER(cosmic_state,cosmicg)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SAMPLES_ADD("samples", cosmicg_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(9)
+	MCFG_SAMPLES_NAMES(cosmicg_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	MCFG_DAC_ADD("dac")
@@ -1099,10 +1103,11 @@ static MACHINE_CONFIG_DERIVED( magspot, cosmic )
 	MCFG_CPU_PROGRAM_MAP(magspot_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(panic)
-	MCFG_PALETTE_LENGTH(16+8*4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", panic)
+	MCFG_PALETTE_ADD("palette", 16+8*4)
+	MCFG_PALETTE_INDIRECT_ENTRIES(16)
+	MCFG_PALETTE_INIT_OWNER(cosmic_state,magspot)
 
-	MCFG_PALETTE_INIT_OVERRIDE(cosmic_state,magspot)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(cosmic_state, screen_update_magspot)
 
@@ -1131,10 +1136,11 @@ static MACHINE_CONFIG_DERIVED( nomnlnd, cosmic )
 	MCFG_CPU_PROGRAM_MAP(magspot_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(panic)
-	MCFG_PALETTE_LENGTH(16+8*4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", panic)
+	MCFG_PALETTE_ADD("palette", 16+8*4)
+	MCFG_PALETTE_INDIRECT_ENTRIES(16)
+	MCFG_PALETTE_INIT_OWNER(cosmic_state,nomnlnd)
 
-	MCFG_PALETTE_INIT_OVERRIDE(cosmic_state,nomnlnd)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(cosmic_state, screen_update_nomnlnd)
 
@@ -1354,6 +1360,23 @@ ROM_START( cosmicg )
 	ROM_LOAD( "cosmicg9.bin", 0x0000, 0x0400, CRC(689c2c96) SHA1(ddfdc3fd29c56fdebd3b1c3443a7c39f567d5355) )
 ROM_END
 
+
+ROM_START( cosmicgi )
+	ROM_REGION( 0x10000, "maincpu", 0 )  /* 8k for code */
+	ROM_LOAD( "1g118.2h", 0x0000, 0x0400, CRC(4bda1711) SHA1(746fd15dbe08c9e2af74547c19a55a84f7b65303) )
+	ROM_LOAD( "2g118.3h", 0x0400, 0x0400, CRC(3c10b2ba) SHA1(127a950d90420417a91aa3c8fabec7d7e7d526f5) )
+	ROM_LOAD( "3.4h",     0x0800, 0x0400, CRC(82a49b48) SHA1(4cf9f684f3eb18b99a88ca879bb7083b1334f0cc) )
+	ROM_LOAD( "4g118.5h", 0x0c00, 0x0400, CRC(42bb0611) SHA1(3894e4372f1443402ea7145b1101e1219fe2cde2) ) // changes in here cause trails when you move the ship, PCB does the same and ROM gives the same read every time, possible a bit has been flipped tho. check
+	ROM_LOAD( "5.6h",     0x1000, 0x0400, CRC(b1c00fbf) SHA1(136267f75e2d5b445695cabef4538f986e6f1b10) )
+	ROM_LOAD( "6.7h",     0x1400, 0x0400, CRC(f03454ce) SHA1(32c87f369475c7154fe3243d2c7be4a25444e530) )
+	ROM_LOAD( "7.8h",     0x1800, 0x0400, CRC(84656c97) SHA1(2180faa07dd5bc618c80ae033babfc1191a0b890) ) // standard label but different anyway?
+	ROM_LOAD( "8g128.9h", 0x1c00, 0x0400, CRC(7f48307c) SHA1(5929c131d790b0c8f9113730715531809c6840e2) )
+
+	ROM_REGION( 0x0400, "user1", 0 ) /* color map */ // population of this is optional, board runs as b&w without (this board didn't have it populated)
+	ROM_LOAD( "cosmicg9.bin", 0x0000, 0x0400, CRC(689c2c96) SHA1(ddfdc3fd29c56fdebd3b1c3443a7c39f567d5355) )
+ROM_END
+
+
 /* rom 9 not dumped according to readme? */
 ROM_START( magspot )
 	ROM_REGION( 0x10000, "maincpu", 0 )
@@ -1548,7 +1571,8 @@ DRIVER_INIT_MEMBER(cosmic_state,panic)
 }
 
 
-GAME( 1979, cosmicg,  0,       cosmicg,  cosmicg, cosmic_state,  cosmicg, ROT270, "Universal", "Cosmic Guerilla", GAME_IMPERFECT_SOUND | GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1979, cosmicg,  0,       cosmicg,  cosmicg, cosmic_state,  cosmicg, ROT270, "Universal", "Cosmic Guerilla", GAME_IMPERFECT_SOUND | GAME_NO_COCKTAIL /*| GAME_SUPPORTS_SAVE */)
+GAME( 1979, cosmicgi, cosmicg, cosmicg,  cosmicg, cosmic_state,  cosmicg, ROT270, "bootleg (Inder)", "Cosmic Guerilla (Spanish bootleg)", GAME_IMPERFECT_SOUND | GAME_NO_COCKTAIL  /*| GAME_SUPPORTS_SAVE */)
 GAME( 1979, cosmica,  0,       cosmica,  cosmica, cosmic_state,  cosmica, ROT270, "Universal", "Cosmic Alien (version II)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
 GAME( 1979, cosmica1, cosmica, cosmica,  cosmica, cosmic_state,  cosmica, ROT270, "Universal", "Cosmic Alien (first version)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
 GAME( 1979, cosmica2, cosmica, cosmica,  cosmica, cosmic_state,  cosmica, ROT270, "Universal", "Cosmic Alien (early version II?)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )

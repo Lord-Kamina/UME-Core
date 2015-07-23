@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, David Graves
 /****************************************************************************
 
     Gunbuster (c) 1992 Taito
@@ -43,8 +45,7 @@
 
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
-#include "video/taitoic.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "sound/es5506.h"
 #include "audio/taito_en.h"
 #include "includes/gunbustr.h"
@@ -70,18 +71,6 @@ INTERRUPT_GEN_MEMBER(gunbustr_state::gunbustr_interrupt)
 	device.execute().set_input_line(4, HOLD_LINE);
 }
 
-WRITE32_MEMBER(gunbustr_state::gunbustr_palette_w)
-{
-	int a;
-	COMBINE_DATA(&m_generic_paletteram_32[offset]);
-
-	a = m_generic_paletteram_32[offset] >> 16;
-	palette_set_color_rgb(machine(),offset*2,pal5bit(a >> 10),pal5bit(a >> 5),pal5bit(a >> 0));
-
-	a = m_generic_paletteram_32[offset] &0xffff;
-	palette_set_color_rgb(machine(),offset*2+1,pal5bit(a >> 10),pal5bit(a >> 5),pal5bit(a >> 0));
-}
-
 CUSTOM_INPUT_MEMBER(gunbustr_state::coin_word_r)
 {
 	return m_coin_word;
@@ -101,9 +90,9 @@ WRITE32_MEMBER(gunbustr_state::gunbustr_input_w)
 
 			if (ACCESSING_BITS_0_7)
 			{
-				m_eeprom->set_clock_line((data & 0x20) ? ASSERT_LINE : CLEAR_LINE);
-				m_eeprom->write_bit(data & 0x40);
-				m_eeprom->set_cs_line((data & 0x10) ? CLEAR_LINE : ASSERT_LINE);
+				m_eeprom->clk_write((data & 0x20) ? ASSERT_LINE : CLEAR_LINE);
+				m_eeprom->di_write((data & 0x40) >> 6);
+				m_eeprom->cs_write((data & 0x10) ? ASSERT_LINE : CLEAR_LINE);
 			}
 			break;
 		}
@@ -167,9 +156,9 @@ static ADDRESS_MAP_START( gunbustr_map, AS_PROGRAM, 32, gunbustr_state )
 	AM_RANGE(0x400004, 0x400007) AM_READ_PORT("SYSTEM")
 	AM_RANGE(0x400000, 0x400007) AM_WRITE(gunbustr_input_w)                                         /* eerom etc. */
 	AM_RANGE(0x500000, 0x500003) AM_READWRITE(gunbustr_gun_r, gunbustr_gun_w)                       /* gun coord read */
-	AM_RANGE(0x800000, 0x80ffff) AM_DEVREADWRITE_LEGACY("tc0480scp", tc0480scp_long_r, tc0480scp_long_w)
-	AM_RANGE(0x830000, 0x83002f) AM_DEVREADWRITE_LEGACY("tc0480scp", tc0480scp_ctrl_long_r, tc0480scp_ctrl_long_w)
-	AM_RANGE(0x900000, 0x901fff) AM_RAM_WRITE(gunbustr_palette_w) AM_SHARE("paletteram")            /* Palette ram */
+	AM_RANGE(0x800000, 0x80ffff) AM_DEVREADWRITE("tc0480scp", tc0480scp_device, long_r, long_w)
+	AM_RANGE(0x830000, 0x83002f) AM_DEVREADWRITE("tc0480scp", tc0480scp_device, ctrl_long_r, ctrl_long_w)
+	AM_RANGE(0x900000, 0x901fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xc00000, 0xc03fff) AM_RAM                                                             /* network ram ?? */
 ADDRESS_MAP_END
 
@@ -186,7 +175,7 @@ static INPUT_PORTS_START( gunbustr )
 	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)
+	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)
 	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_8WAY PORT_PLAYER(1)
 	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_8WAY PORT_PLAYER(1)
 	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_8WAY PORT_PLAYER(1)
@@ -276,35 +265,14 @@ static const gfx_layout charlayout =
 };
 
 static GFXDECODE_START( gunbustr )
-	GFXDECODE_ENTRY( "gfx2", 0x0, tile16x16_layout,  0, 512 )
-	GFXDECODE_ENTRY( "gfx1", 0x0, charlayout,        0, 512 )
+	GFXDECODE_ENTRY( "gfx2", 0x0, tile16x16_layout,  0, 256 )
+	GFXDECODE_ENTRY( "gfx1", 0x0, charlayout,        0, 256 )
 GFXDECODE_END
 
 
 /***********************************************************
                  MACHINE DRIVERS
 ***********************************************************/
-
-static const eeprom_interface gunbustr_eeprom_interface =
-{
-	6,              /* address bits */
-	16,             /* data bits */
-	"0110",         /* read command */
-	"0101",         /* write command */
-	"0111",         /* erase command */
-	"0100000000",   /* unlock command */
-	"0100110000",   /* lock command */
-};
-
-static const tc0480scp_interface gunbustr_tc0480scp_intf =
-{
-	1, 2,           /* gfxnum, txnum */
-	0,              /* pixels */
-	0x20, 0x07,     /* x_offset, y_offset */
-	-1, -1,         /* text_xoff, text_yoff */
-	-1, 0,          /* flip_xoff, flip_yoff */
-	0               /* col_base */
-};
 
 static MACHINE_CONFIG_START( gunbustr, gunbustr_state )
 
@@ -313,7 +281,7 @@ static MACHINE_CONFIG_START( gunbustr, gunbustr_state )
 	MCFG_CPU_PROGRAM_MAP(gunbustr_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", gunbustr_state,  gunbustr_interrupt) /* VBL */
 
-	MCFG_EEPROM_ADD("eeprom", gunbustr_eeprom_interface)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -322,12 +290,20 @@ static MACHINE_CONFIG_START( gunbustr, gunbustr_state )
 	MCFG_SCREEN_SIZE(40*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 40*8-1, 2*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gunbustr_state, screen_update_gunbustr)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(gunbustr)
-	MCFG_PALETTE_LENGTH(8192)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", gunbustr)
+	MCFG_PALETTE_ADD("palette", 4096)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
-
-	MCFG_TC0480SCP_ADD("tc0480scp", gunbustr_tc0480scp_intf)
+	MCFG_DEVICE_ADD("tc0480scp", TC0480SCP, 0)
+	MCFG_TC0480SCP_GFX_REGION(1)
+	MCFG_TC0480SCP_TX_REGION(2)
+	MCFG_TC0480SCP_OFFSETS(0x20, 0x07)
+	MCFG_TC0480SCP_OFFSETS_TX(-1, -1)
+	MCFG_TC0480SCP_OFFSETS_FLIP(-1, 0)
+	MCFG_TC0480SCP_GFXDECODE("gfxdecode")
+	MCFG_TC0480SCP_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_FRAGMENT_ADD(taito_en_sound)

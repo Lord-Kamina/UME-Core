@@ -1,20 +1,34 @@
-DECLARE_READ16_HANDLER( copdxbl_0_r );
-DECLARE_WRITE16_HANDLER( copdxbl_0_w );
+// license:LGPL-2.1+
+// copyright-holders:Olivier Galibert, Angelo Salese, David Haywood, Tomasz Slanina
 
-DECLARE_READ16_HANDLER( heatbrl_mcu_r );
-DECLARE_WRITE16_HANDLER( heatbrl_mcu_w );
-DECLARE_READ16_HANDLER( cupsoc_mcu_r );
-DECLARE_WRITE16_HANDLER( cupsoc_mcu_w );
-DECLARE_READ16_HANDLER( cupsocs_mcu_r );
-DECLARE_WRITE16_HANDLER( cupsocs_mcu_w );
-DECLARE_READ16_HANDLER( godzilla_mcu_r );
-DECLARE_WRITE16_HANDLER( godzilla_mcu_w );
-DECLARE_READ16_HANDLER( denjinmk_mcu_r );
-DECLARE_WRITE16_HANDLER( denjinmk_mcu_w );
-DECLARE_READ16_HANDLER( grainbow_mcu_r );
-DECLARE_WRITE16_HANDLER( grainbow_mcu_w );
-DECLARE_READ16_HANDLER( legionna_mcu_r );
-DECLARE_WRITE16_HANDLER( legionna_mcu_w );
+#include "raiden2cop.h"
 
-DECLARE_READ16_HANDLER( raiden2_mcu_r );
-DECLARE_WRITE16_HANDLER( raiden2_mcu_w );
+
+
+class seibu_cop_bootleg_device : public device_t
+{
+public:
+seibu_cop_bootleg_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+	DECLARE_READ16_MEMBER( copdxbl_0_r );
+	DECLARE_WRITE16_MEMBER( copdxbl_0_w );
+protected:
+	// device-level overrides
+	virtual void device_config_complete();
+	virtual void device_start();
+	virtual void device_reset();
+
+private:
+	UINT16 *m_cop_mcu_ram;
+
+
+
+
+	required_device<raiden2cop_device> m_raiden2cop;
+
+};
+
+extern const device_type SEIBU_COP_BOOTLEG;
+
+#define MCFG_SEIBU_COP_ADD(_tag) \
+	MCFG_DEVICE_ADD(_tag, SEIBU_COP_BOOTLEG, 0)

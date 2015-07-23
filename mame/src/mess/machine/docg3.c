@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Tim Schuerewegen
 /*
 
     M-Systems DiskOnChip G3 - Flash Disk with MLC NAND and M-Systems? x2 Technology
@@ -37,7 +39,7 @@ const device_type DISKONCHIP_G3 = &device_creator<diskonchip_g3_device>;
 //-------------------------------------------------
 
 diskonchip_g3_device::diskonchip_g3_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, DISKONCHIP_G3, "DiskOnChip G3", tag, owner, clock),
+	: device_t(mconfig, DISKONCHIP_G3, "DiskOnChip G3", tag, owner, clock, "diskonchip_g3", __FILE__),
 		device_nvram_interface(mconfig, *this)
 {
 }

@@ -1,37 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Sega System 16B hardware
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -67,6 +38,7 @@ public:
 			m_cmptimer_2(*this, "cmptimer_2"),
 			m_nvram(*this, "nvram"),
 			m_sprites(*this, "sprites"),
+			m_segaic16vid(*this, "segaic16vid"),
 			m_workram(*this, "workram"),
 			m_romboard(ROM_BOARD_INVALID),
 			m_tilemap_type(SEGAIC16_TILEMAP_16B),
@@ -76,7 +48,9 @@ public:
 			m_atomicp_sound_count(0),
 			m_hwc_input_value(0),
 			m_mj_input_num(0),
-			m_mj_last_val(0)
+			m_mj_last_val(0),
+			m_gfxdecode(*this, "gfxdecode"),
+			m_sound_decrypted_opcodes(*this, "sound_decrypted_opcodes")
 	{ }
 
 	// memory mapping
@@ -99,7 +73,7 @@ public:
 	DECLARE_READ8_MEMBER( upd7759_status_r );
 
 	// other callbacks
-	static void upd7759_generate_nmi(device_t *device, int state);
+	DECLARE_WRITE_LINE_MEMBER(upd7759_generate_nmi);
 	INTERRUPT_GEN_MEMBER( i8751_main_cpu_vblank );
 
 	// ROM board-specific driver init
@@ -129,6 +103,7 @@ public:
 	DECLARE_DRIVER_INIT(tetrbx);
 	DECLARE_DRIVER_INIT(aceattac_5358);
 	DECLARE_DRIVER_INIT(passshtj_5358);
+	DECLARE_DRIVER_INIT(cencourt_5358);
 	DECLARE_DRIVER_INIT(shinfz);
 	DECLARE_DRIVER_INIT(dunkshot_5358_small);
 	DECLARE_DRIVER_INIT(timescan_5358_small);
@@ -140,9 +115,8 @@ public:
 	// video updates
 	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 
-	// wrappers for legacy functions (to be removed)
-	template<write16_space_func _Legacy>
-	WRITE16_MEMBER( legacy_wrapper ) { _Legacy(space, offset, data, mem_mask); }
+	DECLARE_WRITE16_MEMBER( tileram_w ) { m_segaic16vid->tileram_w(space,offset,data,mem_mask); };
+	DECLARE_WRITE16_MEMBER( textram_w ) { m_segaic16vid->textram_w(space,offset,data,mem_mask); };
 
 protected:
 	// internal types
@@ -208,6 +182,7 @@ protected:
 	optional_device<sega_315_5250_compare_timer_device> m_cmptimer_2;
 	required_device<nvram_device> m_nvram;
 	required_device<sega_sys16b_sprite_device> m_sprites;
+	required_device<segaic16_video_device> m_segaic16vid;
 
 	// memory pointers
 	required_shared_ptr<UINT16> m_workram;
@@ -227,6 +202,9 @@ protected:
 	UINT8               m_hwc_input_value;
 	UINT8               m_mj_input_num;
 	UINT8               m_mj_last_val;
+
+	required_device<gfxdecode_device> m_gfxdecode;
+	optional_shared_ptr<UINT8> m_sound_decrypted_opcodes;
 };
 
 

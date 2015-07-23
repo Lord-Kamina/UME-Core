@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
 /****************************************************************************
 
     Irem M57 hardware
@@ -30,12 +32,10 @@
 
 ***************************************************************************/
 
-void m57_state::palette_init()
+PALETTE_INIT_MEMBER(m57_state, m57)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
-
-	machine().colortable = colortable_alloc(machine(), 32 * 8 + 16);
 
 	/* character palette */
 	for (i = 0; i < 256; i++)
@@ -58,8 +58,8 @@ void m57_state::palette_init()
 		bit2 = (color_prom[0] >> 2) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r,g,b));
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_indirect_color(i, rgb_t(r,g,b));
+		palette.set_pen_indirect(i, i);
 		color_prom++;
 	}
 
@@ -87,7 +87,7 @@ void m57_state::palette_init()
 		bit2 = (*color_prom >> 2) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		colortable_palette_set_color(machine().colortable, i + 256, MAKE_RGB(r,g,b));
+		palette.set_indirect_color(i + 256, rgb_t(r,g,b));
 		color_prom++;
 	}
 
@@ -98,7 +98,7 @@ void m57_state::palette_init()
 	/* sprite lookup table */
 	for (i = 0; i < 32 * 8; i++)
 	{
-		colortable_entry_set_value(machine().colortable, i + 32 * 8, 256 + (~*color_prom & 0x0f));
+		palette.set_pen_indirect(i + 32 * 8, 256 + (~*color_prom & 0x0f));
 		color_prom++;
 	}
 }
@@ -140,7 +140,7 @@ WRITE8_MEMBER(m57_state::m57_videoram_w)
 
 void m57_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m57_state::get_tile_info),this), TILEMAP_SCAN_ROWS,  8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m57_state::get_tile_info),this), TILEMAP_SCAN_ROWS,  8, 8, 32, 32);
 	m_bg_tilemap->set_scroll_rows(256);
 
 	save_item(NAME(m_flipscreen));
@@ -170,7 +170,7 @@ WRITE8_MEMBER(m57_state::m57_flipscreen_w)
  *
  *************************************/
 
-void m57_state::draw_background(bitmap_ind16 &bitmap, const rectangle &cliprect)
+void m57_state::draw_background(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int y,x;
 	INT16 scrolly;
@@ -179,7 +179,7 @@ void m57_state::draw_background(bitmap_ind16 &bitmap, const rectangle &cliprect)
 	for (y = 64; y < 128; y++)
 		m_bg_tilemap->set_scrollx(y, m_scrollram[0x40]);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	// from 128 to 255: wrapped
 	for (y = 128; y <= cliprect.max_y; y++)
@@ -241,12 +241,12 @@ void m57_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 			flipy = !flipy;
 		}
 
-		drawgfx_transmask(bitmap, cliprect, machine().gfx[1 + bank],
+		m_gfxdecode->gfx(1 + bank)->transmask(bitmap,cliprect,
 			tile_number,
 			color,
 			flipx, flipy,
 			sx, sy,
-			colortable_get_transpen_mask(machine().colortable, machine().gfx[1], color, 256 + 15));
+			m_palette->transpen_mask(*m_gfxdecode->gfx(1), color, 256 + 15));
 	}
 }
 
@@ -260,7 +260,7 @@ void m57_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 
 UINT32 m57_state::screen_update_m57(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	draw_background(bitmap, cliprect);
+	draw_background(screen, bitmap, cliprect);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }

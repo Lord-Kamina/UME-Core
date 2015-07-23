@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Alex Pasadyn,Zsolt Vasvari,Aaron Giles
 /***************************************************************************
 
     Gottlieb Exterminator hardware
@@ -15,13 +17,13 @@
  *
  *************************************/
 
-void exterm_state::palette_init()
+PALETTE_INIT_MEMBER(exterm_state, exterm)
 {
 	int i;
 
 	/* initialize 555 RGB lookup */
 	for (i = 0; i < 32768; i++)
-		palette_set_color_rgb(machine(), i + 0x800, pal5bit(i >> 10), pal5bit(i >> 5), pal5bit(i >> 0));
+		palette.set_pen_color(i + 0x800, pal5bit(i >> 10), pal5bit(i >> 5), pal5bit(i >> 0));
 }
 
 
@@ -32,31 +34,27 @@ void exterm_state::palette_init()
  *
  *************************************/
 
-void exterm_to_shiftreg_master(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_TO_SHIFTREG_CB_MEMBER(exterm_state::to_shiftreg_master)
 {
-	exterm_state *state = space.machine().driver_data<exterm_state>();
-	memcpy(shiftreg, &state->m_master_videoram[TOWORD(address)], 256 * sizeof(UINT16));
+	memcpy(shiftreg, &m_master_videoram[TOWORD(address)], 256 * sizeof(UINT16));
 }
 
 
-void exterm_from_shiftreg_master(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_FROM_SHIFTREG_CB_MEMBER(exterm_state::from_shiftreg_master)
 {
-	exterm_state *state = space.machine().driver_data<exterm_state>();
-	memcpy(&state->m_master_videoram[TOWORD(address)], shiftreg, 256 * sizeof(UINT16));
+	memcpy(&m_master_videoram[TOWORD(address)], shiftreg, 256 * sizeof(UINT16));
 }
 
 
-void exterm_to_shiftreg_slave(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_TO_SHIFTREG_CB_MEMBER(exterm_state::to_shiftreg_slave)
 {
-	exterm_state *state = space.machine().driver_data<exterm_state>();
-	memcpy(shiftreg, &state->m_slave_videoram[TOWORD(address)], 256 * 2 * sizeof(UINT8));
+	memcpy(shiftreg, &m_slave_videoram[TOWORD(address)], 256 * 2 * sizeof(UINT8));
 }
 
 
-void exterm_from_shiftreg_slave(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_FROM_SHIFTREG_CB_MEMBER(exterm_state::from_shiftreg_slave)
 {
-	exterm_state *state = space.machine().driver_data<exterm_state>();
-	memcpy(&state->m_slave_videoram[TOWORD(address)], shiftreg, 256 * 2 * sizeof(UINT8));
+	memcpy(&m_slave_videoram[TOWORD(address)], shiftreg, 256 * 2 * sizeof(UINT8));
 }
 
 
@@ -67,10 +65,9 @@ void exterm_from_shiftreg_slave(address_space &space, UINT32 address, UINT16 *sh
  *
  *************************************/
 
-void exterm_scanline_update(screen_device &screen, bitmap_ind16 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_IND16_CB_MEMBER(exterm_state::scanline_update)
 {
-	exterm_state *state = screen.machine().driver_data<exterm_state>();
-	UINT16 *bgsrc = &state->m_master_videoram[(params->rowaddr << 8) & 0xff00];
+	UINT16 *bgsrc = &m_master_videoram[(params->rowaddr << 8) & 0xff00];
 	UINT16 *fgsrc = NULL;
 	UINT16 *dest = &bitmap.pix16(scanline);
 	tms34010_display_params fgparams;
@@ -79,12 +76,12 @@ void exterm_scanline_update(screen_device &screen, bitmap_ind16 &bitmap, int sca
 	int x;
 
 	/* get parameters for the slave CPU */
-	tms34010_get_display_params(state->m_slave, &fgparams);
+	m_slave->get_display_params(&fgparams);
 
 	/* compute info about the slave vram */
 	if (fgparams.enabled && scanline >= fgparams.veblnk && scanline < fgparams.vsblnk && fgparams.heblnk < fgparams.hsblnk)
 	{
-		fgsrc = &state->m_slave_videoram[((fgparams.rowaddr << 8) + (fgparams.yoffset << 7)) & 0xff80];
+		fgsrc = &m_slave_videoram[((fgparams.rowaddr << 8) + (fgparams.yoffset << 7)) & 0xff80];
 		fgcoladdr = (fgparams.coladdr >> 1);
 	}
 

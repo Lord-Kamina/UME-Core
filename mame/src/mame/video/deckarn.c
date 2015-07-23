@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail,David Haywood
 /* Data East 'Karnov style' sprites */
 /* Custom Chip ??? */
 
@@ -13,9 +15,21 @@ void deco_karnovsprites_device::set_gfx_region(device_t &device, int region)
 const device_type DECO_KARNOVSPRITES = &device_creator<deco_karnovsprites_device>;
 
 deco_karnovsprites_device::deco_karnovsprites_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, DECO_KARNOVSPRITES, "karnovsprites_device", tag, owner, clock),
-		m_gfxregion(0)
+	: device_t(mconfig, DECO_KARNOVSPRITES, "DECO Karnov Sprites", tag, owner, clock, "deco_karnovsprites", __FILE__),
+		m_gfxregion(0),
+		m_gfxdecode(*this),
+		m_palette(*this)
 {
+}
+
+//-------------------------------------------------
+//  static_set_gfxdecode_tag: Set the tag of the
+//  gfx decoder
+//-------------------------------------------------
+
+void deco_karnovsprites_device::static_set_gfxdecode_tag(device_t &device, const char *tag)
+{
+	downcast<deco_karnovsprites_device &>(device).m_gfxdecode.set_tag(tag);
 }
 
 void deco_karnovsprites_device::device_start()
@@ -26,7 +40,7 @@ void deco_karnovsprites_device::device_reset()
 {
 }
 
-void deco_karnovsprites_device::draw_sprites( running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect, UINT16* spriteram, int size, int priority )
+void deco_karnovsprites_device::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, UINT16* spriteram, int size, int priority )
 {
 	int offs;
 
@@ -69,7 +83,7 @@ void deco_karnovsprites_device::draw_sprites( running_machine &machine, bitmap_i
 		y = (y + 16) % 0x200;
 		x = 256 - x;
 		y = 256 - y;
-		if (machine.driver_data()->flip_screen())
+		if (machine().driver_data()->flip_screen())
 		{
 			y = 240 - y;
 			x = 240 - x;
@@ -87,14 +101,24 @@ void deco_karnovsprites_device::draw_sprites( running_machine &machine, bitmap_i
 		else
 			sprite2 = sprite + 1;
 
-		drawgfx_transpen(bitmap,cliprect,machine.gfx[m_gfxregion],
+		m_gfxdecode->gfx(m_gfxregion)->transpen(bitmap,cliprect,
 				sprite,
 				colour,fx,fy,x,y,0);
 
 		/* 1 more sprite drawn underneath */
 		if (extra)
-			drawgfx_transpen(bitmap,cliprect,machine.gfx[m_gfxregion],
+			m_gfxdecode->gfx(m_gfxregion)->transpen(bitmap,cliprect,
 				sprite2,
 				colour,fx,fy,x,y+16,0);
 	}
+}
+
+//-------------------------------------------------
+//  static_set_palette_tag: Set the tag of the
+//  palette device
+//-------------------------------------------------
+
+void deco_karnovsprites_device::static_set_palette_tag(device_t &device, const char *tag)
+{
+	downcast<deco_karnovsprites_device &>(device).m_palette.set_tag(tag);
 }

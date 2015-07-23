@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Mike Coates, Frank Palazzolo, Aaron Giles
 /***************************************************************************
 
     Bally Astrocade-based hardware
@@ -61,7 +63,7 @@ inline int astrocde_state::mame_vpos_to_astrocade_vpos(int scanline)
  *
  *************************************/
 
-void astrocde_state::palette_init()
+PALETTE_INIT_MEMBER(astrocde_state, astrocde)
 {
 	/*
 	    The Astrocade has a 256 color palette: 32 colors with 8 luminance
@@ -94,7 +96,7 @@ void astrocde_state::palette_init()
 
 			/* transform to RGB */
 			r = (ry + y) * 255;
-			g = ((y - 0.299 * (ry + y) - 0.114 * (by + y)) / 0.587) * 255;
+			g = ((y - 0.299f * (ry + y) - 0.114f * (by + y)) / 0.587f) * 255;
 			b = (by + y) * 255;
 
 			/* clamp and store */
@@ -104,7 +106,7 @@ void astrocde_state::palette_init()
 			g = MIN(g, 255);
 			b = MAX(b, 0);
 			b = MIN(b, 255);
-			palette_set_color(machine(), color * 16 + luma, MAKE_RGB(r, g, b));
+			palette.set_pen_color(color * 16 + luma, rgb_t(r, g, b));
 		}
 	}
 }
@@ -150,7 +152,7 @@ PALETTE_INIT_MEMBER(astrocde_state,profpac)
 		bit3 = (i >> 11) & 0x01;
 		r = combine_4_weights(weights, bit0, bit1, bit2, bit3);
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -166,7 +168,7 @@ void astrocde_state::video_start()
 {
 	/* allocate timers */
 	m_scanline_timer = timer_alloc(TIMER_SCANLINE);
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(1), 1);
+	m_scanline_timer->adjust(m_screen->time_until_pos(1), 1);
 	m_intoff_timer = timer_alloc(TIMER_INTERRUPT_OFF);
 
 	/* register for save states */
@@ -182,7 +184,7 @@ VIDEO_START_MEMBER(astrocde_state,profpac)
 {
 	/* allocate timers */
 	m_scanline_timer = timer_alloc(TIMER_SCANLINE);
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(1), 1);
+	m_scanline_timer->adjust(m_screen->time_until_pos(1), 1);
 	m_intoff_timer = timer_alloc(TIMER_INTERRUPT_OFF);
 
 	/* allocate videoram */
@@ -398,7 +400,7 @@ void astrocde_state::astrocade_trigger_lightpen(UINT8 vfeedback, UINT8 hfeedback
 		if ((m_interrupt_enabl & 0x01) == 0)
 		{
 			m_maincpu->set_input_line_and_vector(0, HOLD_LINE, m_interrupt_vector & 0xf0);
-			m_intoff_timer->adjust(machine().primary_screen->time_until_pos(vfeedback));
+			m_intoff_timer->adjust(m_screen->time_until_pos(vfeedback));
 		}
 
 		/* mode 1 means assert for 1 instruction */
@@ -429,7 +431,7 @@ TIMER_CALLBACK_MEMBER(astrocde_state::scanline_callback)
 
 	/* force an update against the current scanline */
 	if (scanline > 0)
-		machine().primary_screen->update_partial(scanline - 1);
+		m_screen->update_partial(scanline - 1);
 
 	/* generate a scanline interrupt if it's time */
 	if (astrocade_scanline == m_interrupt_scanline && (m_interrupt_enabl & 0x08) != 0)
@@ -438,7 +440,7 @@ TIMER_CALLBACK_MEMBER(astrocde_state::scanline_callback)
 		if ((m_interrupt_enabl & 0x04) == 0)
 		{
 			m_maincpu->set_input_line_and_vector(0, HOLD_LINE, m_interrupt_vector);
-			timer_set(machine().primary_screen->time_until_vblank_end(), TIMER_INTERRUPT_OFF);
+			timer_set(m_screen->time_until_vblank_end(), TIMER_INTERRUPT_OFF);
 		}
 
 		/* mode 1 means assert for 1 instruction */
@@ -455,9 +457,9 @@ TIMER_CALLBACK_MEMBER(astrocde_state::scanline_callback)
 
 	/* advance to the next scanline */
 	scanline++;
-	if (scanline >= machine().primary_screen->height())
+	if (scanline >= m_screen->height())
 		scanline = 0;
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(scanline), scanline);
+	m_scanline_timer->adjust(m_screen->time_until_pos(scanline), scanline);
 }
 
 

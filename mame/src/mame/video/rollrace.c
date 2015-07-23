@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli
 #include "emu.h"
 #include "includes/rollrace.h"
 
@@ -20,13 +22,13 @@
   bit 0 -- 1  kohm resistor  -- RED/GREEN/BLUE
 
 ***************************************************************************/
-void rollrace_state::palette_init()
+PALETTE_INIT_MEMBER(rollrace_state, rollrace)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
 
-	for (i = 0;i < machine().total_colors();i++)
+	for (i = 0;i < palette.entries();i++)
 	{
 		int bit0,bit1,bit2,bit3,r,g,b;
 
@@ -36,64 +38,64 @@ void rollrace_state::palette_init()
 		bit2 = (color_prom[0] >> 2) & 0x01;
 		bit3 = (color_prom[0] >> 3) & 0x01;
 		r = 0x0e * bit0 + 0x1f * bit1 + 0x42 * bit2 + 0x90 * bit3;
-		bit0 = (color_prom[machine().total_colors()] >> 0) & 0x01;
-		bit1 = (color_prom[machine().total_colors()] >> 1) & 0x01;
-		bit2 = (color_prom[machine().total_colors()] >> 2) & 0x01;
-		bit3 = (color_prom[machine().total_colors()] >> 3) & 0x01;
+		bit0 = (color_prom[palette.entries()] >> 0) & 0x01;
+		bit1 = (color_prom[palette.entries()] >> 1) & 0x01;
+		bit2 = (color_prom[palette.entries()] >> 2) & 0x01;
+		bit3 = (color_prom[palette.entries()] >> 3) & 0x01;
 		g = 0x0e * bit0 + 0x1f * bit1 + 0x42 * bit2 + 0x90 * bit3;
-		bit0 = (color_prom[2*machine().total_colors()] >> 0) & 0x01;
-		bit1 = (color_prom[2*machine().total_colors()] >> 1) & 0x01;
-		bit2 = (color_prom[2*machine().total_colors()] >> 2) & 0x01;
-		bit3 = (color_prom[2*machine().total_colors()] >> 3) & 0x01;
+		bit0 = (color_prom[2*palette.entries()] >> 0) & 0x01;
+		bit1 = (color_prom[2*palette.entries()] >> 1) & 0x01;
+		bit2 = (color_prom[2*palette.entries()] >> 2) & 0x01;
+		bit3 = (color_prom[2*palette.entries()] >> 3) & 0x01;
 		b = 0x0e * bit0 + 0x1f * bit1 + 0x42 * bit2 + 0x90 * bit3;
 
-		palette_set_color(machine(),i,MAKE_RGB(r,g,b));
+		palette.set_pen_color(i,rgb_t(r,g,b));
 
 		color_prom++;
 	}
 }
 
-WRITE8_MEMBER(rollrace_state::rollrace_charbank_w)
+WRITE8_MEMBER(rollrace_state::charbank_w)
 {
-	m_ra_charbank[offset&1] = data;
-	m_ra_chrbank = m_ra_charbank[0] | (m_ra_charbank[1] << 1) ;
+	m_charbank[offset&1] = data;
+	m_chrbank = m_charbank[0] | (m_charbank[1] << 1) ;
 }
 
 
-WRITE8_MEMBER(rollrace_state::rollrace_bkgpen_w)
+WRITE8_MEMBER(rollrace_state::bkgpen_w)
 {
-	m_ra_bkgpen = data;
+	m_bkgpen = data;
 }
 
-WRITE8_MEMBER(rollrace_state::rollrace_spritebank_w)
+WRITE8_MEMBER(rollrace_state::spritebank_w)
 {
-	m_ra_spritebank = data;
+	m_spritebank = data;
 }
 
-WRITE8_MEMBER(rollrace_state::rollrace_backgroundpage_w)
+WRITE8_MEMBER(rollrace_state::backgroundpage_w)
 {
-	m_ra_bkgpage = data & 0x1f;
-	m_ra_bkgflip = ( data & 0x80 ) >> 7;
+	m_bkgpage = data & 0x1f;
+	m_bkgflip = ( data & 0x80 ) >> 7;
 
 	/* 0x80 flip vertical */
 }
 
-WRITE8_MEMBER(rollrace_state::rollrace_backgroundcolor_w)
+WRITE8_MEMBER(rollrace_state::backgroundcolor_w)
 {
-	m_ra_bkgcol = data;
+	m_bkgcol = data;
 }
 
-WRITE8_MEMBER(rollrace_state::rollrace_flipy_w)
+WRITE8_MEMBER(rollrace_state::flipy_w)
 {
-	m_ra_flipy = data & 0x01;
+	m_flipy = data & 0x01;
 }
 
-WRITE8_MEMBER(rollrace_state::rollrace_flipx_w)
+WRITE8_MEMBER(rollrace_state::flipx_w)
 {
-	m_ra_flipx = data & 0x01;
+	m_flipx = data & 0x01;
 }
 
-UINT32 rollrace_state::screen_update_rollrace(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 rollrace_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	UINT8 *spriteram = m_spriteram;
 	int offs;
@@ -103,12 +105,12 @@ UINT32 rollrace_state::screen_update_rollrace(screen_device &screen, bitmap_ind1
 	const UINT8 *mem = memregion("user1")->base();
 
 	/* fill in background colour*/
-	bitmap.fill(m_ra_bkgpen, cliprect);
+	bitmap.fill(m_bkgpen, cliprect);
 
 	/* draw road */
 	for (offs = 0x3ff; offs >= 0; offs--)
 		{
-			if(!(m_ra_bkgflip))
+			if(!(m_bkgflip))
 				{
 				sy = ( 31 - offs / 32 ) ;
 				}
@@ -117,18 +119,18 @@ UINT32 rollrace_state::screen_update_rollrace(screen_device &screen, bitmap_ind1
 
 			sx = ( offs%32 ) ;
 
-			if(m_ra_flipx)
+			if(m_flipx)
 				sx = 31-sx ;
 
-			if(m_ra_flipy)
+			if(m_flipy)
 				sy = 31-sy ;
 
-			drawgfx_transpen(bitmap,
-				cliprect,machine().gfx[RA_BGCHAR_BASE],
-				mem[offs + ( m_ra_bkgpage * 1024 )]
-				+ ((( mem[offs + 0x4000 + ( m_ra_bkgpage * 1024 )] & 0xc0 ) >> 6 ) * 256 ) ,
-				m_ra_bkgcol,
-				m_ra_flipx,(m_ra_bkgflip^m_ra_flipy),
+			m_gfxdecode->gfx(RA_BGCHAR_BASE)->transpen(bitmap,
+				cliprect,
+				mem[offs + ( m_bkgpage * 1024 )]
+				+ ((( mem[offs + 0x4000 + ( m_bkgpage * 1024 )] & 0xc0 ) >> 6 ) * 256 ) ,
+				m_bkgcol,
+				m_flipx,(m_bkgflip^m_flipy),
 				sx*8,sy*8,0);
 
 
@@ -148,9 +150,9 @@ UINT32 rollrace_state::screen_update_rollrace(screen_device &screen, bitmap_ind1
 
 		if(sx && sy)
 		{
-		if(m_ra_flipx)
+		if(m_flipx)
 			sx = 224 - sx;
-		if(m_ra_flipy)
+		if(m_flipy)
 			sy = 224 - sy;
 
 		if(spriteram[offs+1] & 0x80)
@@ -159,12 +161,12 @@ UINT32 rollrace_state::screen_update_rollrace(screen_device &screen, bitmap_ind1
 		bank = (( spriteram[offs+1] & 0x40 ) >> 6 ) ;
 
 		if(bank)
-			bank += m_ra_spritebank;
+			bank += m_spritebank;
 
-		drawgfx_transpen(bitmap, cliprect,machine().gfx[ RA_SP_BASE + bank ],
+		m_gfxdecode->gfx( RA_SP_BASE + bank )->transpen(bitmap,cliprect,
 			spriteram[offs+1] & 0x3f ,
 			spriteram[offs+2] & 0x1f,
-			m_ra_flipx,!(s_flipy^m_ra_flipy),
+			m_flipx,!(s_flipy^m_flipy),
 			sx,sy,0);
 		}
 	}
@@ -181,17 +183,17 @@ UINT32 rollrace_state::screen_update_rollrace(screen_device &screen, bitmap_ind1
 		scroll = ( 8 * sy + m_colorram[2 * sx] ) % 256;
 		col = m_colorram[ sx * 2 + 1 ]&0x1f;
 
-		if (!m_ra_flipy)
+		if (!m_flipy)
 		{
 			scroll = (248 - scroll) % 256;
 		}
 
-		if (m_ra_flipx) sx = 31 - sx;
+		if (m_flipx) sx = 31 - sx;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[RA_FGCHAR_BASE + m_ra_chrbank]  ,
+		m_gfxdecode->gfx(RA_FGCHAR_BASE + m_chrbank)  ->transpen(bitmap,cliprect,
 			m_videoram[ offs ]  ,
 			col,
-			m_ra_flipx,m_ra_flipy,
+			m_flipx,m_flipy,
 			8*sx,scroll,0);
 
 	}

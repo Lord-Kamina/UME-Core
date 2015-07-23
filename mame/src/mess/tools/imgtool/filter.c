@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
     filter.c
@@ -58,6 +60,7 @@ const filter_getinfoproc filters[] =
 	filter_thombas7_getinfo,
 	filter_thombas128_getinfo,
 	filter_thomcrypt_getinfo,
+	filter_bml3bas_getinfo,
 	NULL
 };
 

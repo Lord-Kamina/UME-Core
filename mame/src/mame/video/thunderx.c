@@ -1,5 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, Manuel Abadia
 #include "emu.h"
-#include "video/konicdev.h"
 #include "includes/thunderx.h"
 
 /***************************************************************************
@@ -8,13 +9,20 @@
 
 ***************************************************************************/
 
-void thunderx_tile_callback( running_machine &machine, int layer, int bank, int *code, int *color, int *flags, int *priority )
+static const int layer_colorbase[] = { 768 / 16, 0 / 16, 256 / 16 };
+
+K052109_CB_MEMBER(thunderx_state::tile_callback)
 {
-	thunderx_state *state = machine.driver_data<thunderx_state>();
 	*code |= ((*color & 0x1f) << 8) | (bank << 13);
-	*color = state->m_layer_colorbase[layer] + ((*color & 0xe0) >> 5);
+	*color = layer_colorbase[layer] + ((*color & 0xe0) >> 5);
 }
 
+K052109_CB_MEMBER(thunderx_state::gbusters_tile_callback)
+{
+	/* (color & 0x02) is flip y handled internally by the 052109 */
+	*code |= ((*color & 0x0d) << 8) | ((*color & 0x10) << 5) | (bank << 12);
+	*color = layer_colorbase[layer] + ((*color & 0xe0) >> 5);
+}
 
 /***************************************************************************
 
@@ -22,22 +30,22 @@ void thunderx_tile_callback( running_machine &machine, int layer, int bank, int 
 
 ***************************************************************************/
 
-void thunderx_sprite_callback( running_machine &machine, int *code,int *color, int *priority_mask, int *shadow )
-{
-	thunderx_state *state = machine.driver_data<thunderx_state>();
+static const int sprite_colorbase = 512 / 16;
 
+K051960_CB_MEMBER(thunderx_state::sprite_callback)
+{
 	/* Sprite priority 1 means appear behind background, used only to mask sprites */
 	/* in the foreground */
 	/* Sprite priority 3 means don't draw (not used) */
 	switch (*color & 0x30)
 	{
-		case 0x00: *priority_mask = 0xf0; break;
-		case 0x10: *priority_mask = 0xf0 | 0xcc | 0xaa; break;
-		case 0x20: *priority_mask = 0xf0 | 0xcc; break;
-		case 0x30: *priority_mask = 0xffff; break;
+		case 0x00: *priority = 0; break;
+		case 0x10: *priority = GFX_PMASK_2 | GFX_PMASK_1; break;
+		case 0x20: *priority = GFX_PMASK_2; break;
+		case 0x30: *priority = 0xffff; break;
 	}
 
-	*color = state->m_sprite_colorbase + (*color & 0x0f);
+	*color = sprite_colorbase + (*color & 0x0f);
 }
 
 
@@ -50,12 +58,7 @@ void thunderx_sprite_callback( running_machine &machine, int *code,int *color, i
 
 void thunderx_state::video_start()
 {
-	m_layer_colorbase[0] = 48;
-	m_layer_colorbase[1] = 0;
-	m_layer_colorbase[2] = 16;
-	m_sprite_colorbase = 32;
-
-	palette_set_shadow_factor(machine(),7.0/8.0);
+	m_palette->set_shadow_factor(7.0/8.0);
 }
 
 
@@ -65,26 +68,21 @@ void thunderx_state::video_start()
 
 ***************************************************************************/
 
-UINT32 thunderx_state::screen_update_scontra(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 thunderx_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	k052109_tilemap_update(m_k052109);
+	m_k052109->tilemap_update();
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
-	/* The background color is always from layer 1 - but it's always black anyway */
-//  bitmap.fill(16 * m_layer_colorbase[1], cliprect);
-	if (m_priority)
-	{
-		k052109_tilemap_draw(m_k052109, bitmap, cliprect, 2, TILEMAP_DRAW_OPAQUE, 1);
-		k052109_tilemap_draw(m_k052109, bitmap, cliprect, 1, 0, 2);
-	}
-	else
-	{
-		k052109_tilemap_draw(m_k052109, bitmap, cliprect, 1, TILEMAP_DRAW_OPAQUE, 1);
-		k052109_tilemap_draw(m_k052109, bitmap, cliprect, 2, 0, 2);
-	}
-	k052109_tilemap_draw(m_k052109, bitmap, cliprect, 0, 0, 4);
+	/* The background color is always from layer 1 */
+	m_k052109->tilemap_draw(screen, bitmap, cliprect, 1, TILEMAP_DRAW_OPAQUE, 0);
 
-	k051960_sprites_draw(m_k051960, bitmap, cliprect, -1, -1);
+	int bg = m_priority ? 2 : 1;
+	int fg = m_priority ? 1 : 2;
+
+	m_k052109->tilemap_draw(screen, bitmap, cliprect, bg, 0, 1);
+	m_k052109->tilemap_draw(screen, bitmap, cliprect, fg, 0, 2);
+	m_k051960->k051960_sprites_draw(bitmap, cliprect, screen.priority(), -1, -1);
+	m_k052109->tilemap_draw(screen, bitmap, cliprect, 0, 0, 0);
 	return 0;
 }

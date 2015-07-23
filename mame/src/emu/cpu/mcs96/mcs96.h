@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert, R. Belmont
 /***************************************************************************
 
     mcs96.h
 
     MCS96
-
-****************************************************************************
-
-    Copyright Olivier Galibert
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY OLIVIER GALIBERT ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL OLIVIER GALIBERT BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -42,14 +13,16 @@
 
 class mcs96_device : public cpu_device {
 public:
-	mcs96_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, int data_width);
+	enum {
+		EXINT_LINE = 1
+	};
 
-	UINT64 get_cycle();
+	mcs96_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, int data_width, const char *shortname, const char *source);
 
 protected:
 	enum {
 		STATE_FETCH = 0x200,
-		STATE_FETCH_NOIRQ = 0x201,
+		STATE_FETCH_NOIRQ = 0x201
 	};
 
 	enum {
@@ -59,7 +32,7 @@ protected:
 		F_VT = 0x1000,
 		F_V  = 0x2000,
 		F_N  = 0x4000,
-		F_Z  = 0x8000,
+		F_Z  = 0x8000
 	};
 
 	struct disasm_entry {
@@ -69,29 +42,30 @@ protected:
 	};
 
 	enum {
-		DASM_none,          /* No parameters */
-		DASM_nop_2,         /* One ignored parameter byte */
-		DASM_rel8,          /* Relative, 8 bits */
-		DASM_rel11,         /* Relative, 11 bits */
-		DASM_rel16,         /* Relative, 16 bits */
-		DASM_rrel8,         /* Register + relative, 8 bits */
-		DASM_brrel8,        /* Bit test + register + relative, 8 bits */
-		DASM_direct_1,      /* Register-direct references, 1 operator */
-		DASM_direct_2,      /* Register-direct references, 2 operators */
-		DASM_direct_3,      /* Register-direct references, 3 operators */
-		DASM_immed_1b,      /* Immediate references to byte, 1 operator */
-		DASM_immed_2b,      /* Immediate references to byte, 2 operators */
-		DASM_immed_3b,      /* Immediate references to byte, 3 operators */
-		DASM_immed_1w,      /* Immediate references to word, 1 operator */
-		DASM_immed_2w,      /* Immediate references to word, 2 operators */
-		DASM_immed_3w,      /* Immediate references to word, 3 operators */
-		DASM_indirect_1n,   /* Indirect normal, 1 operator */
-		DASM_indirect_1,    /* Indirect, normal or auto-incrementing, 1 operator */
-		DASM_indirect_2,    /* Indirect, normal or auto-incrementing, 2 operators */
-		DASM_indirect_3,    /* Indirect, normal or auto-incrementing, 3 operators */
-		DASM_indexed_1,     /* Indexed, short or long, 1 operator */
-		DASM_indexed_2,     /* Indexed, short or long, 2 operators */
-		DASM_indexed_3,     /* Indexed, short or long, 3 operators */
+		DASM_none,              /* No parameters */
+		DASM_nop_2,             /* One ignored parameter byte */
+		DASM_rel8,              /* Relative, 8 bits */
+		DASM_rel11,             /* Relative, 11 bits */
+		DASM_rel16,             /* Relative, 16 bits */
+		DASM_rrel8,             /* Register + relative, 8 bits */
+		DASM_brrel8,            /* Bit test + register + relative, 8 bits */
+		DASM_direct_1,          /* Register-direct references, 1 operator */
+		DASM_direct_2,          /* Register-direct references, 2 operators */
+		DASM_direct_3,          /* Register-direct references, 3 operators */
+		DASM_immed_1b,          /* Immediate references to byte, 1 operator */
+		DASM_immed_2b,          /* Immediate references to byte, 2 operators */
+		DASM_immed_or_reg_2b,   /* Immediate references to byte or register, 2 operators */
+		DASM_immed_3b,          /* Immediate references to byte, 3 operators */
+		DASM_immed_1w,          /* Immediate references to word, 1 operator */
+		DASM_immed_2w,          /* Immediate references to word, 2 operators */
+		DASM_immed_3w,          /* Immediate references to word, 3 operators */
+		DASM_indirect_1n,       /* Indirect normal, 1 operator */
+		DASM_indirect_1,        /* Indirect, normal or auto-incrementing, 1 operator */
+		DASM_indirect_2,        /* Indirect, normal or auto-incrementing, 2 operators */
+		DASM_indirect_3,        /* Indirect, normal or auto-incrementing, 3 operators */
+		DASM_indexed_1,         /* Indexed, short or long, 1 operator */
+		DASM_indexed_2,         /* Indexed, short or long, 2 operators */
+		DASM_indexed_3         /* Indexed, short or long, 3 operators */
 	};
 
 	// device-level overrides
@@ -111,7 +85,7 @@ protected:
 	// device_state_interface overrides
 	virtual void state_import(const device_state_entry &entry);
 	virtual void state_export(const device_state_entry &entry);
-	virtual void state_string_export(const device_state_entry &entry, astring &string);
+	virtual void state_string_export(const device_state_entry &entry, std::string &str);
 
 	// device_disasm_interface overrides
 	virtual UINT32 disasm_min_opcode_bytes() const;
@@ -122,7 +96,6 @@ protected:
 	address_space *program;
 	direct_read_data *direct;
 
-	UINT64 end_cycles;
 	int icount, bcount, inst_state, cycles_scaling;
 	UINT8 pending_irq;
 	UINT16 PC, PPC, PSW;
@@ -141,12 +114,12 @@ protected:
 	virtual UINT16 io_r16(UINT8 adr) = 0;
 
 	void recompute_bcount(UINT64 event_time);
-	static astring regname(UINT8 reg);
+	static std::string regname(UINT8 reg);
 
 	inline void next(int cycles) { icount -= cycles_scaling*cycles; inst_state = STATE_FETCH; }
 	inline void next_noirq(int cycles) { icount -= cycles_scaling*cycles; inst_state = STATE_FETCH_NOIRQ; }
 	void check_irq();
-	inline UINT8 read_pc() { return direct->read_decrypted_byte(PC++); }
+	inline UINT8 read_pc() { return direct->read_byte(PC++); }
 
 	void reg_w8(UINT8 adr, UINT8 data);
 	void reg_w16(UINT8 adr, UINT16 data);
@@ -245,15 +218,15 @@ protected:
 	O(rst_none);
 	O(scall_rel11);
 	O(setc_none);
-	O(shl_immed_2b);
-	O(shlb_immed_2b);
-	O(shll_immed_2b);
-	O(shr_immed_2b);
-	O(shra_immed_2b);
-	O(shrab_immed_2b);
-	O(shral_immed_2b);
-	O(shrb_immed_2b);
-	O(shrl_immed_2b);
+	O(shl_immed_or_reg_2b);
+	O(shlb_immed_or_reg_2b);
+	O(shll_immed_or_reg_2b);
+	O(shr_immed_or_reg_2b);
+	O(shra_immed_or_reg_2b);
+	O(shrab_immed_or_reg_2b);
+	O(shral_immed_or_reg_2b);
+	O(shrb_immed_or_reg_2b);
+	O(shrl_immed_or_reg_2b);
 	O(sjmp_rel11);
 	O(skip_immed_1b);
 	O(st_direct_2); O(st_indexed_2); O(st_indirect_2);

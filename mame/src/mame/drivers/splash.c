@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia, David Haywood
 /***************************************************************************
 
 Splash! (c) 1992 Gaelco
@@ -5,7 +7,7 @@ Return of Ladyfrog (c) 1993 Microhard   (hack/bootleg of splash)
 Funny Strip (c)199? Microhard / MagicGames
 Rebus (c)1995 Microhard
 
-Driver by Manuel Abadia <manu@teleline.es>
+Driver by Manuel Abadia <emumanu+mame@gmail.com>
 
 Return of Lady Frog addition by David Haywood
 
@@ -31,13 +33,13 @@ Sound not working on Return of Lady Frog
 
 TS 2006.12.22:
 - Funny Strip is runing on pSOS RTOS ( http://en.wikipedia.org/wiki/PSOS and http://dr-linux.net/newbase/reference/psosCD/ ) .
-  There's copyrigth text at $480
+  There's copyright text at $480
   Also Rebus and TRoLF are running on it (the same internal code structure - traps, interrupt vectors),
   but copyright messages are removed.
 - Rebus protection patch sits at the end of trap $b (rtos call) and in some cases returns 0 in D0.
   It's not a real protection check i think.
 
-More notes about Funny Strip protection issus at the boottom of source file (DRIVER INIT)
+More notes about Funny Strip protection issues at the bottom of source file (DRIVER INIT)
 
 ***************************************************************************/
 
@@ -46,7 +48,6 @@ More notes about Funny Strip protection issus at the boottom of source file (DRI
 #include "cpu/m68000/m68000.h"
 #include "sound/2203intf.h"
 #include "sound/3812intf.h"
-#include "sound/msm5205.h"
 #include "includes/splash.h"
 
 WRITE16_MEMBER(splash_state::splash_sh_irqtrigger_w)
@@ -70,7 +71,7 @@ WRITE16_MEMBER(splash_state::roldf_sh_irqtrigger_w)
 	space.device().execute().spin_until_time(attotime::from_usec(40));
 }
 
-WRITE16_MEMBER(splash_state::splash_coin_w)
+WRITE16_MEMBER(splash_state::coin_w)
 {
 	if (ACCESSING_BITS_8_15)
 	{
@@ -96,11 +97,11 @@ static ADDRESS_MAP_START( splash_map, AS_PROGRAM, 16, splash_state )
 	AM_RANGE(0x840004, 0x840005) AM_READ_PORT("P1")
 	AM_RANGE(0x840006, 0x840007) AM_READ_PORT("P2")
 	AM_RANGE(0x84000e, 0x84000f) AM_WRITE(splash_sh_irqtrigger_w)                       /* Sound command */
-	AM_RANGE(0x84000a, 0x84003b) AM_WRITE(splash_coin_w)                                /* Coin Counters + Coin Lockout */
-	AM_RANGE(0x880000, 0x8817ff) AM_RAM_WRITE(splash_vram_w) AM_SHARE("videoram")   /* Video RAM */
+	AM_RANGE(0x84000a, 0x84003b) AM_WRITE(coin_w)                                /* Coin Counters + Coin Lockout */
+	AM_RANGE(0x880000, 0x8817ff) AM_RAM_WRITE(vram_w) AM_SHARE("videoram")   /* Video RAM */
 	AM_RANGE(0x881800, 0x881803) AM_RAM AM_SHARE("vregs")                           /* Scroll registers */
 	AM_RANGE(0x881804, 0x881fff) AM_RAM                                                 /* Work RAM */
-	AM_RANGE(0x8c0000, 0x8c0fff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")/* Palette is xRRRRxGGGGxBBBBx */
+	AM_RANGE(0x8c0000, 0x8c0fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")/* Palette is xRRRRxGGGGxBBBBx */
 	AM_RANGE(0x900000, 0x900fff) AM_RAM AM_SHARE("spriteram")                       /* Sprite RAM */
 	AM_RANGE(0xffc000, 0xffffff) AM_RAM                                                 /* Work RAM */
 ADDRESS_MAP_END
@@ -169,11 +170,11 @@ static ADDRESS_MAP_START( roldfrog_map, AS_PROGRAM, 16, splash_state )
 	AM_RANGE(0x840004, 0x840005) AM_READ_PORT("P1")
 	AM_RANGE(0x840006, 0x840007) AM_READ_PORT("P2")
 	AM_RANGE(0x84000e, 0x84000f) AM_WRITE(roldf_sh_irqtrigger_w)                        /* Sound command */
-	AM_RANGE(0x84000a, 0x84003b) AM_WRITE(splash_coin_w)                                /* Coin Counters + Coin Lockout */
-	AM_RANGE(0x880000, 0x8817ff) AM_RAM_WRITE(splash_vram_w) AM_SHARE("videoram")   /* Video RAM */
+	AM_RANGE(0x84000a, 0x84003b) AM_WRITE(coin_w)                                /* Coin Counters + Coin Lockout */
+	AM_RANGE(0x880000, 0x8817ff) AM_RAM_WRITE(vram_w) AM_SHARE("videoram")   /* Video RAM */
 	AM_RANGE(0x881800, 0x881803) AM_RAM AM_SHARE("vregs")                           /* Scroll registers */
 	AM_RANGE(0x881804, 0x881fff) AM_RAM                                                 /* Work RAM */
-	AM_RANGE(0x8c0000, 0x8c0fff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")/* Palette is xRRRRxGGGGxBBBBx */
+	AM_RANGE(0x8c0000, 0x8c0fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")/* Palette is xRRRRxGGGGxBBBBx */
 	AM_RANGE(0xa00000, 0xa00001) AM_READ(roldfrog_bombs_r)
 	AM_RANGE(0xd00000, 0xd00fff) AM_RAM AM_SHARE("spriteram")                       /* Sprite RAM */
 	AM_RANGE(0xe00000, 0xe00001) AM_WRITEONLY AM_SHARE("bitmap_mode")           /* Bitmap Mode? */
@@ -224,17 +225,17 @@ static ADDRESS_MAP_START( funystrp_map, AS_PROGRAM, 16, splash_state )
 	AM_RANGE(0x000000, 0x01ffff) AM_ROM                                                 /* ROM */
 	AM_RANGE(0x100000, 0x1fffff) AM_RAM                                                 /* protection? RAM */
 	AM_RANGE(0x800000, 0x83ffff) AM_RAM AM_SHARE("pixelram")                        /* Pixel Layer */
-	AM_RANGE(0x84000a, 0x84000b) AM_WRITE(splash_coin_w)                                /* Coin Counters + Coin Lockout */
+	AM_RANGE(0x84000a, 0x84000b) AM_WRITE(coin_w)                                /* Coin Counters + Coin Lockout */
 	AM_RANGE(0x84000e, 0x84000f) AM_WRITE(funystrp_sh_irqtrigger_w)                       /* Sound command */
 	AM_RANGE(0x840000, 0x840001) AM_READ_PORT("DSW1")
 	AM_RANGE(0x840002, 0x840003) AM_READ_PORT("DSW2")
 	AM_RANGE(0x840004, 0x840005) AM_READ_PORT("P1")
 	AM_RANGE(0x840006, 0x840007) AM_READ_PORT("P2")
 	AM_RANGE(0x840008, 0x840009) AM_READ_PORT("SYSTEM")
-	AM_RANGE(0x880000, 0x8817ff) AM_RAM_WRITE(splash_vram_w) AM_SHARE("videoram")   /* Video RAM */
+	AM_RANGE(0x880000, 0x8817ff) AM_RAM_WRITE(vram_w) AM_SHARE("videoram")   /* Video RAM */
 	AM_RANGE(0x881800, 0x881803) AM_RAM AM_SHARE("vregs")                           /* Scroll registers */
 	AM_RANGE(0x881804, 0x881fff) AM_WRITENOP
-	AM_RANGE(0x8c0000, 0x8c0fff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")/* Palette is xRRRRxGGGGxBBBBx */
+	AM_RANGE(0x8c0000, 0x8c0fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")/* Palette is xRRRRxGGGGxBBBBx */
 	AM_RANGE(0xd00000, 0xd01fff) AM_READWRITE(spr_read, spr_write) AM_SHARE("spriteram")        /* Sprite RAM */
 	AM_RANGE(0xfe0000, 0xffffff) AM_RAM  AM_MASK(0xffff) /* there's fe0000 <-> ff0000 compare */                /* Work RAM */
 ADDRESS_MAP_END
@@ -438,7 +439,7 @@ static INPUT_PORTS_START( funystrp )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_START2 )
 
 	PORT_START("SYSTEM")
-	PORT_DIPNAME( 0xffff, 0xffff, "Clear EEPROM" )
+	PORT_DIPNAME( 0xffff, 0x0000, "Clear EEPROM" )
 	PORT_DIPSETTING(    0x0000, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0xffff, DEF_STR( On ) )
 
@@ -471,11 +472,11 @@ static GFXDECODE_START( splash )
 	GFXDECODE_ENTRY( "gfx1", 0x000000, tilelayout16,0,128 )
 GFXDECODE_END
 
-static const msm5205_interface splash_msm5205_interface =
+
+MACHINE_START_MEMBER(splash_state,splash)
 {
-	DEVCB_DRIVER_LINE_MEMBER(splash_state,splash_msm5205_int), /* IRQ handler */
-	MSM5205_S48_4B      /* 8KHz */
-};
+	save_item(NAME(m_adpcm_data));
+}
 
 MACHINE_RESET_MEMBER(splash_state,splash)
 {
@@ -500,12 +501,14 @@ static MACHINE_CONFIG_START( splash, splash_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(64*8, 64*8)
 	MCFG_SCREEN_VISIBLE_AREA(2*8, 48*8-1, 2*8, 32*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(splash_state, screen_update_splash)
+	MCFG_SCREEN_UPDATE_DRIVER(splash_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(splash)
-	MCFG_PALETTE_LENGTH(2048)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", splash)
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
-
+	MCFG_MACHINE_START_OVERRIDE(splash_state, splash )
 	MCFG_MACHINE_RESET_OVERRIDE(splash_state, splash )
 
 	/* sound hardware */
@@ -515,18 +518,18 @@ static MACHINE_CONFIG_START( splash, splash_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.80)
 
 	MCFG_SOUND_ADD("msm", MSM5205, XTAL_384kHz)
-	MCFG_SOUND_CONFIG(splash_msm5205_interface)     /* Sample rate = 384kHz/48 */
+	MCFG_MSM5205_VCLK_CB(WRITELINE(splash_state, splash_msm5205_int)) /* IRQ handler */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)      /* 8KHz */     /* Sample rate = 384kHz/48 */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.80)
 MACHINE_CONFIG_END
 
 
-static const ay8910_interface ay8910_config =
+MACHINE_START_MEMBER(splash_state, roldfrog)
 {
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL, DEVCB_NULL,
-	DEVCB_NULL, DEVCB_NULL
-};
+	save_item(NAME(m_ret));
+	save_item(NAME(m_vblank_irq));
+	save_item(NAME(m_sound_irq));
+}
 
 INTERRUPT_GEN_MEMBER(splash_state::roldfrog_interrupt)
 {
@@ -552,13 +555,14 @@ static MACHINE_CONFIG_START( roldfrog, splash_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(64*8, 64*8)
 	MCFG_SCREEN_VISIBLE_AREA(2*8, 48*8-1, 2*8, 32*8-1)
+	MCFG_SCREEN_UPDATE_DRIVER(splash_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_SCREEN_UPDATE_DRIVER(splash_state, screen_update_splash)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", splash)
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
-	MCFG_GFXDECODE(splash)
-	MCFG_PALETTE_LENGTH(2048)
-
-
+	MCFG_MACHINE_START_OVERRIDE(splash_state, roldfrog )
 	MCFG_MACHINE_RESET_OVERRIDE(splash_state, splash )
 
 	/* sound hardware */
@@ -566,7 +570,6 @@ static MACHINE_CONFIG_START( roldfrog, splash_state )
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, XTAL_24MHz / 8)
 	MCFG_YM2203_IRQ_HANDLER(WRITELINE(splash_state, ym_irq))
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(0, "mono", 0.20)
 	MCFG_SOUND_ROUTE(1, "mono", 0.20)
 	MCFG_SOUND_ROUTE(2, "mono", 0.20)
@@ -603,19 +606,23 @@ WRITE_LINE_MEMBER(splash_state::adpcm_int2)
 	}
 }
 
-static const msm5205_interface msm_interface1 =
-{
-	DEVCB_DRIVER_LINE_MEMBER(splash_state,adpcm_int1),         /* interrupt function */
-	MSM5205_S64_4B  /* 1 / 96 = 3906.25Hz playback  - guess */
-};
 
-static const msm5205_interface msm_interface2 =
+MACHINE_START_MEMBER(splash_state, funystrp)
 {
-	DEVCB_DRIVER_LINE_MEMBER(splash_state,adpcm_int2),         /* interrupt function */
-	MSM5205_S96_4B  /* 1 / 96 = 3906.25Hz playback  - guess */
-};
+	save_item(NAME(m_funystrp_val));
+	save_item(NAME(m_funystrp_ff3cc7_val));
+	save_item(NAME(m_funystrp_ff3cc8_val));
+	save_item(NAME(m_msm_data1));
+	save_item(NAME(m_msm_data2));
+	save_item(NAME(m_msm_toggle1));
+	save_item(NAME(m_msm_toggle2));
+	save_item(NAME(m_msm_source));
+	save_item(NAME(m_snd_interrupt_enable1));
+	save_item(NAME(m_snd_interrupt_enable2));
+}
 
 static MACHINE_CONFIG_START( funystrp, splash_state )
+
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, XTAL_24MHz/2)       /* 12 MHz (24/2) */
 	MCFG_CPU_PROGRAM_MAP(funystrp_map)
@@ -632,22 +639,26 @@ static MACHINE_CONFIG_START( funystrp, splash_state )
 	MCFG_SCREEN_SIZE(64*8, 64*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 48*8-1, 2*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(splash_state, screen_update_funystrp)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(splash)
-	MCFG_PALETTE_LENGTH(2048)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", splash)
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
-
+	MCFG_MACHINE_START_OVERRIDE(splash_state, funystrp )
 	MCFG_MACHINE_RESET_OVERRIDE(splash_state, funystrp )
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("msm1", MSM5205, XTAL_400kHz)
-	MCFG_SOUND_CONFIG(msm_interface1)       /* Sample rate = 400kHz/64 */
+	MCFG_MSM5205_VCLK_CB(WRITELINE(splash_state, adpcm_int1))         /* interrupt function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)  /* 1 / 48 */       /* Sample rate = 400kHz/64 */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.80)
 
 	MCFG_SOUND_ADD("msm2", MSM5205, XTAL_400kHz)
-	MCFG_SOUND_CONFIG(msm_interface2)       /* Sample rate = 400kHz/96 */
+	MCFG_MSM5205_VCLK_CB(WRITELINE(splash_state, adpcm_int2))         /* interrupt function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S96_4B)  /* 1 / 96 */       /* Sample rate = 400kHz/96 */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.80)
 MACHINE_CONFIG_END
 
@@ -1035,59 +1046,337 @@ DRIVER_INIT_MEMBER(splash_state,rebus)
 
 
 
+
+READ16_MEMBER(splash_state::funystrp_protection_r)
+{
+	int pc = space.device().safe_pc();
+
+	int ofst = offset+(0x100000/2);
+
+//  logerror ("PROTR: %5.5x, pc: %5.5x\n", ofst*2, pc);
+
+	// don't interfere with ram check.
+	if (pc == 0x04770) return 0x00;
+	if (pc == 0x04788) return 0x55;
+
+	switch (ofst)
+	{
+		//-----------------------------------------------------------------
+		// sub $7ACC, $C7EE, subtractions, original value from 68k
+
+		case ((0x107001 / 2) + 0x0030): // $7ACE
+			m_funystrp_val = m_funystrp_ff3cc7_val & 0x7f;
+			return 0;
+
+		case ((0x107001 / 2) + 0x013e): // $7AFC
+			return (m_funystrp_val + 0x13) & 0xff;
+
+		case ((0x107001 / 2) + 0x0279): // $7B38
+			return (m_funystrp_val + 0x22) & 0xff;
+
+		case ((0x107001 / 2) + 0x0357): // $7B6E
+			return (m_funystrp_val + 0x44) & 0xff;
+
+		case ((0x107001 / 2) + 0x03b1): // $7BA4
+			return (m_funystrp_val + 0x6a) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $7E76, subtractions, original value from protection device
+
+		case ((0x110001 / 2) + 0x0013): // $7E80
+			m_funystrp_val = 0;
+			return 0;
+
+		case ((0x110001 / 2) + 0x0125): // $7E96
+			return (m_funystrp_val + 0x03) & 0xff;
+
+		case ((0x110001 / 2) + 0x0261): // $7ECE
+			return (m_funystrp_val + 0x08) & 0xff;
+
+		case ((0x110001 / 2) + 0x0322): // $7F00
+			return (m_funystrp_val + 0x12) & 0xff;
+
+		case ((0x110001 / 2) + 0x039b): // $7F36
+			return (m_funystrp_val + 0x70) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $7F70, $8038, $116E2, no subtractions, straight compare!, original value from 68k
+		// increase ff3cc8 value in sub $116e2
+
+		case ((0x100001 / 2) + 0x0010): // $7F72
+			m_funystrp_val = m_funystrp_ff3cc8_val;
+			return 0;
+
+		case ((0x100001 / 2) + 0x0123): // $7F9A
+			return (m_funystrp_val + 0x00) & 0xff;
+
+		case ((0x100001 / 2) + 0x0257): // $7FC4
+			return (m_funystrp_val + 0x00) & 0xff;
+
+		case ((0x100001 / 2) + 0x0312): // $7FEA
+			return (m_funystrp_val + 0x00) & 0xff;
+
+		case ((0x100001 / 2) + 0x0395): // $8010
+			// increment $ff3cc8 in $117A8
+			return (m_funystrp_val + 0x00) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $8522, subtractions, original value from protection device, weird cases
+
+		case ((0x104801 / 2) + 0x013A): // $8524
+			m_funystrp_val = 0;
+			return 0;
+
+		// this and above usually swapped... fooling the lazy bootlegger?
+		case ((0x104801 / 2) + 0x0017): // $8542
+			return (m_funystrp_val + 0x12) & 0xff;
+
+		// first case... weird?
+	//  case ((0x104801 / 2) + 0x013A): // $857E
+	//      return (m_funystrp_val + 0x00) & 0xff;
+
+		case ((0x104801 / 2) + 0x0277): // $85A4
+			return (m_funystrp_val + 0x04) & 0xff;
+
+		case ((0x104801 / 2) + 0x034b): // $85D6
+			return (m_funystrp_val + 0x37) & 0xff;
+
+		case ((0x104801 / 2) + 0x03ac): // $860E
+			return (m_funystrp_val + 0x77) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $88F8, subtractions, original value from protection device
+		// verified as working!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+		case ((0x127001 / 2) + 0x0045): // $88FA
+			m_funystrp_val = 0;
+			return 0;
+
+		case ((0x127001 / 2) + 0x0145): // $8918
+			return (m_funystrp_val + 0x01) & 0xff;
+
+		case ((0x127001 / 2) + 0x028B): // $894A
+			return (m_funystrp_val + 0x02) & 0xff;
+
+		case ((0x127001 / 2) + 0x0363): // $8982
+			return (m_funystrp_val + 0x03) & 0xff;
+
+		case ((0x127001 / 2) + 0x03BA): // $89B4
+			return (m_funystrp_val + 0x00) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $9DD2, subtractions, original value from protection device
+
+		case ((0x170001 / 2) + 0x006B): // $9DD4
+			m_funystrp_val = 0;
+			return 0;
+
+		case ((0x170001 / 2) + 0x0162): // $9DF2
+			return (m_funystrp_val + 0x00) & 0xff;
+
+		case ((0x170001 / 2) + 0x02A7): // $9E1E
+			return (m_funystrp_val + 0x7c) & 0xff;
+
+		case ((0x170001 / 2) + 0x0381): // $9E54
+			return (m_funystrp_val + 0x30) & 0xff;
+
+		case ((0x170001 / 2) + 0x03C7): // $9E8A
+			return (m_funystrp_val + 0x28) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $A944, subtractions, original value from protection device
+		// verified as working!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+		case ((0x177001 / 2) + 0x0079): // $A946
+			m_funystrp_val = 0;
+			return 0;
+
+		case ((0x177001 / 2) + 0x01A0): // $A964
+			return (m_funystrp_val + 0x02) & 0xff;
+
+		case ((0x177001 / 2) + 0x02B2): // $A99C
+			return (m_funystrp_val + 0x04) & 0xff;
+
+		case ((0x177001 / 2) + 0x039A): // $A9CE
+			return (m_funystrp_val + 0x25) & 0xff;
+
+		case ((0x177001 / 2) + 0x03D3): // $AA04
+			return (m_funystrp_val + 0x16) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $C5E4, subtractions, original value from 68k
+
+	//  these cases are already in sub $7ACC, last one is new!!
+	//  case ((0x107001 / 2) + 0x0030): // $7ACE
+	//      m_funystrp_val = m_funystrp_ff3cc7_val & 0x7f;
+	//      return 0;
+
+	//  case ((0x107001 / 2) + 0x013e): // $7AFC
+	//      return (m_funystrp_val + 0x13) & 0xff;
+
+	//  case ((0x107001 / 2) + 0x0279): // $7B38
+	//      return (m_funystrp_val + 0x22) & 0xff;
+
+	//  case ((0x107001 / 2) + 0x0357): // $7B6E
+	//      return (m_funystrp_val + 0x44) & 0xff;
+
+		case ((0x107001 / 2) + 0x0381): // $7BA4
+			return (m_funystrp_val + 0x6a) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $DBCE, subtractions, original value from protection device
+
+		case ((0x140001 / 2) + 0x0052): // $DBD0
+			m_funystrp_val = 0;
+			return 0;
+
+		case ((0x140001 / 2) + 0x015C): // $DBEE
+			return (m_funystrp_val + 0x15) & 0xff;
+
+		case ((0x140001 / 2) + 0x0293): // $DC2A
+			return (m_funystrp_val + 0x03) & 0xff;
+
+		case ((0x140001 / 2) + 0x0374): // $DC5C
+			return (m_funystrp_val + 0x55) & 0xff;
+
+		case ((0x140001 / 2) + 0x03C0): // $DC92
+			return (m_funystrp_val + 0x44) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $F72C, subtractions, original value from protection device,
+		// routine verified working!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+		case ((0x100001 / 2) + 0x0017): // $F72E
+			m_funystrp_val = 0;
+			return 0;
+
+		case ((0x100001 / 2) + 0x0127): // $F74C
+			return (m_funystrp_val + 0x17) & 0xff;
+
+		case ((0x110001 / 2) + 0x0263): // $F788
+			return (m_funystrp_val + 0x0f) & 0xff;
+
+		case ((0x110001 / 2) + 0x0324): // $F7BE
+			return (m_funystrp_val + 0x12) & 0xff;
+
+		case ((0x110001 / 2) + 0x0399): // $F7F4
+			return (m_funystrp_val + 0x70) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $F82E, subtractions, original value from protection device,
+
+		case ((0x100001 / 2) + 0x0013): // $F830
+			m_funystrp_val = 0;
+			return 0;
+
+		case ((0x100001 / 2) + 0x0125): // $F84E
+			return (m_funystrp_val + 0x17) & 0xff;
+
+	//  used in sub $7E76
+	//  case ((0x110001 / 2) + 0x0261): // $F88A
+	//      return (m_funystrp_val + 0x0f) & 0xff;
+
+	//  case ((0x110001 / 2) + 0x0322): // $F8C0
+	//      return (m_funystrp_val + 0x12) & 0xff;
+
+	//  case ((0x110001 / 2) + 0x039B): // $F8F6
+	//      return (m_funystrp_val + 0x70) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $10FE2, subtractions, original value from protection device
+		// routine is different from rest, unoptimized or just poorly coded?
+		// examine later to verify this is right
+
+		case ((0x105001 / 2) + 0x0021): // $10FF6
+			m_funystrp_val = 0;
+			return 0;
+
+		case ((0x105001 / 2) + 0x0131): // $1100C
+			return (m_funystrp_val + 0x51) & 0xff;
+
+		case ((0x105001 / 2) + 0x026a): // $11038
+			return (m_funystrp_val + 0x22) & 0xff;
+
+		case ((0x105001 / 2) + 0x0331): // $11060
+			return (m_funystrp_val + 0x00) & 0xff;
+
+		case ((0x105001 / 2) + 0x03ab): // $11078
+			return (m_funystrp_val + 0x03) & 0xff;
+
+		//-----------------------------------------------------------------
+		// sub $11F2C, subtractions, original value from protection device,
+		// routine is different from rest, unoptimized or just poorly coded?
+		// examine later to verify this is right
+
+		case ((0x183001 / 2) + 0x0088): // $11F3C
+			m_funystrp_val = 0;
+			return 0;
+
+		case ((0x183001 / 2) + 0x01A7): // $11F5A
+			return (m_funystrp_val + 0x09) & 0xff;
+
+		case ((0x183001 / 2) + 0x02C4): // $11F86
+			return (m_funystrp_val + 0x01) & 0xff;
+
+		case ((0x183001 / 2) + 0x03B3): // $11FAA
+			return (m_funystrp_val + 0x63) & 0xff;
+
+		case ((0x183001 / 2) + 0x03E9): // $11FD2
+			return (m_funystrp_val + 0x65) & 0xff;
+	}
+
+	return 0;
+}
+
+WRITE16_MEMBER(splash_state::funystrp_protection_w)
+{
+	int ofst = (0x100000/2)+offset;
+
+//  logerror ("PROTW: %5.5x, %4.4x, PC: %5.5x m: %4.4x\n", ofst*2, data, space.device().safe_pc(), mem_mask);
+
+//  if (ACCESSING_BITS_0_7) // ??
+	{
+		switch (ofst)
+		{
+			case (0x100000/2):
+				// on boot?
+			return;
+
+			case (0x1007e1/2):
+			case (0x1007e3/2):
+			// counters written here... ??
+			return;
+
+			case (0x1007e5/2):
+				m_funystrp_ff3cc8_val = data;
+			return;
+
+			case (0x1007e7/2):
+				m_funystrp_ff3cc7_val = data;
+			return;
+		}
+	}
+}
+
 DRIVER_INIT_MEMBER(splash_state,funystrp)
 {
-	UINT16 *ROM = (UINT16 *)memregion("maincpu")->base();
-
 	m_bitmap_type = 0;
 	m_sprite_attr2_shift = 0;
 
-	// initial protection checks, just after boot
-
-	ROM[0x04770/2] = 0x4e71;
-	ROM[0x04772/2] = 0x4e71;
-
-	// temporary solution - work in progress - will be turned into proper r/w handlers
-	// protection write -> read -> compare tests
-	// not all of them should always pass ( especially the ones that compares data read with ram variable )
-	// side effect of the above is broken (sometimes) sound
-	// there's stil problem with  (broken) gameplay = sometimes one (or more) dot is moved
-	// out of playfield (and placed on right part of screen ) and there's no way to complete the level
-	// game reads sprite coords directly from sprite ram and checks distance between player and each(!) dot or
-	// game object every frame
-	// most of the patched protection checks are very similar. when test fails, dot counter is altered.
-	// sometimes it's increased = level is impossible to complete, sometimes - cleared (and level ends
-	// immediately).
-
-	ROM[0x07b30/2] = 0x7001;
-	ROM[0x07ec6/2] = 0x7001;
-	ROM[0x07fbe/2] = 0x7001;
-	ROM[0x08060/2] = 0x7001;
-	ROM[0x08576/2] = 0x7001;
-	ROM[0x08948/2] = 0x7001;
-	ROM[0x09e16/2] = 0x7001;
-	ROM[0x0a994/2] = 0x7001;
-	ROM[0x0c648/2] = 0x7001;
-	ROM[0x0c852/2] = 0x7001;
-	ROM[0x0dc22/2] = 0x7001;
-	ROM[0x0f780/2] = 0x7001;
-	ROM[0x0f882/2] = 0x7001;
-	ROM[0x11032/2] = 0x7001;
-	ROM[0x11730/2] = 0x7001;
-	ROM[0x11f80/2] = 0x7001;
-
-	ROM = (UINT16 *)memregion("audiocpu")->base();
+	UINT16 *ROM = (UINT16 *)memregion("audiocpu")->base();
 
 	membank("sound_bank")->configure_entries(0, 16, &ROM[0x00000], 0x8000);
 
+	m_maincpu->space(AS_PROGRAM).install_write_handler(0x100000, 0x1fffff, write16_delegate(FUNC(splash_state::funystrp_protection_w), this));
+	m_maincpu->space(AS_PROGRAM).install_read_handler(0x100000, 0x1fffff, read16_delegate(FUNC(splash_state::funystrp_protection_r),this));
 }
 
-GAME( 1992, splash,   0,        splash,   splash, splash_state,   splash,   ROT0, "Gaelco",    "Splash! (Ver. 1.2 World)", 0 )
-GAME( 1992, splash10, splash,   splash,   splash, splash_state,   splash10, ROT0, "Gaelco",    "Splash! (Ver. 1.0 World)", 0 )
-GAME( 1992, paintlad, splash,   splash,   splash, splash_state,   splash,   ROT0, "Gaelco",    "Painted Lady (Splash) (Ver. 1.3 US)", 0 )
+GAME( 1992, splash,   0,        splash,   splash, splash_state,   splash,   ROT0, "Gaelco / OMK Software", "Splash! (Ver. 1.2 World)", GAME_SUPPORTS_SAVE )
+GAME( 1992, splash10, splash,   splash,   splash, splash_state,   splash10, ROT0, "Gaelco / OMK Software", "Splash! (Ver. 1.0 World)", GAME_SUPPORTS_SAVE )
+GAME( 1992, paintlad, splash,   splash,   splash, splash_state,   splash,   ROT0, "Gaelco / OMK Software", "Painted Lady (Splash) (Ver. 1.3 US)", GAME_SUPPORTS_SAVE )
 
-GAME( 1993, roldfrog, 0,        roldfrog, splash, splash_state,   roldfrog, ROT0, "Microhard", "The Return of Lady Frog (set 1)", 0)
-GAME( 1993, roldfroga,roldfrog, roldfrog, splash, splash_state,   roldfrog, ROT0, "Microhard", "The Return of Lady Frog (set 2)", 0 )
-GAME( 1995, rebus,    0,        roldfrog, splash, splash_state,   rebus,    ROT0, "Microhard", "Rebus", GAME_NOT_WORKING|GAME_UNEMULATED_PROTECTION|GAME_NO_SOUND )
-GAME( 199?, funystrp, 0,        funystrp, funystrp, splash_state, funystrp, ROT0, "Microhard / MagicGames", "Funny Strip", GAME_NOT_WORKING|GAME_UNEMULATED_PROTECTION )
-GAME( 199?, puckpepl, funystrp, funystrp, funystrp, splash_state, funystrp, ROT0, "Microhard", "Puck People", GAME_NOT_WORKING|GAME_UNEMULATED_PROTECTION )
+GAME( 1993, roldfrog, 0,        roldfrog, splash, splash_state,   roldfrog, ROT0, "Microhard", "The Return of Lady Frog (set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1993, roldfroga,roldfrog, roldfrog, splash, splash_state,   roldfrog, ROT0, "Microhard", "The Return of Lady Frog (set 2)", GAME_SUPPORTS_SAVE )
+GAME( 1995, rebus,    0,        roldfrog, splash, splash_state,   rebus,    ROT0, "Microhard", "Rebus", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_NO_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 199?, funystrp, 0,        funystrp, funystrp, splash_state, funystrp, ROT0, "Microhard / MagicGames", "Funny Strip", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_SUPPORTS_SAVE )
+GAME( 199?, puckpepl, funystrp, funystrp, funystrp, splash_state, funystrp, ROT0, "Microhard", "Puck People", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_SUPPORTS_SAVE )

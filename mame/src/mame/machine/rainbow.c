@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Coates
 /*************************************************************************
 
   Rainbow Islands C-Chip Protection
@@ -780,6 +782,8 @@ WRITE16_MEMBER(rbisland_state::rbisland_cchip_bank_w)
 
 WRITE16_MEMBER(rbisland_state::rbisland_cchip_ram_w)
 {
+	data &= mem_mask;
+
 	m_CRAM[m_current_bank][offset] = data;
 }
 
@@ -819,10 +823,10 @@ void rbisland_state::rbisland_cchip_init( int version )
 	{
 		m_CRAM[i] = auto_alloc_array(machine(), UINT8, 0x400);
 
-		state_save_register_item_pointer(machine(), "cchip", NULL, i, m_CRAM[i], 0x400);
+		save_pointer(m_CRAM[i], "cchip/m_CRAM[i]", 0x400, i);
 	}
 
-	state_save_register_item(machine(), "cchip", NULL, 0, m_current_bank);
+	save_item(m_current_bank, "cchip/m_current_bank");
 
 	machine().scheduler().timer_pulse(attotime::from_hz(60), timer_expired_delegate(FUNC(rbisland_state::cchip_timer),this));
 }

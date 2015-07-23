@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     BattleToads
@@ -59,9 +61,9 @@ WRITE16_MEMBER( btoads_state::display_control_w )
 	if (ACCESSING_BITS_8_15)
 	{
 		/* allow multiple changes during display */
-		int scanline = machine().primary_screen->vpos();
+		int scanline = m_screen->vpos();
 		if (scanline > 0)
-			machine().primary_screen->update_partial(scanline - 1);
+			m_screen->update_partial(scanline - 1);
 
 		/* bit 15 controls which page is rendered and which page is displayed */
 		if (data & 0x8000)
@@ -91,7 +93,7 @@ WRITE16_MEMBER( btoads_state::display_control_w )
 WRITE16_MEMBER( btoads_state::scroll0_w )
 {
 	/* allow multiple changes during display */
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 
 	/* upper bits are Y scroll, lower bits are X scroll */
 	if (ACCESSING_BITS_8_15)
@@ -104,7 +106,7 @@ WRITE16_MEMBER( btoads_state::scroll0_w )
 WRITE16_MEMBER( btoads_state::scroll1_w )
 {
 	/* allow multiple changes during display */
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 
 	/* upper bits are Y scroll, lower bits are X scroll */
 	if (ACCESSING_BITS_8_15)
@@ -257,7 +259,7 @@ void btoads_state::render_sprite_row(UINT16 *sprite_source, UINT32 address)
  *
  *************************************/
 
-void btoads_state::to_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_TO_SHIFTREG_CB_MEMBER(btoads_state::to_shiftreg)
 {
 	address &= ~0x40000000;
 
@@ -284,7 +286,7 @@ void btoads_state::to_shiftreg(address_space &space, UINT32 address, UINT16 *shi
 }
 
 
-void btoads_state::from_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_FROM_SHIFTREG_CB_MEMBER(btoads_state::from_shiftreg)
 {
 	address &= ~0x40000000;
 
@@ -316,7 +318,7 @@ void btoads_state::from_shiftreg(address_space &space, UINT32 address, UINT16 *s
  *
  *************************************/
 
-void btoads_state::scanline_update(screen_device &screen, bitmap_rgb32 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_RGB32_CB_MEMBER(btoads_state::scanline_update)
 {
 	UINT32 fulladdr = ((params->rowaddr << 16) | params->coladdr) >> 4;
 	UINT16 *bg0_base = &m_vram_bg0[(fulladdr + (m_yscroll0 << 10)) & 0x3fc00];

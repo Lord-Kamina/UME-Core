@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /***************************************************************************
 
   Thunder Zone / Desert Assault (c) 1991 Data East Corporation
@@ -134,8 +136,6 @@ Dip locations verified with US conversion kit manual.
 #include "sound/2203intf.h"
 #include "sound/2151intf.h"
 #include "sound/okim6295.h"
-#include "video/deco16ic.h"
-#include "video/decocomn.h"
 
 /**********************************************************************************/
 
@@ -217,25 +217,25 @@ READ16_MEMBER(dassault_state::shared_ram_r)
 static ADDRESS_MAP_START( dassault_map, AS_PROGRAM, 16, dassault_state )
 	AM_RANGE(0x000000, 0x07ffff) AM_ROM
 
-	AM_RANGE(0x100000, 0x103fff) AM_RAM_DEVWRITE_LEGACY("deco_common", decocomn_nonbuffered_palette_w) AM_SHARE("paletteram")
+	AM_RANGE(0x100000, 0x103fff) AM_RAM_DEVWRITE("deco_common", decocomn_device, nonbuffered_palette_w) AM_SHARE("paletteram")
 
 	AM_RANGE(0x140004, 0x140007) AM_WRITENOP /* ? */
 	AM_RANGE(0x180000, 0x180001) AM_WRITE(dassault_sound_w)
 
 	AM_RANGE(0x1c0000, 0x1c000f) AM_READ(dassault_control_r)
-	AM_RANGE(0x1c000a, 0x1c000b) AM_DEVWRITE_LEGACY("deco_common", decocomn_priority_w)
+	AM_RANGE(0x1c000a, 0x1c000b) AM_DEVWRITE("deco_common", decocomn_device, priority_w)
 	AM_RANGE(0x1c000c, 0x1c000d) AM_DEVWRITE("spriteram2", buffered_spriteram16_device, write)
 	AM_RANGE(0x1c000e, 0x1c000f) AM_WRITE(dassault_control_w)
 
-	AM_RANGE(0x200000, 0x201fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf1_data_r, deco16ic_pf1_data_w)
-	AM_RANGE(0x202000, 0x203fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf2_data_r, deco16ic_pf2_data_w)
+	AM_RANGE(0x200000, 0x201fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf1_data_r, pf1_data_w)
+	AM_RANGE(0x202000, 0x203fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf2_data_r, pf2_data_w)
 	AM_RANGE(0x212000, 0x212fff) AM_WRITEONLY AM_SHARE("pf2_rowscroll")
-	AM_RANGE(0x220000, 0x22000f) AM_DEVWRITE_LEGACY("tilegen1", deco16ic_pf_control_w)
+	AM_RANGE(0x220000, 0x22000f) AM_DEVWRITE("tilegen1", deco16ic_device, pf_control_w)
 
-	AM_RANGE(0x240000, 0x240fff) AM_DEVREADWRITE_LEGACY("tilegen2", deco16ic_pf1_data_r, deco16ic_pf1_data_w)
-	AM_RANGE(0x242000, 0x242fff) AM_DEVREADWRITE_LEGACY("tilegen2", deco16ic_pf2_data_r, deco16ic_pf2_data_w)
+	AM_RANGE(0x240000, 0x240fff) AM_DEVREADWRITE("tilegen2", deco16ic_device, pf1_data_r, pf1_data_w)
+	AM_RANGE(0x242000, 0x242fff) AM_DEVREADWRITE("tilegen2", deco16ic_device, pf2_data_r, pf2_data_w)
 	AM_RANGE(0x252000, 0x252fff) AM_WRITEONLY AM_SHARE("pf4_rowscroll")
-	AM_RANGE(0x260000, 0x26000f) AM_DEVWRITE_LEGACY("tilegen2", deco16ic_pf_control_w)
+	AM_RANGE(0x260000, 0x26000f) AM_DEVWRITE("tilegen2", deco16ic_device, pf_control_w)
 
 	AM_RANGE(0x3f8000, 0x3fbfff) AM_RAM AM_SHARE("ram") /* Main ram */
 	AM_RANGE(0x3fc000, 0x3fcfff) AM_RAM AM_SHARE("spriteram2") /* Spriteram (2nd) */
@@ -452,40 +452,10 @@ WRITE8_MEMBER(dassault_state::sound_bankswitch_w)
 
 /**********************************************************************************/
 
-static const decocomn_interface dassault_decocomn_intf =
-{
-	"screen",
-};
-
-static int dassault_bank_callback( const int bank )
+DECO16IC_BANK_CB_MEMBER(dassault_state::bank_callback)
 {
 	return ((bank >> 4) & 0xf) << 12;
 }
-
-static const deco16ic_interface dassault_deco16ic_tilegen1_intf =
-{
-	"screen",
-	0, 1,
-	0x0f, 0x0f, /* trans masks (default values) */
-	0, 16, /* color base (default values) */
-	0x0f, 0x0f, /* color masks (default values) */
-	dassault_bank_callback,
-	dassault_bank_callback,
-	0,1,
-};
-
-static const deco16ic_interface dassault_deco16ic_tilegen2_intf =
-{
-	"screen",
-	0, 1,
-	0x0f, 0x0f, /* trans masks (default values) */
-	0, 16, /* color base (default values) */
-	0x0f, 0x0f, /* color masks (default values) */
-	dassault_bank_callback,
-	dassault_bank_callback,
-	0,2,
-};
-
 
 static MACHINE_CONFIG_START( dassault, dassault_state )
 
@@ -513,22 +483,58 @@ static MACHINE_CONFIG_START( dassault, dassault_state )
 	MCFG_SCREEN_UPDATE_DRIVER(dassault_state, screen_update_dassault)
 
 
-	MCFG_GFXDECODE(dassault)
-	MCFG_PALETTE_LENGTH(4096)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", dassault)
+	MCFG_PALETTE_ADD("palette", 4096)
 
 	MCFG_BUFFERED_SPRITERAM16_ADD("spriteram")
 	MCFG_BUFFERED_SPRITERAM16_ADD("spriteram2")
 
-	MCFG_DECOCOMN_ADD("deco_common", dassault_decocomn_intf)
+	MCFG_DECOCOMN_ADD("deco_common")
+	MCFG_DECOCOMN_PALETTE("palette")
 
-	MCFG_DECO16IC_ADD("tilegen1", dassault_deco16ic_tilegen1_intf)
-	MCFG_DECO16IC_ADD("tilegen2", dassault_deco16ic_tilegen2_intf)
+	MCFG_DEVICE_ADD("tilegen1", DECO16IC, 0)
+	MCFG_DECO16IC_SPLIT(0)
+	MCFG_DECO16IC_WIDTH12(1)
+	MCFG_DECO16IC_PF1_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF2_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF1_COL_BANK(0)
+	MCFG_DECO16IC_PF2_COL_BANK(16)
+	MCFG_DECO16IC_PF1_COL_MASK(0x0f)
+	MCFG_DECO16IC_PF2_COL_MASK(0x0f)
+	MCFG_DECO16IC_BANK1_CB(dassault_state, bank_callback)
+	MCFG_DECO16IC_BANK2_CB(dassault_state, bank_callback)
+	MCFG_DECO16IC_PF12_8X8_BANK(0)
+	MCFG_DECO16IC_PF12_16X16_BANK(1)
+
+	MCFG_DECO16IC_GFXDECODE("gfxdecode")
+	MCFG_DECO16IC_PALETTE("palette")
+
+	MCFG_DEVICE_ADD("tilegen2", DECO16IC, 0)
+	MCFG_DECO16IC_SPLIT(0)
+	MCFG_DECO16IC_WIDTH12(1)
+	MCFG_DECO16IC_PF1_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF2_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF1_COL_BANK(0)
+	MCFG_DECO16IC_PF2_COL_BANK(16)
+	MCFG_DECO16IC_PF1_COL_MASK(0x0f)
+	MCFG_DECO16IC_PF2_COL_MASK(0x0f)
+	MCFG_DECO16IC_BANK1_CB(dassault_state, bank_callback)
+	MCFG_DECO16IC_BANK2_CB(dassault_state, bank_callback)
+	MCFG_DECO16IC_PF12_8X8_BANK(0)
+	MCFG_DECO16IC_PF12_16X16_BANK(2)
+
+	MCFG_DECO16IC_GFXDECODE("gfxdecode")
+	MCFG_DECO16IC_PALETTE("palette")
 
 	MCFG_DEVICE_ADD("spritegen1", DECO_SPRITE, 0)
-	decospr_device::set_gfx_region(*device, 3);
+	MCFG_DECO_SPRITE_GFX_REGION(3)
+	MCFG_DECO_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_DECO_SPRITE_PALETTE("palette")
 
 	MCFG_DEVICE_ADD("spritegen2", DECO_SPRITE, 0)
-	decospr_device::set_gfx_region(*device, 4);
+	MCFG_DECO_SPRITE_GFX_REGION(4)
+	MCFG_DECO_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_DECO_SPRITE_PALETTE("palette")
 
 
 	/* sound hardware */
@@ -970,34 +976,30 @@ DRIVER_INIT_MEMBER(dassault_state,dassault)
 {
 	const UINT8 *src = memregion("gfx1")->base();
 	UINT8 *dst = memregion("gfx2")->base();
-	UINT8 *tmp = auto_alloc_array(machine(), UINT8, 0x80000);
+	dynamic_buffer tmp(0x80000);
 
 	/* Playfield 4 also has access to the char graphics, make things easier
 	by just copying the chars to both banks (if I just used a different gfx
 	bank then the colours would be wrong). */
-	memcpy(tmp + 0x000000, dst + 0x80000, 0x80000);
-	memcpy(dst + 0x090000, tmp + 0x00000, 0x80000);
+	memcpy(&tmp[0x000000], dst + 0x80000, 0x80000);
+	memcpy(dst + 0x090000, &tmp[0x00000], 0x80000);
 	memcpy(dst + 0x080000, src + 0x00000, 0x10000);
 	memcpy(dst + 0x110000, src + 0x10000, 0x10000);
-
-	auto_free(machine(), tmp);
 }
 
 DRIVER_INIT_MEMBER(dassault_state,thndzone)
 {
 	const UINT8 *src = memregion("gfx1")->base();
 	UINT8 *dst = memregion("gfx2")->base();
-	UINT8 *tmp = auto_alloc_array(machine(), UINT8, 0x80000);
+	dynamic_buffer tmp(0x80000);
 
 	/* Playfield 4 also has access to the char graphics, make things easier
 	by just copying the chars to both banks (if I just used a different gfx
 	bank then the colours would be wrong). */
-	memcpy(tmp + 0x000000, dst + 0x80000, 0x80000);
-	memcpy(dst + 0x090000, tmp + 0x00000, 0x80000);
+	memcpy(&tmp[0x000000], dst + 0x80000, 0x80000);
+	memcpy(dst + 0x090000, &tmp[0x00000], 0x80000);
 	memcpy(dst + 0x080000, src + 0x00000, 0x10000);
 	memcpy(dst + 0x110000, src + 0x10000, 0x10000);
-
-	auto_free(machine(), tmp);
 }
 
 /**********************************************************************************/

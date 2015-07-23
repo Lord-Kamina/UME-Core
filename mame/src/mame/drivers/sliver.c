@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /*
 Sliver - Hollow Corp.1996
 driver by Tomasz Slanina
@@ -67,7 +69,7 @@ Notes:
 #include "sound/okim6295.h"
 #include "cpu/mcs51/mcs51.h"
 #include "video/ramdac.h"
-#include "../../lib/libjpeg/jpeglib.h"
+#include "libjpeg/jpeglib.h"
 
 
 #define FIFO_SIZE 1024
@@ -83,7 +85,8 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_colorram(*this, "colorram"),
-		m_audiocpu(*this, "audiocpu"){ }
+		m_audiocpu(*this, "audiocpu"),
+		m_screen(*this, "screen") { }
 
 	UINT16 m_io_offset;
 	UINT16 m_io_reg[IO_SIZE];
@@ -113,6 +116,7 @@ public:
 	DECLARE_WRITE16_MEMBER(io_data_w);
 	DECLARE_WRITE16_MEMBER(sound_w);
 	DECLARE_WRITE8_MEMBER(oki_setbank);
+	TIMER_DEVICE_CALLBACK_MEMBER(obj_irq_cb);
 	virtual void video_start();
 	UINT32 screen_update_sliver(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	void plot_pixel_rgb(int x, int y, UINT32 r, UINT32 g, UINT32 b);
@@ -120,6 +124,7 @@ public:
 	void blit_gfx();
 	void render_jpeg();
 	required_device<cpu_device> m_audiocpu;
+	required_device<screen_device> m_screen;
 };
 
 void sliver_state::plot_pixel_rgb(int x, int y, UINT32 r, UINT32 g, UINT32 b)
@@ -365,8 +370,8 @@ ADDRESS_MAP_END
 
 void sliver_state::video_start()
 {
-	machine().primary_screen->register_screen_bitmap(m_bitmap_bg);
-	machine().primary_screen->register_screen_bitmap(m_bitmap_fg);
+	m_screen->register_screen_bitmap(m_bitmap_bg);
+	m_screen->register_screen_bitmap(m_bitmap_fg);
 }
 
 UINT32 sliver_state::screen_update_sliver(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
@@ -452,23 +457,16 @@ static ADDRESS_MAP_START( ramdac_map, AS_0, 8, sliver_state )
 	AM_RANGE(0x000, 0x3ff) AM_RAM AM_SHARE("colorram")
 ADDRESS_MAP_END
 
-static RAMDAC_INTERFACE( ramdac_intf )
+TIMER_DEVICE_CALLBACK_MEMBER ( sliver_state::obj_irq_cb )
 {
-	0
-};
-
-static TIMER_DEVICE_CALLBACK ( obj_irq_cb )
-{
-	sliver_state *state = timer.machine().driver_data<sliver_state>();
-
-	state->m_maincpu->set_input_line(3, HOLD_LINE);
+	m_maincpu->set_input_line(3, HOLD_LINE);
 }
 
 static MACHINE_CONFIG_START( sliver, sliver_state )
 	MCFG_CPU_ADD("maincpu", M68000, 12000000)
 	MCFG_CPU_PROGRAM_MAP(sliver_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", sliver_state, irq4_line_hold)
-	MCFG_TIMER_ADD_PERIODIC("obj_actel", obj_irq_cb, attotime::from_hz(60)) /* unknown clock, causes "obj actel ready error" without this */
+	MCFG_TIMER_DRIVER_ADD_PERIODIC("obj_actel", sliver_state, obj_irq_cb, attotime::from_hz(60)) /* unknown clock, causes "obj actel ready error" without this */
 	// irq 2 valid but not used?
 
 	MCFG_CPU_ADD("audiocpu", I8051, 8000000)
@@ -482,7 +480,8 @@ static MACHINE_CONFIG_START( sliver, sliver_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 384-1-16, 0*8, 240-1)
 	MCFG_SCREEN_UPDATE_DRIVER(sliver_state, screen_update_sliver)
 
-	MCFG_RAMDAC_ADD("ramdac", ramdac_intf, ramdac_map)
+	MCFG_PALETTE_ADD("palette", 0x100)
+	MCFG_RAMDAC_ADD("ramdac", ramdac_map, "palette")
 
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")

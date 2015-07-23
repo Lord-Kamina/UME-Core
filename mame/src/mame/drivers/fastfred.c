@@ -1,10 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
   Fast Freddie/Jump Coaster hardware
   driver by Zsolt Vasvari
 
   TODO:
-  - remove protection hack
+  - remove protection hack (protection may be done by the 'H2' chip on the pcb)
 
 ***************************************************************************/
 
@@ -13,6 +15,14 @@
 #include "includes/fastfred.h"
 #include "sound/ay8910.h"
 
+
+void fastfred_state::machine_start()
+{
+	save_item(NAME(m_charbank));
+	save_item(NAME(m_colorbank));
+	save_item(NAME(m_nmi_mask));
+	save_item(NAME(m_sound_nmi_mask));
+}
 
 // This routine is a big hack, but the only way I can get the game working
 // without knowing anything about the way the protection chip works.
@@ -124,7 +134,8 @@ READ8_MEMBER(fastfred_state::boggy84_custom_io_r)
 
 MACHINE_START_MEMBER(fastfred_state,imago)
 {
-	machine().gfx[1]->set_source(m_imago_sprites);
+	machine_start();
+	m_gfxdecode->gfx(1)->set_source(m_imago_sprites);
 }
 
 WRITE8_MEMBER(fastfred_state::imago_dma_irq_w)
@@ -151,7 +162,7 @@ WRITE8_MEMBER(fastfred_state::imago_sprites_dma_w)
 	sprites_data = rom[m_imago_sprites_address + 0x2000*2 + m_imago_sprites_bank * 0x1000];
 	m_imago_sprites[offset + 0x800*2] = sprites_data;
 
-	machine().gfx[1]->mark_dirty(offset/32);
+	m_gfxdecode->gfx(1)->mark_dirty(offset/32);
 }
 
 READ8_MEMBER(fastfred_state::imago_sprites_offset_r)
@@ -620,8 +631,6 @@ static GFXDECODE_START( imago )
 	GFXDECODE_ENTRY( "gfx4", 0,      imago_char_1bpp, 0x140,  1 )
 GFXDECODE_END
 
-#define CLOCK 18432000  /* The crystal is 18.432MHz */
-
 INTERRUPT_GEN_MEMBER(fastfred_state::vblank_irq)
 {
 	if(m_nmi_mask)
@@ -637,11 +646,11 @@ INTERRUPT_GEN_MEMBER(fastfred_state::sound_timer_irq)
 static MACHINE_CONFIG_START( fastfred, fastfred_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", Z80, CLOCK/6)     /* 3.072 MHz */
+	MCFG_CPU_ADD("maincpu", Z80, XTAL_12_432MHz/4)   /* 3.108 MHz; xtal from pcb pics, divider not verified */
 	MCFG_CPU_PROGRAM_MAP(fastfred_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", fastfred_state,  vblank_irq)
 
-	MCFG_CPU_ADD("audiocpu", Z80, CLOCK/12)  /* 1.536 MHz */
+	MCFG_CPU_ADD("audiocpu", Z80, XTAL_12_432MHz/8)  /* 1.554 MHz; xtal from pcb pics, divider not verified */
 	MCFG_CPU_PROGRAM_MAP(sound_map)
 	MCFG_CPU_PERIODIC_INT_DRIVER(fastfred_state, sound_timer_irq, 4*60)
 
@@ -652,20 +661,22 @@ static MACHINE_CONFIG_START( fastfred, fastfred_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(fastfred_state, screen_update_fastfred)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(fastfred)
-	MCFG_PALETTE_LENGTH(32*8)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", fastfred)
 
-	MCFG_PALETTE_INIT_OVERRIDE(fastfred_state,fastfred)
+	MCFG_PALETTE_ADD("palette", 32*8)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256)
+	MCFG_PALETTE_INIT_OWNER(fastfred_state,fastfred)
 	MCFG_VIDEO_START_OVERRIDE(fastfred_state,fastfred)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SOUND_ADD("ay8910.1", AY8910, CLOCK/12)
+	MCFG_SOUND_ADD("ay8910.1", AY8910, XTAL_12_432MHz/8) /* 1.554 MHz; xtal from pcb pics, divider not verified */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_SOUND_ADD("ay8910.2", AY8910, CLOCK/12)
+	MCFG_SOUND_ADD("ay8910.2", AY8910, XTAL_12_432MHz/8) /* 1.554 MHz; xtal from pcb pics, divider not verified */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 MACHINE_CONFIG_END
 
@@ -678,7 +689,7 @@ static MACHINE_CONFIG_DERIVED( jumpcoas, fastfred )
 	MCFG_DEVICE_REMOVE("audiocpu")
 
 	/* video hardware */
-	MCFG_GFXDECODE(jumpcoas)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", jumpcoas)
 
 	/* sound hardware */
 	MCFG_DEVICE_REMOVE("ay8910.2")
@@ -693,8 +704,9 @@ static MACHINE_CONFIG_DERIVED( imago, fastfred )
 	MCFG_MACHINE_START_OVERRIDE(fastfred_state,imago)
 
 	/* video hardware */
-	MCFG_PALETTE_LENGTH(256+64+2) /* 256 for characters, 64 for the stars and 2 for the web */
-	MCFG_GFXDECODE(imago)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(256+64+2) /* 256 for characters, 64 for the stars and 2 for the web */
+	MCFG_GFXDECODE_MODIFY("gfxdecode", imago)
 
 	MCFG_VIDEO_START_OVERRIDE(fastfred_state,imago)
 	MCFG_SCREEN_MODIFY("screen")
@@ -1038,13 +1050,13 @@ DRIVER_INIT_MEMBER(fastfred_state,imago)
 	m_hardware_type = 3;
 }
 
-GAME( 1982, flyboy,   0,        fastfred, flyboy, fastfred_state,   flyboy,   ROT90, "Kaneko", "Fly-Boy", 0 )
-GAME( 1982, flyboyb,  flyboy,   fastfred, flyboy, fastfred_state,   flyboyb,  ROT90, "bootleg", "Fly-Boy (bootleg)", 0 )
-GAME( 1982, fastfred, flyboy,   fastfred, fastfred, fastfred_state, fastfred, ROT90, "Kaneko (Atari license)", "Fast Freddie", 0 )
-GAME( 1983, jumpcoas, 0,        jumpcoas, jumpcoas, fastfred_state, jumpcoas, ROT90, "Kaneko", "Jump Coaster", 0 )
-GAME( 1983, jumpcoast,jumpcoas, jumpcoas, jumpcoas, fastfred_state, jumpcoas, ROT90, "Kaneko (Taito license)", "Jump Coaster (Taito)", 0 )
-GAME( 1983, boggy84,  0,        jumpcoas, boggy84, fastfred_state,  boggy84,  ROT90, "Kaneko", "Boggy '84", 0 )
-GAME( 1983, boggy84b, boggy84,  jumpcoas, boggy84, fastfred_state,  boggy84b, ROT90, "bootleg (Eddie's Games)", "Boggy '84 (bootleg)", 0 )
-GAME( 1986, redrobin, 0,        fastfred, redrobin, fastfred_state, flyboyb,  ROT90, "Elettronolo", "Red Robin", 0 )
+GAME( 1982, flyboy,   0,        fastfred, flyboy, fastfred_state,   flyboy,   ROT90, "Kaneko", "Fly-Boy", GAME_SUPPORTS_SAVE )
+GAME( 1982, flyboyb,  flyboy,   fastfred, flyboy, fastfred_state,   flyboyb,  ROT90, "bootleg", "Fly-Boy (bootleg)", GAME_SUPPORTS_SAVE )
+GAME( 1982, fastfred, flyboy,   fastfred, fastfred, fastfred_state, fastfred, ROT90, "Kaneko (Atari license)", "Fast Freddie", GAME_SUPPORTS_SAVE )
+GAME( 1983, jumpcoas, 0,        jumpcoas, jumpcoas, fastfred_state, jumpcoas, ROT90, "Kaneko", "Jump Coaster", GAME_SUPPORTS_SAVE )
+GAME( 1983, jumpcoast,jumpcoas, jumpcoas, jumpcoas, fastfred_state, jumpcoas, ROT90, "Kaneko (Taito license)", "Jump Coaster (Taito)", GAME_SUPPORTS_SAVE )
+GAME( 1983, boggy84,  0,        jumpcoas, boggy84, fastfred_state,  boggy84,  ROT90, "Kaneko", "Boggy '84", GAME_SUPPORTS_SAVE )
+GAME( 1983, boggy84b, boggy84,  jumpcoas, boggy84, fastfred_state,  boggy84b, ROT90, "bootleg (Eddie's Games)", "Boggy '84 (bootleg)", GAME_SUPPORTS_SAVE )
+GAME( 1986, redrobin, 0,        fastfred, redrobin, fastfred_state, flyboyb,  ROT90, "Elettronolo", "Red Robin", GAME_SUPPORTS_SAVE )
 GAME( 1984, imago,    0,        imago,    imago, fastfred_state,    imago,    ROT90, "Acom", "Imago (cocktail set)", 0 )
 GAME( 1983, imagoa,   imago,    imago,    imagoa, fastfred_state,   imago,    ROT90, "Acom", "Imago (no cocktail set)", 0 )

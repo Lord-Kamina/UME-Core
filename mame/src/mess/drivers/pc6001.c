@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese
 /*******************************************************************************************************************************************************
 
     PC-6001 series (c) 1981 NEC
@@ -11,7 +13,7 @@
       do some tight synch between the master CPU and a code simulation,but I think
       it's not worth the effort...
     - Identify and hook-up the FDC device, apparently PC-6001 and PC-6601 doesn't even use the same thing;
-    - PC-6601: mon r-0 type games doesn't seem to work at all on this version?
+    - PC-6601: mon r-0 type games doesn't seem to work at all on this system?
     - PC-6001SR: get it to boot, also implement MK-2 compatibility mode (it changes the memory map to behave like the older versions)
     - Currently rewriting the video part without the MC6847 for two reasons:
         A) the later models have a custom video chip in the place of the MC6847,
@@ -27,7 +29,7 @@
                             nothing is shown on screen, other emus behaves the same, bad dump?
     - Dawn Patrol (cart): presumably too slow;
     (Mk2 mode 5 games)
-    - 3D Golf Simulation Super Version: gameplay / inputs looks broken
+    - 3D Golf Simulation Super Version: gameplay / inputs seems broken
     - American Truck: Screen is offset at the loading screen, loading bug?
     - Castle Excellent: copyright text drawing is quite bogus, scans text in vertical instead of horizontal?
     - Dezeni Land (ALL versions) / Hurry Fox 1/2: asks you to "load something", can't do it with current cassette kludge, also, for Dezeni Land(s) keyboard irqs
@@ -128,10 +130,12 @@ irq vector 0x26:                                                                
 #include "machine/i8251.h"
 #include "video/mc6847.h"
 #include "sound/ay8910.h"
+#include "sound/upd7752.h"
 #include "sound/wave.h"
 
 #include "imagedev/cassette.h"
-#include "imagedev/cartslot.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 #include "formats/p6001_cas.h"
 
 
@@ -144,10 +148,10 @@ public:
 		m_ram(*this, "ram"),
 		m_maincpu(*this, "maincpu"),
 		m_cassette(*this, "cassette"),
+		m_cas_hack(*this, "cas_hack"),
+		m_cart(*this, "cartslot"),
 		m_region_maincpu(*this, "maincpu"),
 		m_region_gfx1(*this, "gfx1"),
-		m_region_cas(*this, "cas"),
-		m_region_cart_img(*this, "cart_img"),
 		m_io_mode4_dsw(*this, "MODE4_DSW"),
 		m_io_p1(*this, "P1"),
 		m_io_p2(*this, "P2"),
@@ -162,7 +166,8 @@ public:
 		m_bank5(*this, "bank5"),
 		m_bank6(*this, "bank6"),
 		m_bank7(*this, "bank7"),
-		m_bank8(*this, "bank8") { }
+		m_bank8(*this, "bank8"),
+		m_palette(*this, "palette")  { }
 
 	required_device<i8255_device> m_ppi;
 
@@ -217,8 +222,6 @@ public:
 	DECLARE_WRITE8_MEMBER(pc6001m2_system_latch_w);
 	DECLARE_WRITE8_MEMBER(pc6001m2_vram_bank_w);
 	DECLARE_WRITE8_MEMBER(pc6001m2_col_bank_w);
-	DECLARE_READ8_MEMBER(upd7752_reg_r);
-	DECLARE_WRITE8_MEMBER(upd7752_reg_w);
 	DECLARE_WRITE8_MEMBER(pc6001m2_0xf3_w);
 	DECLARE_WRITE8_MEMBER(pc6001m2_timer_adj_w);
 	DECLARE_WRITE8_MEMBER(pc6001m2_timer_irqv_w);
@@ -246,7 +249,7 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(pc6001);
 	DECLARE_MACHINE_RESET(pc6001m2);
 	DECLARE_PALETTE_INIT(pc6001m2);
 	DECLARE_MACHINE_RESET(pc6001sr);
@@ -264,15 +267,14 @@ public:
 	DECLARE_WRITE8_MEMBER(pc6001_8255_portb_w);
 	DECLARE_WRITE8_MEMBER(pc6001_8255_portc_w);
 	DECLARE_READ8_MEMBER(pc6001_8255_portc_r);
-	DECLARE_DEVICE_IMAGE_LOAD_MEMBER(pc6001_cass);
 	IRQ_CALLBACK_MEMBER(pc6001_irq_callback);
 protected:
 	required_device<cpu_device> m_maincpu;
-	required_device<device_t> m_cassette;
+	optional_device<cassette_image_device> m_cassette;
+	optional_device<generic_slot_device> m_cas_hack;
+	required_device<generic_slot_device> m_cart;
 	required_memory_region m_region_maincpu;
 	required_memory_region m_region_gfx1;
-	required_memory_region m_region_cas;
-	required_memory_region m_region_cart_img;
 	required_ioport m_io_mode4_dsw;
 	required_ioport m_io_p1;
 	required_ioport m_io_p2;
@@ -288,6 +290,9 @@ protected:
 	optional_memory_bank m_bank6;
 	optional_memory_bank m_bank7;
 	optional_memory_bank m_bank8;
+	required_device<palette_device> m_palette;
+
+	memory_region *m_cart_rom;
 
 	void draw_gfx_mode4(bitmap_ind16 &bitmap,const rectangle &cliprect,int attr);
 	void draw_bitmap_2bpp(bitmap_ind16 &bitmap,const rectangle &cliprect, int attr);
@@ -361,7 +366,7 @@ void pc6001_state::draw_gfx_mode4(bitmap_ind16 &bitmap,const rectangle &cliprect
 
 					color = ((tile)>>(7-xi) & 1) ? fgcol : 0;
 
-					bitmap.pix16((y+24), (x*8+xi)+32) = machine().pens[color];
+					bitmap.pix16((y+24), (x*8+xi)+32) = m_palette->pen(color);
 				}
 			}
 			else
@@ -372,8 +377,8 @@ void pc6001_state::draw_gfx_mode4(bitmap_ind16 &bitmap,const rectangle &cliprect
 
 					color = (attr & 2) ? (pen_wattr[col_setting-1][fgcol]) : (pen_gattr[col_setting-1][fgcol]);
 
-					bitmap.pix16((y+24), ((x*8+xi*2)+0)+32) = machine().pens[color];
-					bitmap.pix16((y+24), ((x*8+xi*2)+1)+32) = machine().pens[color];
+					bitmap.pix16((y+24), ((x*8+xi*2)+0)+32) = m_palette->pen(color);
+					bitmap.pix16((y+24), ((x*8+xi*2)+1)+32) = m_palette->pen(color);
 				}
 			}
 		}
@@ -406,7 +411,7 @@ void pc6001_state::draw_bitmap_2bpp(bitmap_ind16 &bitmap,const rectangle &clipre
 						color = ((tile >> i) & 3)+8;
 						color+= col_bank;
 
-						bitmap.pix16(((y*shrink_y+yi)+24), (x*shrink_x+((shrink_x-1)-xi))+32) = machine().pens[color];
+						bitmap.pix16(((y*shrink_y+yi)+24), (x*shrink_x+((shrink_x-1)-xi))+32) = m_palette->pen(color);
 					}
 				}
 			}
@@ -429,9 +434,9 @@ void pc6001_state::draw_bitmap_2bpp(bitmap_ind16 &bitmap,const rectangle &clipre
 						color = ((tile >> i) & 3)+8;
 						color+= col_bank;
 
-						bitmap.pix16((((y+0)*shrink_y+yi)+24), (x*shrink_x+((shrink_x-1)-xi))+32) = machine().pens[color];
-						bitmap.pix16((((y+1)*shrink_y+yi)+24), (x*shrink_x+((shrink_x-1)-xi))+32) = machine().pens[color];
-						bitmap.pix16((((y+2)*shrink_y+yi)+24), (x*shrink_x+((shrink_x-1)-xi))+32) = machine().pens[color];
+						bitmap.pix16((((y+0)*shrink_y+yi)+24), (x*shrink_x+((shrink_x-1)-xi))+32) = m_palette->pen(color);
+						bitmap.pix16((((y+1)*shrink_y+yi)+24), (x*shrink_x+((shrink_x-1)-xi))+32) = m_palette->pen(color);
+						bitmap.pix16((((y+2)*shrink_y+yi)+24), (x*shrink_x+((shrink_x-1)-xi))+32) = m_palette->pen(color);
 					}
 				}
 			}
@@ -466,7 +471,7 @@ void pc6001_state::draw_tile_3bpp(bitmap_ind16 &bitmap,const rectangle &cliprect
 
 			color = ((tile >> i) & 1) ? pen+8 : 0;
 
-			bitmap.pix16(((y*12+(11-yi))+24), (x*8+(7-xi))+32) = machine().pens[color];
+			bitmap.pix16(((y*12+(11-yi))+24), (x*8+(7-xi))+32) = m_palette->pen(color);
 		}
 	}
 }
@@ -502,7 +507,7 @@ void pc6001_state::draw_tile_text(bitmap_ind16 &bitmap,const rectangle &cliprect
 					color = pen ? fgcol : 0;
 			}
 
-			bitmap.pix16(((y*12+yi)+24), (x*8+xi)+32) = machine().pens[color];
+			bitmap.pix16(((y*12+yi)+24), (x*8+xi)+32) = m_palette->pen(color);
 		}
 	}
 }
@@ -524,7 +529,7 @@ void pc6001_state::draw_border(bitmap_ind16 &bitmap,const rectangle &cliprect,in
 			else
 				color = 0; //FIXME: other modes not yet checked
 
-			bitmap.pix16(y, x) = machine().pens[color];
+			bitmap.pix16(y, x) = m_palette->pen(color);
 		}
 	}
 }
@@ -616,9 +621,9 @@ UINT32 pc6001_state::screen_update_pc6001m2(screen_device &screen, bitmap_ind16 
 					color |= ((pen[1] & 2) << 2);
 
 					if (cliprect.contains((x+i)*2+0, y))
-						bitmap.pix16(y, (x+i)*2+0) = machine().pens[color];
+						bitmap.pix16(y, (x+i)*2+0) = m_palette->pen(color);
 					if (cliprect.contains((x+i)*2+1, y))
-						bitmap.pix16(y, (x+i)*2+1) = machine().pens[color];
+						bitmap.pix16(y, (x+i)*2+1) = m_palette->pen(color);
 				}
 
 				count++;
@@ -664,7 +669,7 @@ UINT32 pc6001_state::screen_update_pc6001m2(screen_device &screen, bitmap_ind16 
 					}
 
 					if (cliprect.contains(x+i, y))
-						bitmap.pix16(y, (x+i)) = machine().pens[color];
+						bitmap.pix16(y, (x+i)) = m_palette->pen(color);
 				}
 
 				count++;
@@ -704,7 +709,7 @@ UINT32 pc6001_state::screen_update_pc6001m2(screen_device &screen, bitmap_ind16 
 						color = pen ? fgcol : bgcol;
 
 						if (cliprect.contains(x*8+xi, y*12+yi))
-							bitmap.pix16(((y*12+yi)), (x*8+xi)) = machine().pens[color];
+							bitmap.pix16(((y*12+yi)), (x*8+xi)) = m_palette->pen(color);
 					}
 				}
 			}
@@ -748,7 +753,7 @@ UINT32 pc6001_state::screen_update_pc6001sr(screen_device &screen, bitmap_ind16 
 						color = pen ? fgcol : bgcol;
 
 						if (cliprect.contains(x*8+xi, y*12+yi))
-							bitmap.pix16(((y*12+yi)), (x*8+xi)) = machine().pens[color];
+							bitmap.pix16(((y*12+yi)), (x*8+xi)) = m_palette->pen(color);
 					}
 				}
 			}
@@ -767,42 +772,42 @@ UINT32 pc6001_state::screen_update_pc6001sr(screen_device &screen, bitmap_ind16 
 				color = m_video_ram[count] & 0x0f;
 
 				if (cliprect.contains(x+0, y+0))
-					bitmap.pix16((y+0), (x+0)) = machine().pens[color+0x10];
+					bitmap.pix16((y+0), (x+0)) = m_palette->pen(color+0x10);
 
 				color = (m_video_ram[count] & 0xf0) >> 4;
 
 				if (cliprect.contains(x+1, y+0))
-					bitmap.pix16((y+0), (x+1)) = machine().pens[color+0x10];
+					bitmap.pix16((y+0), (x+1)) = m_palette->pen(color+0x10);
 
 				color = m_video_ram[count+1] & 0x0f;
 
 				if (cliprect.contains(x+2, y+0))
-					bitmap.pix16((y+0), (x+2)) = machine().pens[color+0x10];
+					bitmap.pix16((y+0), (x+2)) = m_palette->pen(color+0x10);
 
 				color = (m_video_ram[count+1] & 0xf0) >> 4;
 
 				if (cliprect.contains(x+3, y+0))
-					bitmap.pix16((y+0), (x+3)) = machine().pens[color+0x10];
+					bitmap.pix16((y+0), (x+3)) = m_palette->pen(color+0x10);
 
 				color = m_video_ram[count+2] & 0x0f;
 
 				if (cliprect.contains(x+0, y+1))
-					bitmap.pix16((y+1), (x+0)) = machine().pens[color+0x10];
+					bitmap.pix16((y+1), (x+0)) = m_palette->pen(color+0x10);
 
 				color = (m_video_ram[count+2] & 0xf0) >> 4;
 
 				if (cliprect.contains(x+1, y+1))
-					bitmap.pix16((y+1), (x+1)) = machine().pens[color+0x10];
+					bitmap.pix16((y+1), (x+1)) = m_palette->pen(color+0x10);
 
 				color = m_video_ram[count+3] & 0x0f;
 
 				if (cliprect.contains(x+2, y+1))
-					bitmap.pix16((y+1), (x+2)) = machine().pens[color+0x10];
+					bitmap.pix16((y+1), (x+2)) = m_palette->pen(color+0x10);
 
 				color = (m_video_ram[count+3] & 0xf0) >> 4;
 
 				if (cliprect.contains(x+3, y+1))
-					bitmap.pix16((y+1), (x+3)) = machine().pens[color+0x10];
+					bitmap.pix16((y+1), (x+3)) = m_palette->pen(color+0x10);
 
 
 				count+=4;
@@ -903,15 +908,12 @@ WRITE8_MEMBER(pc6001_state::nec_ppi8255_w)
 		m_port_c_8255 |= 0xa8;
 
 		{
-			UINT8 *gfx_data = m_region_gfx1->base();
-			UINT8 *ext_rom = m_region_cart_img->base();
-
 			//printf("%02x\n",data);
 
-			if((data & 0x0f) == 0x05)
-				m_bank1->set_base(&ext_rom[0x2000]);
-			if((data & 0x0f) == 0x04)
-				m_bank1->set_base(&gfx_data[0]);
+			if ((data & 0x0f) == 0x05 && m_cart_rom)
+				m_bank1->set_base(m_cart_rom->base() + 0x2000);
+			if ((data & 0x0f) == 0x04)
+				m_bank1->set_base(m_region_gfx1->base());
 		}
 	}
 	m_ppi->write(space,offset,data);
@@ -920,7 +922,7 @@ WRITE8_MEMBER(pc6001_state::nec_ppi8255_w)
 static ADDRESS_MAP_START(pc6001_map, AS_PROGRAM, 8, pc6001_state )
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x0000, 0x3fff) AM_ROM AM_WRITENOP
-	AM_RANGE(0x4000, 0x5fff) AM_ROM AM_REGION("cart_img",0)
+	//AM_RANGE(0x4000, 0x5fff)      // mapped by the cartslot
 	AM_RANGE(0x6000, 0x7fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x8000, 0xffff) AM_RAM AM_SHARE("ram")
 ADDRESS_MAP_END
@@ -1334,14 +1336,14 @@ WRITE8_MEMBER(pc6001_state::pc6001m2_vram_bank_w)
 	{
 		/* Apparently bitmap modes changes the screen res to 320 x 200 */
 		{
-			rectangle visarea = machine().primary_screen->visible_area();
+			rectangle visarea = machine().first_screen()->visible_area();
 			int y_height;
 
 			y_height = (m_exgfx_bitmap_mode || m_exgfx_2bpp_mode) ? 200 : 240;
 
 			visarea.set(0, (320) - 1, 0, (y_height) - 1);
 
-			machine().primary_screen->configure(320, 240, visarea, machine().primary_screen->frame_period().attoseconds);
+			machine().first_screen()->configure(320, 240, visarea, machine().first_screen()->frame_period().attoseconds);
 		}
 	}
 
@@ -1355,44 +1357,6 @@ WRITE8_MEMBER(pc6001_state::pc6001m2_col_bank_w)
 	m_bgcol_bank = (data & 7);
 }
 
-/* voice synth is a NEC uPD7752 sound chip (currently unemulated) */
-READ8_MEMBER(pc6001_state::upd7752_reg_r)
-{
-	switch(offset & 3)
-	{
-		//[0x00]: status register
-		//x--- ---- BSY busy status (1) processing (0) stopped
-		//-x-- ---- REQ audio parameter (1) input request (0) prohibited (???)
-		//--x- ---- ~INT / EXT message data (1) Outside (0) Inside
-		//---x ---- ERR error flag
-		case 0x00: return 0x60;
-		//[0x02]: port 0xe2 latch?
-		case 0x02: return 0xff;
-		//[0x03]: port 0xe3 latch?
-		case 0x03: return 0xff;
-	}
-	return 0xff;
-}
-
-WRITE8_MEMBER(pc6001_state::upd7752_reg_w)
-{
-	switch(offset & 3)
-	{
-		// [0x00]: audio parameter transfer
-
-		// [0x02]: mode set
-		// ---- -x-- Frame periodic analysis (0) 10 ms / frame (1) 20 ms / frame
-		// ---- --xx Utterance (tempo?) speed
-		//        00 : NORMAL SPEED
-		//        01 : SLOW SPEED
-		//        10 : FAST SPEED
-		//        11 : Setting prohibited
-
-		// case 0x02:
-
-		// case 0x03: command set
-	}
-}
 
 WRITE8_MEMBER(pc6001_state::pc6001m2_0xf3_w)
 {
@@ -1480,7 +1444,7 @@ static ADDRESS_MAP_START( pc6001m2_io , AS_IO, 8, pc6001_state )
 
 	AM_RANGE(0xd0, 0xd3) AM_MIRROR(0x0c) AM_NOP // disk device
 
-	AM_RANGE(0xe0, 0xe3) AM_MIRROR(0x0c) AM_READWRITE(upd7752_reg_r,upd7752_reg_w)
+	AM_RANGE(0xe0, 0xe3) AM_MIRROR(0x0c) AM_DEVREADWRITE("upd7752", upd7752_device, read, write)
 
 	AM_RANGE(0xf0, 0xf0) AM_READWRITE(pc6001m2_bank_r0_r,pc6001m2_bank_r0_w)
 	AM_RANGE(0xf1, 0xf1) AM_READWRITE(pc6001m2_bank_r1_r,pc6001m2_bank_r1_w)
@@ -1527,7 +1491,7 @@ static ADDRESS_MAP_START( pc6601_io , AS_IO, 8, pc6001_state )
 
 	AM_RANGE(0xd0, 0xdf) AM_READWRITE(pc6601_fdc_r,pc6601_fdc_w) // disk device
 
-	AM_RANGE(0xe0, 0xe3) AM_MIRROR(0x0c) AM_READWRITE(upd7752_reg_r,upd7752_reg_w)
+	AM_RANGE(0xe0, 0xe3) AM_MIRROR(0x0c) AM_DEVREADWRITE("upd7752", upd7752_device, read, write)
 
 	AM_RANGE(0xf0, 0xf0) AM_READWRITE(pc6001m2_bank_r0_r,pc6001m2_bank_r0_w)
 	AM_RANGE(0xf1, 0xf1) AM_READWRITE(pc6001m2_bank_r1_r,pc6001m2_bank_r1_w)
@@ -1674,15 +1638,12 @@ WRITE8_MEMBER(pc6001_state::necsr_ppi8255_w)
 
 		if(0)
 		{
-			UINT8 *gfx_data = m_region_gfx1->base();
-			UINT8 *ext_rom = m_region_cart_img->base();
-
 			//printf("%02x\n",data);
 
-			if((data & 0x0f) == 0x05)
-				m_bank1->set_base(&ext_rom[0x2000]);
-			if((data & 0x0f) == 0x04)
-				m_bank1->set_base(&gfx_data[0]);
+			if ((data & 0x0f) == 0x05 && m_cart_rom)
+				m_bank1->set_base(m_cart_rom->base() + 0x2000);
+			if ((data & 0x0f) == 0x04)
+				m_bank1->set_base(m_region_gfx1->base());
 		}
 	}
 	m_ppi->write(space,offset,data);
@@ -1731,7 +1692,7 @@ static ADDRESS_MAP_START( pc6001sr_io , AS_IO, 8, pc6001_state )
 
 	AM_RANGE(0xd0, 0xdf) AM_READWRITE(pc6601_fdc_r,pc6601_fdc_w) // disk device
 
-	AM_RANGE(0xe0, 0xe3) AM_MIRROR(0x0c) AM_READWRITE(upd7752_reg_r,upd7752_reg_w)
+	AM_RANGE(0xe0, 0xe3) AM_MIRROR(0x0c) AM_DEVREADWRITE("upd7752", upd7752_device, read, write)
 
 //  AM_RANGE(0xf0, 0xf0) AM_READWRITE(pc6001m2_bank_r0_r,pc6001m2_bank_r0_w)
 //  AM_RANGE(0xf1, 0xf1) AM_READWRITE(pc6001m2_bank_r1_r,pc6001m2_bank_r1_w)
@@ -1943,42 +1904,6 @@ READ8_MEMBER(pc6001_state::pc6001_8255_portc_r)
 	return 0x88;
 }
 
-
-
-static I8255_INTERFACE( pc6001_ppi8255_interface )
-{
-	DEVCB_DRIVER_MEMBER(pc6001_state,pc6001_8255_porta_r),
-	DEVCB_DRIVER_MEMBER(pc6001_state,pc6001_8255_porta_w),
-	DEVCB_DRIVER_MEMBER(pc6001_state,pc6001_8255_portb_r),
-	DEVCB_DRIVER_MEMBER(pc6001_state,pc6001_8255_portb_w),
-	DEVCB_DRIVER_MEMBER(pc6001_state,pc6001_8255_portc_r),
-	DEVCB_DRIVER_MEMBER(pc6001_state,pc6001_8255_portc_w)
-};
-
-static const i8251_interface pc6001_usart_interface=
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
-static const ay8910_interface pc6001_ay_interface =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("P1"),
-	DEVCB_INPUT_PORT("P2"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 UINT8 pc6001_state::check_keyboard_press()
 {
 	ioport_port *ports[3] = { m_io_key1, m_io_key2, m_io_key3 };
@@ -2065,27 +1990,26 @@ TIMER_DEVICE_CALLBACK_MEMBER(pc6001_state::cassette_callback)
 	if(m_cas_switch == 1)
 	{
 		#if 0
-		static UINT8 cas_data_i = 0x80,cas_data_poll;
-		//m_cur_keycode = gfx_data[m_cas_offset++];
-		if(m_cassette->input() > 0.03)
-			cas_data_poll|= cas_data_i;
-		else
-			cas_data_poll&=~cas_data_i;
-		if(cas_data_i == 1)
-		{
-			m_cur_keycode = cas_data_poll;
-			cas_data_i = 0x80;
-			/* data ready, poll irq */
-			m_irq_vector = 0x08;
-			m_maincpu->set_input_line(0, ASSERT_LINE);
-		}
-		else
-			cas_data_i>>=1;
+			static UINT8 cas_data_i = 0x80,cas_data_poll;
+			//m_cur_keycode = gfx_data[m_cas_offset++];
+			if(m_cassette->input() > 0.03)
+				cas_data_poll|= cas_data_i;
+			else
+				cas_data_poll&=~cas_data_i;
+			if(cas_data_i == 1)
+			{
+				m_cur_keycode = cas_data_poll;
+				cas_data_i = 0x80;
+				/* data ready, poll irq */
+				m_irq_vector = 0x08;
+				m_maincpu->set_input_line(0, ASSERT_LINE);
+			}
+			else
+				cas_data_i>>=1;
 		#else
-			UINT8 *cas_data = m_region_cas->base();
-
-			m_cur_keycode = cas_data[m_cas_offset++];
-			popmessage("%04x %04x",m_cas_offset,m_cas_maxsize);
+			address_space &space = m_maincpu->space(AS_PROGRAM);
+			m_cur_keycode = m_cas_hack->read_rom(space, m_cas_offset++);
+			popmessage("%04x %04x", m_cas_offset, m_cas_maxsize);
 			if(m_cas_offset > m_cas_maxsize)
 			{
 				m_cas_offset = 0;
@@ -2149,15 +2073,19 @@ void pc6001_state::machine_start()
 
 void pc6001_state::machine_reset()
 {
-	UINT8 *work_ram = m_region_maincpu->base();
+	m_video_ram = m_region_maincpu->base() + 0xc000;
 
-	m_video_ram =  work_ram + 0xc000;
+	if (m_cart->exists())
+		m_maincpu->space(AS_PROGRAM).install_read_handler(0x4000, 0x5fff, read8_delegate(FUNC(generic_slot_device::read_rom),(generic_slot_device*)m_cart));
+
+	std::string region_tag;
+	m_cart_rom = memregion(region_tag.assign(m_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
 
 	m_port_c_8255=0;
 
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(pc6001_state::pc6001_irq_callback),this));
 	m_cas_switch = 0;
 	m_cas_offset = 0;
+	m_cas_maxsize = (m_cas_hack->exists()) ? m_cas_hack->get_rom_size() : 0;
 	m_timer_irq_mask = 1;
 	m_timer_irq_mask2 = 1;
 	m_timer_irq_vector = 0x06; // actually vector is fixed in plain PC-6001
@@ -2166,15 +2094,19 @@ void pc6001_state::machine_reset()
 
 MACHINE_RESET_MEMBER(pc6001_state,pc6001m2)
 {
-	UINT8 *work_ram = m_region_maincpu->base();
+	m_video_ram = m_region_maincpu->base() + 0xc000 + 0x28000;
 
-	m_video_ram = work_ram + 0xc000 + 0x28000;
+	std::string region_tag;
+	m_cart_rom = memregion(region_tag.assign(m_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
+	// hackish way to simplify bankswitch handling
+	if (m_cart_rom)
+		memcpy(m_region_maincpu->base() + 0x48000, m_cart_rom->base(), 0x4000);
 
 	m_port_c_8255=0;
 
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(pc6001_state::pc6001_irq_callback),this));
 	m_cas_switch = 0;
 	m_cas_offset = 0;
+	m_cas_maxsize = (m_cas_hack->exists()) ? m_cas_hack->get_rom_size() : 0;
 
 	/* set default bankswitch */
 	{
@@ -2201,15 +2133,17 @@ MACHINE_RESET_MEMBER(pc6001_state,pc6001m2)
 
 MACHINE_RESET_MEMBER(pc6001_state,pc6001sr)
 {
-	UINT8 *work_ram = m_region_maincpu->base();
+	m_video_ram = m_region_maincpu->base() + 0x70000;
 
-	m_video_ram = work_ram + 0x70000;
+	std::string region_tag;
+	m_cart_rom = memregion(region_tag.assign(m_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
+	// should this be mirrored into the EXROM regions? hard to tell without an actual cart dump...
 
 	m_port_c_8255=0;
 
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(pc6001_state::pc6001_irq_callback),this));
 	m_cas_switch = 0;
 	m_cas_offset = 0;
+	m_cas_maxsize = (m_cas_hack->exists()) ? m_cas_hack->get_rom_size() : 0;
 
 	/* set default bankswitch */
 	{
@@ -2244,48 +2178,48 @@ MACHINE_RESET_MEMBER(pc6001_state,pc6001sr)
 
 static const rgb_t defcolors[] =
 {
-	MAKE_RGB(0x07, 0xff, 0x00), /* GREEN */
-	MAKE_RGB(0xff, 0xff, 0x00), /* YELLOW */
-	MAKE_RGB(0x3b, 0x08, 0xff), /* BLUE */
-	MAKE_RGB(0xcc, 0x00, 0x3b), /* RED */
-	MAKE_RGB(0xff, 0xff, 0xff), /* BUFF */
-	MAKE_RGB(0x07, 0xe3, 0x99), /* CYAN */
-	MAKE_RGB(0xff, 0x1c, 0xff), /* MAGENTA */
-	MAKE_RGB(0xff, 0x81, 0x00), /* ORANGE */
+	rgb_t(0x07, 0xff, 0x00), /* GREEN */
+	rgb_t(0xff, 0xff, 0x00), /* YELLOW */
+	rgb_t(0x3b, 0x08, 0xff), /* BLUE */
+	rgb_t(0xcc, 0x00, 0x3b), /* RED */
+	rgb_t(0xff, 0xff, 0xff), /* BUFF */
+	rgb_t(0x07, 0xe3, 0x99), /* CYAN */
+	rgb_t(0xff, 0x1c, 0xff), /* MAGENTA */
+	rgb_t(0xff, 0x81, 0x00), /* ORANGE */
 
 	/* MC6847 specific */
-	MAKE_RGB(0x00, 0x7c, 0x00), /* ALPHANUMERIC DARK GREEN */
-	MAKE_RGB(0x07, 0xff, 0x00), /* ALPHANUMERIC BRIGHT GREEN */
-	MAKE_RGB(0x91, 0x00, 0x00), /* ALPHANUMERIC DARK ORANGE */
-	MAKE_RGB(0xff, 0x81, 0x00)  /* ALPHANUMERIC BRIGHT ORANGE */
+	rgb_t(0x00, 0x7c, 0x00), /* ALPHANUMERIC DARK GREEN */
+	rgb_t(0x07, 0xff, 0x00), /* ALPHANUMERIC BRIGHT GREEN */
+	rgb_t(0x91, 0x00, 0x00), /* ALPHANUMERIC DARK ORANGE */
+	rgb_t(0xff, 0x81, 0x00)  /* ALPHANUMERIC BRIGHT ORANGE */
 };
 
 static const rgb_t mk2_defcolors[] =
 {
-	MAKE_RGB(0x00, 0x00, 0x00), /* BLACK */
-	MAKE_RGB(0xff, 0xaf, 0x00), /* ORANGE */
-	MAKE_RGB(0x00, 0xff, 0xaf), /* tone of GREEN */
-	MAKE_RGB(0xaf, 0xff, 0x00), /* tone of GREEN */
-	MAKE_RGB(0xaf, 0x00, 0xff), /* VIOLET */
-	MAKE_RGB(0xff, 0x00, 0xaf), /* SCARLET */
-	MAKE_RGB(0x00, 0xaf, 0xff), /* LIGHT BLUE */
-	MAKE_RGB(0xaf, 0xaf, 0xaf), /* GRAY */
-	MAKE_RGB(0x00, 0x00, 0x00), /* BLACK */
-	MAKE_RGB(0xff, 0x00, 0x00), /* RED */
-	MAKE_RGB(0x00, 0xff, 0x00), /* GREEN */
-	MAKE_RGB(0xff, 0xff, 0x00), /* YELLOW */
-	MAKE_RGB(0x00, 0x00, 0xff), /* BLUE */
-	MAKE_RGB(0xff, 0x00, 0xff), /* PINK */
-	MAKE_RGB(0x00, 0xff, 0xff), /* CYAN */
-	MAKE_RGB(0xff, 0xff, 0xff)  /* WHITE */
+	rgb_t(0x00, 0x00, 0x00), /* BLACK */
+	rgb_t(0xff, 0xaf, 0x00), /* ORANGE */
+	rgb_t(0x00, 0xff, 0xaf), /* tone of GREEN */
+	rgb_t(0xaf, 0xff, 0x00), /* tone of GREEN */
+	rgb_t(0xaf, 0x00, 0xff), /* VIOLET */
+	rgb_t(0xff, 0x00, 0xaf), /* SCARLET */
+	rgb_t(0x00, 0xaf, 0xff), /* LIGHT BLUE */
+	rgb_t(0xaf, 0xaf, 0xaf), /* GRAY */
+	rgb_t(0x00, 0x00, 0x00), /* BLACK */
+	rgb_t(0xff, 0x00, 0x00), /* RED */
+	rgb_t(0x00, 0xff, 0x00), /* GREEN */
+	rgb_t(0xff, 0xff, 0x00), /* YELLOW */
+	rgb_t(0x00, 0x00, 0xff), /* BLUE */
+	rgb_t(0xff, 0x00, 0xff), /* PINK */
+	rgb_t(0x00, 0xff, 0xff), /* CYAN */
+	rgb_t(0xff, 0xff, 0xff)  /* WHITE */
 };
 
-void pc6001_state::palette_init()
+PALETTE_INIT_MEMBER(pc6001_state, pc6001)
 {
 	int i;
 
 	for(i=0;i<8+4;i++)
-		palette_set_color(machine(), i+8,defcolors[i]);
+		palette.set_pen_color(i+8,defcolors[i]);
 }
 
 PALETTE_INIT_MEMBER(pc6001_state,pc6001m2)
@@ -2293,37 +2227,21 @@ PALETTE_INIT_MEMBER(pc6001_state,pc6001m2)
 	int i;
 
 	for(i=0;i<8;i++)
-		palette_set_color(machine(), i+8,defcolors[i]);
+		palette.set_pen_color(i+8,defcolors[i]);
 
 	for(i=0x10;i<0x20;i++)
-		palette_set_color(machine(), i,mk2_defcolors[i-0x10]);
+		palette.set_pen_color(i,mk2_defcolors[i-0x10]);
 }
 
+#if 0
 static const cassette_interface pc6001_cassette_interface =
 {
 	pc6001_cassette_formats,
 	NULL,
 	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	NULL,
 	NULL
 };
-
-DEVICE_IMAGE_LOAD_MEMBER( pc6001_state,pc6001_cass )
-{
-	UINT8 *cas = m_region_cas->base();
-	UINT32 size;
-
-	size = image.length();
-	if (image.fread( cas, size) != size)
-	{
-		image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unable to fully read from file");
-		return IMAGE_INIT_FAIL;
-	}
-
-	m_cas_maxsize = size;
-
-	return IMAGE_INIT_PASS;
-}
+#endif
 
 static const gfx_layout char_layout =
 {
@@ -2362,42 +2280,45 @@ static MACHINE_CONFIG_START( pc6001, pc6001_state )
 	MCFG_CPU_PROGRAM_MAP(pc6001_map)
 	MCFG_CPU_IO_MAP(pc6001_io)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pc6001_state,  pc6001_interrupt)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(pc6001_state,pc6001_irq_callback)
 
 //  MCFG_CPU_ADD("subcpu", I8049, 7987200)
 
 
-	MCFG_GFXDECODE(pc6001m2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pc6001m2)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_UPDATE_DRIVER(pc6001_state, screen_update_pc6001)
-//  MCFG_SCREEN_REFRESH_RATE(M6847_NTSC_FRAMES_PER_SECOND)
-//  MCFG_SCREEN_UPDATE_STATIC(m6847)
 	MCFG_SCREEN_SIZE(320, 25+192+26)
 	MCFG_SCREEN_VISIBLE_AREA(0, 319, 0, 239)
+	MCFG_SCREEN_PALETTE("palette")
 
+	MCFG_PALETTE_ADD("palette", 16+4)
+	MCFG_PALETTE_INIT_OWNER(pc6001_state, pc6001)
 
-	MCFG_PALETTE_LENGTH(16+4)
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(pc6001_state, pc6001_8255_porta_r))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(pc6001_state, pc6001_8255_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(pc6001_state, pc6001_8255_portb_r))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(pc6001_state, pc6001_8255_portb_w))
+	MCFG_I8255_IN_PORTC_CB(READ8(pc6001_state, pc6001_8255_portc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pc6001_state, pc6001_8255_portc_w))
 
-	MCFG_I8255_ADD( "ppi8255", pc6001_ppi8255_interface )
 	/* uart */
-	MCFG_I8251_ADD("uart", pc6001_usart_interface)
+	MCFG_DEVICE_ADD("uart", I8251, 0)
 
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "pc6001_cart")
 
-//  MCFG_CASSETTE_ADD("cassette",pc6001_cassette_interface)
-	MCFG_CARTSLOT_ADD("cassette")
-	MCFG_CARTSLOT_EXTENSION_LIST("cas,p6")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("pc6001_cass")
-	MCFG_CARTSLOT_LOAD(pc6001_state,pc6001_cass)
+//  MCFG_CASSETTE_ADD("cassette", pc6001_cassette_interface)
+	MCFG_GENERIC_CARTSLOT_ADD("cas_hack", generic_plain_slot, "pc6001_cass")
+	MCFG_GENERIC_EXTENSIONS("cas,p6")
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("ay8910", AY8910, PC6001_MAIN_CLOCK/4)
-	MCFG_SOUND_CONFIG(pc6001_ay_interface)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("P1"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("P2"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 //  MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 //  MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
@@ -2415,15 +2336,20 @@ static MACHINE_CONFIG_DERIVED( pc6001m2, pc6001 )
 
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(pc6001_state, screen_update_pc6001m2)
-	MCFG_PALETTE_LENGTH(16+16)
-	MCFG_PALETTE_INIT_OVERRIDE(pc6001_state,pc6001m2)
+
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(16+16)
+	MCFG_PALETTE_INIT_OWNER(pc6001_state,pc6001m2)
 
 	/* basic machine hardware */
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(pc6001m2_map)
 	MCFG_CPU_IO_MAP(pc6001m2_io)
 
-	MCFG_GFXDECODE(pc6001m2)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", pc6001m2)
+
+	MCFG_SOUND_ADD("upd7752", UPD7752, PC6001_MAIN_CLOCK/4)
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 
 MACHINE_CONFIG_END
 
@@ -2434,6 +2360,7 @@ static MACHINE_CONFIG_DERIVED( pc6601, pc6001m2 )
 	MCFG_CPU_PROGRAM_MAP(pc6001m2_map)
 	MCFG_CPU_IO_MAP(pc6601_io)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pc6001_state,  pc6001_interrupt)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(pc6001_state,pc6001_irq_callback)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( pc6001sr, pc6001m2 )
@@ -2448,6 +2375,7 @@ static MACHINE_CONFIG_DERIVED( pc6001sr, pc6001m2 )
 	MCFG_CPU_PROGRAM_MAP(pc6001sr_map)
 	MCFG_CPU_IO_MAP(pc6001sr_io)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pc6001_state,  pc6001sr_interrupt)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(pc6001_state,pc6001_irq_callback)
 MACHINE_CONFIG_END
 
 /* ROM definition */
@@ -2463,11 +2391,6 @@ ROM_START( pc6001 )
 	ROM_RELOAD(             0x1000, 0x1000 )
 
 	ROM_REGION( 0x8000, "gfx2", ROMREGION_ERASEFF )
-
-	ROM_REGION( 0x20000, "cas", ROMREGION_ERASEFF )
-
-	ROM_REGION( 0x4000, "cart_img", ROMREGION_ERASE00 )
-	ROM_CART_LOAD("cart", 0x0000, 0x4000, ROM_OPTIONAL | ROM_MIRROR)
 ROM_END
 
 ROM_START( pc6001a )
@@ -2481,11 +2404,6 @@ ROM_START( pc6001a )
 	ROM_LOAD( "cgrom60.60a", 0x0000, 0x1000, CRC(49c21d08) SHA1(9454d6e2066abcbd051bad9a29a5ca27b12ec897) )
 
 	ROM_REGION( 0x8000, "gfx2", ROMREGION_ERASEFF )
-
-	ROM_REGION( 0x20000, "cas", ROMREGION_ERASEFF )
-
-	ROM_REGION( 0x4000, "cart_img", ROMREGION_ERASE00 )
-	ROM_CART_LOAD("cart", 0x0000, 0x4000, ROM_OPTIONAL | ROM_MIRROR)
 ROM_END
 
 ROM_START( pc6001mk2 )
@@ -2497,7 +2415,7 @@ ROM_START( pc6001mk2 )
 	ROM_LOAD( "kanjirom.62", 0x20000, 0x8000, CRC(20c8f3eb) SHA1(4c9f30f0a2ebbe70aa8e697f94eac74d8241cadd) )
 	// work ram              0x28000,0x10000
 	// extended work ram     0x38000,0x10000
-	ROM_CART_LOAD("cart",    0x48000, 0x4000, ROM_OPTIONAL | ROM_MIRROR)
+	// exrom                 0x48000, 0x4000
 	// <invalid>             0x4c000, 0x4000
 
 	ROM_REGION( 0x1000, "mcu", ROMREGION_ERASEFF )
@@ -2508,11 +2426,6 @@ ROM_START( pc6001mk2 )
 
 	ROM_REGION( 0x8000, "gfx2", 0 )
 	ROM_COPY( "maincpu", 0x20000, 0x00000, 0x8000 )
-
-	ROM_REGION( 0x20000, "cas", ROMREGION_ERASEFF )
-
-	ROM_REGION( 0x4000, "cart_img", ROMREGION_ERASE00 )
-	ROM_COPY( "maincpu", 0x48000, 0x0000, 0x4000 )
 ROM_END
 
 ROM_START( pc6601 ) /* Variant of pc6001m2 */
@@ -2522,7 +2435,7 @@ ROM_START( pc6601 ) /* Variant of pc6001m2 */
 	ROM_LOAD( "cgrom60.66",  0x1c000, 0x2000, CRC(d2434f29) SHA1(a56d76f5cbdbcdb8759abe601eab68f01b0a8fe8) )
 	ROM_LOAD( "cgrom66.66",  0x1e000, 0x2000, CRC(3ce48c33) SHA1(f3b6c63e83a17d80dde63c6e4d86adbc26f84f79) )
 	ROM_LOAD( "kanjirom.66", 0x20000, 0x8000, CRC(20c8f3eb) SHA1(4c9f30f0a2ebbe70aa8e697f94eac74d8241cadd) )
-	ROM_CART_LOAD("cart",    0x48000, 0x4000, ROM_OPTIONAL | ROM_MIRROR)
+	// exrom                 0x48000, 0x4000
 
 	ROM_REGION( 0x1000, "mcu", ROMREGION_ERASEFF )
 	ROM_LOAD( "i8049", 0x0000, 0x1000, NO_DUMP )
@@ -2532,11 +2445,6 @@ ROM_START( pc6601 ) /* Variant of pc6001m2 */
 
 	ROM_REGION( 0x8000, "gfx2", 0 )
 	ROM_COPY( "maincpu", 0x20000, 0x00000, 0x8000 )
-
-	ROM_REGION( 0x20000, "cas", ROMREGION_ERASEFF )
-
-	ROM_REGION( 0x4000, "cart_img", ROMREGION_ERASE00 )
-	ROM_COPY( "maincpu", 0x48000, 0x0000, 0x4000 )
 ROM_END
 
 ROM_START( pc6001sr )
@@ -2558,11 +2466,6 @@ ROM_START( pc6001sr )
 
 	ROM_REGION( 0x8000, "gfx2", 0 )
 	ROM_COPY( "maincpu", 0x28000, 0x00000, 0x8000 )
-
-	ROM_REGION( 0x20000, "cas", ROMREGION_ERASEFF )
-
-	ROM_REGION( 0x4000, "cart_img", ROMREGION_ERASE00 )
-	ROM_COPY( "maincpu", 0x48000, 0x0000, 0x4000 )
 ROM_END
 
 /*    YEAR  NAME      PARENT   COMPAT MACHINE   INPUT     INIT    COMPANY  FULLNAME          FLAGS */

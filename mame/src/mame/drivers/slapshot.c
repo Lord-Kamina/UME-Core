@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Graves
 /***************************************************************************
 
 Slapshot (c) Taito 1994
@@ -134,37 +136,10 @@ Region byte at offset 0x031:
 #include "emu.h"
 #include "cpu/z80/z80.h"
 #include "cpu/m68000/m68000.h"
-#include "video/taitoic.h"
 #include "audio/taitosnd.h"
 #include "sound/2610intf.h"
 #include "machine/timekpr.h"
-#include "machine/taitoio.h"
 #include "includes/slapshot.h"
-
-
-/******************************************************
-                COLOR
-******************************************************/
-
-READ16_MEMBER(slapshot_state::color_ram_word_r)
-{
-	return m_color_ram[offset];
-}
-
-WRITE16_MEMBER(slapshot_state::color_ram_word_w)
-{
-	int r,g,b;
-	COMBINE_DATA(&m_color_ram[offset]);
-
-	if ((offset % 2) == 1)  /* assume words written sequentially */
-	{
-		r = (m_color_ram[offset- 1 ] & 0xff);
-		g = (m_color_ram[offset] & 0xff00) >> 8;
-		b = (m_color_ram[offset] & 0xff);
-
-		palette_set_color(machine(), offset / 2, MAKE_RGB(r,g,b));
-	}
-}
 
 
 /***********************************************************
@@ -184,9 +159,9 @@ void slapshot_state::device_timer(emu_timer &timer, device_timer_id id, int para
 }
 
 
-INTERRUPT_GEN_MEMBER(slapshot_state::slapshot_interrupt)
+INTERRUPT_GEN_MEMBER(slapshot_state::interrupt)
 {
-	timer_set(downcast<cpu_device *>(&device)->cycles_to_attotime(200000 - 500), TIMER_SLAPSHOT_INTERRUPT6);
+	m_int6_timer->adjust(m_maincpu->cycles_to_attotime(200000 - 500));
 	device.execute().set_input_line(5, HOLD_LINE);
 }
 
@@ -195,7 +170,7 @@ INTERRUPT_GEN_MEMBER(slapshot_state::slapshot_interrupt)
                 GAME INPUTS
 **********************************************************/
 
-READ16_MEMBER(slapshot_state::slapshot_service_input_r)
+READ16_MEMBER(slapshot_state::service_input_r)
 {
 	switch (offset)
 	{
@@ -245,23 +220,17 @@ WRITE16_MEMBER(slapshot_state::opwolf3_adc_req_w)
                 SOUND
 *****************************************************/
 
-void slapshot_state::reset_sound_region()
-{
-	membank("bank10")->set_entry(m_banknum);
-}
-
 WRITE8_MEMBER(slapshot_state::sound_bankswitch_w)
 {
-	m_banknum = data & 7;
-	reset_sound_region();
+	membank("z80bank")->set_entry(data & 3);
 }
 
-WRITE16_MEMBER(slapshot_state::slapshot_msb_sound_w)
+WRITE16_MEMBER(slapshot_state::msb_sound_w)
 {
 	if (offset == 0)
-		m_tc0140syt->tc0140syt_port_w(space, 0, (data >> 8) & 0xff);
+		m_tc0140syt->master_port_w(space, 0, (data >> 8) & 0xff);
 	else if (offset == 1)
-		m_tc0140syt->tc0140syt_comm_w(space, 0, (data >> 8) & 0xff);
+		m_tc0140syt->master_comm_w(space, 0, (data >> 8) & 0xff);
 
 #ifdef MAME_DEBUG
 	if (data & 0xff)
@@ -269,10 +238,10 @@ WRITE16_MEMBER(slapshot_state::slapshot_msb_sound_w)
 #endif
 }
 
-READ16_MEMBER(slapshot_state::slapshot_msb_sound_r)
+READ16_MEMBER(slapshot_state::msb_sound_r)
 {
 	if (offset == 1)
-		return ((m_tc0140syt->tc0140syt_comm_r(space, 0) & 0xff) << 8);
+		return ((m_tc0140syt->master_comm_r(space, 0) & 0xff) << 8);
 	else
 		return 0;
 }
@@ -287,14 +256,14 @@ static ADDRESS_MAP_START( slapshot_map, AS_PROGRAM, 16, slapshot_state )
 	AM_RANGE(0x500000, 0x50ffff) AM_RAM /* main RAM */
 	AM_RANGE(0x600000, 0x60ffff) AM_RAM AM_SHARE("spriteram")   /* sprite ram */
 	AM_RANGE(0x700000, 0x701fff) AM_RAM AM_SHARE("spriteext")   /* debugging */
-	AM_RANGE(0x800000, 0x80ffff) AM_DEVREADWRITE_LEGACY("tc0480scp", tc0480scp_word_r, tc0480scp_word_w)    /* tilemaps */
-	AM_RANGE(0x830000, 0x83002f) AM_DEVREADWRITE_LEGACY("tc0480scp", tc0480scp_ctrl_word_r, tc0480scp_ctrl_word_w)
-	AM_RANGE(0x900000, 0x907fff) AM_READWRITE(color_ram_word_r, color_ram_word_w) AM_SHARE("color_ram") /* 8bpg palette */
+	AM_RANGE(0x800000, 0x80ffff) AM_DEVREADWRITE("tc0480scp", tc0480scp_device, word_r, word_w)    /* tilemaps */
+	AM_RANGE(0x830000, 0x83002f) AM_DEVREADWRITE("tc0480scp", tc0480scp_device, ctrl_word_r, ctrl_word_w)
+	AM_RANGE(0x900000, 0x907fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xa00000, 0xa03fff) AM_DEVREADWRITE8("mk48t08", timekeeper_device, read, write, 0xff00) /* nvram (only low bytes used) */
-	AM_RANGE(0xb00000, 0xb0001f) AM_DEVWRITE8_LEGACY("tc0360pri", tc0360pri_w, 0xff00)  /* priority chip */
+	AM_RANGE(0xb00000, 0xb0001f) AM_DEVWRITE8("tc0360pri", tc0360pri_device, write, 0xff00)  /* priority chip */
 	AM_RANGE(0xc00000, 0xc0000f) AM_DEVREADWRITE("tc0640fio", tc0640fio_device, halfword_byteswap_r, halfword_byteswap_w)
-	AM_RANGE(0xc00020, 0xc0002f) AM_READ(slapshot_service_input_r)  /* service mirror */
-	AM_RANGE(0xd00000, 0xd00003) AM_READWRITE(slapshot_msb_sound_r, slapshot_msb_sound_w)
+	AM_RANGE(0xc00020, 0xc0002f) AM_READ(service_input_r)  /* service mirror */
+	AM_RANGE(0xd00000, 0xd00003) AM_READWRITE(msb_sound_r, msb_sound_w)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( opwolf3_map, AS_PROGRAM, 16, slapshot_state )
@@ -302,14 +271,14 @@ static ADDRESS_MAP_START( opwolf3_map, AS_PROGRAM, 16, slapshot_state )
 	AM_RANGE(0x500000, 0x50ffff) AM_RAM /* main RAM */
 	AM_RANGE(0x600000, 0x60ffff) AM_RAM AM_SHARE("spriteram")   /* sprite ram */
 	AM_RANGE(0x700000, 0x701fff) AM_RAM AM_SHARE("spriteext")   /* debugging */
-	AM_RANGE(0x800000, 0x80ffff) AM_DEVREADWRITE_LEGACY("tc0480scp", tc0480scp_word_r, tc0480scp_word_w)    /* tilemaps */
-	AM_RANGE(0x830000, 0x83002f) AM_DEVREADWRITE_LEGACY("tc0480scp", tc0480scp_ctrl_word_r, tc0480scp_ctrl_word_w)
-	AM_RANGE(0x900000, 0x907fff) AM_READWRITE(color_ram_word_r, color_ram_word_w) AM_SHARE("color_ram") /* 8bpg palette */
+	AM_RANGE(0x800000, 0x80ffff) AM_DEVREADWRITE("tc0480scp", tc0480scp_device, word_r, word_w)    /* tilemaps */
+	AM_RANGE(0x830000, 0x83002f) AM_DEVREADWRITE("tc0480scp", tc0480scp_device, ctrl_word_r, ctrl_word_w)
+	AM_RANGE(0x900000, 0x907fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xa00000, 0xa03fff) AM_DEVREADWRITE8("mk48t08", timekeeper_device, read, write, 0xff00) /* nvram (only low bytes used) */
-	AM_RANGE(0xb00000, 0xb0001f) AM_DEVWRITE8_LEGACY("tc0360pri", tc0360pri_w, 0xff00)  /* priority chip */
+	AM_RANGE(0xb00000, 0xb0001f) AM_DEVWRITE8("tc0360pri", tc0360pri_device, write, 0xff00)  /* priority chip */
 	AM_RANGE(0xc00000, 0xc0000f) AM_DEVREADWRITE("tc0640fio", tc0640fio_device, halfword_byteswap_r, halfword_byteswap_w)
-	AM_RANGE(0xc00020, 0xc0002f) AM_READ(slapshot_service_input_r)   /* service mirror */
-	AM_RANGE(0xd00000, 0xd00003) AM_READWRITE(slapshot_msb_sound_r, slapshot_msb_sound_w)
+	AM_RANGE(0xc00020, 0xc0002f) AM_READ(service_input_r)   /* service mirror */
+	AM_RANGE(0xd00000, 0xd00003) AM_READWRITE(msb_sound_r, msb_sound_w)
 	AM_RANGE(0xe00000, 0xe00007) AM_READWRITE(opwolf3_adc_r, opwolf3_adc_req_w)
 ADDRESS_MAP_END
 
@@ -318,11 +287,11 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( opwolf3_z80_sound_map, AS_PROGRAM, 8, slapshot_state )
 	AM_RANGE(0x0000, 0x3fff) AM_ROM
-	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank10")
+	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("z80bank")
 	AM_RANGE(0xc000, 0xdfff) AM_RAM
 	AM_RANGE(0xe000, 0xe003) AM_DEVREADWRITE("ymsnd", ym2610_device, read, write)
-	AM_RANGE(0xe200, 0xe200) AM_READNOP AM_DEVWRITE("tc0140syt", tc0140syt_device, tc0140syt_slave_port_w)
-	AM_RANGE(0xe201, 0xe201) AM_DEVREADWRITE("tc0140syt", tc0140syt_device, tc0140syt_slave_comm_r, tc0140syt_slave_comm_w)
+	AM_RANGE(0xe200, 0xe200) AM_READNOP AM_DEVWRITE("tc0140syt", tc0140syt_device, slave_port_w)
+	AM_RANGE(0xe201, 0xe201) AM_DEVREADWRITE("tc0140syt", tc0140syt_device, slave_comm_r, slave_comm_w)
 	AM_RANGE(0xe400, 0xe403) AM_WRITENOP /* pan */
 	AM_RANGE(0xea00, 0xea00) AM_READNOP
 	AM_RANGE(0xee00, 0xee00) AM_WRITENOP /* ? */
@@ -473,54 +442,19 @@ static const gfx_layout slapshot_charlayout =
 
 static GFXDECODE_START( slapshot )
 	GFXDECODE_ENTRY( "gfx2", 0x0, tilelayout,  0, 256 ) /* sprite parts */
-	GFXDECODE_ENTRY( "gfx1", 0x0, slapshot_charlayout,  0, 256 )    /* sprites & playfield */
+	GFXDECODE_ENTRY( "gfx1", 0x0, slapshot_charlayout, 4096, 256 )    /* sprites & playfield */
 GFXDECODE_END
-
-
-
-/**************************************************************
-                 YM2610B (SOUND)
-**************************************************************/
-
-/* handler called by the YM2610 emulator when the internal timers cause an IRQ */
-WRITE_LINE_MEMBER(slapshot_state::irqhandler)
-{
-	m_audiocpu->set_input_line(0, state ? ASSERT_LINE : CLEAR_LINE);
-}
 
 
 /***********************************************************
                  MACHINE DRIVERS
 ***********************************************************/
 
-static const tc0480scp_interface slapshot_tc0480scp_intf =
-{
-	1, 2,       /* gfxnum, txnum */
-	3,      /* pixels */
-	30, 9,      /* x_offset, y_offset */
-	-1, 1,      /* text_xoff, text_yoff */
-	0, 2,       /* flip_xoff, flip_yoff */
-	256     /* col_base */
-};
-
-static const tc0640fio_interface slapshot_io_intf =
-{
-	DEVCB_NULL, DEVCB_INPUT_PORT("COINS"),
-	DEVCB_INPUT_PORT("BUTTONS"), DEVCB_INPUT_PORT("SYSTEM"), DEVCB_INPUT_PORT("JOY")    /* port read handlers */
-};
-
-static const tc0140syt_interface slapshot_tc0140syt_intf =
-{
-	"maincpu", "audiocpu"
-};
-
 void slapshot_state::machine_start()
 {
-	membank("bank10")->configure_entries(0, 4, memregion("audiocpu")->base() + 0xc000, 0x4000);
+	membank("z80bank")->configure_entries(0, 4, memregion("audiocpu")->base(), 0x4000);
 
-	m_banknum = 0;
-	save_item(NAME(m_banknum));
-	machine().save().register_postload(save_prepost_delegate(FUNC(slapshot_state::reset_sound_region), this));
+	m_int6_timer = timer_alloc(TIMER_SLAPSHOT_INTERRUPT6);
 }
 
 
@@ -529,15 +463,18 @@ static MACHINE_CONFIG_START( slapshot, slapshot_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, 14346000)   /* 28.6860 MHz / 2 ??? */
 	MCFG_CPU_PROGRAM_MAP(slapshot_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", slapshot_state,  slapshot_interrupt)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", slapshot_state,  interrupt)
 
 	MCFG_CPU_ADD("audiocpu", Z80,32000000/8)    /* 4 MHz */
 	MCFG_CPU_PROGRAM_MAP(opwolf3_z80_sound_map)
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(600))
 
-
-	MCFG_TC0640FIO_ADD("tc0640fio", slapshot_io_intf)
+	MCFG_DEVICE_ADD("tc0640fio", TC0640FIO, 0)
+	MCFG_TC0640FIO_READ_1_CB(IOPORT("COINS"))
+	MCFG_TC0640FIO_READ_2_CB(IOPORT("BUTTONS"))
+	MCFG_TC0640FIO_READ_3_CB(IOPORT("SYSTEM"))
+	MCFG_TC0640FIO_READ_7_CB(IOPORT("JOY"))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -545,21 +482,31 @@ static MACHINE_CONFIG_START( slapshot, slapshot_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(40*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 2*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(slapshot_state, screen_update_slapshot)
+	MCFG_SCREEN_UPDATE_DRIVER(slapshot_state, screen_update)
 	MCFG_SCREEN_VBLANK_DRIVER(slapshot_state, screen_eof_taito_no_buffer)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(slapshot)
-	MCFG_PALETTE_LENGTH(8192)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", slapshot)
+	MCFG_PALETTE_ADD("palette", 8192)
+	MCFG_PALETTE_FORMAT(XRGB)
 
+	MCFG_DEVICE_ADD("tc0480scp", TC0480SCP, 0)
+	MCFG_TC0480SCP_GFX_REGION(1)
+	MCFG_TC0480SCP_TX_REGION(2)
+	MCFG_TC0480SCP_OFFSETS(30 + 3, 9)
+	MCFG_TC0480SCP_OFFSETS_TX(-1, -1)
+	MCFG_TC0480SCP_OFFSETS_FLIP(0, 2)
+	MCFG_TC0480SCP_COL_BASE(4096)
+	MCFG_TC0480SCP_GFXDECODE("gfxdecode")
+	MCFG_TC0480SCP_PALETTE("palette")
 
-	MCFG_TC0480SCP_ADD("tc0480scp", slapshot_tc0480scp_intf)
 	MCFG_TC0360PRI_ADD("tc0360pri")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_ADD("ymsnd", YM2610B, 16000000/2)
-	MCFG_YM2610_IRQ_HANDLER(WRITELINE(slapshot_state, irqhandler))
+	MCFG_YM2610_IRQ_HANDLER(INPUTLINE("audiocpu", 0))
 	MCFG_SOUND_ROUTE(0, "lspeaker",  0.25)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 0.25)
 	MCFG_SOUND_ROUTE(1, "lspeaker",  1.0)
@@ -567,7 +514,9 @@ static MACHINE_CONFIG_START( slapshot, slapshot_state )
 
 	MCFG_MK48T08_ADD( "mk48t08" )
 
-	MCFG_TC0140SYT_ADD("tc0140syt", slapshot_tc0140syt_intf)
+	MCFG_DEVICE_ADD("tc0140syt", TC0140SYT, 0)
+	MCFG_TC0140SYT_MASTER_CPU("maincpu")
+	MCFG_TC0140SYT_SLAVE_CPU("audiocpu")
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( opwolf3, slapshot_state )
@@ -575,15 +524,18 @@ static MACHINE_CONFIG_START( opwolf3, slapshot_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, 14346000)   /* 28.6860 MHz / 2 ??? */
 	MCFG_CPU_PROGRAM_MAP(opwolf3_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", slapshot_state,  slapshot_interrupt)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", slapshot_state,  interrupt)
 
 	MCFG_CPU_ADD("audiocpu", Z80,32000000/8)    /* 4 MHz */
 	MCFG_CPU_PROGRAM_MAP(opwolf3_z80_sound_map)
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(600))
 
-
-	MCFG_TC0640FIO_ADD("tc0640fio", slapshot_io_intf)
+	MCFG_DEVICE_ADD("tc0640fio", TC0640FIO, 0)
+	MCFG_TC0640FIO_READ_1_CB(IOPORT("COINS"))
+	MCFG_TC0640FIO_READ_2_CB(IOPORT("BUTTONS"))
+	MCFG_TC0640FIO_READ_3_CB(IOPORT("SYSTEM"))
+	MCFG_TC0640FIO_READ_7_CB(IOPORT("JOY"))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -591,21 +543,31 @@ static MACHINE_CONFIG_START( opwolf3, slapshot_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(40*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 2*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(slapshot_state, screen_update_slapshot)
+	MCFG_SCREEN_UPDATE_DRIVER(slapshot_state, screen_update)
 	MCFG_SCREEN_VBLANK_DRIVER(slapshot_state, screen_eof_taito_no_buffer)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(slapshot)
-	MCFG_PALETTE_LENGTH(8192)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", slapshot)
+	MCFG_PALETTE_ADD("palette", 8192)
+	MCFG_PALETTE_FORMAT(XRGB)
 
+	MCFG_DEVICE_ADD("tc0480scp", TC0480SCP, 0)
+	MCFG_TC0480SCP_GFX_REGION(1)
+	MCFG_TC0480SCP_TX_REGION(2)
+	MCFG_TC0480SCP_OFFSETS(30 + 3, 9)
+	MCFG_TC0480SCP_OFFSETS_TX(-1, -1)
+	MCFG_TC0480SCP_OFFSETS_FLIP(0, 2)
+	MCFG_TC0480SCP_COL_BASE(4096)
+	MCFG_TC0480SCP_GFXDECODE("gfxdecode")
+	MCFG_TC0480SCP_PALETTE("palette")
 
-	MCFG_TC0480SCP_ADD("tc0480scp", slapshot_tc0480scp_intf)
 	MCFG_TC0360PRI_ADD("tc0360pri")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_ADD("ymsnd", YM2610B, 16000000/2)
-	MCFG_YM2610_IRQ_HANDLER(WRITELINE(slapshot_state, irqhandler))
+	MCFG_YM2610_IRQ_HANDLER(INPUTLINE("audiocpu", 0))
 	MCFG_SOUND_ROUTE(0, "lspeaker",  0.25)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 0.25)
 	MCFG_SOUND_ROUTE(1, "lspeaker",  1.0)
@@ -613,7 +575,9 @@ static MACHINE_CONFIG_START( opwolf3, slapshot_state )
 
 	MCFG_MK48T08_ADD( "mk48t08" )
 
-	MCFG_TC0140SYT_ADD("tc0140syt", slapshot_tc0140syt_intf)
+	MCFG_DEVICE_ADD("tc0140syt", TC0140SYT, 0)
+	MCFG_TC0140SYT_MASTER_CPU("maincpu")
+	MCFG_TC0140SYT_SLAVE_CPU("audiocpu")
 MACHINE_CONFIG_END
 
 /***************************************************************************
@@ -625,9 +589,8 @@ ROM_START( slapshot )
 	ROM_LOAD16_BYTE( "d71-15.3",  0x00000, 0x80000, CRC(1470153f) SHA1(63fd5314fcaafba7326fd9481e3c686901dde65c) )
 	ROM_LOAD16_BYTE( "d71-16.1",  0x00001, 0x80000, CRC(f13666e0) SHA1(e8b475163ea7da5ee3f2b900004cc67c684bab75) )
 
-	ROM_REGION( 0x1c000, "audiocpu", 0 )    /* sound cpu */
-	ROM_LOAD    ( "d71-07.77",    0x00000, 0x4000, CRC(dd5f670c) SHA1(743a9563c40fe40178c9ec8eece71a08380c2239) )
-	ROM_CONTINUE(                 0x10000, 0xc000 ) /* banked stuff */
+	ROM_REGION( 0x10000, "audiocpu", 0 )    /* sound cpu */
+	ROM_LOAD    ( "d71-07.77",    0x00000, 0x10000, CRC(dd5f670c) SHA1(743a9563c40fe40178c9ec8eece71a08380c2239) )
 
 	ROM_REGION( 0x100000, "gfx1", 0 )
 	ROM_LOAD16_BYTE( "d71-04.79", 0x00000, 0x80000, CRC(b727b81c) SHA1(9f56160e2b3e4d59cfa96b5c013f4e368781666e) )  /* SCR */
@@ -660,9 +623,8 @@ ROM_START( opwolf3 )
 	ROM_LOAD16_BYTE( "d74_18.18", 0x100000, 0x80000, CRC(bd5d7cdb) SHA1(29f1cd7b86bc05f873e93f088194113da87a3b86) ) // data ???
 	ROM_LOAD16_BYTE( "d74_17.17", 0x100001, 0x80000, CRC(ac35a672) SHA1(8136bd076443bfaeb3d339971d88951e8b2b59b4) ) // data ???
 
-	ROM_REGION( 0x1c000, "audiocpu", 0 )    /* sound cpu */
-	ROM_LOAD    ( "d74_22.77",    0x00000, 0x4000, CRC(118374a6) SHA1(cc1d0d28efdf1df3e648e7d932405811854ba4ee) )
-	ROM_CONTINUE(                 0x10000, 0xc000 ) /* banked stuff */
+	ROM_REGION( 0x10000, "audiocpu", 0 )    /* sound cpu */
+	ROM_LOAD    ( "d74_22.77",    0x00000, 0x10000, CRC(118374a6) SHA1(cc1d0d28efdf1df3e648e7d932405811854ba4ee) )
 
 	ROM_REGION( 0x400000, "gfx1", 0 )
 	ROM_LOAD16_BYTE( "d74_05.80", 0x000000, 0x200000, CRC(85ea64cc) SHA1(1960a934191c451df1554323d47f6fc64939b0ce) )    /* SCR */
@@ -687,9 +649,8 @@ ROM_START( opwolf3u )
 	ROM_LOAD16_BYTE( "d74_18.18", 0x100000, 0x80000, CRC(bd5d7cdb) SHA1(29f1cd7b86bc05f873e93f088194113da87a3b86) ) // data ???
 	ROM_LOAD16_BYTE( "d74_17.17", 0x100001, 0x80000, CRC(ac35a672) SHA1(8136bd076443bfaeb3d339971d88951e8b2b59b4) ) // data ???
 
-	ROM_REGION( 0x1c000, "audiocpu", 0 )    /* sound cpu */
-	ROM_LOAD    ( "d74_19.77",    0x00000, 0x4000, CRC(05d53f06) SHA1(48b0cd68ad3758f424552a4e3833c5a1c2f1825b) )
-	ROM_CONTINUE(                 0x10000, 0xc000 ) /* banked stuff */
+	ROM_REGION( 0x10000, "audiocpu", 0 )    /* sound cpu */
+	ROM_LOAD    ( "d74_19.77",    0x00000, 0x10000, CRC(05d53f06) SHA1(48b0cd68ad3758f424552a4e3833c5a1c2f1825b) )
 
 	ROM_REGION( 0x400000, "gfx1", 0 )
 	ROM_LOAD16_BYTE( "d74_05.80", 0x000000, 0x200000, CRC(85ea64cc) SHA1(1960a934191c451df1554323d47f6fc64939b0ce) )    /* SCR */
@@ -735,6 +696,6 @@ DRIVER_INIT_MEMBER(slapshot_state,slapshot)
 	}
 }
 
-GAME( 1994, slapshot, 0,       slapshot, slapshot, slapshot_state, slapshot, ROT0, "Taito Corporation",         "Slap Shot (Japan)", 0 )
-GAME( 1994, opwolf3,  0,       opwolf3,  opwolf3, slapshot_state,  slapshot, ROT0, "Taito Corporation Japan",   "Operation Wolf 3 (World)", 0 )
-GAME( 1994, opwolf3u, opwolf3, opwolf3,  opwolf3, slapshot_state,  slapshot, ROT0, "Taito America Corporation", "Operation Wolf 3 (US)", 0 )
+GAME( 1994, slapshot, 0,       slapshot, slapshot, slapshot_state, slapshot, ROT0, "Taito Corporation",         "Slap Shot (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1994, opwolf3,  0,       opwolf3,  opwolf3, slapshot_state,  slapshot, ROT0, "Taito Corporation Japan",   "Operation Wolf 3 (World)", GAME_SUPPORTS_SAVE )
+GAME( 1994, opwolf3u, opwolf3, opwolf3,  opwolf3, slapshot_state,  slapshot, ROT0, "Taito America Corporation", "Operation Wolf 3 (US)", GAME_SUPPORTS_SAVE )

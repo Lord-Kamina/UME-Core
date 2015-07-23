@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Phil Stroffolino, Carlos A. Lozano, Rob Rosenbrock
 /***************************************************************************
 
     Renegade Video Hardware
@@ -8,43 +10,40 @@
 #include "includes/renegade.h"
 
 
-WRITE8_MEMBER(renegade_state::renegade_videoram_w)
+WRITE8_MEMBER(renegade_state::bg_videoram_w)
 {
-	UINT8 *videoram = m_videoram;
-	videoram[offset] = data;
+	m_bg_videoram[offset] = data;
 	offset = offset % (64 * 16);
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(renegade_state::renegade_videoram2_w)
+WRITE8_MEMBER(renegade_state::fg_videoram_w)
 {
-	m_videoram2[offset] = data;
+	m_fg_videoram[offset] = data;
 	offset = offset % (32 * 32);
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(renegade_state::renegade_flipscreen_w)
+WRITE8_MEMBER(renegade_state::flipscreen_w)
 {
 	flip_screen_set(~data & 0x01);
 }
 
-WRITE8_MEMBER(renegade_state::renegade_scroll0_w)
+WRITE8_MEMBER(renegade_state::scroll_lsb_w)
 {
 	m_scrollx = (m_scrollx & 0xff00) | data;
 }
 
-WRITE8_MEMBER(renegade_state::renegade_scroll1_w)
+WRITE8_MEMBER(renegade_state::scroll_msb_w)
 {
 	m_scrollx = (m_scrollx & 0xff) | (data << 8);
 }
 
 TILE_GET_INFO_MEMBER(renegade_state::get_bg_tilemap_info)
 {
-	UINT8 *videoram = m_videoram;
-	const UINT8 *source = &videoram[tile_index];
+	const UINT8 *source = &m_bg_videoram[tile_index];
 	UINT8 attributes = source[0x400]; /* CCC??BBB */
-	SET_TILE_INFO_MEMBER(
-		1 + (attributes & 0x7),
+	SET_TILE_INFO_MEMBER(1 + (attributes & 0x7),
 		source[0],
 		attributes >> 5,
 		0);
@@ -52,10 +51,9 @@ TILE_GET_INFO_MEMBER(renegade_state::get_bg_tilemap_info)
 
 TILE_GET_INFO_MEMBER(renegade_state::get_fg_tilemap_info)
 {
-	const UINT8 *source = &m_videoram2[tile_index];
+	const UINT8 *source = &m_fg_videoram[tile_index];
 	UINT8 attributes = source[0x400];
-	SET_TILE_INFO_MEMBER(
-		0,
+	SET_TILE_INFO_MEMBER(0,
 		(attributes & 3) * 256 + source[0],
 		attributes >> 6,
 		0);
@@ -63,8 +61,8 @@ TILE_GET_INFO_MEMBER(renegade_state::get_fg_tilemap_info)
 
 void renegade_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(renegade_state::get_bg_tilemap_info),this), TILEMAP_SCAN_ROWS,      16, 16, 64, 16);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(renegade_state::get_fg_tilemap_info),this), TILEMAP_SCAN_ROWS,   8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(renegade_state::get_bg_tilemap_info),this), TILEMAP_SCAN_ROWS,      16, 16, 64, 16);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(renegade_state::get_fg_tilemap_info),this), TILEMAP_SCAN_ROWS,   8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 	m_bg_tilemap->set_scrolldx(256, 0);
@@ -103,7 +101,7 @@ void renegade_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 			if (attributes & 0x80) /* big sprite */
 			{
 				sprite_number &= ~1;
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[sprite_bank],
+				m_gfxdecode->gfx(sprite_bank)->transpen(bitmap,cliprect,
 					sprite_number + 1,
 					color,
 					xflip, flip_screen(),
@@ -113,7 +111,7 @@ void renegade_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 			{
 				sy += (flip_screen() ? -16 : 16);
 			}
-			drawgfx_transpen(bitmap, cliprect, machine().gfx[sprite_bank],
+			m_gfxdecode->gfx(sprite_bank)->transpen(bitmap,cliprect,
 				sprite_number,
 				color,
 				xflip, flip_screen(),
@@ -123,11 +121,11 @@ void renegade_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 	}
 }
 
-UINT32 renegade_state::screen_update_renegade(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 renegade_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	m_bg_tilemap->set_scrollx(0, m_scrollx);
-	m_bg_tilemap->draw(bitmap, cliprect, 0 , 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0 , 0);
 	draw_sprites(bitmap, cliprect);
-	m_fg_tilemap->draw(bitmap, cliprect, 0 , 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0 , 0);
 	return 0;
 }

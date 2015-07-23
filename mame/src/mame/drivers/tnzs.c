@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia, Mirko Buffoni, Takahiro Nogi
 /***************************************************************************
 
 
@@ -622,24 +624,18 @@ Driver by Takahiro Nogi (nogi@kt.rim.or.jp) 1999/11/06
 #include "emu.h"
 #include "cpu/z80/z80.h"
 #include "includes/taitoipt.h"
-#include "cpu/mcs48/mcs48.h"
 #include "sound/2203intf.h"
-#include "sound/dac.h"
-#include "sound/samples.h"
 #include "includes/tnzs.h"
 #include "sound/2151intf.h"
-#include "video/seta001.h"
 
-static SAMPLES_START( kageki_init_samples )
+SAMPLES_START_CB_MEMBER(tnzs_state::kageki_init_samples)
 {
-	running_machine &machine = device.machine();
-	tnzs_state *state = machine.driver_data<tnzs_state>();
 	UINT8 *scan, *src;
 	INT16 *dest;
 	int start, size;
 	int i, n;
 
-	src = state->memregion("samples")->base() + 0x0090;
+	src = memregion("samples")->base() + 0x0090;
 	for (i = 0; i < MAX_SAMPLES; i++)
 	{
 		start = (src[(i * 2) + 1] * 256) + src[(i * 2)];
@@ -656,15 +652,15 @@ static SAMPLES_START( kageki_init_samples )
 		}
 
 		/* 2009-11 FP: should these be saved? */
-		state->m_sampledata[i] = auto_alloc_array(machine, INT16, size);
-		state->m_samplesize[i] = size;
+		m_sampledata[i] = auto_alloc_array(machine(), INT16, size);
+		m_samplesize[i] = size;
 
 
 		if (start < 0x100)
 			start = size = 0;
 
 		// signed 8-bit sample to unsigned 8-bit sample convert
-		dest = state->m_sampledata[i];
+		dest = m_sampledata[i];
 		scan = &src[start];
 		for (n = 0; n < size; n++)
 		{
@@ -747,33 +743,34 @@ WRITE8_MEMBER(tnzs_state::kabukiz_sample_w)
 
 static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, tnzs_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
-	AM_RANGE(0x8000, 0xbfff) AM_READWRITE( tnzs_ramrom_bank_r, tnzs_ramrom_bank_w ) /* ROM + RAM */
-	AM_RANGE(0xc000, 0xcfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodelow_r8, spritecodelow_w8)
-	AM_RANGE(0xd000, 0xdfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodehigh_r8, spritecodehigh_w8)
+	AM_RANGE(0x8000, 0xbfff) AM_DEVICE("mainbank", address_map_bank_device, amap8)
+	AM_RANGE(0xc000, 0xcfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodelow_r8, spritecodelow_w8)
+	AM_RANGE(0xd000, 0xdfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodehigh_r8, spritecodehigh_w8)
 	AM_RANGE(0xe000, 0xefff) AM_RAM AM_SHARE("share1")
-	AM_RANGE(0xf000, 0xf2ff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spriteylow_r8, spriteylow_w8)
-	AM_RANGE(0xf300, 0xf303) AM_MIRROR(0xfc) AM_DEVWRITE_LEGACY("spritegen", spritectrl_w8)  /* control registers (0x80 mirror used by Arkanoid 2) */
-	AM_RANGE(0xf400, 0xf400) AM_DEVWRITE_LEGACY("spritegen", spritebgflag_w8)   /* enable / disable background transparency */
+	AM_RANGE(0xf000, 0xf2ff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spriteylow_r8, spriteylow_w8)
+	AM_RANGE(0xf300, 0xf303) AM_MIRROR(0xfc) AM_DEVWRITE("spritegen", seta001_device, spritectrl_w8)  /* control registers (0x80 mirror used by Arkanoid 2) */
+	AM_RANGE(0xf400, 0xf400) AM_DEVWRITE("spritegen", seta001_device, spritebgflag_w8)   /* enable / disable background transparency */
 	AM_RANGE(0xf600, 0xf600) AM_READNOP AM_WRITE(tnzs_ramrom_bankswitch_w)
 	/* arknoid2, extrmatn, plumppop and drtoppel have PROMs instead of RAM */
 	/* drtoppel writes here anyway! (maybe leftover from tests during development) */
 	/* so the handler is patched out in init_drtopple() */
-	AM_RANGE(0xf800, 0xfbff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_byte_le_w) AM_SHARE("paletteram")
+	AM_RANGE(0xf800, 0xfbff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( cpu0_type2, AS_PROGRAM, 8, tnzs_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
-	AM_RANGE(0x8000, 0xbfff) AM_READWRITE( tnzs_ramrom_bank_r, tnzs_ramrom_bank_w ) /* ROM + RAM */
-	AM_RANGE(0xc000, 0xcfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodelow_r8, spritecodelow_w8)
-	AM_RANGE(0xd000, 0xdfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodehigh_r8, spritecodehigh_w8)
+	AM_RANGE(0x8000, 0xbfff) AM_DEVICE("mainbank", address_map_bank_device, amap8)
+	AM_RANGE(0xc000, 0xcfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodelow_r8, spritecodelow_w8)
+	AM_RANGE(0xd000, 0xdfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodehigh_r8, spritecodehigh_w8)
 	AM_RANGE(0xe000, 0xefff) AM_RAM AM_SHARE("share1")
-	AM_RANGE(0xf000, 0xf2ff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spriteylow_r8, spriteylow_w8)
-	AM_RANGE(0xf300, 0xf303) AM_MIRROR(0xfc) AM_DEVWRITE_LEGACY("spritegen", spritectrl_w8) /* control registers (0x80 mirror used by Arkanoid 2) */
-	AM_RANGE(0xf400, 0xf400) AM_DEVWRITE_LEGACY("spritegen", spritebgflag_w8)   /* enable / disable background transparency */
+	AM_RANGE(0xf000, 0xf2ff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spriteylow_r8, spriteylow_w8)
+	AM_RANGE(0xf300, 0xf303) AM_MIRROR(0xfc) AM_DEVWRITE("spritegen", seta001_device, spritectrl_w8) /* control registers (0x80 mirror used by Arkanoid 2) */
+	AM_RANGE(0xf400, 0xf400) AM_DEVWRITE("spritegen", seta001_device, spritebgflag_w8)   /* enable / disable background transparency */
 	AM_RANGE(0xf600, 0xf600) AM_WRITE(tnzs_ramrom_bankswitch_w)
 	/* kabukiz still writes here but it's not used (it's paletteram in type1 map) */
 	AM_RANGE(0xf800, 0xfbff) AM_WRITENOP
 ADDRESS_MAP_END
+
 
 static ADDRESS_MAP_START( sub_map, AS_PROGRAM, 8, tnzs_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
@@ -821,7 +818,7 @@ static ADDRESS_MAP_START( tnzsb_cpu1_map, AS_PROGRAM, 8, tnzs_state )
 	AM_RANGE(0xd000, 0xdfff) AM_RAM
 	AM_RANGE(0xe000, 0xefff) AM_RAM AM_SHARE("share1")
 	AM_RANGE(0xf000, 0xf003) AM_READONLY
-	AM_RANGE(0xf000, 0xf3ff) AM_WRITE(paletteram_xRRRRRGGGGGBBBBB_byte_le_w) AM_SHARE("paletteram")
+	AM_RANGE(0xf000, 0xf3ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( kabukiz_cpu1_map, AS_PROGRAM, 8, tnzs_state )
@@ -836,7 +833,7 @@ static ADDRESS_MAP_START( kabukiz_cpu1_map, AS_PROGRAM, 8, tnzs_state )
 	AM_RANGE(0xc002, 0xc002) AM_READ_PORT("IN2")
 	AM_RANGE(0xd000, 0xdfff) AM_RAM
 	AM_RANGE(0xe000, 0xefff) AM_RAM AM_SHARE("share1")
-	AM_RANGE(0xf800, 0xfbff) AM_WRITE(paletteram_xRRRRRGGGGGBBBBB_byte_le_w) AM_SHARE("paletteram")
+	AM_RANGE(0xf800, 0xfbff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( tnzsb_cpu2_map, AS_PROGRAM, 8, tnzs_state )
@@ -864,37 +861,17 @@ static ADDRESS_MAP_START( i8742_io_map, AS_IO, 8, tnzs_state )
 ADDRESS_MAP_END
 
 
-WRITE8_MEMBER(tnzs_state::jpopnics_palette_w)
-{
-	int r, g, b;
-	UINT16 paldata;
-	m_generic_paletteram_8[offset] = data;
-
-	offset = offset >> 1;
-
-	paldata = (m_generic_paletteram_8[offset * 2] << 8) | m_generic_paletteram_8[(offset * 2 + 1)];
-
-	g = (paldata >> 12) & 0x000f;
-	r = (paldata >> 4) & 0x000f;
-	b = (paldata >> 8) & 0x000f;
-	// the other bits seem to be used, and the colours are wrong..
-
-	palette_set_color_rgb(machine(), offset, r << 4, g << 4, b << 4);
-}
-
-
-
 static ADDRESS_MAP_START( jpopnics_main_map, AS_PROGRAM, 8, tnzs_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
-	AM_RANGE(0x8000, 0xbfff) AM_READWRITE( tnzs_ramrom_bank_r, tnzs_ramrom_bank_w )
-	AM_RANGE(0xc000, 0xcfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodelow_r8, spritecodelow_w8)
-	AM_RANGE(0xd000, 0xdfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodehigh_r8, spritecodehigh_w8)
+	AM_RANGE(0x8000, 0xbfff) AM_DEVICE("mainbank", address_map_bank_device, amap8)
+	AM_RANGE(0xc000, 0xcfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodelow_r8, spritecodelow_w8)
+	AM_RANGE(0xd000, 0xdfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodehigh_r8, spritecodehigh_w8)
 	AM_RANGE(0xe000, 0xefff) AM_RAM AM_SHARE("share1") /* WORK RAM (shared by the 2 z80's) */
-	AM_RANGE(0xf000, 0xf2ff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spriteylow_r8, spriteylow_w8)
-	AM_RANGE(0xf300, 0xf303) AM_MIRROR(0xfc) AM_DEVWRITE_LEGACY("spritegen", spritectrl_w8) /* control registers (0x80 mirror used by Arkanoid 2) */
-	AM_RANGE(0xf400, 0xf400) AM_DEVWRITE_LEGACY("spritegen", spritebgflag_w8)   /* enable / disable background transparency */
+	AM_RANGE(0xf000, 0xf2ff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spriteylow_r8, spriteylow_w8)
+	AM_RANGE(0xf300, 0xf303) AM_MIRROR(0xfc) AM_DEVWRITE("spritegen", seta001_device, spritectrl_w8) /* control registers (0x80 mirror used by Arkanoid 2) */
+	AM_RANGE(0xf400, 0xf400) AM_DEVWRITE("spritegen", seta001_device, spritebgflag_w8)   /* enable / disable background transparency */
 	AM_RANGE(0xf600, 0xf600) AM_READNOP AM_WRITE(tnzs_ramrom_bankswitch_w)
-	AM_RANGE(0xf800, 0xffff) AM_RAM_WRITE(jpopnics_palette_w) AM_SHARE("paletteram")
+	AM_RANGE(0xf800, 0xffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 ADDRESS_MAP_END
 
 WRITE8_MEMBER(tnzs_state::jpopnics_subbankswitch_w)
@@ -920,6 +897,20 @@ static ADDRESS_MAP_START( jpopnics_sub_map, AS_PROGRAM, 8, tnzs_state )
 	AM_RANGE(0xf000, 0xf003) AM_READ(arknoid2_sh_f000_r)
 ADDRESS_MAP_END
 
+/* RAM/ROM bank that maps at 0x8000-0xbfff on maincpu */
+static ADDRESS_MAP_START( mainbank_map, AS_PROGRAM, 8, tnzs_state )
+	AM_RANGE(0x00000, 0x07fff) AM_RAM // instead of the first two banks of ROM being repeated redundantly the hardware maps RAM here
+	AM_RANGE(0x08000, 0x1ffff) AM_ROM AM_REGION(":maincpu", 0x8000)
+ADDRESS_MAP_END
+
+MACHINE_CONFIG_FRAGMENT( tnzs_mainbank )
+	MCFG_DEVICE_ADD("mainbank", ADDRESS_MAP_BANK, 0)
+	MCFG_DEVICE_PROGRAM_MAP(mainbank_map)
+	MCFG_ADDRESS_MAP_BANK_ENDIANNESS(ENDIANNESS_LITTLE)
+	MCFG_ADDRESS_MAP_BANK_DATABUS_WIDTH(8)
+	MCFG_ADDRESS_MAP_BANK_ADDRBUS_WIDTH(17)
+	MCFG_ADDRESS_MAP_BANK_STRIDE(0x4000)
+MACHINE_CONFIG_END
 
 #define COMMON_IN2\
 	PORT_START("IN2")\
@@ -1548,57 +1539,11 @@ static GFXDECODE_START( insectx )
 GFXDECODE_END
 
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSWA"),
-	DEVCB_INPUT_PORT("DSWB"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
 /* handler called by the 2203 emulator when the internal timers cause an IRQ */
 WRITE_LINE_MEMBER(tnzs_state::irqhandler)
 {
 	m_audiocpu->set_input_line(INPUT_LINE_NMI, state ? ASSERT_LINE : CLEAR_LINE);
 }
-
-static const ay8910_interface kageki_ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(tnzs_state,kageki_csport_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(tnzs_state,kageki_csport_w)
-};
-
-
-static const ay8910_interface tnzsb_ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL
-};
-
-static const ay8910_interface kabukiz_ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(tnzs_state,kabukiz_sound_bank_w),
-	DEVCB_DRIVER_MEMBER(tnzs_state,kabukiz_sample_w)
-};
-
-static const samples_interface tnzs_samples_interface =
-{
-	1,
-	NULL,
-	kageki_init_samples
-};
 
 static MACHINE_CONFIG_START( arknoid2, tnzs_state )
 
@@ -1611,12 +1556,16 @@ static MACHINE_CONFIG_START( arknoid2, tnzs_state )
 	MCFG_CPU_PROGRAM_MAP(sub_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", tnzs_state,  irq0_line_hold)
 
+	MCFG_FRAGMENT_ADD(tnzs_mainbank)
+
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_MACHINE_START_OVERRIDE(tnzs_state,tnzs)
 	MCFG_MACHINE_RESET_OVERRIDE(tnzs_state,tnzs)
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1626,17 +1575,20 @@ static MACHINE_CONFIG_START( arknoid2, tnzs_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tnzs_state, screen_update_tnzs)
 	MCFG_SCREEN_VBLANK_DRIVER(tnzs_state, screen_eof_tnzs)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(tnzs)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tnzs)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
-	MCFG_PALETTE_INIT_OVERRIDE(tnzs_state,arknoid2)
+	MCFG_PALETTE_INIT_OWNER(tnzs_state,arknoid2)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, XTAL_12MHz/4) /* verified on pcb */
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSWA"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSWB"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
 MACHINE_CONFIG_END
 
@@ -1652,12 +1604,16 @@ static MACHINE_CONFIG_START( drtoppel, tnzs_state )
 	MCFG_CPU_PROGRAM_MAP(sub_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", tnzs_state,  irq0_line_hold)
 
+	MCFG_FRAGMENT_ADD(tnzs_mainbank)
+
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_MACHINE_START_OVERRIDE(tnzs_state,tnzs)
 	MCFG_MACHINE_RESET_OVERRIDE(tnzs_state,tnzs)
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1667,17 +1623,19 @@ static MACHINE_CONFIG_START( drtoppel, tnzs_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tnzs_state, screen_update_tnzs)
 	MCFG_SCREEN_VBLANK_DRIVER(tnzs_state, screen_eof_tnzs)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(tnzs)
-	MCFG_PALETTE_LENGTH(512)
-
-	MCFG_PALETTE_INIT_OVERRIDE(tnzs_state,arknoid2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tnzs)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
+	MCFG_PALETTE_INIT_OWNER(tnzs_state,arknoid2)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, XTAL_12MHz/4)
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSWA"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSWB"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
 MACHINE_CONFIG_END
 
@@ -1696,12 +1654,16 @@ static MACHINE_CONFIG_START( tnzs, tnzs_state )
 	MCFG_CPU_ADD("mcu", I8742, 12000000/2)  /* 400KHz ??? - Main board Crystal is 12MHz */
 	MCFG_CPU_IO_MAP(i8742_io_map)
 
+	MCFG_FRAGMENT_ADD(tnzs_mainbank)
+
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_MACHINE_START_OVERRIDE(tnzs_state,tnzs)
 	MCFG_MACHINE_RESET_OVERRIDE(tnzs_state,tnzs)
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1711,16 +1673,18 @@ static MACHINE_CONFIG_START( tnzs, tnzs_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tnzs_state, screen_update_tnzs)
 	MCFG_SCREEN_VBLANK_DRIVER(tnzs_state, screen_eof_tnzs)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(tnzs)
-	MCFG_PALETTE_LENGTH(512)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tnzs)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, XTAL_12MHz/4)
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSWA"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSWB"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
 MACHINE_CONFIG_END
 
@@ -1736,12 +1700,16 @@ static MACHINE_CONFIG_START( insectx, tnzs_state )
 	MCFG_CPU_PROGRAM_MAP(sub_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", tnzs_state,  irq0_line_hold)
 
+	MCFG_FRAGMENT_ADD(tnzs_mainbank)
+
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_MACHINE_START_OVERRIDE(tnzs_state,tnzs)
 	MCFG_MACHINE_RESET_OVERRIDE(tnzs_state,tnzs)
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1751,15 +1719,18 @@ static MACHINE_CONFIG_START( insectx, tnzs_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tnzs_state, screen_update_tnzs)
 	MCFG_SCREEN_VBLANK_DRIVER(tnzs_state, screen_eof_tnzs)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(insectx)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", insectx)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, XTAL_12MHz/4) /* verified on pcb */
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSWA"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSWB"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
 MACHINE_CONFIG_END
 
@@ -1775,12 +1746,16 @@ static MACHINE_CONFIG_START( kageki, tnzs_state )
 	MCFG_CPU_PROGRAM_MAP(kageki_sub_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", tnzs_state,  irq0_line_hold)
 
+	MCFG_FRAGMENT_ADD(tnzs_mainbank)
+
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_MACHINE_START_OVERRIDE(tnzs_state,tnzs)
 	MCFG_MACHINE_RESET_OVERRIDE(tnzs_state,tnzs)
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1790,21 +1765,26 @@ static MACHINE_CONFIG_START( kageki, tnzs_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tnzs_state, screen_update_tnzs)
 	MCFG_SCREEN_VBLANK_DRIVER(tnzs_state, screen_eof_tnzs)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(tnzs)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tnzs)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, XTAL_12MHz/4) /* verified on pcb */
-	MCFG_YM2203_AY8910_INTF(&kageki_ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(tnzs_state, kageki_csport_r))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(tnzs_state, kageki_csport_w))
 	MCFG_SOUND_ROUTE(0, "mono", 0.15)
 	MCFG_SOUND_ROUTE(1, "mono", 0.15)
 	MCFG_SOUND_ROUTE(2, "mono", 0.15)
 	MCFG_SOUND_ROUTE(3, "mono", 0.35)
 
-	MCFG_SAMPLES_ADD("samples", tnzs_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(1)
+	MCFG_SAMPLES_START_CB(tnzs_state, kageki_init_samples)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -1824,12 +1804,16 @@ static MACHINE_CONFIG_START( tnzsb, tnzs_state )
 	MCFG_CPU_PROGRAM_MAP(tnzsb_cpu2_map)
 	MCFG_CPU_IO_MAP(tnzsb_io_map)
 
+	MCFG_FRAGMENT_ADD(tnzs_mainbank)
+
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_MACHINE_START_OVERRIDE(tnzs_state,tnzs)
 	MCFG_MACHINE_RESET_OVERRIDE(tnzs_state,tnzs)
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1839,16 +1823,17 @@ static MACHINE_CONFIG_START( tnzsb, tnzs_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tnzs_state, screen_update_tnzs)
 	MCFG_SCREEN_VBLANK_DRIVER(tnzs_state, screen_eof_tnzs)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(tnzs)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tnzs)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, XTAL_12MHz/4) /* verified on pcb */
 	MCFG_YM2203_IRQ_HANDLER(WRITELINE(tnzs_state, irqhandler))
-	MCFG_YM2203_AY8910_INTF(&tnzsb_ay8910_config)
 	MCFG_SOUND_ROUTE(0, "mono", 1.0)
 	MCFG_SOUND_ROUTE(1, "mono", 1.0)
 	MCFG_SOUND_ROUTE(2, "mono", 1.0)
@@ -1866,7 +1851,8 @@ static MACHINE_CONFIG_DERIVED( kabukiz, tnzsb )
 	MCFG_CPU_PROGRAM_MAP(kabukiz_cpu2_map)
 
 	MCFG_SOUND_MODIFY("ymsnd")
-	MCFG_YM2203_AY8910_INTF(&kabukiz_ay8910_config)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(tnzs_state, kabukiz_sound_bank_w))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(tnzs_state, kabukiz_sample_w))
 
 	MCFG_DAC_ADD("dac")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
@@ -1884,12 +1870,16 @@ static MACHINE_CONFIG_START( jpopnics, tnzs_state )
 	MCFG_CPU_PROGRAM_MAP(jpopnics_sub_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", tnzs_state,  irq0_line_hold)
 
+	MCFG_FRAGMENT_ADD(tnzs_mainbank)
+
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
-	MCFG_MACHINE_START_OVERRIDE(tnzs_state,jpopnics)
+	MCFG_MACHINE_START_OVERRIDE(tnzs_state,tnzs_common)
 	MCFG_MACHINE_RESET_OVERRIDE(tnzs_state,jpopnics)
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1899,9 +1889,12 @@ static MACHINE_CONFIG_START( jpopnics, tnzs_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tnzs_state, screen_update_tnzs)
 	MCFG_SCREEN_VBLANK_DRIVER(tnzs_state, screen_eof_tnzs)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(tnzs)
-	MCFG_PALETTE_LENGTH(1024)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tnzs)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_FORMAT(GGGGBBBBRRRRxxxx) /* wrong, the other 4 bits seem to be used as well */
+	MCFG_PALETTE_ENDIANNESS(ENDIANNESS_BIG)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -2201,6 +2194,8 @@ ROM_START( drtoppelj )
 	ROM_LOAD( "b19-12.16f", 0x0200, 0x200, CRC(5754e9d8) SHA1(8c7d29e22c90b1f72929b95675dc15e431aae044) )   /* lo bytes, AM27S29 or compatible like MB7124 */
 ROM_END
 
+/* M6100309A PCB
+   P0-0038A */
 ROM_START( kageki )
 	ROM_REGION( 0x20000, "maincpu", 0 )
 	ROM_LOAD( "b35-16.11c", 0x00000, 0x10000, CRC(a4e6fd58) SHA1(7cfe5b3fa6c88cdab45719f5b58541270825ad30) )    /* US ver */
@@ -2388,7 +2383,7 @@ PCB Layout
 ----------
 
 M6100356A (on PCB)
-PO-043A (Seta number; on PCB)
+P0-043A (Seta number; on PCB)
 |---------------------------------------------------|
 |     VOL  HA17408           B53-26.U34  DSWB DSWA  |
 |      4558       YM2203 Z80  62256              Z80|
@@ -2471,6 +2466,9 @@ ROM_START( tnzs )
 	ROM_LOAD( "b53-23.3",   0xa0000, 0x20000, CRC(74acfb9b) SHA1(90b544ed7ede7565660bdd13c94c15c54423cda9) )
 	ROM_LOAD( "b53-20.2",   0xc0000, 0x20000, CRC(095d0dc0) SHA1(ced2937d0594fa00ae344a4e3a3cba23772dc160) )
 	ROM_LOAD( "b53-21.1",   0xe0000, 0x20000, CRC(9800c54d) SHA1(761647177d621ac2cdd8b009876eed35809f3c92) )
+
+	ROM_REGION( 0x10000, "pal", 0 )
+	ROM_LOAD( "b53-15.pal16l8a.subpcb.ic6.jed", 0x00000, 0x01000, NO_DUMP) // on sub pcb
 ROM_END
 
 ROM_START( tnzsj )
@@ -2492,16 +2490,29 @@ ROM_START( tnzsj )
 	ROM_LOAD( "b53-23.3",   0xa0000, 0x20000, CRC(74acfb9b) SHA1(90b544ed7ede7565660bdd13c94c15c54423cda9) )
 	ROM_LOAD( "b53-20.2",   0xc0000, 0x20000, CRC(095d0dc0) SHA1(ced2937d0594fa00ae344a4e3a3cba23772dc160) )
 	ROM_LOAD( "b53-21.1",   0xe0000, 0x20000, CRC(9800c54d) SHA1(761647177d621ac2cdd8b009876eed35809f3c92) )
+
+	ROM_REGION( 0x10000, "pal", 0 )
+	ROM_LOAD( "b53-15.pal16l8a.subpcb.ic6.jed", 0x00000, 0x01000, NO_DUMP) // on sub pcb
 ROM_END
 
-/* tnzs - old style PCB sets */
+/* tnzs - old style PCB sets 
+The New Zealand Story
+Taito, 1988
 
+Taito ID: K1100356A
+          J1100156A
+          MAIN PCB
+Seta ID: P0-041A
+*/
+/* This pcb is similar but not identical to the Chuka Taisen pcb above;
+   there is an M-chip i8742 (with Taito silkscreen) and no 3rd z80.
+   There is no sub-pcb like the later TNZS pcb has. */
 ROM_START( tnzsjo )
 	ROM_REGION( 0x20000, "maincpu", 0 ) /* 64k + bankswitch areas for the first CPU */
-	ROM_LOAD( "b53-10.32", 0x00000, 0x20000, CRC(a73745c6) SHA1(73eb38e75e08312d752332f988dc655084b4a86d) )
+	ROM_LOAD( "b53-10.u32", 0x00000, 0x20000, CRC(a73745c6) SHA1(73eb38e75e08312d752332f988dc655084b4a86d) )
 
 	ROM_REGION( 0x10000, "sub", 0 ) /* 64k for the second CPU */
-	ROM_LOAD( "b53-11.38", 0x00000, 0x10000, CRC(9784d443) SHA1(bc3647aac9974031dbe4898417fbaa99841f9548) )
+	ROM_LOAD( "b53-11.u38", 0x00000, 0x10000, CRC(9784d443) SHA1(bc3647aac9974031dbe4898417fbaa99841f9548) )
 
 	ROM_REGION( 0x10000, "mcu", 0 ) /* M-Chip (i8742 internal ROM) */
 	ROM_LOAD( "b53-09.u46", 0x0000, 0x0800, CRC(a4bfce19) SHA1(9340862d5bdc1ad4799dc92cae9bce1428b47478) )
@@ -2516,6 +2527,11 @@ ROM_START( tnzsjo )
 	ROM_LOAD( "b53-03.3",   0xa0000, 0x20000, CRC(74acfb9b) SHA1(90b544ed7ede7565660bdd13c94c15c54423cda9) )
 	ROM_LOAD( "b53-02.2",   0xc0000, 0x20000, CRC(095d0dc0) SHA1(ced2937d0594fa00ae344a4e3a3cba23772dc160) )
 	ROM_LOAD( "b53-01.1",   0xe0000, 0x20000, CRC(9800c54d) SHA1(761647177d621ac2cdd8b009876eed35809f3c92) )
+
+	ROM_REGION( 0x10000, "pal", 0 ) /* these are marked b06 and so are probably shared with extermination */
+	ROM_LOAD( "b06-12.pal16l8a.ic26.jed", 0x00000, 0x01000, NO_DUMP)
+	ROM_LOAD( "b06-13.pal16l8a.ic25.jed", 0x01000, 0x01000, NO_DUMP)
+	ROM_LOAD( "b06-14.pal16x8a.icxx.jed", 0x02000, 0x01000, NO_DUMP) // does this chip exist?
 ROM_END
 
 	ROM_START( tnzso )
@@ -2526,7 +2542,7 @@ ROM_END
 	ROM_LOAD( "u38", 0x00000, 0x10000, CRC(60340d63) SHA1(12a26d19dc8e407e502f25617a5a4c9cea131ce2) )
 
 	ROM_REGION( 0x10000, "mcu", 0 ) /* M-Chip (i8742 internal ROM) */
-	ROM_LOAD( "b53-06.u46", 0x0000, 0x0800, CRC(a4bfce19) SHA1(9340862d5bdc1ad4799dc92cae9bce1428b47478) )
+	ROM_LOAD( "b53-09.u46", 0x0000, 0x0800, CRC(a4bfce19) SHA1(9340862d5bdc1ad4799dc92cae9bce1428b47478) )
 
 	ROM_REGION( 0x100000, "gfx1", 0 )
 	/* ROMs taken from another set (the ones from this set were read incorrectly) */
@@ -2538,6 +2554,12 @@ ROM_END
 	ROM_LOAD( "b53-03.3",   0xa0000, 0x20000, CRC(74acfb9b) SHA1(90b544ed7ede7565660bdd13c94c15c54423cda9) )
 	ROM_LOAD( "b53-02.2",   0xc0000, 0x20000, CRC(095d0dc0) SHA1(ced2937d0594fa00ae344a4e3a3cba23772dc160) )
 	ROM_LOAD( "b53-01.1",   0xe0000, 0x20000, CRC(9800c54d) SHA1(761647177d621ac2cdd8b009876eed35809f3c92) )
+
+	ROM_REGION( 0x10000, "pal", 0 ) /* PALS not directly observed on this board but assumed to exist */
+	/* these are marked b06 and so are probably shared with extermination */
+	ROM_LOAD( "b06-12.pal16l8a.ic26.jed", 0x00000, 0x01000, NO_DUMP)
+	ROM_LOAD( "b06-13.pal16l8a.ic25.jed", 0x01000, 0x01000, NO_DUMP)
+	ROM_LOAD( "b06-14.pal16x8a.icxx.jed", 0x02000, 0x01000, NO_DUMP) // does this chip exist?
 ROM_END
 
 ROM_START( tnzsop )
@@ -2559,6 +2581,12 @@ ROM_START( tnzsop )
 	ROM_LOAD( "ns_a05.rom",   0xa0000, 0x20000, CRC(6e762e20) SHA1(66731fe4053b9c09bc9c95d10aba212db08b4636) )
 	ROM_LOAD( "ns_a04.rom",   0xc0000, 0x20000, CRC(e1fd1b9d) SHA1(6027491b927c2ab9c77fbf8895da1abcfbe32d62) )
 	ROM_LOAD( "ns_a02.rom",   0xe0000, 0x20000, CRC(2ab06bda) SHA1(2b208b564e55c258665e1f66b26fe14a6c68eb96) )
+
+	ROM_REGION( 0x10000, "pal", 0 ) /* PALS not directly observed on this board but assumed to exist */
+	/* these are marked b06 and so are probably shared with extermination */
+	ROM_LOAD( "b06-12.pal16l8a.ic26.jed", 0x00000, 0x01000, NO_DUMP)
+	ROM_LOAD( "b06-13.pal16l8a.ic25.jed", 0x01000, 0x01000, NO_DUMP)
+	ROM_LOAD( "b06-14.pal16x8a.icxx.jed", 0x02000, 0x01000, NO_DUMP) // does this chip exist?
 ROM_END
 
 /*
@@ -2573,7 +2601,7 @@ PCB Layout
 
 M6100356A (on PCB)
 M6100356A (on sticker)
-PO-043A (Seta number; on PCB)
+P0-043A (Seta number; on PCB)
 |---------------------------------------------------|
 |     VOL  HA17408           B50-07.U34  DSWB DSWA  |
 |      4558       YM2203 Z80  62256              Z80|
@@ -2666,30 +2694,38 @@ ROM_END
 
 
 //    YEAR, NAME,      PARENT,   MACHINE,  INPUT,    INIT,     MONITOR,COMPANY,FULLNAME,FLAGS
-GAME( 1987, plumppop,  0,        drtoppel, plumppop, tnzs_state, plumpop,  ROT0,   "Taito Corporation", "Plump Pop (Japan)", 0 )
-GAME( 1987, extrmatn,  0,        arknoid2, extrmatn, tnzs_state, extrmatn, ROT270, "Taito Corporation Japan", "Extermination (World)", 0 )
-GAME( 1987, extrmatnu, extrmatn, arknoid2, extrmatn, tnzs_state, extrmatn, ROT270, "Taito (World Games license)", "Extermination (US)", 0 )
-GAME( 1987, extrmatnj, extrmatn, arknoid2, extrmatn, tnzs_state, extrmatn, ROT270, "Taito Corporation", "Extermination (Japan)", 0 )
-GAME( 1987, arknoid2,  0,        arknoid2, arknoid2, tnzs_state, arknoid2, ROT270, "Taito Corporation Japan", "Arkanoid - Revenge of DOH (World)", 0 )
-GAME( 1987, arknoid2u, arknoid2, arknoid2, arknid2u, tnzs_state, arknoid2, ROT270, "Taito America Corporation (Romstar license)", "Arkanoid - Revenge of DOH (US)", 0 )
-GAME( 1987, arknoid2j, arknoid2, arknoid2, arknid2u, tnzs_state, arknoid2, ROT270, "Taito Corporation", "Arkanoid - Revenge of DOH (Japan)", 0 )
-GAME( 1987, arknoid2b, arknoid2, arknoid2, arknid2u, tnzs_state, arknoid2, ROT270, "bootleg", "Arkanoid - Revenge of DOH (Japan bootleg)", 0 )
-GAME( 1987, drtoppel,  0,        drtoppel, drtoppel, tnzs_state, drtoppel, ROT90,  "Kaneko / Taito Corporation Japan", "Dr. Toppel's Adventure (World)", 0 ) /* Possible region hack */
-GAME( 1987, drtoppelu, drtoppel, drtoppel, drtopplu, tnzs_state, drtoppel, ROT90,  "Kaneko / Taito America Corporation", "Dr. Toppel's Adventure (US)", 0 ) /* Possible region hack */
-GAME( 1987, drtoppelj, drtoppel, drtoppel, drtopplu, tnzs_state, drtoppel, ROT90,  "Kaneko / Taito Corporation", "Dr. Toppel's Tankentai (Japan)", 0 )
-GAME( 1988, kageki,    0,        kageki,   kageki, tnzs_state,   kageki,   ROT90,  "Kaneko / Taito America Corporation (Romstar license)", "Kageki (US)", 0 )
-GAME( 1988, kagekij,   kageki,   kageki,   kagekij, tnzs_state,  kageki,   ROT90,  "Kaneko / Taito Corporation", "Kageki (Japan)", 0 )
-GAME( 1992, kagekih,   kageki,   kageki,   kageki, tnzs_state,   kageki,   ROT90,  "hack", "Kageki (hack)", 0 ) // date is hacked at least, might also be a Japan set hacked to show english
-GAME( 1988, chukatai,  0,        tnzs,     chukatai, tnzs_state, chukatai, ROT0,   "Taito Corporation Japan", "Chuka Taisen (World)", 0 ) /* Possible region hack */
-GAME( 1988, chukataiu, chukatai, tnzs,     chukatau, tnzs_state, chukatai, ROT0,   "Taito America Corporation", "Chuka Taisen (US)", 0 ) /* Possible region hack */
-GAME( 1988, chukataij, chukatai, tnzs,     chukatau, tnzs_state, chukatai, ROT0,   "Taito Corporation", "Chuka Taisen (Japan)", 0 )
-GAME( 1988, tnzs,      0,        tnzsb,    tnzs, tnzs_state,     tnzsb,    ROT0,   "Taito Corporation Japan", "The NewZealand Story (World, new version) (newer PCB)", 0 )
-GAME( 1988, tnzsj,     tnzs,     tnzsb,    tnzsj, tnzs_state,    tnzsb,    ROT0,   "Taito Corporation", "The NewZealand Story (Japan, new version) (newer PCB)", 0 )
-GAME( 1988, tnzsjo,    tnzs,     tnzs,     tnzsjo, tnzs_state,   tnzs,     ROT0,   "Taito Corporation", "The NewZealand Story (Japan, old version) (older PCB)", 0 )
-GAME( 1988, tnzso,     tnzs,     tnzs,     tnzsop, tnzs_state,   tnzs,     ROT0,   "Taito Corporation Japan", "The NewZealand Story (World, old version) (older PCB)", 0 )
-GAME( 1988, tnzsop,    tnzs,     tnzs,     tnzsop, tnzs_state,   tnzs,     ROT0,   "Taito Corporation Japan", "The NewZealand Story (World, prototype?) (older PCB)", 0 )
-GAME( 1988, kabukiz,   0,        kabukiz,  kabukiz, tnzs_state,  kabukiz,  ROT0,   "Kaneko / Taito Corporation Japan", "Kabuki-Z (World)", 0 )
-GAME( 1988, kabukizj,  kabukiz,  kabukiz,  kabukizj, tnzs_state, kabukiz,  ROT0,   "Kaneko / Taito Corporation", "Kabuki-Z (Japan)", 0 )
-GAME( 1989, insectx,   0,        insectx,  insectx, tnzs_state,  insectx,  ROT0,   "Taito Corporation Japan", "Insector X (World)", 0 )
-GAME( 1989, insectxj,  insectx,  insectx,  insectxj, tnzs_state, insectx,  ROT0,   "Taito Corporation", "Insector X (Japan)", 0 )
-GAME( 1992, jpopnics,  0,        jpopnics, jpopnics, driver_device, 0,        ROT0,   "bootleg (Nics)", "Jumping Pop (Nics, Korean bootleg of Plump Pop)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1987, plumppop,  0,        drtoppel, plumppop, tnzs_state,    plumpop,  ROT0,   "Taito Corporation", "Plump Pop (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1992, jpopnics,  0,        jpopnics, jpopnics, driver_device, 0,        ROT0,   "Nics",              "Jumping Pop (Nics, Korean hack of Plump Pop)", GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+
+GAME( 1987, extrmatn,  0,        arknoid2, extrmatn, tnzs_state,    extrmatn, ROT270, "Taito Corporation Japan",     "Extermination (World)", GAME_SUPPORTS_SAVE )
+GAME( 1987, extrmatnu, extrmatn, arknoid2, extrmatn, tnzs_state,    extrmatn, ROT270, "Taito (World Games license)", "Extermination (US)", GAME_SUPPORTS_SAVE )
+GAME( 1987, extrmatnj, extrmatn, arknoid2, extrmatn, tnzs_state,    extrmatn, ROT270, "Taito Corporation",           "Extermination (Japan)", GAME_SUPPORTS_SAVE )
+
+GAME( 1987, arknoid2,  0,        arknoid2, arknoid2, tnzs_state,    arknoid2, ROT270, "Taito Corporation Japan",                     "Arkanoid - Revenge of DOH (World)", GAME_SUPPORTS_SAVE )
+GAME( 1987, arknoid2u, arknoid2, arknoid2, arknid2u, tnzs_state,    arknoid2, ROT270, "Taito America Corporation (Romstar license)", "Arkanoid - Revenge of DOH (US)", GAME_SUPPORTS_SAVE )
+GAME( 1987, arknoid2j, arknoid2, arknoid2, arknid2u, tnzs_state,    arknoid2, ROT270, "Taito Corporation",                           "Arkanoid - Revenge of DOH (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1987, arknoid2b, arknoid2, arknoid2, arknid2u, tnzs_state,    arknoid2, ROT270, "bootleg",                                     "Arkanoid - Revenge of DOH (Japan bootleg)", GAME_SUPPORTS_SAVE )
+
+GAME( 1987, drtoppel,  0,        drtoppel, drtoppel, tnzs_state,    drtoppel, ROT90,  "Kaneko / Taito Corporation Japan",   "Dr. Toppel's Adventure (World)", GAME_SUPPORTS_SAVE ) /* Possible region hack */
+GAME( 1987, drtoppelu, drtoppel, drtoppel, drtopplu, tnzs_state,    drtoppel, ROT90,  "Kaneko / Taito America Corporation", "Dr. Toppel's Adventure (US)", GAME_SUPPORTS_SAVE ) /* Possible region hack */
+GAME( 1987, drtoppelj, drtoppel, drtoppel, drtopplu, tnzs_state,    drtoppel, ROT90,  "Kaneko / Taito Corporation",         "Dr. Toppel's Tankentai (Japan)", GAME_SUPPORTS_SAVE )
+
+GAME( 1988, kageki,    0,        kageki,   kageki,   tnzs_state,    kageki,   ROT90,  "Kaneko / Taito America Corporation (Romstar license)", "Kageki (US)", GAME_SUPPORTS_SAVE )
+GAME( 1988, kagekij,   kageki,   kageki,   kagekij,  tnzs_state,    kageki,   ROT90,  "Kaneko / Taito Corporation",                           "Kageki (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1992, kagekih,   kageki,   kageki,   kageki,   tnzs_state,    kageki,   ROT90,  "hack",                                                 "Kageki (hack)", GAME_SUPPORTS_SAVE ) // date is hacked at least, might also be a Japan set hacked to show english
+
+GAME( 1988, chukatai,  0,        tnzs,     chukatai, tnzs_state,    chukatai, ROT0,   "Taito Corporation Japan",   "Chuka Taisen (World)", GAME_SUPPORTS_SAVE ) /* Possible region hack */
+GAME( 1988, chukataiu, chukatai, tnzs,     chukatau, tnzs_state,    chukatai, ROT0,   "Taito America Corporation", "Chuka Taisen (US)", GAME_SUPPORTS_SAVE ) /* Possible region hack */
+GAME( 1988, chukataij, chukatai, tnzs,     chukatau, tnzs_state,    chukatai, ROT0,   "Taito Corporation",         "Chuka Taisen (Japan)", GAME_SUPPORTS_SAVE )
+
+GAME( 1988, tnzs,      0,        tnzsb,    tnzs,     tnzs_state,    tnzsb,    ROT0,   "Taito Corporation Japan", "The NewZealand Story (World, new version) (newer PCB)", GAME_SUPPORTS_SAVE )
+GAME( 1988, tnzsj,     tnzs,     tnzsb,    tnzsj,    tnzs_state,    tnzsb,    ROT0,   "Taito Corporation",       "The NewZealand Story (Japan, new version) (newer PCB)", GAME_SUPPORTS_SAVE )
+GAME( 1988, tnzsjo,    tnzs,     tnzs,     tnzsjo,   tnzs_state,    tnzs,     ROT0,   "Taito Corporation",       "The NewZealand Story (Japan, old version) (older PCB)", GAME_SUPPORTS_SAVE )
+GAME( 1988, tnzso,     tnzs,     tnzs,     tnzsop,   tnzs_state,    tnzs,     ROT0,   "Taito Corporation Japan", "The NewZealand Story (World, old version) (older PCB)", GAME_SUPPORTS_SAVE )
+GAME( 1988, tnzsop,    tnzs,     tnzs,     tnzsop,   tnzs_state,    tnzs,     ROT0,   "Taito Corporation Japan", "The NewZealand Story (World, prototype?) (older PCB)", GAME_SUPPORTS_SAVE )
+
+GAME( 1988, kabukiz,   0,        kabukiz,  kabukiz,  tnzs_state,    kabukiz,  ROT0,   "Kaneko / Taito Corporation Japan", "Kabuki-Z (World)", GAME_SUPPORTS_SAVE )
+GAME( 1988, kabukizj,  kabukiz,  kabukiz,  kabukizj, tnzs_state,    kabukiz,  ROT0,   "Kaneko / Taito Corporation",       "Kabuki-Z (Japan)", GAME_SUPPORTS_SAVE )
+
+GAME( 1989, insectx,   0,        insectx,  insectx,  tnzs_state,    insectx,  ROT0,   "Taito Corporation Japan", "Insector X (World)", GAME_SUPPORTS_SAVE )
+GAME( 1989, insectxj,  insectx,  insectx,  insectxj, tnzs_state,    insectx,  ROT0,   "Taito Corporation",       "Insector X (Japan)", GAME_SUPPORTS_SAVE )

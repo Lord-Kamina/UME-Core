@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Atari Jaguar hardware
@@ -199,7 +201,7 @@ enum
 
 inline void jaguar_state::get_crosshair_xy(int player, int &x, int &y)
 {
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	/* only 2 lightguns are connected */
 	x = visarea.min_x + (((ioport(player ? "FAKE2_X" : "FAKE1_X")->read() & 0xff) * visarea.width()) >> 8);
@@ -249,11 +251,11 @@ inline bool jaguar_state::adjust_object_timer(int vc)
 	int hdb = hdbpix[vc % 2];
 
 	/* if setting the second one in a line, make sure we will ever actually hit it */
-	if (vc % 2 == 1 && (hdbpix[1] == hdbpix[0] || hdbpix[1] >= machine().primary_screen->width()))
+	if (vc % 2 == 1 && (hdbpix[1] == hdbpix[0] || hdbpix[1] >= m_screen->width()))
 		return false;
 
 	/* adjust the timer */
-	m_object_timer->adjust(machine().primary_screen->time_until_pos(vc / 2, hdb), vc | (hdb << 16));
+	m_object_timer->adjust(m_screen->time_until_pos(vc / 2, hdb), vc | (hdb << 16));
 	return true;
 }
 
@@ -274,18 +276,16 @@ void jaguar_state::update_cpu_irq()
 }
 
 
-void jaguar_state::gpu_cpu_int(device_t *device)
+WRITE_LINE_MEMBER( jaguar_state::gpu_cpu_int )
 {
-	jaguar_state &state = *device->machine().driver_data<jaguar_state>();
-	state.m_cpu_irq_state |= 2;
-	state.update_cpu_irq();
+	m_cpu_irq_state |= 2;
+	update_cpu_irq();
 }
 
-void jaguar_state::dsp_cpu_int(device_t *device)
+WRITE_LINE_MEMBER( jaguar_state::dsp_cpu_int )
 {
-	jaguar_state &state = *device->machine().driver_data<jaguar_state>();
-	state.m_cpu_irq_state |= 16;
-	state.update_cpu_irq();
+	m_cpu_irq_state |= 16;
+	update_cpu_irq();
 }
 
 
@@ -372,7 +372,7 @@ void jaguar_state::set_palette(UINT16 vmode)
 				UINT8 r = (red_lookup[i >> 8] * (i & 0xff)) >> 8;
 				UINT8 g = (grn_lookup[i >> 8] * (i & 0xff)) >> 8;
 				UINT8 b = (blu_lookup[i >> 8] * (i & 0xff)) >> 8;
-				m_pen_table[i] = MAKE_RGB(r, g, b);
+				m_pen_table[i] = rgb_t(r, g, b);
 			}
 			break;
 
@@ -394,7 +394,7 @@ void jaguar_state::set_palette(UINT16 vmode)
 					g = (g << 3) | (g >> 2);
 					b = (b << 3) | (b >> 2);
 				}
-				m_pen_table[i] = MAKE_RGB(r, g, b);
+				m_pen_table[i] = rgb_t(r, g, b);
 			}
 			break;
 
@@ -403,16 +403,16 @@ void jaguar_state::set_palette(UINT16 vmode)
 			for (i = 0; i < 65536; i++)
 			{
 				if (i & 1) // FIXME: controls RGB 5-5-5 / 5-6-5 format or it's just ignored? Used by UBI Soft logo in Rayman
-					m_pen_table[i] = MAKE_RGB(pal5bit(i >> 11), pal5bit(i >> 1), pal5bit(i >> 6));
+					m_pen_table[i] = rgb_t(pal5bit(i >> 11), pal5bit(i >> 1), pal5bit(i >> 6));
 				else
-					m_pen_table[i] = MAKE_RGB(pal5bit(i >> 11), pal6bit(i >> 0), pal5bit(i >> 6));
+					m_pen_table[i] = rgb_t(pal5bit(i >> 11), pal6bit(i >> 0), pal5bit(i >> 6));
 			}
 			break;
 
 		/* RGB full */
 		case 0x006:
 			for (i = 0; i < 65536; i++)
-				m_pen_table[i] = MAKE_RGB(pal5bit(i >> 11), pal6bit(i >> 0), pal5bit(i >> 6));
+				m_pen_table[i] = rgb_t(pal5bit(i >> 11), pal6bit(i >> 0), pal5bit(i >> 6));
 			break;
 
 		/* others */
@@ -513,12 +513,12 @@ blitter_stats[i][3]++;
 blitter_pixels[i] += (m_blitter_regs[B_COUNT] & 0xffff) * (m_blitter_regs[B_COUNT] >> 16);
 if (++reps % 100 == 99)
 {
-	mame_printf_debug("---\nBlitter stats:\n");
+	osd_printf_debug("---\nBlitter stats:\n");
 	for (i = 0; i < blitter_count; i++)
-		mame_printf_debug("  CMD=%08X A1=%08X A2=%08X %6d times, %08X%08X pixels\n",
+		osd_printf_debug("  CMD=%08X A1=%08X A2=%08X %6d times, %08X%08X pixels\n",
 				blitter_stats[i][0], blitter_stats[i][1], blitter_stats[i][2],
 				blitter_stats[i][3], (UINT32)(blitter_pixels[i] >> 32), (UINT32)(blitter_pixels[i]));
-	mame_printf_debug("---\n");
+	osd_printf_debug("---\n");
 }
 }
 
@@ -575,18 +575,18 @@ READ16_MEMBER( jaguar_state::tom_regs_r )
 			return m_cpu_irq_state;
 
 		case HC:
-			return machine().primary_screen->hpos() % (machine().primary_screen->width() / 2);
+			return m_screen->hpos() % (m_screen->width() / 2);
 
 		case VC:
 		{
 			UINT8 half_line;
 
-			if(machine().primary_screen->hpos() >= (machine().primary_screen->width() / 2))
+			if(m_screen->hpos() >= (m_screen->width() / 2))
 				half_line = 1;
 			else
 				half_line = 0;
 
-			return machine().primary_screen->vpos() * 2 + half_line;
+			return m_screen->vpos() * 2 + half_line;
 		}
 	}
 
@@ -657,7 +657,7 @@ WRITE16_MEMBER( jaguar_state::tom_regs_w )
 					if (hperiod != 0 && vperiod != 0 && hbend < hbstart && vbend < vbstart && hbstart < hperiod)
 					{
 						rectangle visarea(hbend / 2, hbstart / 2 - 1, vbend / 2, vbstart / 2 - 1);
-						machine().primary_screen->configure(hperiod / 2, vperiod / 2, visarea, HZ_TO_ATTOSECONDS(double(m_pixel_clock) * 2 / hperiod / vperiod));
+						m_screen->configure(hperiod / 2, vperiod / 2, visarea, HZ_TO_ATTOSECONDS(double(m_pixel_clock) * 2 / hperiod / vperiod));
 					}
 				}
 				break;
@@ -746,7 +746,7 @@ void jaguar_state::scanline_update(int param)
 {
 	int vc = param & 0xffff;
 	int hdb = param >> 16;
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	/* only run if video is enabled and we are past the "display begin" */
 	if ((m_gpu_regs[VMODE] & 1) && vc >= (m_gpu_regs[VDB] & 0x7ff))
@@ -760,7 +760,7 @@ void jaguar_state::scanline_update(int param)
 		/* if we are first on this scanline, clear to the border color */
 		if (ENABLE_BORDERS && vc % 2 == 0)
 		{
-			rgb_t border = MAKE_RGB(m_gpu_regs[BORD1] & 0xff, m_gpu_regs[BORD1] >> 8, m_gpu_regs[BORD2] & 0xff);
+			rgb_t border = rgb_t(m_gpu_regs[BORD1] & 0xff, m_gpu_regs[BORD1] >> 8, m_gpu_regs[BORD2] & 0xff);
 			for (x = visarea.min_x; x <= visarea.max_x; x++)
 				dest[x] = border;
 		}
@@ -777,7 +777,7 @@ void jaguar_state::scanline_update(int param)
 					UINT8 r = m_pen_table[(scanline[x]&0xff)|256];
 					UINT8 g = m_pen_table[(scanline[x]>>8)|512];
 					UINT8 b = m_pen_table[scanline[x+1]&0xff];
-					dest[hdb++] = MAKE_RGB(r, g, b);
+					dest[hdb++] = rgb_t(r, g, b);
 				}
 		}
 		else
@@ -799,7 +799,7 @@ void jaguar_state::scanline_update(int param)
 		}
 
 		/* point to the next counter value */
-		if (++vc / 2 >= machine().primary_screen->height())
+		if (++vc / 2 >= m_screen->height())
 			vc = 0;
 
 	} while (!adjust_object_timer(vc));
@@ -861,7 +861,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
  *************************************/
 
 #define INCLUDE_OBJECT_PROCESSOR
-#include "jagobj.c"
+#include "jagobj.inc"
 
 
 
@@ -876,7 +876,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 #define COMMAND     command
 #define A1FIXED     a1flags
 #define A2FIXED     a2flags
-#include "jagblit.c"
+#include "jagblit.inc"
 #undef A2FIXED
 #undef A1FIXED
 #undef COMMAND
@@ -887,7 +887,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 #define COMMAND     0x09800001
 #define A1FIXED     0x010020
 #define A2FIXED     0x010020
-#include "jagblit.c"
+#include "jagblit.inc"
 #undef A2FIXED
 #undef A1FIXED
 #undef COMMAND
@@ -897,7 +897,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 #define COMMAND     0x09800009
 #define A1FIXED     0x000020
 #define A2FIXED     0x000020
-#include "jagblit.c"
+#include "jagblit.inc"
 #undef A2FIXED
 #undef A1FIXED
 #undef COMMAND
@@ -907,7 +907,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 #define COMMAND     0x01800009
 #define A1FIXED     0x000028
 #define A2FIXED     0x000028
-#include "jagblit.c"
+#include "jagblit.inc"
 #undef A2FIXED
 #undef A1FIXED
 #undef COMMAND
@@ -917,7 +917,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 #define COMMAND     0x01800001
 #define A1FIXED     0x000018
 #define A2FIXED     0x000018
-#include "jagblit.c"
+#include "jagblit.inc"
 #undef A2FIXED
 #undef A1FIXED
 #undef COMMAND
@@ -927,7 +927,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 #define COMMAND     0x01c00001
 #define A1FIXED     0x000018
 #define A2FIXED     0x000018
-#include "jagblit.c"
+#include "jagblit.inc"
 #undef A2FIXED
 #undef A1FIXED
 #undef COMMAND
@@ -938,7 +938,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 #define COMMAND     0x00010000
 #define A1FIXED     a1flags
 #define A2FIXED     a2flags
-#include "jagblit.c"
+#include "jagblit.inc"
 #undef A2FIXED
 #undef A1FIXED
 #undef COMMAND
@@ -948,7 +948,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 #define COMMAND     0x01800001
 #define A1FIXED     a1flags
 #define A2FIXED     a2flags
-#include "jagblit.c"
+#include "jagblit.inc"
 #undef A2FIXED
 #undef A1FIXED
 #undef COMMAND
@@ -958,7 +958,7 @@ UINT32 jaguar_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, 
 #define COMMAND     ((command & 0xf0000f00) | 0x01800001)
 #define A1FIXED     a1flags
 #define A2FIXED     a2flags
-#include "jagblit.c"
+#include "jagblit.inc"
 #undef A2FIXED
 #undef A1FIXED
 #undef COMMAND

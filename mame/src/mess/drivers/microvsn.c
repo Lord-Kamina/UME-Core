@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /***************************************************************************
 
     Milton Bradley MicroVision
@@ -17,8 +19,10 @@ of the games were clocked at around 500KHz, 550KHz, or 300KHz.
 #include "cpu/mcs48/mcs48.h"
 #include "cpu/tms0980/tms0980.h"
 #include "sound/dac.h"
-#include "imagedev/cartslot.h"
 #include "rendlay.h"
+
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 
 
 #define LOG 0
@@ -31,7 +35,9 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_dac( *this, "dac" ),
 		m_i8021( *this, "maincpu1" ),
-		m_tms1100( *this, "maincpu2" ) { }
+		m_tms1100( *this, "maincpu2" ),
+		m_cart(*this, "cartslot")
+	{ }
 
 	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 
@@ -40,7 +46,7 @@ public:
 	DECLARE_MACHINE_RESET(microvision);
 
 	void screen_vblank(screen_device &screen, bool state);
-	DECLARE_DEVICE_IMAGE_LOAD_MEMBER( microvision_cart );
+	DECLARE_DEVICE_IMAGE_LOAD_MEMBER( microvsn_cart );
 
 	// i8021 interface
 	DECLARE_WRITE8_MEMBER(i8021_p0_write);
@@ -86,6 +92,7 @@ protected:
 	required_device<dac_device> m_dac;
 	required_device<cpu_device> m_i8021;
 	required_device<cpu_device> m_tms1100;
+	required_device<generic_slot_device> m_cart;
 
 	// Timers
 	static const device_timer_id TIMER_PADDLE = 0;
@@ -102,10 +109,13 @@ protected:
 	UINT16  m_o;
 
 	// generic variables
+	void    update_lcd();
 	void    lcd_write(UINT8 control, UINT8 data);
 	void    speaker_write(UINT8 speaker);
+	bool    m_pla;
 
 	UINT8   m_lcd_latch[8];
+	UINT8   m_lcd_holding_latch[8];
 	UINT8   m_lcd_latch_index;
 	UINT8   m_lcd[16][16];
 	UINT8   m_lcd_control_old;
@@ -114,22 +124,22 @@ protected:
 
 PALETTE_INIT_MEMBER(microvision_state,microvision)
 {
-	palette_set_color_rgb( machine(), 15, 0x00, 0x00, 0x00 );
-	palette_set_color_rgb( machine(), 14, 0x11, 0x11, 0x11 );
-	palette_set_color_rgb( machine(), 13, 0x22, 0x22, 0x22 );
-	palette_set_color_rgb( machine(), 12, 0x33, 0x33, 0x33 );
-	palette_set_color_rgb( machine(), 11, 0x44, 0x44, 0x44 );
-	palette_set_color_rgb( machine(), 10, 0x55, 0x55, 0x55 );
-	palette_set_color_rgb( machine(),  9, 0x66, 0x66, 0x66 );
-	palette_set_color_rgb( machine(),  8, 0x77, 0x77, 0x77 );
-	palette_set_color_rgb( machine(),  7, 0x88, 0x88, 0x88 );
-	palette_set_color_rgb( machine(),  6, 0x99, 0x99, 0x99 );
-	palette_set_color_rgb( machine(),  5, 0xaa, 0xaa, 0xaa );
-	palette_set_color_rgb( machine(),  4, 0xbb, 0xbb, 0xbb );
-	palette_set_color_rgb( machine(),  3, 0xcc, 0xcc, 0xcc );
-	palette_set_color_rgb( machine(),  2, 0xdd, 0xdd, 0xdd );
-	palette_set_color_rgb( machine(),  1, 0xee, 0xee, 0xee );
-	palette_set_color_rgb( machine(),  0, 0xff, 0xff, 0xff );
+	palette.set_pen_color( 15, 0x00, 0x00, 0x00 );
+	palette.set_pen_color( 14, 0x11, 0x11, 0x11 );
+	palette.set_pen_color( 13, 0x22, 0x22, 0x22 );
+	palette.set_pen_color( 12, 0x33, 0x33, 0x33 );
+	palette.set_pen_color( 11, 0x44, 0x44, 0x44 );
+	palette.set_pen_color( 10, 0x55, 0x55, 0x55 );
+	palette.set_pen_color( 9, 0x66, 0x66, 0x66 );
+	palette.set_pen_color( 8, 0x77, 0x77, 0x77 );
+	palette.set_pen_color( 7, 0x88, 0x88, 0x88 );
+	palette.set_pen_color( 6, 0x99, 0x99, 0x99 );
+	palette.set_pen_color( 5, 0xaa, 0xaa, 0xaa );
+	palette.set_pen_color( 4, 0xbb, 0xbb, 0xbb );
+	palette.set_pen_color( 3, 0xcc, 0xcc, 0xcc );
+	palette.set_pen_color( 2, 0xdd, 0xdd, 0xdd );
+	palette.set_pen_color( 1, 0xee, 0xee, 0xee );
+	palette.set_pen_color( 0, 0xff, 0xff, 0xff );
 }
 
 
@@ -146,6 +156,8 @@ MACHINE_START_MEMBER(microvision_state, microvision)
 	save_item(NAME(m_lcd_latch_index));
 	save_item(NAME(m_lcd));
 	save_item(NAME(m_lcd_control_old));
+	save_item(NAME(m_pla));
+	save_item(NAME(m_lcd_holding_latch));
 }
 
 
@@ -190,7 +202,7 @@ MACHINE_RESET_MEMBER(microvision_state, microvision)
 					break;
 
 				case RC_TYPE_100PF_23_2K:
-				case RC_TYPE_UNKNOWN:   // Default to most occuring setting
+				case RC_TYPE_UNKNOWN:   // Default to most occurring setting
 					static_set_clock( m_tms1100, 500000 );
 					break;
 
@@ -203,13 +215,36 @@ MACHINE_RESET_MEMBER(microvision_state, microvision)
 }
 
 
-UINT32 microvision_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+void microvision_state::update_lcd()
 {
+	UINT16 row = ( m_lcd_holding_latch[0] << 12 ) | ( m_lcd_holding_latch[1] << 8 ) | ( m_lcd_holding_latch[2] << 4 ) | m_lcd_holding_latch[3];
+	UINT16 col = ( m_lcd_holding_latch[4] << 12 ) | ( m_lcd_holding_latch[5] << 8 ) | ( m_lcd_holding_latch[6] << 4 ) | m_lcd_holding_latch[7];
+
+	if (LOG) logerror("row = %04x, col = %04x\n", row, col );
 	for ( int i = 0; i < 16; i++ )
 	{
+		UINT16 temp = row;
+
 		for ( int j = 0; j < 16; j++ )
 		{
-			bitmap.pix16(i,j) = m_lcd[i][j];
+			if ( ( temp & col ) & 0x8000 )
+			{
+				m_lcd[j][i] = 15;
+			}
+			temp <<= 1;
+		}
+		col <<= 1;
+	}
+}
+
+
+UINT32 microvision_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+{
+	for ( UINT8 i = 0; i < 16; i++ )
+	{
+		for ( UINT8 j = 0; j < 16; j++ )
+		{
+			bitmap.pix16(i,j) = m_lcd [i] [j];
 		}
 	}
 
@@ -231,45 +266,50 @@ void microvision_state::screen_vblank(screen_device &screen, bool state)
 				}
 			}
 		}
+		update_lcd();
 	}
 }
 
 
 /*
 control is signals LCD5 LCD4
+  LCD5 = -Data Clk on 0488
+  LCD4 = Latch pulse on 0488
+  LCD3 = Data 0
+  LCD2 = Data 1
+  LCD1 = Data 2
+  LCD0 = Data 3
 data is signals LCD3 LCD2 LCD1 LCD0
 */
 void microvision_state::lcd_write(UINT8 control, UINT8 data)
 {
-	data &= 0xf;
-	if ( ( control == 2 ) && ( m_lcd_control_old == 0 ) )
-	{
-		m_lcd_latch[ m_lcd_latch_index & 0x07 ] = data;
-		m_lcd_latch_index++;
-	}
-	else if ( ( control == 3 ) && ( m_lcd_control_old == 2 ) )
-	{
+	// Latch pulse, when high, resets the %8 latch address counter
+	if ( control & 0x01 ) {
 		m_lcd_latch_index = 0;
+	}
 
-		UINT16 row = ( m_lcd_latch[0] << 12 ) | ( m_lcd_latch[1] << 8 ) | ( m_lcd_latch[2] << 4 ) | m_lcd_latch[3];
-		UINT16 col = ( m_lcd_latch[4] << 12 ) | ( m_lcd_latch[5] << 8 ) | ( m_lcd_latch[6] << 4 ) | m_lcd_latch[7];
+	// The addressed latches load when -Data Clk is low
+	if ( ! ( control & 0x02 ) ) {
+		m_lcd_latch[ m_lcd_latch_index & 0x07 ] = data & 0x0f;
+	}
 
-		if (LOG) logerror("row = %04x, col = %04x\n", row, col );
-		for ( int i = 0; i < 16; i++ )
-		{
-			UINT16 temp = row;
-
-			for ( int j = 0; j < 16; j++ )
-			{
-				if ( ( temp & col ) & 0x8000 )
-				{
-					m_lcd[j][i] = 15;
-				}
-				temp <<= 1;
-			}
-			col <<= 1;
+	// The latch address counter is incremented on rising edges of -Data Clk
+	if ( ( ! ( m_lcd_control_old & 0x02 ) ) && ( control & 0x02 ) ) {
+		// Check if Latch pule is low
+		if ( ! ( control & 0x01 ) ) {
+			m_lcd_latch_index++;
 		}
 	}
+
+	// A parallel transfer of data from the addressed latches to the holding latches occurs
+	// whenever Latch Pulse is high and -Data Clk is high
+	if ( control == 3 ) {
+		for ( int i = 0; i < 8; i++ ) {
+			m_lcd_holding_latch[i] = m_lcd_latch[i];
+		}
+		update_lcd();
+	}
+
 	m_lcd_control_old = control;
 }
 
@@ -453,20 +493,33 @@ WRITE16_MEMBER( microvision_state::tms1100_write_r )
 }
 
 
-DEVICE_IMAGE_LOAD_MEMBER(microvision_state,microvision_cart)
+static const UINT16 microvision_output_pla_0[0x20] =
+{
+	/* O output PLA configuration currently unknown */
+	0x00, 0x08, 0x04, 0x0C, 0x02, 0x0A, 0x06, 0x0E,
+	0x01, 0x09, 0x05, 0x0D, 0x03, 0x0B, 0x07, 0x0F,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+
+static const UINT16 microvision_output_pla_1[0x20] =
+{
+	/* O output PLA configuration currently unknown */
+	/* Reversed bit order */
+	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+
+DEVICE_IMAGE_LOAD_MEMBER(microvision_state, microvsn_cart)
 {
 	UINT8 *rom1 = memregion("maincpu1")->base();
 	UINT8 *rom2 = memregion("maincpu2")->base();
-	UINT32 file_size;
-
-	if (image.software_entry() == NULL)
-	{
-		file_size = image.length();
-	}
-	else
-	{
-		file_size = image.get_software_region_length("rom");
-	}
+	UINT32 file_size = m_cart->common_get_size("rom");
+	m_pla = 0;
 
 	if ( file_size != 1024 && file_size != 2048 )
 	{
@@ -477,7 +530,7 @@ DEVICE_IMAGE_LOAD_MEMBER(microvision_state,microvision_cart)
 	/* Read cartridge */
 	if (image.software_entry() == NULL)
 	{
-		if (image.fread( rom1, file_size) != file_size)
+		if (image.fread(rom1, file_size) != file_size)
 		{
 			image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unable to fully read from file");
 			return IMAGE_INIT_FAIL;
@@ -488,6 +541,14 @@ DEVICE_IMAGE_LOAD_MEMBER(microvision_state,microvision_cart)
 		// Copy rom contents
 		memcpy(rom1, image.get_software_region("rom"), file_size);
 
+		// Get PLA type
+		const char *pla = image.get_feature("pla");
+
+		if (pla)
+			m_pla = 1;
+
+		tms1xxx_cpu_device::set_output_pla(m_tms1100, m_pla ? microvision_output_pla_1 : microvision_output_pla_0);
+
 		// Set default setting for PCB type and RC type
 		m_pcb_type = microvision_state::PCB_TYPE_UNKNOWN;
 		m_rc_type = microvision_state::RC_TYPE_UNKNOWN;
@@ -495,7 +556,7 @@ DEVICE_IMAGE_LOAD_MEMBER(microvision_state,microvision_cart)
 		// Detect settings for PCB type
 		const char *pcb = image.get_feature("pcb");
 
-		if ( pcb != NULL )
+		if (pcb)
 		{
 			static const struct { const char *pcb_name; microvision_state::pcb_type pcbtype; } pcb_types[] =
 				{
@@ -505,9 +566,9 @@ DEVICE_IMAGE_LOAD_MEMBER(microvision_state,microvision_cart)
 					{ "7924952D02", microvision_state::PCB_TYPE_7924952D02 }
 				};
 
-			for (int i = 0; i < ARRAY_LENGTH(pcb_types) && m_pcb_type == microvision_state::PCB_TYPE_UNKNOWN; i++ )
+			for (int i = 0; i < ARRAY_LENGTH(pcb_types) && m_pcb_type == microvision_state::PCB_TYPE_UNKNOWN; i++)
 			{
-				if (!mame_stricmp(pcb, pcb_types[i].pcb_name))
+				if (!core_stricmp(pcb, pcb_types[i].pcb_name))
 				{
 					m_pcb_type = pcb_types[i].pcbtype;
 				}
@@ -517,7 +578,7 @@ DEVICE_IMAGE_LOAD_MEMBER(microvision_state,microvision_cart)
 		// Detect settings for RC types
 		const char *rc = image.get_feature("rc");
 
-		if ( rc != NULL )
+		if (rc)
 		{
 			static const struct { const char *rc_name; microvision_state::rc_type rctype; } rc_types[] =
 				{
@@ -526,9 +587,9 @@ DEVICE_IMAGE_LOAD_MEMBER(microvision_state,microvision_cart)
 					{ "100pf/39.4K", microvision_state::RC_TYPE_100PF_39_4K }
 				};
 
-			for ( int i = 0; i < ARRAY_LENGTH(rc_types) && m_rc_type == microvision_state::RC_TYPE_UNKNOWN; i++ )
+			for (int i = 0; i < ARRAY_LENGTH(rc_types) && m_rc_type == microvision_state::RC_TYPE_UNKNOWN; i++)
 			{
-				if (!mame_stricmp(rc, rc_types[i].rc_name))
+				if (!core_stricmp(rc, rc_types[i].rc_name))
 				{
 					m_rc_type = rc_types[i].rctype;
 				}
@@ -537,13 +598,13 @@ DEVICE_IMAGE_LOAD_MEMBER(microvision_state,microvision_cart)
 	}
 
 	// Mirror rom data to maincpu2 region
-	memcpy( rom2, rom1, file_size );
+	memcpy(rom2, rom1, file_size);
 
 	// Based on file size select cpu:
 	// - 1024 -> I8021
 	// - 2048 -> TI TMS1100
 
-	switch ( file_size )
+	switch (file_size)
 	{
 		case 1024:
 			m_cpu_type = microvision_state::CPU_TYPE_I8021;
@@ -591,26 +652,14 @@ static ADDRESS_MAP_START( microvision_8021_io, AS_IO, 8, microvision_state )
 ADDRESS_MAP_END
 
 
-static const tms0980_config microvision_tms0980_config =
-{
-	{
-		/* O output PLA configuration currently unknown */
-		0x00, 0x08, 0x04, 0x0C, 0x02, 0x0A, 0x06, 0x0E,
-		0x01, 0x09, 0x05, 0x0D, 0x03, 0x0B, 0x07, 0x0F,
-		0xFF00, 0xFF00, 0xFF00, 0xFF00, 0xFF00, 0xFF00, 0xFF00, 0xFF00,
-		0xFF00, 0xFF00, 0xFF00, 0xFF00, 0xFF00, 0xFF00, 0xFF00, 0xFF00
-	},
-	DEVCB_DRIVER_MEMBER(microvision_state, tms1100_read_k),
-	DEVCB_DRIVER_MEMBER16(microvision_state, tms1100_write_o),
-	DEVCB_DRIVER_MEMBER16(microvision_state, tms1100_write_r)
-};
-
-
 static MACHINE_CONFIG_START( microvision, microvision_state )
 	MCFG_CPU_ADD("maincpu1", I8021, 2000000)    // approximately
 	MCFG_CPU_IO_MAP( microvision_8021_io )
 	MCFG_CPU_ADD("maincpu2", TMS1100, 500000)   // most games seem to be running at approximately this speed
-	MCFG_CPU_CONFIG( microvision_tms0980_config )
+	MCFG_TMS1XXX_OUTPUT_PLA( microvision_output_pla_0 )
+	MCFG_TMS1XXX_READ_K_CB( READ8( microvision_state, tms1100_read_k ) )
+	MCFG_TMS1XXX_WRITE_O_CB( WRITE16( microvision_state, tms1100_write_o ) )
+	MCFG_TMS1XXX_WRITE_R_CB( WRITE16( microvision_state, tms1100_write_r ) )
 
 	MCFG_SCREEN_ADD("screen", LCD)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -624,9 +673,10 @@ static MACHINE_CONFIG_START( microvision, microvision_state )
 	MCFG_SCREEN_VBLANK_DRIVER(microvision_state, screen_vblank)
 	MCFG_SCREEN_SIZE(16, 16)
 	MCFG_SCREEN_VISIBLE_AREA(0, 15, 0, 15)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(16)
-	MCFG_PALETTE_INIT_OVERRIDE(microvision_state,microvision)
+	MCFG_PALETTE_ADD("palette", 16)
+	MCFG_PALETTE_INIT_OWNER(microvision_state,microvision)
 
 	MCFG_DEFAULT_LAYOUT(layout_lcd)
 
@@ -635,11 +685,9 @@ static MACHINE_CONFIG_START( microvision, microvision_state )
 	MCFG_SOUND_ADD("dac", DAC, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin")
-	MCFG_CARTSLOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("microvision_cart")
-	MCFG_CARTSLOT_LOAD(microvision_state,microvision_cart)
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "microvision_cart")
+	MCFG_GENERIC_MANDATORY
+	MCFG_GENERIC_LOAD(microvision_state, microvsn_cart)
 
 	/* Software lists */
 	MCFG_SOFTWARE_LIST_ADD("cart_list","microvision")
@@ -649,6 +697,10 @@ MACHINE_CONFIG_END
 ROM_START( microvsn )
 	ROM_REGION( 0x800, "maincpu1", ROMREGION_ERASE00 )
 	ROM_REGION( 0x800, "maincpu2", ROMREGION_ERASE00 )
+	ROM_REGION( 867, "maincpu2:mpla", 0 )
+	ROM_LOAD( "tms1100_default_mpla.pla", 0, 867, CRC(62445fc9) SHA1(d6297f2a4bc7a870b76cc498d19dbb0ce7d69fec) ) // verified for: pinball, blockbuster, bowling
+
+	ROM_REGION( 365, "maincpu2:opla", ROMREGION_ERASE00 )
 ROM_END
 
 

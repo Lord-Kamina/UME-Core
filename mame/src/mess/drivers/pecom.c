@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         Pecom driver by Miodrag Milanovic
@@ -164,30 +166,26 @@ static INPUT_PORTS_START( pecom )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("Break") PORT_CODE(KEYCODE_MINUS) PORT_CHANGED_MEMBER(DEVICE_SELF, pecom_state, ef_w, (void*)COSMAC_INPUT_LINE_EF4)
 INPUT_PORTS_END
 
-static const cassette_interface pecom_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED),
-	"pecom_cass",
-	NULL
-};
-
 /* Machine driver */
 static MACHINE_CONFIG_START( pecom64, pecom_state )
-
 	/* basic machine hardware */
 	MCFG_CPU_ADD(CDP1802_TAG, CDP1802, CDP1869_DOT_CLK_PAL/3)
 	MCFG_CPU_PROGRAM_MAP(pecom64_mem)
 	MCFG_CPU_IO_MAP(pecom64_io)
-	MCFG_CPU_CONFIG(pecom64_cdp1802_config)
-
+	MCFG_COSMAC_WAIT_CALLBACK(VCC)
+	MCFG_COSMAC_CLEAR_CALLBACK(READLINE(pecom_state, clear_r))
+	MCFG_COSMAC_EF2_CALLBACK(READLINE(pecom_state, ef2_r))
+	MCFG_COSMAC_Q_CALLBACK(WRITELINE(pecom_state, q_w))
+	MCFG_COSMAC_SC_CALLBACK(WRITE8(pecom_state, sc_w))
 
 	// sound and video hardware
-
 	MCFG_FRAGMENT_ADD(pecom_video)
 
-	MCFG_CASSETTE_ADD( "cassette", pecom_cassette_interface )
+	// devices
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("pecom_cass")
+
 	MCFG_SOFTWARE_LIST_ADD("cass_list","pecom_cass")
 
 	/* internal ram */
@@ -197,11 +195,16 @@ static MACHINE_CONFIG_START( pecom64, pecom_state )
 MACHINE_CONFIG_END
 
 /* ROM definition */
+ROM_START( pecom32 )
+	ROM_REGION( 0x10000, CDP1802_TAG, ROMREGION_ERASEFF )
+	ROM_LOAD( "090786.bin", 0x8000, 0x4000, CRC(b3b1ea23) SHA1(de69f22568161ced801973345fa39d6d207b9e8c) )
+ROM_END
+
 ROM_START( pecom64 )
 	ROM_REGION( 0x10000, CDP1802_TAG, ROMREGION_ERASEFF )
 	ROM_SYSTEM_BIOS(0, "ver4", "version 4")
-	ROMX_LOAD( "pecom64-1.bin", 0x8000, 0x4000, CRC(9a433b47) SHA1(dadb8c399e0a25a2693e10e42a2d7fc2ea9ad427), ROM_BIOS(1) )
-	ROMX_LOAD( "pecom64-2.bin", 0xc000, 0x4000, CRC(2116cadc) SHA1(03f11055cd221d438a40a41874af8fba0fa116d9), ROM_BIOS(1) )
+	ROMX_LOAD( "rom_1_g_24.02.88_l.bin", 0x8000, 0x4000, CRC(9a433b47) SHA1(dadb8c399e0a25a2693e10e42a2d7fc2ea9ad427), ROM_BIOS(1) )
+	ROMX_LOAD( "rom_2_g_24.02.88_d.bin", 0xc000, 0x4000, CRC(2116cadc) SHA1(03f11055cd221d438a40a41874af8fba0fa116d9), ROM_BIOS(1) )
 	ROM_SYSTEM_BIOS(1, "ver1", "version 1")
 	ROMX_LOAD( "170887-rom1.bin", 0x8000, 0x4000, CRC(43710fb4) SHA1(f84f75061c9ac3e34af93141ecabd3c955881aa2), ROM_BIOS(2) )
 	ROMX_LOAD( "170887-rom2.bin", 0xc000, 0x4000, CRC(d0d34f08) SHA1(7baab17d1e68771b8dcef97d0fffc655beabef28), ROM_BIOS(2) )
@@ -210,4 +213,5 @@ ROM_END
 /* Driver */
 
 /*    YEAR  NAME   PARENT  COMPAT       MACHINE     INPUT   INIT   COMPANY  FULLNAME      FLAGS */
-COMP( 1987, pecom64,     0,      0,     pecom64,    pecom, driver_device,   0,     "Ei Nis", "Pecom 64",    0)
+COMP( 1986, pecom32,       0,      0,     pecom64,    pecom, driver_device,   0,     "Ei Nis", "Pecom 32",    0)
+COMP( 1987, pecom64, pecom32,      0,     pecom64,    pecom, driver_device,   0,     "Ei Nis", "Pecom 64",    0)

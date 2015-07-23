@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Marco Cassili,Ernesto Corvi,Tim Lindquist,Carlos A. Lozano,Bryan McPhail,Jarek Parchanski,Nicola Salmoria,Tomasz Slanina,Phil Stroffolino,Acho A. Tang,Victor Trucco
 #include "emu.h"
 #include "includes/snk.h"
 
@@ -53,7 +55,7 @@ PALETTE_INIT_MEMBER(snk_state,tnk3)
 		bit3 = (color_prom[i + num_colors] >> 1) & 0x01;
 		b = 0x0e * bit0 + 0x1f * bit1 + 0x43 * bit2 + 0x8f * bit3;
 
-		palette_set_color(machine(),i,MAKE_RGB(r,g,b));
+		palette.set_pen_color(i,rgb_t(r,g,b));
 	}
 }
 
@@ -174,7 +176,7 @@ TILE_GET_INFO_MEMBER(snk_state::gwar_get_bg_tile_info)
 	// bermudat, tdfever use FFFF to blank the background.
 	// (still call SET_TILE_INFO_MEMBER, otherwise problems might occur on boot when
 	// the tile data hasn't been initialised)
-	if (code >= machine().gfx[1]->elements())
+	if (code >= m_gfxdecode->gfx(1)->elements())
 		tileinfo.pen_data = m_empty_tile;
 }
 
@@ -185,23 +187,23 @@ VIDEO_START_MEMBER(snk_state,snk_3bpp_shadow)
 {
 	int i;
 
-	if(!(machine().config().m_video_attributes & VIDEO_HAS_SHADOWS))
+	if(!(m_palette->shadows_enabled()))
 		fatalerror("driver should use VIDEO_HAS_SHADOWS\n");
 
 	/* prepare shadow draw table */
 	for(i = 0; i <= 5; i++) m_drawmode_table[i] = DRAWMODE_SOURCE;
-	m_drawmode_table[6] = (machine().config().m_video_attributes & VIDEO_HAS_SHADOWS) ? DRAWMODE_SHADOW : DRAWMODE_SOURCE;
+	m_drawmode_table[6] = (m_palette->shadows_enabled()) ? DRAWMODE_SHADOW : DRAWMODE_SOURCE;
 	m_drawmode_table[7] = DRAWMODE_NONE;
 
 	for (i = 0x000;i < 0x400;i++)
-		machine().shadow_table[i] = i | 0x200;
+		m_palette->shadow_table()[i] = i | 0x200;
 }
 
 VIDEO_START_MEMBER(snk_state,snk_4bpp_shadow)
 {
 	int i;
 
-	if(!(machine().config().m_video_attributes & VIDEO_HAS_SHADOWS))
+	if(!(m_palette->shadows_enabled()))
 		fatalerror("driver should use VIDEO_HAS_SHADOWS\n");
 
 	/* prepare shadow draw table */
@@ -211,10 +213,10 @@ VIDEO_START_MEMBER(snk_state,snk_4bpp_shadow)
 
 	/* all palette entries are not affected by shadow sprites... */
 	for (i = 0x000;i < 0x400;i++)
-		machine().shadow_table[i] = i;
+		m_palette->shadow_table()[i] = i;
 	/* ... except for tilemap colors */
 	for (i = 0x200;i < 0x300;i++)
-		machine().shadow_table[i] = i + 0x100;
+		m_palette->shadow_table()[i] = i + 0x100;
 }
 
 
@@ -222,9 +224,9 @@ VIDEO_START_MEMBER(snk_state,marvins)
 {
 	VIDEO_START_CALL_MEMBER(snk_3bpp_shadow);
 
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::marvins_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this), 8, 8, 36, 28);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::marvins_get_fg_tile_info),this), TILEMAP_SCAN_COLS,    8, 8, 64, 32);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::marvins_get_bg_tile_info),this), TILEMAP_SCAN_COLS,    8, 8, 64, 32);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::marvins_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this), 8, 8, 36, 28);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::marvins_get_fg_tile_info),this), TILEMAP_SCAN_COLS,    8, 8, 64, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::marvins_get_bg_tile_info),this), TILEMAP_SCAN_COLS,    8, 8, 64, 32);
 
 	m_tx_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_scrolldy(8, 8);
@@ -243,8 +245,8 @@ VIDEO_START_MEMBER(snk_state,jcross)
 {
 	VIDEO_START_CALL_MEMBER(snk_3bpp_shadow);
 
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::marvins_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this), 8, 8, 36, 28);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::aso_get_bg_tile_info),this),     TILEMAP_SCAN_COLS,    8, 8, 64, 64);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::marvins_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this), 8, 8, 36, 28);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::aso_get_bg_tile_info),this),     TILEMAP_SCAN_COLS,    8, 8, 64, 64);
 
 	m_tx_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_scrolldy(8, 8);
@@ -262,8 +264,8 @@ VIDEO_START_MEMBER(snk_state,sgladiat)
 {
 	VIDEO_START_CALL_MEMBER(snk_3bpp_shadow);
 
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::marvins_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this), 8, 8, 36, 28);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::aso_get_bg_tile_info),this),     TILEMAP_SCAN_COLS,    8, 8, 64, 32);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::marvins_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this), 8, 8, 36, 28);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::aso_get_bg_tile_info),this),     TILEMAP_SCAN_COLS,    8, 8, 64, 32);
 
 	m_tx_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_scrolldy(8, 8);
@@ -302,8 +304,8 @@ VIDEO_START_MEMBER(snk_state,tnk3)
 {
 	VIDEO_START_CALL_MEMBER(snk_3bpp_shadow);
 
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::marvins_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this), 8, 8, 36, 28);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::tnk3_get_bg_tile_info),this),    TILEMAP_SCAN_COLS,    8, 8, 64, 64);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::marvins_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this), 8, 8, 36, 28);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::tnk3_get_bg_tile_info),this),    TILEMAP_SCAN_COLS,    8, 8, 64, 64);
 
 	m_tx_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_scrolldy(8, 8);
@@ -320,8 +322,8 @@ VIDEO_START_MEMBER(snk_state,ikari)
 {
 	VIDEO_START_CALL_MEMBER(snk_3bpp_shadow);
 
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::ikari_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this),  8,  8, 36, 28);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::ikari_get_bg_tile_info),this), TILEMAP_SCAN_COLS,    16, 16, 32, 32);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::ikari_get_tx_tile_info),this), tilemap_mapper_delegate(FUNC(snk_state::marvins_tx_scan_cols),this),  8,  8, 36, 28);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::ikari_get_bg_tile_info),this), TILEMAP_SCAN_COLS,    16, 16, 32, 32);
 
 	m_tx_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_scrolldy(8, 8);
@@ -342,8 +344,8 @@ VIDEO_START_MEMBER(snk_state,gwar)
 
 	memset(m_empty_tile, 0xf, sizeof(m_empty_tile));
 
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::gwar_get_tx_tile_info),this), TILEMAP_SCAN_COLS,  8,  8, 50, 32);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk_state::gwar_get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::gwar_get_tx_tile_info),this), TILEMAP_SCAN_COLS,  8,  8, 50, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk_state::gwar_get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
 
 	m_tx_tilemap->set_transparent_pen(15);
 
@@ -647,10 +649,10 @@ WRITE8_MEMBER(snk_state::tdfever_spriteram_w)
 	/*  partial updates avoid flickers in the fsoccer radar. */
 	if (offset < 0x80 && m_spriteram[offset] != data)
 	{
-		int vpos = machine().primary_screen->vpos();
+		int vpos = m_screen->vpos();
 
 		if (vpos > 0)
-			machine().primary_screen->update_partial(vpos - 1);
+			m_screen->update_partial(vpos - 1);
 	}
 
 	m_spriteram[offset] = data;
@@ -658,15 +660,13 @@ WRITE8_MEMBER(snk_state::tdfever_spriteram_w)
 
 /**************************************************************************************/
 
-static void marvins_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect,
-		const int scrollx, const int scrolly, const int from, const int to)
+void snk_state::marvins_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, const int scrollx, const int scrolly, const int from, const int to)
 {
-	snk_state *state = machine.driver_data<snk_state>();
-	gfx_element *gfx = machine.gfx[3];
+	gfx_element *gfx = m_gfxdecode->gfx(3);
 	const UINT8 *source, *finish;
 
-	source = state->m_spriteram + from*4;
-	finish = state->m_spriteram + to*4;
+	source = m_spriteram + from*4;
+	finish = m_spriteram + to*4;
 
 	while( source<finish )
 	{
@@ -678,7 +678,7 @@ static void marvins_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap,
 		int flipy = (attributes&0x20);
 		int flipx = 0;
 
-		if (state->flip_screen())
+		if (flip_screen())
 		{
 			sx = 89 - 16 - sx;
 			sy = 262 - 16 - sy;
@@ -691,12 +691,12 @@ static void marvins_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap,
 		if (sx > 512-16) sx -= 512;
 		if (sy > 256-16) sy -= 256;
 
-		drawgfx_transtable(bitmap,cliprect,gfx,
+		gfx->transtable(bitmap,cliprect,
 			tile_number,
 			color,
 			flipx, flipy,
 			sx, sy,
-			state->m_drawmode_table, machine.shadow_table);
+			m_drawmode_table);
 
 		source+=4;
 	}
@@ -706,7 +706,7 @@ static void marvins_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap,
 void snk_state::tnk3_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, const int xscroll, const int yscroll)
 {
 	UINT8 *spriteram = m_spriteram;
-	gfx_element *gfx = machine().gfx[2];
+	gfx_element *gfx = m_gfxdecode->gfx(2);
 	const int size = gfx->width();
 	int tile_number, attributes, color, sx, sy;
 	int xflip,yflip;
@@ -757,21 +757,19 @@ void snk_state::tnk3_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 		if (sx > 512-size) sx -= 512;
 		if (sy > (m_yscroll_mask+1)-size) sy -= (m_yscroll_mask+1);
 
-		drawgfx_transtable(bitmap,cliprect,gfx,
+		gfx->transtable(bitmap,cliprect,
 				tile_number,
 				color,
 				xflip,yflip,
 				sx,sy,
-				m_drawmode_table, machine().shadow_table);
+				m_drawmode_table);
 	}
 }
 
 
-static void ikari_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect,
-		const int start, const int xscroll, const int yscroll, const UINT8 *source, const int gfxnum )
+void snk_state::ikari_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, const int start, const int xscroll, const int yscroll, const UINT8 *source, const int gfxnum )
 {
-	snk_state *state = machine.driver_data<snk_state>();
-	gfx_element *gfx = machine.gfx[gfxnum];
+	gfx_element *gfx = m_gfxdecode->gfx(gfxnum);
 	const int size = gfx->width();
 	int tile_number, attributes, color, sx, sy;
 	int which, finish;
@@ -804,12 +802,12 @@ static void ikari_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap, c
 		if (sx > 512-size) sx -= 512;
 		if (sy > 512-size) sy -= 512;
 
-		drawgfx_transtable(bitmap,cliprect,gfx,
+		gfx->transtable(bitmap,cliprect,
 				tile_number,
 				color,
 				0,0,
 				sx,sy,
-				state->m_drawmode_table, machine.shadow_table);
+				m_drawmode_table);
 	}
 }
 
@@ -839,11 +837,10 @@ byte3: attributes
     -xx-x--- (bank number)
     x------- (x offset bit8)
 */
-static void tdfever_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect,
-		const int xscroll, const int yscroll, const UINT8 *source, const int gfxnum, const int hw_xflip, const int from, const int to )
+void snk_state::tdfever_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect,   const int xscroll, const int yscroll, const UINT8 *source, const int gfxnum,
+										const int hw_xflip, const int from, const int to)
 {
-	snk_state *state = machine.driver_data<snk_state>();
-	gfx_element *gfx = machine.gfx[gfxnum];
+	gfx_element *gfx = m_gfxdecode->gfx(gfxnum);
 	const int size = gfx->width();
 	int tile_number, attributes, sx, sy, color;
 	int which;
@@ -879,7 +876,7 @@ static void tdfever_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap,
 		if (hw_xflip)
 			sx = 495 - size - sx;
 
-		if (state->flip_screen())
+		if (flip_screen())
 		{
 			sx = 495 - size - sx;
 			sy = 258 - size - sy;
@@ -892,12 +889,12 @@ static void tdfever_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap,
 		if (sx > 512-size) sx -= 512;
 		if (sy > 512-size) sy -= 512;
 
-		drawgfx_transtable(bitmap,cliprect,gfx,
+		gfx->transtable(bitmap,cliprect,
 				tile_number,
 				color,
 				flipx,flipy,
 				sx,sy,
-				state->m_drawmode_table, machine.shadow_table);
+				m_drawmode_table);
 	}
 }
 
@@ -910,11 +907,11 @@ UINT32 snk_state::screen_update_marvins(screen_device &screen, bitmap_ind16 &bit
 	m_fg_tilemap->set_scrollx(0, m_fg_scrollx);
 	m_fg_tilemap->set_scrolly(0, m_fg_scrolly);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
-	marvins_draw_sprites(machine(), bitmap, cliprect, m_sp16_scrollx, m_sp16_scrolly, 0, m_sprite_split_point>>2);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
-	marvins_draw_sprites(machine(), bitmap, cliprect, m_sp16_scrollx, m_sp16_scrolly, m_sprite_split_point>>2, 25);
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+	marvins_draw_sprites(bitmap, cliprect, m_sp16_scrollx, m_sp16_scrolly, 0, m_sprite_split_point>>2);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+	marvins_draw_sprites(bitmap, cliprect, m_sp16_scrollx, m_sp16_scrolly, m_sprite_split_point>>2, 25);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
@@ -925,9 +922,9 @@ UINT32 snk_state::screen_update_tnk3(screen_device &screen, bitmap_ind16 &bitmap
 	m_bg_tilemap->set_scrollx(0, m_bg_scrollx);
 	m_bg_tilemap->set_scrolly(0, m_bg_scrolly);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	tnk3_draw_sprites(bitmap, cliprect, m_sp16_scrollx, m_sp16_scrolly);
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
@@ -938,13 +935,13 @@ UINT32 snk_state::screen_update_ikari(screen_device &screen, bitmap_ind16 &bitma
 	m_bg_tilemap->set_scrollx(0, m_bg_scrollx);
 	m_bg_tilemap->set_scrolly(0, m_bg_scrolly);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
-	ikari_draw_sprites(machine(), bitmap, cliprect,  0, m_sp16_scrollx, m_sp16_scrolly, m_spriteram + 0x800, 2 );
-	ikari_draw_sprites(machine(), bitmap, cliprect,  0, m_sp32_scrollx, m_sp32_scrolly, m_spriteram,         3 );
-	ikari_draw_sprites(machine(), bitmap, cliprect, 25, m_sp16_scrollx, m_sp16_scrolly, m_spriteram + 0x800, 2 );
+	ikari_draw_sprites(bitmap, cliprect,  0, m_sp16_scrollx, m_sp16_scrolly, m_spriteram + 0x800, 2 );
+	ikari_draw_sprites(bitmap, cliprect,  0, m_sp32_scrollx, m_sp32_scrolly, m_spriteram,         3 );
+	ikari_draw_sprites(bitmap, cliprect, 25, m_sp16_scrollx, m_sp16_scrolly, m_spriteram + 0x800, 2 );
 
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -954,13 +951,13 @@ UINT32 snk_state::screen_update_gwar(screen_device &screen, bitmap_ind16 &bitmap
 	m_bg_tilemap->set_scrollx(0, m_bg_scrollx);
 	m_bg_tilemap->set_scrolly(0, m_bg_scrolly);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
-	tdfever_draw_sprites(machine(), bitmap, cliprect, m_sp16_scrollx, m_sp16_scrolly, m_spriteram + 0x800, 2, 0, 0, m_sprite_split_point );
-	tdfever_draw_sprites(machine(), bitmap, cliprect, m_sp32_scrollx, m_sp32_scrolly, m_spriteram,         3, 0, 0, 32 );
-	tdfever_draw_sprites(machine(), bitmap, cliprect, m_sp16_scrollx, m_sp16_scrolly, m_spriteram + 0x800, 2, 0, m_sprite_split_point, 64 );
+	tdfever_draw_sprites(bitmap, cliprect, m_sp16_scrollx, m_sp16_scrolly, m_spriteram + 0x800, 2, 0, 0, m_sprite_split_point );
+	tdfever_draw_sprites(bitmap, cliprect, m_sp32_scrollx, m_sp32_scrolly, m_spriteram,         3, 0, 0, 32 );
+	tdfever_draw_sprites(bitmap, cliprect, m_sp16_scrollx, m_sp16_scrolly, m_spriteram + 0x800, 2, 0, m_sprite_split_point, 64 );
 
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
@@ -971,11 +968,11 @@ UINT32 snk_state::screen_update_tdfever(screen_device &screen, bitmap_ind16 &bit
 	m_bg_tilemap->set_scrollx(0, m_bg_scrollx);
 	m_bg_tilemap->set_scrolly(0, m_bg_scrolly);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
-	tdfever_draw_sprites(machine(), bitmap, cliprect, m_sp32_scrollx, m_sp32_scrolly, m_spriteram, 2, 1, 0, 32 );
+	tdfever_draw_sprites(bitmap, cliprect, m_sp32_scrollx, m_sp32_scrolly, m_spriteram, 2, 1, 0, 32 );
 
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }

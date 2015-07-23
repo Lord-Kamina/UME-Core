@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner, Dan Boris, Dirk Best, Robbbert
 /******************************************************************************
 
  AIM65
@@ -41,22 +43,21 @@
  * PB7: CU (Cursor)
  */
 
-static void dl1416_update(device_t *device, int index)
+void aim65_state::dl1416_update(dl1416_device *device, int index)
 {
-	aim65_state *state = device->machine().driver_data<aim65_state>();
-	dl1416_ce_w(device, state->m_pia_a & (0x04 << index));
-	dl1416_wr_w(device, BIT(state->m_pia_a, 7));
-	dl1416_cu_w(device, BIT(state->m_pia_b, 7));
-	dl1416_data_w(device, state->generic_space(), state->m_pia_a & 0x03, state->m_pia_b & 0x7f);
+	device->ce_w(m_pia_a & (0x04 << index));
+	device->wr_w(BIT(m_pia_a, 7));
+	device->cu_w(BIT(m_pia_b, 7));
+	device->data_w(generic_space(), m_pia_a & 0x03, m_pia_b & 0x7f);
 }
 
 void aim65_state::aim65_pia()
 {
-	dl1416_update(machine().device("ds1"), 0);
-	dl1416_update(machine().device("ds2"), 1);
-	dl1416_update(machine().device("ds3"), 2);
-	dl1416_update(machine().device("ds4"), 3);
-	dl1416_update(machine().device("ds5"), 4);
+	dl1416_update(m_ds1, 0);
+	dl1416_update(m_ds2, 1);
+	dl1416_update(m_ds3, 2);
+	dl1416_update(m_ds4, 3);
+	dl1416_update(m_ds5, 4);
 }
 
 
@@ -143,7 +144,15 @@ void aim65_state::machine_start()
 	ram_device *ram = m_ram;
 	address_space &space = m_maincpu->space(AS_PROGRAM);
 
-	/* Init RAM */
+	// Init ROM sockets
+	if (m_z24->exists())
+		space.install_read_handler(0xd000, 0xdfff, read8_delegate(FUNC(generic_slot_device::read_rom),(generic_slot_device*)m_z24));
+	if (m_z25->exists())
+		space.install_read_handler(0xc000, 0xcfff, read8_delegate(FUNC(generic_slot_device::read_rom),(generic_slot_device*)m_z25));
+	if (m_z26->exists())
+		space.install_read_handler(0xb000, 0xbfff, read8_delegate(FUNC(generic_slot_device::read_rom),(generic_slot_device*)m_z26));
+
+	// Init RAM
 	space.install_ram(0x0000, ram->size() - 1, ram->pointer());
 
 	m_pb_save = 0;
@@ -400,7 +409,7 @@ SCREEN_UPDATE( aim65 )
 
 			for (b = 0; b<10; b++)
 			{
-				pen = screen.machine().pens[BIT(data, 0) ? 2 : 0];
+				pen = screen.m_palette->pen(BIT(data, 0) ? 2 : 0);
 				plot_pixel(bitmap,700 - ((b * 10) + x), y, pen);
 				data >>= 1;
 			}

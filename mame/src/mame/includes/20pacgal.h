@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Ms.Pac-Man/Galaga - 20 Year Reunion hardware
@@ -5,7 +7,9 @@
     driver by Nicola Salmoria
 
 ***************************************************************************/
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
+#include "sound/namco.h"
+#include "machine/intelfsh.h"
 
 class _20pacgal_state : public driver_device
 {
@@ -32,7 +36,7 @@ public:
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
-	required_device<eeprom_device> m_eeprom;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
 
 	/* memory */
 	UINT8 m_sprite_gfx_ram[0x2000];
@@ -66,9 +70,20 @@ public:
 	void draw_stars(bitmap_rgb32 &bitmap, const rectangle &cliprect );
 	void draw_sprite(bitmap_rgb32 &bitmap, int y, int x,
 						UINT8 code, UINT8 color, int flip_y, int flip_x);
-
+	void common_save_state();
 };
 
+
+class _25pacman_state : public _20pacgal_state
+{
+public:
+	_25pacman_state(const machine_config &mconfig, device_type type, const char *tag)
+		: _20pacgal_state(mconfig, type, tag)
+	{ }
+
+	DECLARE_READ8_MEMBER( _25pacman_io_87_r );
+	virtual void machine_start();
+};
 
 /*----------- defined in video/20pacgal.c -----------*/
 MACHINE_CONFIG_EXTERN( 20pacgal_video );

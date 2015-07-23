@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /***************************************************************************
 
     Pocket Gal                      (c) 1987 Data East Corporation
@@ -16,37 +18,33 @@
 #include "cpu/m6502/m6502.h"
 #include "sound/2203intf.h"
 #include "sound/3812intf.h"
-#include "sound/msm5205.h"
 #include "includes/pcktgal.h"
-#include "video/decbac06.h"
 #include "machine/deco222.h"
 
 /***************************************************************************/
 
-WRITE8_MEMBER(pcktgal_state::pcktgal_bank_w)
+WRITE8_MEMBER(pcktgal_state::bank_w)
 {
-	UINT8 *RAM = memregion("maincpu")->base();
+	if (data & 1) { membank("bank1")->set_entry(0); }
+	else { membank("bank1")->set_entry(1); }
 
-	if (data & 1) { membank("bank1")->set_base(&RAM[0x4000]); }
-	else { membank("bank1")->set_base(&RAM[0x10000]); }
-
-	if (data & 2) { membank("bank2")->set_base(&RAM[0x6000]); }
-	else { membank("bank2")->set_base(&RAM[0x12000]); }
+	if (data & 2) { membank("bank2")->set_entry(0); }
+	else { membank("bank2")->set_entry(1); }
 }
 
-WRITE8_MEMBER(pcktgal_state::pcktgal_sound_bank_w)
+WRITE8_MEMBER(pcktgal_state::sound_bank_w)
 {
 	membank("bank3")->set_entry((data >> 2) & 1);
 }
 
-WRITE8_MEMBER(pcktgal_state::pcktgal_sound_w)
+WRITE8_MEMBER(pcktgal_state::sound_w)
 {
 	soundlatch_byte_w(space, 0, data);
 	m_audiocpu->set_input_line(INPUT_LINE_NMI, PULSE_LINE);
 }
 
 
-WRITE_LINE_MEMBER(pcktgal_state::pcktgal_adpcm_int)
+WRITE_LINE_MEMBER(pcktgal_state::adpcm_int)
 {
 	m_msm->data_w(m_msm5205next >> 4);
 	m_msm5205next <<= 4;
@@ -56,12 +54,12 @@ WRITE_LINE_MEMBER(pcktgal_state::pcktgal_adpcm_int)
 		m_audiocpu->set_input_line(M6502_IRQ_LINE, HOLD_LINE);
 }
 
-WRITE8_MEMBER(pcktgal_state::pcktgal_adpcm_data_w)
+WRITE8_MEMBER(pcktgal_state::adpcm_data_w)
 {
 	m_msm5205next = data;
 }
 
-READ8_MEMBER(pcktgal_state::pcktgal_adpcm_reset_r)
+READ8_MEMBER(pcktgal_state::adpcm_reset_r)
 {
 	m_msm->reset_w(0);
 	return 0;
@@ -71,14 +69,14 @@ READ8_MEMBER(pcktgal_state::pcktgal_adpcm_reset_r)
 
 static ADDRESS_MAP_START( pcktgal_map, AS_PROGRAM, 8, pcktgal_state )
 	AM_RANGE(0x0000, 0x07ff) AM_RAM
-	AM_RANGE(0x0800, 0x0fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco_bac06_pf_data_8bit_r, deco_bac06_pf_data_8bit_w)
+	AM_RANGE(0x0800, 0x0fff) AM_DEVREADWRITE("tilegen1", deco_bac06_device, pf_data_8bit_r, pf_data_8bit_w)
 	AM_RANGE(0x1000, 0x11ff) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0x1800, 0x1800) AM_READ_PORT("P1")
-	AM_RANGE(0x1800, 0x1807) AM_DEVWRITE_LEGACY("tilegen1", deco_bac06_pf_control0_8bit_w)
-	AM_RANGE(0x1810, 0x181f) AM_DEVREADWRITE_LEGACY("tilegen1", deco_bac06_pf_control1_8bit_r, deco_bac06_pf_control1_8bit_w)
+	AM_RANGE(0x1800, 0x1807) AM_DEVWRITE("tilegen1", deco_bac06_device, pf_control0_8bit_w)
+	AM_RANGE(0x1810, 0x181f) AM_DEVREADWRITE("tilegen1", deco_bac06_device, pf_control1_8bit_r, pf_control1_8bit_w)
 
-	AM_RANGE(0x1a00, 0x1a00) AM_READ_PORT("P2") AM_WRITE(pcktgal_sound_w)
-	AM_RANGE(0x1c00, 0x1c00) AM_READ_PORT("DSW") AM_WRITE(pcktgal_bank_w)
+	AM_RANGE(0x1a00, 0x1a00) AM_READ_PORT("P2") AM_WRITE(sound_w)
+	AM_RANGE(0x1c00, 0x1c00) AM_READ_PORT("DSW") AM_WRITE(bank_w)
 	AM_RANGE(0x4000, 0x5fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x6000, 0x7fff) AM_ROMBANK("bank2")
 	AM_RANGE(0x8000, 0xffff) AM_ROM
@@ -91,10 +89,10 @@ static ADDRESS_MAP_START( pcktgal_sound_map, AS_PROGRAM, 8, pcktgal_state )
 	AM_RANGE(0x0000, 0x07ff) AM_RAM
 	AM_RANGE(0x0800, 0x0801) AM_DEVWRITE("ym1", ym2203_device, write)
 	AM_RANGE(0x1000, 0x1001) AM_DEVWRITE("ym2", ym3812_device, write)
-	AM_RANGE(0x1800, 0x1800) AM_WRITE(pcktgal_adpcm_data_w) /* ADPCM data for the MSM5205 chip */
-	AM_RANGE(0x2000, 0x2000) AM_WRITE(pcktgal_sound_bank_w)
+	AM_RANGE(0x1800, 0x1800) AM_WRITE(adpcm_data_w) /* ADPCM data for the MSM5205 chip */
+	AM_RANGE(0x2000, 0x2000) AM_WRITE(sound_bank_w)
 	AM_RANGE(0x3000, 0x3000) AM_READ(soundlatch_byte_r)
-	AM_RANGE(0x3400, 0x3400) AM_READ(pcktgal_adpcm_reset_r) /* ? not sure */
+	AM_RANGE(0x3400, 0x3400) AM_READ(adpcm_reset_r) /* ? not sure */
 	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank3")
 	AM_RANGE(0x8000, 0xffff) AM_ROM
 ADDRESS_MAP_END
@@ -205,20 +203,18 @@ static GFXDECODE_START( bootleg )
 	GFXDECODE_ENTRY( "gfx2", 0x00000, bootleg_spritelayout,   0,  8 ) /* sprites */
 GFXDECODE_END
 
-/***************************************************************************/
-
-static const msm5205_interface msm5205_config =
-{
-	DEVCB_DRIVER_LINE_MEMBER(pcktgal_state,pcktgal_adpcm_int),  /* interrupt function */
-	MSM5205_S48_4B      /* 8KHz            */
-};
 
 /***************************************************************************/
 
 
 void pcktgal_state::machine_start()
 {
+	membank("bank1")->configure_entries(0, 2, memregion("maincpu")->base() + 0x4000, 0xc000);
+	membank("bank2")->configure_entries(0, 2, memregion("maincpu")->base() + 0x6000, 0xc000);
 	membank("bank3")->configure_entries(0, 2, memregion("audiocpu")->base() + 0x10000, 0x4000);
+	
+	save_item(NAME(m_msm5205next));
+	save_item(NAME(m_toggle));
 }
 
 static MACHINE_CONFIG_START( pcktgal, pcktgal_state )
@@ -240,13 +236,16 @@ static MACHINE_CONFIG_START( pcktgal, pcktgal_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pcktgal_state, screen_update_pcktgal)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(pcktgal)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pcktgal)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INIT_OWNER(pcktgal_state, pcktgal)
 
 
 	MCFG_DEVICE_ADD("tilegen1", DECO_BAC06, 0)
-	deco_bac06_device::set_gfx_region_wide(*device, 0,0,0);
+	deco_bac06_device::set_gfx_region_wide(*device,0,0,0);
+	MCFG_DECO_BAC06_GFXDECODE("gfxdecode")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -258,13 +257,14 @@ static MACHINE_CONFIG_START( pcktgal, pcktgal_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
 	MCFG_SOUND_ADD("msm", MSM5205, 384000)
-	MCFG_SOUND_CONFIG(msm5205_config)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(pcktgal_state, adpcm_int))  /* interrupt function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)      /* 8KHz            */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.70)
 MACHINE_CONFIG_END
 
 
 static MACHINE_CONFIG_DERIVED( bootleg, pcktgal )
-	MCFG_GFXDECODE(bootleg)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", bootleg)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(pcktgal_state, screen_update_pcktgalb)
 MACHINE_CONFIG_END
@@ -442,9 +442,9 @@ DRIVER_INIT_MEMBER(pcktgal_state,pcktgal)
 
 /***************************************************************************/
 
-GAME( 1987, pcktgal,  0,       pcktgal, pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation", "Pocket Gal (Japan)", 0 )
-GAME( 1987, pcktgalb, pcktgal, bootleg, pcktgal, driver_device, 0,        ROT0, "bootleg", "Pocket Gal (bootleg)", 0 )
-GAME( 1989, pcktgal2, pcktgal, pcktgal2,pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation", "Pocket Gal 2 (English)", 0 )
-GAME( 1989, pcktgal2j,pcktgal, pcktgal2,pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation", "Pocket Gal 2 (Japanese)", 0 )
-GAME( 1989, spool3,   pcktgal, pcktgal2,pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation", "Super Pool III (English)", 0 )
-GAME( 1990, spool3i,  pcktgal, pcktgal2,pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation (I-Vics license)", "Super Pool III (I-Vics)", 0 )
+GAME( 1987, pcktgal,  0,       pcktgal, pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation", "Pocket Gal (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1987, pcktgalb, pcktgal, bootleg, pcktgal, driver_device, 0,        ROT0, "bootleg", "Pocket Gal (bootleg)", GAME_SUPPORTS_SAVE )
+GAME( 1989, pcktgal2, pcktgal, pcktgal2,pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation", "Pocket Gal 2 (English)", GAME_SUPPORTS_SAVE )
+GAME( 1989, pcktgal2j,pcktgal, pcktgal2,pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation", "Pocket Gal 2 (Japanese)", GAME_SUPPORTS_SAVE )
+GAME( 1989, spool3,   pcktgal, pcktgal2,pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation", "Super Pool III (English)", GAME_SUPPORTS_SAVE )
+GAME( 1990, spool3i,  pcktgal, pcktgal2,pcktgal, pcktgal_state, pcktgal,  ROT0, "Data East Corporation (I-Vics license)", "Super Pool III (I-Vics)", GAME_SUPPORTS_SAVE )

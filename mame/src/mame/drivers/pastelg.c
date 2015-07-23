@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Takahiro Nogi
 /******************************************************************************
 
     Game Driver for Nichibutsu Mahjong series.
@@ -22,7 +24,6 @@ Memo:
 
 #include "emu.h"
 #include "cpu/z80/z80.h"
-#include "includes/nb1413m3.h"
 #include "sound/ay8910.h"
 #include "sound/dac.h"
 #include "includes/pastelg.h"
@@ -37,17 +38,16 @@ Memo:
 #endif
 
 
-
-DRIVER_INIT_MEMBER(pastelg_state,pastelg)
+void pastelg_state::machine_start()
 {
-	nb1413m3_type = NB1413M3_PASTELG;
+	save_item(NAME(m_mux_data));
 }
 
 READ8_MEMBER(pastelg_state::pastelg_sndrom_r)
 {
 	UINT8 *ROM = memregion("voice")->base();
 
-	return ROM[pastelg_blitter_src_addr_r(space) & 0x7fff];
+	return ROM[pastelg_blitter_src_addr_r() & 0x7fff];
 }
 
 static ADDRESS_MAP_START( pastelg_map, AS_PROGRAM, 8, pastelg_state )
@@ -64,15 +64,15 @@ READ8_MEMBER(pastelg_state::pastelg_irq_ack_r)
 static ADDRESS_MAP_START( pastelg_io_map, AS_IO, 8, pastelg_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 //  AM_RANGE(0x00, 0x00) AM_WRITENOP
-	AM_RANGE(0x00, 0x7f) AM_READ_LEGACY(nb1413m3_sndrom_r)
+	AM_RANGE(0x00, 0x7f) AM_DEVREAD("nb1413m3", nb1413m3_device, sndrom_r)
 	AM_RANGE(0x81, 0x81) AM_DEVREAD("aysnd", ay8910_device, data_r)
 	AM_RANGE(0x82, 0x83) AM_DEVWRITE("aysnd", ay8910_device, data_address_w)
 	AM_RANGE(0x90, 0x90) AM_READ_PORT("SYSTEM")
 	AM_RANGE(0x90, 0x96) AM_WRITE(pastelg_blitter_w)
-	AM_RANGE(0xa0, 0xa0) AM_READWRITE_LEGACY(nb1413m3_inputport1_r, nb1413m3_inputportsel_w)
-	AM_RANGE(0xb0, 0xb0) AM_READ_LEGACY(nb1413m3_inputport2_r) AM_WRITE(pastelg_romsel_w)
+	AM_RANGE(0xa0, 0xa0) AM_DEVREADWRITE("nb1413m3", nb1413m3_device, inputport1_r, inputportsel_w)
+	AM_RANGE(0xb0, 0xb0) AM_DEVREAD("nb1413m3", nb1413m3_device, inputport2_r) AM_WRITE(pastelg_romsel_w)
 	AM_RANGE(0xc0, 0xc0) AM_READ(pastelg_sndrom_r)
-	AM_RANGE(0xc0, 0xcf) AM_WRITE(pastelg_clut_w)
+	AM_RANGE(0xc0, 0xcf) AM_WRITEONLY AM_SHARE("clut")
 	AM_RANGE(0xd0, 0xd0) AM_READ(pastelg_irq_ack_r) AM_DEVWRITE("dac", dac_device, write_unsigned8)
 	AM_RANGE(0xe0, 0xe0) AM_READ_PORT("DSWC")
 ADDRESS_MAP_END
@@ -111,6 +111,11 @@ WRITE8_MEMBER(pastelg_state::threeds_inputportsel_w)
 	m_mux_data = ~data;
 }
 
+CUSTOM_INPUT_MEMBER( pastelg_state::nb1413m3_busyflag_r )
+{
+	return m_nb1413m3->m_busyflag & 0x01;
+}
+
 static ADDRESS_MAP_START( threeds_io_map, AS_IO, 8, pastelg_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x81, 0x81) AM_DEVREAD("aysnd", ay8910_device, data_r)
@@ -119,7 +124,7 @@ static ADDRESS_MAP_START( threeds_io_map, AS_IO, 8, pastelg_state )
 	AM_RANGE(0xf0, 0xf6) AM_WRITE(pastelg_blitter_w)
 	AM_RANGE(0xa0, 0xa0) AM_READWRITE(threeds_inputport1_r, threeds_inputportsel_w)
 	AM_RANGE(0xb0, 0xb0) AM_READ(threeds_inputport2_r) AM_WRITE(threeds_output_w)//writes: bit 3 is coin lockout, bit 1 is coin counter
-	AM_RANGE(0xc0, 0xcf) AM_WRITE(pastelg_clut_w)
+	AM_RANGE(0xc0, 0xcf) AM_WRITEONLY AM_SHARE("clut")
 	AM_RANGE(0xc0, 0xc0) AM_READ(threeds_rom_readback_r)
 	AM_RANGE(0xd0, 0xd0) AM_READ(pastelg_irq_ack_r) AM_DEVWRITE("dac", dac_device, write_unsigned8)
 ADDRESS_MAP_END
@@ -199,7 +204,7 @@ static INPUT_PORTS_START( pastelg )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 
 	PORT_START("SYSTEM")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM(nb1413m3_busyflag_r, NULL)    // DRAW BUSY
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER(DEVICE_SELF, pastelg_state, nb1413m3_busyflag_r, NULL)    // DRAW BUSY
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )         //
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_SERVICE3 )       // MEMORY RESET
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_SERVICE2 )       // ANALYZER
@@ -393,16 +398,6 @@ static INPUT_PORTS_START( galds )
 	PORT_DIPSETTING(      0x00, DEF_STR( On ) )
 INPUT_PORTS_END
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSWB"),
-	DEVCB_INPUT_PORT("DSWA"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 
 static MACHINE_CONFIG_START( pastelg, pastelg_state )
 
@@ -412,8 +407,9 @@ static MACHINE_CONFIG_START( pastelg, pastelg_state )
 	MCFG_CPU_IO_MAP(pastelg_io_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pastelg_state,  irq0_line_assert) // nmiclock not written, chip is 1411M1 instead of 1413M3
 
-	MCFG_MACHINE_START(nb1413m3)
-	MCFG_MACHINE_RESET(nb1413m3)
+	MCFG_NB1413M3_ADD("nb1413m3")
+	MCFG_NB1413M3_TYPE( NB1413M3_PASTELG )
+
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
 	/* video hardware */
@@ -423,15 +419,17 @@ static MACHINE_CONFIG_START( pastelg, pastelg_state )
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 256-1, 16, 240-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pastelg_state, screen_update_pastelg)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(32)
-
+	MCFG_PALETTE_ADD("palette", 32)
+	MCFG_PALETTE_INIT_OWNER(pastelg_state, pastelg)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, 1250000)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSWB"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSWA"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.35)
 
 	MCFG_DAC_ADD("dac")
@@ -469,8 +467,7 @@ static MACHINE_CONFIG_START( threeds, pastelg_state )
 	MCFG_CPU_IO_MAP(threeds_io_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pastelg_state,  irq0_line_assert)
 
-	MCFG_MACHINE_START(nb1413m3)
-	MCFG_MACHINE_RESET(nb1413m3)
+	MCFG_NB1413M3_ADD("nb1413m3")
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
 	/* video hardware */
@@ -480,15 +477,17 @@ static MACHINE_CONFIG_START( threeds, pastelg_state )
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 256-1, 16, 240-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pastelg_state, screen_update_pastelg)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(32)
-
+	MCFG_PALETTE_ADD("palette", 32)
+	MCFG_PALETTE_INIT_OWNER(pastelg_state, pastelg)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, 1250000)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSWB"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSWA"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.35)
 
 	MCFG_DAC_ADD("dac")
@@ -519,7 +518,7 @@ ROM_START( pastelg )
 	ROM_LOAD( "pgal_bp2.bin", 0x0020, 0x0020, CRC(4433021e) SHA1(e0d6619a193d26ad24788d4af5ef01ee89cffacd) )
 ROM_END
 
-ROM_START( 3ds )
+ROM_START( threeds )
 	ROM_REGION( 0x10000, "maincpu", 0 ) /* program */
 	ROM_LOAD( "up9.9a",    0x00000, 0x04000, CRC(bc0e7cfd) SHA1(4e84f573fb2c1228757d34b8bc69649b145d9707) )
 	ROM_LOAD( "up10.10a",  0x04000, 0x04000, CRC(e185d9f5) SHA1(98d4a824ed6a89e42543fb87daed33ef606bcced) )
@@ -550,7 +549,7 @@ ROM_START( galds )
 
 	ROM_REGION( 0x08000, "voice", ROMREGION_ERASE00 ) /* voice */
 
-	ROM_REGION( 0x38000, "gfx1", 0 ) /* gfx - the same as 3ds */
+	ROM_REGION( 0x38000, "gfx1", 0 ) /* gfx - the same as threeds */
 	ROM_LOAD( "dg1.ic11",  0x00000, 0x08000, CRC(5734ca7d) SHA1(d22b9e604cc4e2c0bb4eb32ded06bb5fa519965f) )
 	ROM_LOAD( "dg2.ic10",  0x08000, 0x08000, CRC(c7f21718) SHA1(4b2956d499e4db63e7f2329420e3d0313e6360ed) )
 	ROM_LOAD( "dg3.ic9",   0x10000, 0x08000, CRC(87bd0a9e) SHA1(a0443017ef4c19f0135c4f764a96457f02cda743) )
@@ -566,6 +565,6 @@ ROM_END
 
 
 
-GAME( 1985, pastelg, 0,   pastelg, pastelg, pastelg_state, pastelg, ROT0, "Nichibutsu", "Pastel Gal (Japan 851224)", 0 )
-GAME( 1985, 3ds,     0,   threeds, threeds, pastelg_state, pastelg, ROT0, "Nichibutsu", "Three Ds - Three Dealers Casino House", 0 )
-GAME( 1985, galds,   3ds, threeds, galds, pastelg_state,   pastelg, ROT0, "Nihon System Corp.", "Gals Ds - Three Dealers Casino House (bootleg?)", 0 )
+GAME( 1985, pastelg, 0,       pastelg, pastelg, driver_device, 0, ROT0, "Nichibutsu", "Pastel Gal (Japan 851224)", GAME_SUPPORTS_SAVE )
+GAME( 1985, threeds, 0,       threeds, threeds, driver_device, 0, ROT0, "Nichibutsu", "Three Ds - Three Dealers Casino House", GAME_SUPPORTS_SAVE )
+GAME( 1985, galds,   threeds, threeds, galds,   driver_device, 0, ROT0, "Nihon System Corp.", "Gals Ds - Three Dealers Casino House (bootleg?)", GAME_SUPPORTS_SAVE )

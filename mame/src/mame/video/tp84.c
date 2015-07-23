@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Marc Lafontaine
 /***************************************************************************
 
     video.c
@@ -41,7 +43,7 @@
             220 ohm
             100 ohm
 */
-void tp84_state::palette_init()
+PALETTE_INIT_MEMBER(tp84_state, tp84)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	static const int resistances[4] = { 1000, 470, 220, 100 };
@@ -53,9 +55,6 @@ void tp84_state::palette_init()
 			4, resistances, weights, 470, 0,
 			0, 0, 0, 0, 0,
 			0, 0, 0, 0, 0);
-
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
 
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x100; i++)
@@ -84,7 +83,7 @@ void tp84_state::palette_init()
 		bit3 = (color_prom[i + 0x200] >> 3) & 0x01;
 		b = combine_4_weights(weights, bit0, bit1, bit2, bit3);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* color_prom now points to the beginning of the lookup table */
@@ -98,7 +97,7 @@ void tp84_state::palette_init()
 		for (j = 0; j < 8; j++)
 		{
 			UINT8 ctabentry = ((~i & 0x100) >> 1) | (j << 4) | (color_prom[i] & 0x0f);
-			colortable_entry_set_value(machine().colortable, ((i & 0x100) << 3) | (j << 8) | (i & 0xff), ctabentry);
+			palette.set_pen_indirect(((i & 0x100) << 3) | (j << 8) | (i & 0xff), ctabentry);
 		}
 	}
 }
@@ -107,7 +106,7 @@ void tp84_state::palette_init()
 WRITE8_MEMBER(tp84_state::tp84_spriteram_w)
 {
 	/* the game multiplexes the sprites, so update now */
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	m_spriteram[offset] = data;
 }
 
@@ -115,7 +114,7 @@ WRITE8_MEMBER(tp84_state::tp84_spriteram_w)
 READ8_MEMBER(tp84_state::tp84_scanline_r)
 {
 	/* reads 1V - 128V */
-	return machine().primary_screen->vpos();
+	return m_screen->vpos();
 }
 
 
@@ -144,8 +143,8 @@ TILE_GET_INFO_MEMBER(tp84_state::get_fg_tile_info)
 
 void tp84_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tp84_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tp84_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tp84_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tp84_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 }
 
 
@@ -164,8 +163,8 @@ void tp84_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 		int flip_x = ~m_spriteram[offs + 2] & 0x40;
 		int flip_y =  m_spriteram[offs + 2] & 0x80;
 
-		drawgfx_transmask(bitmap, cliprect, machine().gfx[1], code, color, flip_x, flip_y, x, y,
-				colortable_get_transpen_mask(machine().colortable, machine().gfx[1], color, palette_base));
+		m_gfxdecode->gfx(1)->transmask(bitmap,cliprect, code, color, flip_x, flip_y, x, y,
+				m_palette->transpen_mask(*m_gfxdecode->gfx(1), color, palette_base));
 
 	}
 }
@@ -187,18 +186,18 @@ UINT32 tp84_state::screen_update_tp84(screen_device &screen, bitmap_ind16 &bitma
 										((*m_flipscreen_y & 0x01) ? TILEMAP_FLIPY : 0));
 	}
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 
 	/* draw top status region */
 	clip.min_x = visarea.min_x;
 	clip.max_x = visarea.min_x + 15;
-	m_fg_tilemap->draw(bitmap, clip, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, clip, 0, 0);
 
 	/* draw bottom status region */
 	clip.min_x = visarea.max_x - 15;
 	clip.max_x = visarea.max_x;
-	m_fg_tilemap->draw(bitmap, clip, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, clip, 0, 0);
 
 	return 0;
 }

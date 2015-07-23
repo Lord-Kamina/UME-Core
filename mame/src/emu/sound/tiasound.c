@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Ron Fries,Dan Boris
 /*****************************************************************************/
 /*                                                                           */
 /* Module:  TIA Chip Sound Simulator                                         */
@@ -526,6 +528,22 @@ static void poly_init(UINT8 *poly, int size, int f0, int f1)
 	}
 }
 
+static void tia_save_state(device_t *device, tia *tia)
+{
+	device->save_item(NAME(tia->AUDC));
+	device->save_item(NAME(tia->AUDF));
+	device->save_item(NAME(tia->AUDV));
+	device->save_item(NAME(tia->Outvol));
+	device->save_item(NAME(tia->P4));
+	device->save_item(NAME(tia->P5));
+	device->save_item(NAME(tia->P9));
+	device->save_item(NAME(tia->Div_n_cnt));
+	device->save_item(NAME(tia->Div_n_max));
+	device->save_item(NAME(tia->Div_3_cnt));
+	device->save_item(NAME(tia->Samp_n_cnt));
+	device->save_item(NAME(tia->oversampling));
+}
+
 /*****************************************************************************/
 /* Module:  tia_sh_start()                                                   */
 /* Purpose: to handle the power-up initialization functions                  */
@@ -541,7 +559,7 @@ static void poly_init(UINT8 *poly, int size, int f0, int f1)
 /*                                                                           */
 /*****************************************************************************/
 
-void *tia_sound_init(int clock, int sample_rate, int gain)
+void *tia_sound_init(device_t *device, int clock, int sample_rate, int gain)
 {
 	struct tia *chip;
 	int chan;
@@ -582,11 +600,13 @@ void *tia_sound_init(int clock, int sample_rate, int gain)
 		chip->P9[chan] = 0;
 	}
 
+	tia_save_state(device, chip);
+
 	return chip;
 }
 
 
 void tia_sound_free(void *chip)
 {
-	global_free(chip);
+	global_free((struct tia *)chip);
 }

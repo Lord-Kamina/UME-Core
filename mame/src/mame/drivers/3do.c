@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Angelo Salese, Wilbert Pol
 /***************************************************************************
 
   3do.c
@@ -98,7 +100,6 @@ Part list of Goldstar 3DO Interactive Multiplayer
 #include "cpu/arm7/arm7.h"
 
 
-
 #define X2_CLOCK_PAL    59000000
 #define X2_CLOCK_NTSC   49090000
 #define X601_CLOCK      XTAL_16_9344MHz
@@ -132,6 +133,7 @@ INPUT_PORTS_END
 void _3do_state::machine_start()
 {
 	m_bank2->set_base(memregion("user1")->base());
+	m_nvram->set_base(&m_nvmem, sizeof(m_nvmem));
 
 	/* configure overlay */
 	m_bank1->configure_entry(0, m_dram);
@@ -150,38 +152,13 @@ void _3do_state::machine_reset()
 	m_clio.cstatbits = 0x01; /* bit 0 = reset of clio caused by power on */
 }
 
-struct cdrom_interface _3do_cdrom =
-{
-	NULL,
-	NULL
-};
-
-static NVRAM_HANDLER( _3do )
-{
-	_3do_state *state = machine.driver_data<_3do_state>();
-	UINT8 *nvram = state->m_nvram;
-
-	if (read_or_write)
-		file->write(nvram,0x8000);
-	else
-	{
-		if (file)
-			file->read(nvram,0x8000);
-		else
-		{
-			/* fill in the default values */
-			memset(nvram,0xff,0x8000);
-		}
-	}
-}
-
 static MACHINE_CONFIG_START( 3do, _3do_state )
 
 	/* Basic machine hardware */
 	MCFG_CPU_ADD( "maincpu", ARM7_BE, XTAL_50MHz/4 )
 	MCFG_CPU_PROGRAM_MAP( 3do_mem)
 
-	MCFG_NVRAM_HANDLER(_3do)
+	MCFG_NVRAM_ADD_1FILL("nvram")
 
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("timer_x16", _3do_state, timer_x16_cb, attotime::from_hz(12000)) // TODO: timing
 
@@ -191,7 +168,7 @@ static MACHINE_CONFIG_START( 3do, _3do_state )
 	MCFG_SCREEN_RAW_PARAMS( X2_CLOCK_NTSC / 2, 1592, 254, 1534, 263, 22, 262 )
 	MCFG_SCREEN_UPDATE_DRIVER(_3do_state, screen_update__3do)
 
-	MCFG_CDROM_ADD( "cdrom", _3do_cdrom)
+	MCFG_CDROM_ADD("cdrom")
 MACHINE_CONFIG_END
 
 
@@ -201,7 +178,7 @@ static MACHINE_CONFIG_START( 3do_pal, _3do_state )
 	MCFG_CPU_ADD("maincpu", ARM7_BE, XTAL_50MHz/4 )
 	MCFG_CPU_PROGRAM_MAP( 3do_mem)
 
-	MCFG_NVRAM_HANDLER(_3do)
+	MCFG_NVRAM_ADD_1FILL("nvram")
 
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("timer_x16", _3do_state, timer_x16_cb, attotime::from_hz(12000)) // TODO: timing
 
@@ -209,7 +186,7 @@ static MACHINE_CONFIG_START( 3do_pal, _3do_state )
 	MCFG_SCREEN_RAW_PARAMS( X2_CLOCK_PAL / 2, 1592, 254, 1534, 263, 22, 262 ) // TODO: proper params
 	MCFG_SCREEN_UPDATE_DRIVER(_3do_state, screen_update__3do)
 
-	MCFG_CDROM_ADD( "cdrom", _3do_cdrom)
+	MCFG_CDROM_ADD("cdrom")
 MACHINE_CONFIG_END
 
 #if 0

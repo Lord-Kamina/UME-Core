@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett, R. Belmont
 /*
   Konami Gambling Games ("Tasman" hardware)
   System GX derivative
@@ -15,10 +17,10 @@
 */
 
 #include "emu.h"
-#include "video/konicdev.h"
+#include "video/konami_helper.h"
 #include "includes/konamigx.h"
 #include "cpu/m68000/m68000.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 
 #define CUSTOM_DRAW 1
 
@@ -34,10 +36,14 @@ public:
 	DECLARE_READ32_MEMBER(eeprom_r);
 	DECLARE_WRITE32_MEMBER(eeprom_w);
 	DECLARE_WRITE8_MEMBER(kongambl_ff_w);
+	DECLARE_READ32_MEMBER(test_r);
+	// DECLARE_READ32_MEMBER(rng_r);
 	DECLARE_DRIVER_INIT(kingtut);
 	DECLARE_VIDEO_START(kongambl);
 	UINT32 screen_update_kongambl(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	TIMER_DEVICE_CALLBACK_MEMBER(kongambl_vblank);
+	K056832_CB_MEMBER(tile_callback);
+	K053246_CB_MEMBER(sprite_callback);
 };
 
 
@@ -46,18 +52,18 @@ VIDEO_START_MEMBER(kongambl_state,kongambl)
 	#if CUSTOM_DRAW
 
 	#else
-	k056832_set_layer_association(m_k056832, 0);
-	k056832_set_layer_offs(m_k056832, 0, -2, 0);
-	k056832_set_layer_offs(m_k056832, 1,  2, 0);
-	k056832_set_layer_offs(m_k056832, 2,  4, 0);
-	k056832_set_layer_offs(m_k056832, 3,  6, 0);
+	m_k056832->set_layer_association(0);
+	m_k056832->set_layer_offs(0, -2, 0);
+	m_k056832->set_layer_offs(1,  2, 0);
+	m_k056832->set_layer_offs(2,  4, 0);
+	m_k056832->set_layer_offs(3,  6, 0);
 	#endif
 }
 
 UINT32 kongambl_state::screen_update_kongambl(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	#if CUSTOM_DRAW
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 	UINT32 count;
 
 	count = 0;
@@ -68,8 +74,8 @@ UINT32 kongambl_state::screen_update_kongambl(screen_device &screen, bitmap_ind1
 		{
 			UINT32 tile = m_vram[count] & 0xffff;
 
-			if(machine().primary_screen->visible_area().contains(x*8, y*8))
-				drawgfx_opaque(bitmap,cliprect,gfx,tile,0,0,0,x*8,y*8);
+			if(m_screen->visible_area().contains(x*8, y*8))
+				gfx->opaque(bitmap,cliprect,tile,0,0,0,x*8,y*8);
 
 			count++;
 		}
@@ -83,8 +89,8 @@ UINT32 kongambl_state::screen_update_kongambl(screen_device &screen, bitmap_ind1
 		{
 			UINT32 tile = m_vram[count] & 0xffff;
 
-			if(machine().primary_screen->visible_area().contains(x*8, y*8))
-				drawgfx_transpen(bitmap,cliprect,gfx,tile,0,0,0,x*8,y*8,0);
+			if(m_screen->visible_area().contains(x*8, y*8))
+				gfx->transpen(bitmap,cliprect,tile,0,0,0,x*8,y*8,0);
 
 			count++;
 		}
@@ -93,12 +99,12 @@ UINT32 kongambl_state::screen_update_kongambl(screen_device &screen, bitmap_ind1
 
 	#else
 	bitmap.fill(0, cliprect);
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
-	k056832_tilemap_draw(m_k056832, bitmap, cliprect, 3, 0, 0);
-	k056832_tilemap_draw(m_k056832, bitmap, cliprect, 2, 0, 0);
-	k056832_tilemap_draw(m_k056832, bitmap, cliprect, 1, 0, 0);
-	k056832_tilemap_draw(m_k056832, bitmap, cliprect, 0, 0, 0);
+	m_k056832->tilemap_draw(screen, bitmap, cliprect, 3, 0, 0);
+	m_k056832->tilemap_draw(screen, bitmap, cliprect, 2, 0, 0);
+	m_k056832->tilemap_draw(screen, bitmap, cliprect, 1, 0, 0);
+	m_k056832->tilemap_draw(screen, bitmap, cliprect, 0, 0, 0);
 	#endif
 	return 0;
 }
@@ -106,24 +112,25 @@ UINT32 kongambl_state::screen_update_kongambl(screen_device &screen, bitmap_ind1
 READ32_MEMBER(kongambl_state::eeprom_r)
 {
 	//return machine().rand();
-
-	if (ACCESSING_BITS_16_23)
-		return ioport("EXT_PCB")->read() << 16; // ???
+	UINT32 retval = 0;
 
 	if (ACCESSING_BITS_24_31)
-		return ioport("IN0")->read() << 24; // bit 0 freezes the system if 1
+		retval |= ioport("IN0")->read() << 24; // bit 0 freezes the system if 1
 
-	if (ACCESSING_BITS_0_7)
-		return (ioport("SYSTEM")->read());
+	if (ACCESSING_BITS_16_23)
+		retval |= ioport("EXT_PCB")->read() << 16; // ???
 
 	if (ACCESSING_BITS_8_15)
-		return ioport("IN2")->read() << 8; // ???
+		retval |= ioport("IN2")->read() << 8; // ???
 
-	printf("%08x\n",mem_mask);
+	if (ACCESSING_BITS_0_7)
+		retval |= (ioport("SYSTEM")->read());
 
-	return 0;
+
+//  printf("%08x\n",mem_mask);
+
+	return retval;
 }
-
 WRITE32_MEMBER(kongambl_state::eeprom_w)
 {
 	if (ACCESSING_BITS_8_15)
@@ -132,13 +139,13 @@ WRITE32_MEMBER(kongambl_state::eeprom_w)
 	}
 }
 
-static READ32_HANDLER( test_r )
+READ32_MEMBER(kongambl_state::test_r)
 {
 	return -1;//space.machine().rand();
 }
 
 /*
- static READ32_HANDLER( rng_r )
+ READ32_MEMBER(kongambl_state::rng_r)
 {
     return space.machine().rand();
 }
@@ -161,17 +168,18 @@ static ADDRESS_MAP_START( kongambl_map, AS_PROGRAM, 32, kongambl_state )
 
 	AM_RANGE(0x300000, 0x307fff) AM_RAM // backup RAM 24H
 
-	//0x400000 0x400001 "13M" even addresses
-	//0x400002,0x400003 "13J" odd addresses
-	#if CUSTOM_DRAW
+	// override konami chips with custom areas until that code is removed
 	AM_RANGE(0x400000, 0x401fff) AM_ROM AM_REGION("gfx1",0)
 	AM_RANGE(0x420000, 0x43ffff) AM_RAM AM_SHARE("vram")
 	AM_RANGE(0x480000, 0x48003f) AM_RAM // vregs
-	#else
-	AM_RANGE(0x400000, 0x401fff) AM_DEVREAD_LEGACY("k056832", k056832_rom_long_r)
-	AM_RANGE(0x420000, 0x43ffff) AM_DEVREADWRITE_LEGACY("k056832", k056832_unpaged_ram_long_r, k056832_unpaged_ram_long_w)
-	AM_RANGE(0x480000, 0x48003f) AM_DEVWRITE_LEGACY("k056832", k056832_long_w)
-	#endif
+
+	//0x400000 0x400001 "13M" even addresses
+	//0x400002,0x400003 "13J" odd addresses
+	AM_RANGE(0x400000, 0x401fff) AM_DEVREAD("k056832", k056832_device, rom_long_r)
+	AM_RANGE(0x420000, 0x43ffff) AM_DEVREADWRITE("k056832", k056832_device, unpaged_ram_long_r, unpaged_ram_long_w)
+	AM_RANGE(0x480000, 0x48003f) AM_DEVWRITE("k056832", k056832_device, long_w)
+
+
 
 	AM_RANGE(0x440000, 0x443fff) AM_RAM // OBJ RAM
 
@@ -179,28 +187,24 @@ static ADDRESS_MAP_START( kongambl_map, AS_PROGRAM, 32, kongambl_state )
 
 	AM_RANGE(0x4b001c, 0x4b001f) AM_WRITENOP
 
-	AM_RANGE(0x4c0000, 0x4c0003) AM_WRITENOP
-	AM_RANGE(0x4c0004, 0x4c0007) AM_WRITENOP // bank num for "2G"
+	AM_RANGE(0x4c0000, 0x4c0007) AM_DEVWRITE16("k055673", k055673_device, k053246_word_w, 0xffffffff)
 	AM_RANGE(0x4c4000, 0x4c4003) AM_WRITENOP
 	AM_RANGE(0x4c4004, 0x4c4007) AM_WRITENOP
 	AM_RANGE(0x4c801c, 0x4c801f) AM_WRITENOP
 	AM_RANGE(0x4cc01c, 0x4cc01f) AM_WRITENOP
 
-	AM_RANGE(0x4cc000, 0x4cc003) AM_READ_LEGACY(test_r) // ???
-	AM_RANGE(0x4cc004, 0x4cc007) AM_READ_LEGACY(test_r) // ???
-	AM_RANGE(0x4cc008, 0x4cc00b) AM_READ_LEGACY(test_r) // "2G"
-	AM_RANGE(0x4cc00c, 0x4cc00f) AM_READ_LEGACY(test_r) // obj ROM
+	AM_RANGE(0x4cc000, 0x4cc00f) AM_DEVREAD16("k055673", k055673_device, k055673_rom_word_r, 0xffffffff)
 
 	AM_RANGE(0x4d0000, 0x4d0003) AM_WRITE8(kongambl_ff_w,0xff000000)
 
-	AM_RANGE(0x500380, 0x500383) AM_READ_LEGACY(test_r)
+	AM_RANGE(0x500380, 0x500383) AM_READ(test_r)
 	AM_RANGE(0x500000, 0x5007ff) AM_RAM
 //  AM_RANGE(0x500400, 0x500403) AM_NOP //dual port?
 //  AM_RANGE(0x500420, 0x500423) AM_NOP //dual port?
 //  AM_RANGE(0x500500, 0x500503) AM_NOP // reads sound ROM in here, polled from m68k?
-	AM_RANGE(0x580000, 0x580007) AM_READ_LEGACY(test_r)
+	AM_RANGE(0x580000, 0x580007) AM_READ(test_r)
 
-	AM_RANGE(0x600000, 0x60000f) AM_READ_LEGACY(test_r)
+	AM_RANGE(0x600000, 0x60000f) AM_READ(test_r)
 
 	AM_RANGE(0x700000, 0x700003) AM_READ(eeprom_r)
 	AM_RANGE(0x700004, 0x700007) AM_READ_PORT("IN1")
@@ -235,7 +239,7 @@ static INPUT_PORTS_START( kongambl )
 	PORT_DIPNAME( 0x04, 0x00, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x04, DEF_STR( On ) )
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)
 	PORT_DIPNAME( 0x10, 0x00, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x10, DEF_STR( On ) )
@@ -524,22 +528,21 @@ static INPUT_PORTS_START( kongambl )
 	PORT_DIPSETTING(    0x80000000, DEF_STR( On ) )
 
 	PORT_START( "EEPROMOUT" )
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_device, write_bit)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_device, set_clock_line)
-	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_device, set_cs_line)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, di_write)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, clk_write)
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, cs_write)
 INPUT_PORTS_END
 
-static void kongambl_sprite_callback( running_machine &machine, int *code, int *color, int *priority_mask )
+
+K053246_CB_MEMBER(kongambl_state::sprite_callback)
 {
 }
 
-#if !CUSTOM_DRAW
-static void kongambl_tile_callback( running_machine &machine, int layer, int *code, int *color, int *flags )
+K056832_CB_MEMBER(kongambl_state::tile_callback)
 {
 }
-#endif
 
-#if CUSTOM_DRAW
+
 static const gfx_layout charlayout8_tasman =
 {
 	8,8,
@@ -555,33 +558,14 @@ static GFXDECODE_START( tasman )
 	GFXDECODE_ENTRY( "gfx1", 0, charlayout8_tasman, 0, 0x8000/256 )
 GFXDECODE_END
 
-#else
-static const k056832_interface k056832_intf =
-{
-	"gfx1", 0,
-	K056832_BPP_8TASMAN,
-	0, 0,
-	KONAMI_ROM_DEINTERLEAVE_NONE,
-	kongambl_tile_callback, "none"
-};
-#endif
-
-static const k053247_interface k053247_intf =
-{
-	"screen",
-	"gfx2", 1,
-	TASMAN_PLANE_ORDER,
-	-48+1, 23,
-	KONAMI_ROM_DEINTERLEAVE_NONE,
-	kongambl_sprite_callback
-};
 
 TIMER_DEVICE_CALLBACK_MEMBER(kongambl_state::kongambl_vblank)
 {
 	int scanline = param;
 
-	if(scanline == 512)
-		m_maincpu->set_input_line(1, HOLD_LINE); // vblank?
+	// disabled for now since it interferes with the ROM tests
+//  if(scanline == 512)
+//      m_maincpu->set_input_line(1, HOLD_LINE); // vblank?
 
 	if(scanline == 0)
 		m_maincpu->set_input_line(3, HOLD_LINE); // sprite irq?
@@ -596,7 +580,7 @@ static MACHINE_CONFIG_START( kongambl, kongambl_state )
 	MCFG_CPU_PROGRAM_MAP(kongamaud_map)
 	MCFG_CPU_PERIODIC_INT_DRIVER(kongambl_state, irq2_line_hold,  480)
 
-	MCFG_EEPROM_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -604,17 +588,27 @@ static MACHINE_CONFIG_START( kongambl, kongambl_state )
 	MCFG_SCREEN_SIZE(96*8, 64*8+16)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 80*8-1, 0*8, 64*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(kongambl_state, screen_update_kongambl)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x8000)
+	MCFG_PALETTE_ADD("palette", 0x8000)
 
 	MCFG_VIDEO_START_OVERRIDE(kongambl_state,kongambl)
 
-	MCFG_K053247_ADD("k053246", k053247_intf)
-	#if CUSTOM_DRAW
-	MCFG_GFXDECODE(tasman)
-	#else
-	MCFG_K056832_ADD("k056832", k056832_intf)
-	#endif
+	MCFG_K055555_ADD("k055555")
+
+	MCFG_DEVICE_ADD("k055673", K055673, 0)
+	MCFG_K055673_CB(kongambl_state, sprite_callback)
+	MCFG_K055673_CONFIG("gfx2", 1, K055673_LAYOUT_LE2, -48+1, -23)
+	MCFG_K055673_GFXDECODE("gfxdecode")
+	MCFG_K055673_PALETTE("palette")
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tasman)
+
+	MCFG_DEVICE_ADD("k056832", K056832, 0)
+	MCFG_K056832_CB(kongambl_state, tile_callback)
+	MCFG_K056832_CONFIG("gfx1", 0, K056832_BPP_8TASMAN, 0, 0, "none")
+	MCFG_K056832_GFXDECODE("gfxdecode")
+	MCFG_K056832_PALETTE("palette")
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 MACHINE_CONFIG_END
@@ -635,10 +629,10 @@ ROM_START( kingtut )
 	ROM_LOAD16_BYTE( "kit11_h1_vrm.23", 0x000001, 0x80000, CRC(7aa2f1bc) SHA1(d8aead9dedcc83d3dc574122103aaa2074011197) )
 
 	ROM_REGION( 0x200000, "gfx2", 0 ) // 16x16x8 sprites
-	ROM_LOAD16_BYTE( "kit11hh1_obj.11", 0x000000, 0x80000, CRC(a64d2382) SHA1(bb745a26ef6c076f3aa3ec476589a95915b359ed) )
-	ROM_LOAD16_BYTE( "kit11hm1_obj.13", 0x000001, 0x80000, CRC(21cc4e40) SHA1(9e3735fc8cd53f7e831dc76697911216bd8bbc70) )
-	ROM_LOAD16_BYTE( "kit11ll1_obj.17", 0x100000, 0x80000, CRC(a19338b8) SHA1(1aa68596e5bf493cb360495f1174dc1323086ad2) )
-	ROM_LOAD16_BYTE( "kit11lm1_obj.15", 0x100001, 0x80000, CRC(1aea3f4d) SHA1(52fd1a7ffeeb3acce176ad3812a2ca146e02c324) )
+	ROM_LOAD64_WORD( "kit11ll1_obj.17", 0x000000, 0x80000, CRC(a19338b8) SHA1(1aa68596e5bf493cb360495f1174dc1323086ad2) )
+	ROM_LOAD64_WORD( "kit11lm1_obj.15", 0x000002, 0x80000, CRC(1aea3f4d) SHA1(52fd1a7ffeeb3acce176ad3812a2ca146e02c324) )
+	ROM_LOAD64_WORD( "kit11hm1_obj.13", 0x000004, 0x80000, CRC(21cc4e40) SHA1(9e3735fc8cd53f7e831dc76697911216bd8bbc70) )
+	ROM_LOAD64_WORD( "kit11hh1_obj.11", 0x000006, 0x80000, CRC(a64d2382) SHA1(bb745a26ef6c076f3aa3ec476589a95915b359ed) )
 
 	ROM_REGION( 0x100000, "snd", 0 )
 	ROM_LOAD( "snd12sd1_snd.31", 0x000000, 0x80000, CRC(f4121baa) SHA1(723c6d96ecef5ef510d085f443d44bad07aa19e5) )
@@ -660,10 +654,10 @@ ROM_START( moneybnk )
 	ROM_LOAD16_BYTE( "mob11_h1_vrm.23", 0x000001, 0x80000, CRC(a119feaa) SHA1(567e319dfddb9ec04b9302af782e9baccab4f5a6) )
 
 	ROM_REGION( 0x200000, "gfx2", 0 ) // 16x16x8 sprites
-	ROM_LOAD16_BYTE( "mob11hh1_obj.11", 0x000000, 0x80000, CRC(fc2ebc0a) SHA1(7c61d05ae1644a2aafc2f81725658b29ce69a091) )
-	ROM_LOAD16_BYTE( "mob11hm1_obj.13", 0x000001, 0x80000, CRC(6f84c287) SHA1(edccefa96d97c6f67a9cd02f70cf61385d70daae) )
-	ROM_LOAD16_BYTE( "mob11ll1_obj.17", 0x100000, 0x80000, CRC(5c5959a3) SHA1(1eea6bf4c34aa05f45b2737eb6035f2762277cfb) )
-	ROM_LOAD16_BYTE( "mob11lm1_obj.15", 0x100001, 0x80000, CRC(0b0e4e9b) SHA1(cbbbde7470f96e9f93fa848371e19ebfeea7fe4d) )
+	ROM_LOAD64_WORD( "mob11ll1_obj.17", 0x000000, 0x80000, CRC(5c5959a3) SHA1(1eea6bf4c34aa05f45b2737eb6035f2762277cfb) )
+	ROM_LOAD64_WORD( "mob11lm1_obj.15", 0x000002, 0x80000, CRC(0b0e4e9b) SHA1(cbbbde7470f96e9f93fa848371e19ebfeea7fe4d) )
+	ROM_LOAD64_WORD( "mob11hm1_obj.13", 0x000004, 0x80000, CRC(6f84c287) SHA1(edccefa96d97c6f67a9cd02f70cf61385d70daae) )
+	ROM_LOAD64_WORD( "mob11hh1_obj.11", 0x000006, 0x80000, CRC(fc2ebc0a) SHA1(7c61d05ae1644a2aafc2f81725658b29ce69a091) )
 
 	ROM_REGION( 0x100000, "snd", 0 )
 	ROM_LOAD( "snd11sd1_snd.31", 0x000000, 0x80000, CRC(cce53e79) SHA1(970507fcef309c6c81f7e1a8e90afa64f3f6e2ae) )
@@ -685,10 +679,10 @@ ROM_START( dragsphr )
 	ROM_LOAD16_BYTE( "u23.bin", 0x00001, 0x080000, CRC(a29a777f) SHA1(1ca37e468f31246cbcbd2e1799e5a0137d19d0b9) )
 
 	ROM_REGION( 0x200000, "gfx2", 0 ) // 16x16x8 sprites
-	ROM_LOAD16_BYTE( "u11.bin", 0x000000, 0x080000, CRC(97efac6c) SHA1(e317834e3e9b32fb8a8343e58c047a427b3111f0) )
-	ROM_LOAD16_BYTE( "u13.bin", 0x000001, 0x080000, CRC(a4a60822) SHA1(6f49ae6b40185a0b0dc796b32cdbd048bfcbd3de) )
-	ROM_LOAD16_BYTE( "u17.bin", 0x100000, 0x080000, CRC(9352f279) SHA1(1795df2331fde6de06b7d910d74a3fde69379943) )
-	ROM_LOAD16_BYTE( "u15.bin", 0x100001, 0x080000, CRC(4a7bc71a) SHA1(7b6bfc2b83ea6189a629b64cae295071b52c5fab) )
+	ROM_LOAD64_WORD( "u17.bin", 0x000000, 0x080000, CRC(9352f279) SHA1(1795df2331fde6de06b7d910d74a3fde69379943) )
+	ROM_LOAD64_WORD( "u15.bin", 0x000002, 0x080000, CRC(4a7bc71a) SHA1(7b6bfc2b83ea6189a629b64cae295071b52c5fab) )
+	ROM_LOAD64_WORD( "u13.bin", 0x000004, 0x080000, CRC(a4a60822) SHA1(6f49ae6b40185a0b0dc796b32cdbd048bfcbd3de) )
+	ROM_LOAD64_WORD( "u11.bin", 0x000006, 0x080000, CRC(97efac6c) SHA1(e317834e3e9b32fb8a8343e58c047a427b3111f0) )
 
 	ROM_REGION( 0x100000, "snd", 0 )
 	ROM_LOAD( "snd11sd1_snd.31", 0x000000, 0x80000, CRC(cce53e79) SHA1(970507fcef309c6c81f7e1a8e90afa64f3f6e2ae) ) // same as moneybnk
@@ -710,16 +704,15 @@ ROM_START( ivorytsk )
 	ROM_LOAD16_BYTE( "u23_9297hex", 0x00001, 0x080000, CRC(5e36ff5f) SHA1(9be65015217affc1e28d9ce855cd22f9cb147258) )
 
 	ROM_REGION( 0x200000, "gfx2", 0 ) // 16x16x8 sprites
-	ROM_LOAD16_BYTE( "u11_17fbhex", 0x000000, 0x080000, CRC(82e8e69b) SHA1(9aab64be470b07340d4f39de04b3b790821b3ce7) )
-	ROM_LOAD16_BYTE( "u13_29fbhex", 0x000001, 0x080000, CRC(8f21cbb9) SHA1(a0e82e9f29f9eedabcd79a72db7187180e64a076) )
-	ROM_LOAD16_BYTE( "u17_cof8hex", 0x100000, 0x080000, CRC(1ace8891) SHA1(91115680b50d6e31cdbac81ae439eeacb7a5f812) )
-	ROM_LOAD16_BYTE( "u15_8e23hex", 0x100001, 0x080000, CRC(174114cb) SHA1(3f9151e5785482aebfcb6787ddd63d32e0225ad2) )
+	ROM_LOAD64_WORD( "u17_cof8hex", 0x000000, 0x080000, CRC(1ace8891) SHA1(91115680b50d6e31cdbac81ae439eeacb7a5f812) )
+	ROM_LOAD64_WORD( "u15_8e23hex", 0x000002, 0x080000, CRC(174114cb) SHA1(3f9151e5785482aebfcb6787ddd63d32e0225ad2) )
+	ROM_LOAD64_WORD( "u13_29fbhex", 0x000004, 0x080000, CRC(8f21cbb9) SHA1(a0e82e9f29f9eedabcd79a72db7187180e64a076) )
+	ROM_LOAD64_WORD( "u11_17fbhex", 0x000006, 0x080000, CRC(82e8e69b) SHA1(9aab64be470b07340d4f39de04b3b790821b3ce7) )
 
 	ROM_REGION( 0x100000, "snd", 0 )
 	ROM_LOAD( "snd11sd1_snd.31", 0x000000, 0x80000, CRC(cce53e79) SHA1(970507fcef309c6c81f7e1a8e90afa64f3f6e2ae) ) // same as moneybnk
 	ROM_LOAD( "u32_c20fbin.hex", 0x080000, 0x080000, CRC(38a50800) SHA1(a7a70638d021a039070c9173a42095f7603b57c2) )
 ROM_END
-
 
 
 
@@ -736,10 +729,10 @@ ROM_START( vikingt )
 	ROM_LOAD16_BYTE( "u23.bin", 0x00001, 0x080000, CRC(56ba968e) SHA1(100edc40748067683172480fc2b7d48f4dc89da7) )
 
 	ROM_REGION( 0x200000, "gfx2", 0 ) // 16x16x8 sprites
-	ROM_LOAD16_BYTE( "u11.bin", 0x000000, 0x080000, CRC(c0bf7510) SHA1(aa0a6d8109452ddf6915a9bd33b7cbb5fbda2386) )
-	ROM_LOAD16_BYTE( "u13.bin", 0x000001, 0x080000, CRC(2cbda923) SHA1(888b3ef9fe91843b59b03b9dabc3fd32fb7fac20) )
-	ROM_LOAD16_BYTE( "u17.bin", 0x100000, 0x080000, CRC(83e7f568) SHA1(0f82eadb3badb7074338099ff9f4d73216a1d5c7) )
-	ROM_LOAD16_BYTE( "u15.bin", 0x100001, 0x080000, CRC(f349b72b) SHA1(d8abc42bbc607e36004a76e45dd88b581db60d09) )
+	ROM_LOAD64_WORD( "u17.bin", 0x000000, 0x080000, CRC(83e7f568) SHA1(0f82eadb3badb7074338099ff9f4d73216a1d5c7) )
+	ROM_LOAD64_WORD( "u15.bin", 0x000002, 0x080000, CRC(f349b72b) SHA1(d8abc42bbc607e36004a76e45dd88b581db60d09) )
+	ROM_LOAD64_WORD( "u13.bin", 0x000004, 0x080000, CRC(2cbda923) SHA1(888b3ef9fe91843b59b03b9dabc3fd32fb7fac20) )
+	ROM_LOAD64_WORD( "u11.bin", 0x000006, 0x080000, CRC(c0bf7510) SHA1(aa0a6d8109452ddf6915a9bd33b7cbb5fbda2386) )
 
 	ROM_REGION( 0x100000, "snd", 0 )
 	ROM_LOAD( "snd12sd1_snd.31", 0x000000, 0x80000, CRC(f4121baa) SHA1(723c6d96ecef5ef510d085f443d44bad07aa19e5) ) // same as King Tut

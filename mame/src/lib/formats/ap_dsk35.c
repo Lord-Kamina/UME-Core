@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, R. Belmont
 /*********************************************************************
 
     ap_dsk35.c
@@ -99,7 +101,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include "emu.h"
+#include "emu.h" // logerror
 #include "ap_dsk35.h"
 
 struct apple35_tag
@@ -470,8 +472,13 @@ static UINT32 apple35_get_offset(floppy_image_legacy *floppy, int head, int trac
 	{
 		*tag_offset = sector_index * 12;
 		if (*tag_offset >= tag->tag_size)
+		{
 			*tag_offset = ~0;
-		*tag_offset += tag->tag_offset;
+		}
+		else
+		{
+			*tag_offset += tag->tag_offset;
+		}
 	}
 	return sector_index * 0x200 + tag->data_offset;
 }
@@ -1181,7 +1188,7 @@ LEGACY_FLOPPY_OPTIONS_START( apple35_mac )
 LEGACY_FLOPPY_OPTIONS_END
 
 LEGACY_FLOPPY_OPTIONS_START( apple35_iigs )
-	LEGACY_FLOPPY_OPTION( apple35_raw, "dsk,img,image", "Apple raw 3.5\" disk image",   apple35_raw_identify,       apple35_raw_construct, NULL,
+	LEGACY_FLOPPY_OPTION( apple35_raw, "dsk,img,image,po", "Apple raw 3.5\" disk image",   apple35_raw_identify,       apple35_raw_construct, NULL,
 		HEADS([1]-2)
 		TRACKS([80])
 		SECTOR_LENGTH([512])
@@ -1199,39 +1206,8 @@ LEGACY_FLOPPY_OPTIONS_START( apple35_iigs )
 LEGACY_FLOPPY_OPTIONS_END
 
 
-/***************************************************************************
-
-    Copyright Olivier Galibert
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
-
-****************************************************************************/
-
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 dc42_format::dc42_format() : floppy_image_format_t()
 {
 }
@@ -1259,15 +1235,15 @@ bool dc42_format::supports_save() const
 int dc42_format::identify(io_generic *io, UINT32 form_factor)
 {
 	UINT8 h[0x54];
-	int size = io_generic_size(io);
+	UINT64 size = io_generic_size(io);
 	if(size < 0x54)
 		return 0;
 
 	io_generic_read(io, h, 0, 0x54);
-	int dsize = (h[0x40] << 24) | (h[0x41] << 16) | (h[0x42] << 8) | h[0x43];
-	int tsize = (h[0x44] << 24) | (h[0x45] << 16) | (h[0x46] << 8) | h[0x47];
+	UINT32 dsize = (h[0x40] << 24) | (h[0x41] << 16) | (h[0x42] << 8) | h[0x43];
+	UINT32 tsize = (h[0x44] << 24) | (h[0x45] << 16) | (h[0x46] << 8) | h[0x47];
 
-	return dsize > 0 && tsize >= 0 && size == 0x54+tsize+dsize && h[0] < 64 && h[0x52] == 1 && h[0x53] == 0 ? 100 : 0;
+	return size == 0x54+tsize+dsize && h[0] < 64 && h[0x52] == 1 && h[0x53] == 0 ? 100 : 0;
 }
 
 const floppy_image_format_t::desc_e dc42_format::mac_gcr[] = {

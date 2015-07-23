@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia, Ernesto Corvi, Nicola Salmoria
 /***************************************************************************
 
 Galaga 3 / Gaplus (c) 1984 Namco
@@ -142,7 +144,7 @@ TODO:
 - schematics show 4 lines going from the 58XX I/O chip to the 26XX (starfield generator).
   Function and operation unknown.
 
-- Add 62XX custom to machine/namcoio.c (though it's quite different from 56XX and 58XX).
+- Complete 62XX custom emulation (machine/namco62.c) (though it's quite different from 56XX and 58XX).
 
 - Is the sprite generator the same as Phozon? This isn't clear yet. They are
   very similar, especially in the way the size flags are layed out.
@@ -152,22 +154,11 @@ TODO:
 #include "emu.h"
 #include "cpu/m6809/m6809.h"
 #include "machine/namco62.h"
-#include "sound/namco.h"
 #include "sound/samples.h"
 #include "includes/gaplus.h"
 
 
-READ8_MEMBER(gaplus_state::gaplus_spriteram_r)
-{
-	return m_spriteram[offset];
-}
-
-WRITE8_MEMBER(gaplus_state::gaplus_spriteram_w)
-{
-	m_spriteram[offset] = data;
-}
-
-WRITE8_MEMBER(gaplus_state::gaplus_irq_1_ctrl_w)
+WRITE8_MEMBER(gaplus_state::irq_1_ctrl_w)
 {
 	int bit = !BIT(offset, 11);
 	m_main_irq_mask = bit & 1;
@@ -175,7 +166,7 @@ WRITE8_MEMBER(gaplus_state::gaplus_irq_1_ctrl_w)
 		m_maincpu->set_input_line(0, CLEAR_LINE);
 }
 
-WRITE8_MEMBER(gaplus_state::gaplus_irq_2_ctrl_w)
+WRITE8_MEMBER(gaplus_state::irq_2_ctrl_w)
 {
 	int bit = offset & 1;
 	m_sub_irq_mask = bit & 1;
@@ -183,7 +174,7 @@ WRITE8_MEMBER(gaplus_state::gaplus_irq_2_ctrl_w)
 		m_subcpu->set_input_line(0, CLEAR_LINE);
 }
 
-WRITE8_MEMBER(gaplus_state::gaplus_irq_3_ctrl_w)
+WRITE8_MEMBER(gaplus_state::irq_3_ctrl_w)
 {
 	int bit = !BIT(offset, 13);
 	m_sub2_irq_mask = bit & 1;
@@ -191,15 +182,15 @@ WRITE8_MEMBER(gaplus_state::gaplus_irq_3_ctrl_w)
 		m_subcpu2->set_input_line(0, CLEAR_LINE);
 }
 
-WRITE8_MEMBER(gaplus_state::gaplus_sreset_w)
+WRITE8_MEMBER(gaplus_state::sreset_w)
 {
 	int bit = !BIT(offset, 11);
 	m_subcpu->set_input_line(INPUT_LINE_RESET, bit ? CLEAR_LINE : ASSERT_LINE);
 	m_subcpu2->set_input_line(INPUT_LINE_RESET, bit ? CLEAR_LINE : ASSERT_LINE);
-	mappy_sound_enable(machine().device("namco"), bit);
+	m_namco_15xx->mappy_sound_enable(bit);
 }
 
-WRITE8_MEMBER(gaplus_state::gaplus_freset_w)
+WRITE8_MEMBER(gaplus_state::freset_w)
 {
 	int bit = !BIT(offset, 11);
 
@@ -208,21 +199,6 @@ WRITE8_MEMBER(gaplus_state::gaplus_freset_w)
 	m_namco58xx->set_reset_line(bit ? CLEAR_LINE : ASSERT_LINE);
 	m_namco56xx->set_reset_line(bit ? CLEAR_LINE : ASSERT_LINE);
 }
-
-static const namco_62xx_interface namco_62xx_intf =
-{
-	{   /* port read handlers */
-		//DEVCB_INPUT_PORT("IN0L"),
-		//DEVCB_INPUT_PORT("IN0H"),
-		//DEVCB_INPUT_PORT("IN1L"),
-		//DEVCB_INPUT_PORT("IN1H")
-	},
-	{   /* port write handlers */
-		//DEVCB_HANDLER(out_0),
-		//DEVCB_HANDLER(out_1)
-	}
-};
-
 
 void gaplus_state::machine_reset()
 {
@@ -256,7 +232,7 @@ TIMER_CALLBACK_MEMBER(gaplus_state::namcoio_run)
 	}
 }
 
-INTERRUPT_GEN_MEMBER(gaplus_state::gaplus_vblank_main_irq)
+INTERRUPT_GEN_MEMBER(gaplus_state::vblank_main_irq)
 {
 	if(m_main_irq_mask)
 		m_maincpu->set_input_line(0, ASSERT_LINE);
@@ -280,13 +256,13 @@ INTERRUPT_GEN_MEMBER(gaplus_state::gapluso_vblank_main_irq)
 		timer_set(attotime::from_usec(50), TIMER_NAMCOIO_RUN, 0);
 }
 
-INTERRUPT_GEN_MEMBER(gaplus_state::gaplus_vblank_sub_irq)
+INTERRUPT_GEN_MEMBER(gaplus_state::vblank_sub_irq)
 {
 	if(m_sub_irq_mask)
 		m_subcpu->set_input_line(0, ASSERT_LINE);
 }
 
-INTERRUPT_GEN_MEMBER(gaplus_state::gaplus_vblank_sub2_irq)
+INTERRUPT_GEN_MEMBER(gaplus_state::vblank_sub2_irq)
 {
 	if(m_sub2_irq_mask)
 		m_subcpu2->set_input_line(0, ASSERT_LINE);
@@ -294,32 +270,32 @@ INTERRUPT_GEN_MEMBER(gaplus_state::gaplus_vblank_sub2_irq)
 
 
 static ADDRESS_MAP_START( cpu1_map, AS_PROGRAM, 8, gaplus_state )
-	AM_RANGE(0x0000, 0x07ff) AM_READWRITE(gaplus_videoram_r, gaplus_videoram_w) AM_SHARE("videoram")        /* tilemap RAM (shared with CPU #2) */
-	AM_RANGE(0x0800, 0x1fff) AM_READWRITE(gaplus_spriteram_r, gaplus_spriteram_w) AM_SHARE("spriteram") /* shared RAM with CPU #2 (includes sprite RAM) */
-	AM_RANGE(0x6000, 0x63ff) AM_DEVREADWRITE_LEGACY("namco", namco_snd_sharedram_r, namco_snd_sharedram_w)                                      /* shared RAM with CPU #3 */
+	AM_RANGE(0x0000, 0x07ff) AM_RAM_WRITE(videoram_w) AM_SHARE("videoram")        /* tilemap RAM (shared with CPU #2) */
+	AM_RANGE(0x0800, 0x1fff) AM_RAM AM_SHARE("spriteram") /* shared RAM with CPU #2 (includes sprite RAM) */
+	AM_RANGE(0x6000, 0x63ff) AM_DEVREADWRITE("namco", namco_15xx_device, sharedram_r, sharedram_w)                                      /* shared RAM with CPU #3 */
 	AM_RANGE(0x6800, 0x680f) AM_DEVREADWRITE("namcoio_1", namcoio_device, read, write)                                                   /* custom I/O chips interface */
 	AM_RANGE(0x6810, 0x681f) AM_DEVREADWRITE("namcoio_2", namcoio_device, read, write)                                                   /* custom I/O chips interface */
-	AM_RANGE(0x6820, 0x682f) AM_READWRITE(gaplus_customio_3_r, gaplus_customio_3_w) AM_SHARE("customio_3")  /* custom I/O chip #3 interface */
-	AM_RANGE(0x7000, 0x7fff) AM_WRITE(gaplus_irq_1_ctrl_w)                                                      /* main CPU irq control */
+	AM_RANGE(0x6820, 0x682f) AM_READWRITE(customio_3_r, customio_3_w) AM_SHARE("customio_3")  /* custom I/O chip #3 interface */
+	AM_RANGE(0x7000, 0x7fff) AM_WRITE(irq_1_ctrl_w)                                                      /* main CPU irq control */
 	AM_RANGE(0x7800, 0x7fff) AM_READ(watchdog_reset_r)                                                          /* watchdog */
-	AM_RANGE(0x8000, 0x8fff) AM_WRITE(gaplus_sreset_w)                                                          /* reset CPU #2 & #3, enable sound */
-	AM_RANGE(0x9000, 0x9fff) AM_WRITE(gaplus_freset_w)                                                          /* reset I/O chips */
-	AM_RANGE(0xa000, 0xa7ff) AM_WRITE(gaplus_starfield_control_w)               /* starfield control */
+	AM_RANGE(0x8000, 0x8fff) AM_WRITE(sreset_w)                                                          /* reset CPU #2 & #3, enable sound */
+	AM_RANGE(0x9000, 0x9fff) AM_WRITE(freset_w)                                                          /* reset I/O chips */
+	AM_RANGE(0xa000, 0xa7ff) AM_WRITE(starfield_control_w)               /* starfield control */
 	AM_RANGE(0xa000, 0xffff) AM_ROM                                                                             /* ROM */
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( cpu2_map, AS_PROGRAM, 8, gaplus_state )
-	AM_RANGE(0x0000, 0x07ff) AM_READWRITE(gaplus_videoram_r, gaplus_videoram_w)     /* tilemap RAM (shared with CPU #1) */
-	AM_RANGE(0x0800, 0x1fff) AM_READWRITE(gaplus_spriteram_r, gaplus_spriteram_w)   /* shared RAM with CPU #1 */
+	AM_RANGE(0x0000, 0x07ff) AM_RAM_WRITE(videoram_w) AM_SHARE("videoram")   /* tilemap RAM (shared with CPU #1) */
+	AM_RANGE(0x0800, 0x1fff) AM_RAM AM_SHARE("spriteram")                           /* shared RAM with CPU #1 */
 //  AM_RANGE(0x500f, 0x500f) AM_WRITENOP                                            /* ??? written 256 times on startup */
-	AM_RANGE(0x6000, 0x6fff) AM_WRITE(gaplus_irq_2_ctrl_w)                          /* IRQ 2 control */
+	AM_RANGE(0x6000, 0x6fff) AM_WRITE(irq_2_ctrl_w)                          /* IRQ 2 control */
 	AM_RANGE(0xa000, 0xffff) AM_ROM                                                 /* ROM */
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( cpu3_map, AS_PROGRAM, 8, gaplus_state )
-	AM_RANGE(0x0000, 0x03ff) AM_DEVREADWRITE_LEGACY("namco", namco_snd_sharedram_r, namco_snd_sharedram_w)  /* shared RAM with the main CPU + sound registers */
+	AM_RANGE(0x0000, 0x03ff) AM_DEVREADWRITE("namco", namco_15xx_device, sharedram_r, sharedram_w)  /* shared RAM with the main CPU + sound registers */
 	AM_RANGE(0x2000, 0x3fff) AM_READWRITE(watchdog_reset_r, watchdog_reset_w)                       /* watchdog? */
-	AM_RANGE(0x4000, 0x7fff) AM_WRITE(gaplus_irq_3_ctrl_w)                                          /* interrupt enable/disable */
+	AM_RANGE(0x4000, 0x7fff) AM_WRITE(irq_3_ctrl_w)                                          /* interrupt enable/disable */
 	AM_RANGE(0xe000, 0xffff) AM_ROM                                                                 /* ROM */
 ADDRESS_MAP_END
 
@@ -483,26 +459,12 @@ static GFXDECODE_START( gaplus )
 	GFXDECODE_ENTRY( "gfx2", 0x0000, spritelayout, 64*4, 64 )
 GFXDECODE_END
 
-static const namco_interface namco_config =
-{
-	8,              /* number of voices */
-	0               /* stereo */
-};
-
 static const char *const gaplus_sample_names[] =
 {
 	"*gaplus",
 	"bang",
 	0
 };
-
-static const samples_interface gaplus_samples_interface =
-{
-	1,  /* one channel */
-	gaplus_sample_names
-};
-
-
 
 /***************************************************************************
 
@@ -523,31 +485,7 @@ WRITE8_MEMBER(gaplus_state::out_lamps1)
 	coin_counter_w(machine(), 1, ~data & 1);
 }
 
-/* chip #0: player inputs, buttons, coins */
-static const namcoio_interface intf0 =
-{
-	{ DEVCB_INPUT_PORT("COINS"), DEVCB_INPUT_PORT("P1"), DEVCB_INPUT_PORT("P2"), DEVCB_INPUT_PORT("BUTTONS") }, /* port read handlers */
-	{ DEVCB_NULL, DEVCB_NULL },     /* port write handlers */
-};
-
-static const namcoio_interface intf0_lamps =
-{
-	{ DEVCB_INPUT_PORT("COINS"), DEVCB_INPUT_PORT("P1"), DEVCB_INPUT_PORT("P2"), DEVCB_INPUT_PORT("BUTTONS") }, /* port read handlers */
-	{ DEVCB_DRIVER_MEMBER(gaplus_state,out_lamps0), DEVCB_DRIVER_MEMBER(gaplus_state,out_lamps1) },     /* port write handlers */
-};
-
-/* chip #1: dip switches */
-static const namcoio_interface intf1 =
-{
-	{ DEVCB_INPUT_PORT("DSWA_HIGH"), DEVCB_INPUT_PORT("DSWB_LOW"), DEVCB_INPUT_PORT("DSWB_HIGH"), DEVCB_INPUT_PORT("DSWA_LOW") },   /* port read handlers */
-	{ DEVCB_NULL, DEVCB_NULL },     /* port write handlers */
-};
-
-/* TODO: chip #2: test/cocktail, optional buttons */
-
-
-
-MACHINE_START_MEMBER(gaplus_state,gaplus)
+void gaplus_state::machine_start()
 {
 	switch (m_type)
 	{
@@ -561,6 +499,10 @@ MACHINE_START_MEMBER(gaplus_state,gaplus)
 			m_namco56xx = machine().device<namco56xx_device>("namcoio_2");
 			break;
 	}
+
+	save_item(NAME(m_main_irq_mask));
+	save_item(NAME(m_sub_irq_mask));
+	save_item(NAME(m_sub2_irq_mask));
 }
 
 
@@ -569,23 +511,39 @@ static MACHINE_CONFIG_START( gaplus, gaplus_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M6809,  24576000/16)    /* 1.536 MHz */
 	MCFG_CPU_PROGRAM_MAP(cpu1_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", gaplus_state,  gaplus_vblank_main_irq)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", gaplus_state,  vblank_main_irq)
 
 	MCFG_CPU_ADD("sub", M6809,  24576000/16)    /* 1.536 MHz */
 	MCFG_CPU_PROGRAM_MAP(cpu2_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", gaplus_state,  gaplus_vblank_sub_irq)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", gaplus_state,  vblank_sub_irq)
 
 	MCFG_CPU_ADD("sub2", M6809, 24576000/16)    /* 1.536 MHz */
 	MCFG_CPU_PROGRAM_MAP(cpu3_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", gaplus_state,  gaplus_vblank_sub2_irq)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", gaplus_state,  vblank_sub2_irq)
 
-	MCFG_MACHINE_START_OVERRIDE(gaplus_state, gaplus)
 	MCFG_QUANTUM_TIME(attotime::from_hz(6000))  /* a high value to ensure proper synchronization of the CPUs */
 
-	MCFG_NAMCO56XX_ADD("namcoio_1", intf0_lamps)
-	MCFG_NAMCO58XX_ADD("namcoio_2", intf1)
+	MCFG_DEVICE_ADD("namcoio_1", NAMCO56XX, 0)
+	MCFG_NAMCO56XX_IN_0_CB(IOPORT("COINS"))
+	MCFG_NAMCO56XX_IN_1_CB(IOPORT("P1"))
+	MCFG_NAMCO56XX_IN_2_CB(IOPORT("P2"))
+	MCFG_NAMCO56XX_IN_3_CB(IOPORT("BUTTONS"))
+	MCFG_NAMCO56XX_OUT_0_CB(WRITE8(gaplus_state, out_lamps0))
+	MCFG_NAMCO56XX_OUT_1_CB(WRITE8(gaplus_state, out_lamps1))
 
-	MCFG_NAMCO_62XX_ADD("62xx", 24576000/6/2, namco_62xx_intf)  /* totally made up - TODO: fix */
+	MCFG_DEVICE_ADD("namcoio_2", NAMCO58XX, 0)
+	MCFG_NAMCO58XX_IN_0_CB(IOPORT("DSWA_HIGH"))
+	MCFG_NAMCO58XX_IN_1_CB(IOPORT("DSWB_LOW"))
+	MCFG_NAMCO58XX_IN_2_CB(IOPORT("DSWB_HIGH"))
+	MCFG_NAMCO58XX_IN_3_CB(IOPORT("DSWA_LOW"))
+
+	MCFG_NAMCO_62XX_ADD("62xx", 24576000/6/2)  /* totally made up - TODO: fix */
+	//MCFG_NAMCO_62XX_INPUT_0_CB(IOPORT("IN0L"))
+	//MCFG_NAMCO_62XX_INPUT_1_CB(IOPORT("IN0H"))
+	//MCFG_NAMCO_62XX_INPUT_2_CB(IOPORT("IN1L"))
+	//MCFG_NAMCO_62XX_INPUT_3_CB(IOPORT("IN1H"))
+	//MCFG_NAMCO_62XX_OUTPUT_0_CB(WRITE8(gaplus_state,out_0))
+	//MCFG_NAMCO_62XX_OUTPUT_1_CB(WRITE8(gaplus_state,out_1))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -593,29 +551,41 @@ static MACHINE_CONFIG_START( gaplus, gaplus_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(36*8, 28*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 36*8-1, 0*8, 28*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(gaplus_state, screen_update_gaplus)
-	MCFG_SCREEN_VBLANK_DRIVER(gaplus_state, screen_eof_gaplus)
+	MCFG_SCREEN_UPDATE_DRIVER(gaplus_state, screen_update)
+	MCFG_SCREEN_VBLANK_DRIVER(gaplus_state, screen_eof)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(gaplus)
-	MCFG_PALETTE_LENGTH(64*4+64*8)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", gaplus)
+	MCFG_PALETTE_ADD("palette", 64*4+64*8)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256)
+	MCFG_PALETTE_INIT_OWNER(gaplus_state, gaplus)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("namco", NAMCO_15XX, 24576000/1024)
-	MCFG_SOUND_CONFIG(namco_config)
+	MCFG_NAMCO_AUDIO_VOICES(8)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
-	MCFG_SAMPLES_ADD("samples", gaplus_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(1)
+	MCFG_SAMPLES_NAMES(gaplus_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.80)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( gaplusd, gaplus )
 
-	MCFG_DEVICE_REMOVE("namcoio_1")
-	MCFG_DEVICE_REMOVE("namcoio_2")
-	MCFG_NAMCO58XX_ADD("namcoio_1", intf0)
-	MCFG_NAMCO56XX_ADD("namcoio_2", intf1)
+	MCFG_DEVICE_REPLACE("namcoio_1", NAMCO58XX, 0)
+	MCFG_NAMCO58XX_IN_0_CB(IOPORT("COINS"))
+	MCFG_NAMCO58XX_IN_1_CB(IOPORT("P1"))
+	MCFG_NAMCO58XX_IN_2_CB(IOPORT("P2"))
+	MCFG_NAMCO58XX_IN_3_CB(IOPORT("BUTTONS"))
+
+	MCFG_DEVICE_REPLACE("namcoio_2", NAMCO56XX, 0)
+	MCFG_NAMCO56XX_IN_0_CB(IOPORT("DSWA_HIGH"))
+	MCFG_NAMCO56XX_IN_1_CB(IOPORT("DSWB_LOW"))
+	MCFG_NAMCO56XX_IN_2_CB(IOPORT("DSWB_HIGH"))
+	MCFG_NAMCO56XX_IN_3_CB(IOPORT("DSWA_LOW"))
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( gapluso, gaplusd )
@@ -624,10 +594,17 @@ static MACHINE_CONFIG_DERIVED( gapluso, gaplusd )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", gaplus_state,  gapluso_vblank_main_irq)
 
-	MCFG_DEVICE_REMOVE("namcoio_1")
-	MCFG_DEVICE_REMOVE("namcoio_2")
-	MCFG_NAMCO56XX_ADD("namcoio_1", intf0)
-	MCFG_NAMCO58XX_ADD("namcoio_2", intf1)
+	MCFG_DEVICE_REPLACE("namcoio_1", NAMCO56XX, 0)
+	MCFG_NAMCO56XX_IN_0_CB(IOPORT("COINS"))
+	MCFG_NAMCO56XX_IN_1_CB(IOPORT("P1"))
+	MCFG_NAMCO56XX_IN_2_CB(IOPORT("P2"))
+	MCFG_NAMCO56XX_IN_3_CB(IOPORT("BUTTONS"))
+
+	MCFG_DEVICE_REPLACE("namcoio_2", NAMCO58XX, 0)
+	MCFG_NAMCO58XX_IN_0_CB(IOPORT("DSWA_HIGH"))
+	MCFG_NAMCO58XX_IN_1_CB(IOPORT("DSWB_LOW"))
+	MCFG_NAMCO58XX_IN_2_CB(IOPORT("DSWB_HIGH"))
+	MCFG_NAMCO58XX_IN_3_CB(IOPORT("DSWA_LOW"))
 MACHINE_CONFIG_END
 
 
@@ -724,6 +701,47 @@ ROM_START( gaplusd ) /* Alternate hardware */
 	ROM_LOAD( "gp2-8b.11d", 0xa000, 0x2000, CRC(bff601a6) SHA1(e1a04354d8d0bc0d51d7341a46bd23cbd2158ee9) ) /* Revised for alternate hardware */
 	ROM_LOAD( "gp2-7.11c",  0xc000, 0x2000, CRC(0621f7df) SHA1(b86020f819fefb134cb57e203f7c90b1b29581c8) )
 	ROM_LOAD( "gp2-6b.11b", 0xe000, 0x2000, CRC(14cd61ea) SHA1(05605abebcf2791e60b2d810dafcdd8582a87d9b) ) /* Revised for alternate hardware */
+
+	ROM_REGION( 0x10000, "sub2", 0 ) /* 64k for the SOUND CPU */
+	ROM_LOAD( "gp2-1.4b", 0xe000, 0x2000, CRC(ed8aa206) SHA1(4e0a31d84cb7aca497485dbe0240009d58275765) )
+
+	ROM_REGION( 0x4000, "gfx1", 0 )
+	ROM_LOAD( "gp2-5.8s", 0x0000, 0x2000, CRC(f3d19987) SHA1(a0107fa4659597ac42c875ab1c0deb845534268b) )    /* characters */
+	/* 0x2000-0x3fff  will be unpacked from 0x0000-0x1fff */
+
+	ROM_REGION( 0xc000, "gfx2", 0 )
+	ROM_LOAD( "gp2-11.11p", 0x0000, 0x2000, CRC(57740ff9) SHA1(16873e0ac5f975768d596d7d32af7571f4817f2b) )    /* objects */
+	ROM_LOAD( "gp2-10.11n", 0x2000, 0x2000, CRC(6cd8ce11) SHA1(fc346e98737c9fc20810e32d4c150ae4b4051979) )    /* objects */
+	ROM_LOAD( "gp2-12.11r", 0x4000, 0x2000, CRC(7316a1f1) SHA1(368e4541a5151e906a189712bc05192c2ceec8ae) )    /* objects */
+	ROM_LOAD( "gp2-9.11m",  0x6000, 0x2000, CRC(e6a9ae67) SHA1(99c1e67c3b216aa1b63f199e21c73cdedde80e1b) )    /* objects */
+	/* 0x8000-0x9fff  will be unpacked from 0x6000-0x7fff */
+	ROM_FILL(               0xa000, 0x2000, 0x00 )    // optional ROM, not used
+
+	ROM_REGION( 0x0800, "proms", 0 )
+	ROM_LOAD( "gp2-3.1p", 0x0000, 0x0100, CRC(a5091352) SHA1(dcd6dfbfbd5281ba0c7b7c189d6fde23617ed3e3) )    /* red palette ROM (4 bits) */
+	ROM_LOAD( "gp2-1.1n", 0x0100, 0x0100, CRC(8bc8022a) SHA1(c76f9d9b066e268621d41a703c5280261234709a) )    /* green palette ROM (4 bits) */
+	ROM_LOAD( "gp2-2.2n", 0x0200, 0x0100, CRC(8dabc20b) SHA1(64d7b333f529d3ba66aeefd380fd1cbf9ddf460d) )    /* blue palette ROM (4 bits) */
+	ROM_LOAD( "gp2-7.6s", 0x0300, 0x0100, CRC(2faa3e09) SHA1(781ffe9088476798409cb922350eff881590cf35) )    /* char color ROM */
+	ROM_LOAD( "gp2-6.6p", 0x0400, 0x0200, CRC(6f99c2da) SHA1(955dcef363870ee8e91edc73b9ea3ce489738aad) )    /* sprite color ROM (lower 4 bits) */
+	ROM_LOAD( "gp2-5.6n", 0x0600, 0x0200, CRC(c7d31657) SHA1(a93a5bc448dc127e1389d10a9cb06acadfe940cf) )    /* sprite color ROM (upper 4 bits) */
+
+	ROM_REGION( 0x0100, "namco", 0 ) /* sound prom */
+	ROM_LOAD( "gp2-4.3f", 0x0000, 0x0100, CRC(2d9fbdd8) SHA1(e6a23cd5ce3d3e76de3b70c8ab5a3c45b1147af4) )
+
+	ROM_REGION( 0x0100, "plds", 0 )
+	ROM_LOAD( "pal10l8.8n", 0x0000, 0x002c, CRC(08e5b2fe) SHA1(1aa7fa1a61795703af84ae427d0d8588ef8c4c3f) )
+ROM_END
+
+ROM_START( gaplust ) /* Tecfri PCB */
+	ROM_REGION( 0x10000, "maincpu", 0 ) /* 64k for the MAIN CPU */
+	ROM_LOAD( "gp2_4.4", 0xa000, 0x2000, CRC(d891a70d) SHA1(ec906d623f936335e194d3bf9484ca4e82691272) ) // galaga3m - m1.9e                   99.865723%
+	ROM_LOAD( "gp2_3.3", 0xc000, 0x2000, CRC(1df6e319) SHA1(beb7bd22ff8bcb1c39f676e8bbb607e06e4f20d6) ) // galaga3m - m2.9d                   6.762695%
+	ROM_LOAD( "gp2_2.2", 0xe000, 0x2000, CRC(fc764728) SHA1(5a8bd3e83fbea2bb6cc06748c85b56e24a706f37) ) // galaga3m - m3.9c                   81.530762%
+
+	ROM_REGION( 0x10000, "sub", 0 ) /* 64k for the SUB CPU */
+	ROM_LOAD( "gp2_8.8", 0xa000, 0x2000, CRC(9ec3dce5) SHA1(196a975aff59be19f55041a44b201aafef083ba7) ) // matches roms from the Midway PCB sets
+	ROM_LOAD( "gp2_7.7", 0xc000, 0x2000, CRC(0621f7df) SHA1(b86020f819fefb134cb57e203f7c90b1b29581c8) )
+	ROM_LOAD( "gp2_6.6", 0xe000, 0x2000, CRC(6a2942c5) SHA1(6fb2c4dcb2ad393220917b81f1a42e571d209d76) )
 
 	ROM_REGION( 0x10000, "sub2", 0 ) /* 64k for the SOUND CPU */
 	ROM_LOAD( "gp2-1.4b", 0xe000, 0x2000, CRC(ed8aa206) SHA1(4e0a31d84cb7aca497485dbe0240009d58275765) )
@@ -879,7 +897,6 @@ ROM_START( galaga3b ) /* Version 2 or 3 PCB */
 ROM_END
 
 
-
 ROM_START( galaga3c ) /* Version (AKA Midway) 1 PCB */
 	ROM_REGION( 0x10000, "maincpu", 0 ) /* 64k for the MAIN CPU */
 	ROM_LOAD( "gal3_9e.9e", 0xa000, 0x2000, CRC(f4845e7f) SHA1(7b1377254f594bea4a8ffc7e388d9106e0266b55) )
@@ -987,14 +1004,16 @@ DRIVER_INIT_MEMBER(gaplus_state,galaga3)
 
 
 /* These sets are on revision 2 or 3 PCBs AKA "Namco" PCBs */
-GAME( 1984, gaplus,   0,        gapluso,  gapluso,  gaplus_state, gaplus,  ROT90, "Namco", "Gaplus (GP2 rev. B)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS )
-GAME( 1984, gaplusa,  gaplus,   gapluso,  gapluso,  gaplus_state, gaplus,  ROT90, "Namco", "Gaplus (GP2)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS )
-GAME( 1984, gaplusd,  gaplus,   gaplusd,  gapluso,  gaplus_state, gaplusd, ROT90, "Namco", "Gaplus (GP2 rev D, alternate hardware)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS )
-GAME( 1984, galaga3,  gaplus,   gaplus,   gaplus,   gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (GP3 rev. D)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS )
-GAME( 1984, galaga3a, gaplus,   gaplus,   gaplus,   gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (GP3 rev. C)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS )
-GAME( 1984, galaga3b, gaplus,   gaplus,   gaplus,   gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (GP3)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS )
-
+GAME( 1984, gaplus,   0,        gapluso,  gapluso,  gaplus_state, gaplus,  ROT90, "Namco", "Gaplus (GP2 rev. B)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1984, gaplusa,  gaplus,   gapluso,  gapluso,  gaplus_state, gaplus,  ROT90, "Namco", "Gaplus (GP2)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1984, gaplusd,  gaplus,   gaplusd,  gapluso,  gaplus_state, gaplusd, ROT90, "Namco", "Gaplus (GP2 rev D, alternate hardware)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1984, galaga3,  gaplus,   gaplus,   gaplus,   gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (GP3 rev. D)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1984, galaga3a, gaplus,   gaplus,   gaplus,   gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (GP3 rev. C)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1984, galaga3b, gaplus,   gaplus,   gaplus,   gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (GP3)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
 
 /* These sets are on older revision (AKA Midway) 1 PCBs */
-GAME( 1984, galaga3c, gaplus,   gaplus,   galaga3a, gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (set 4)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS )
-GAME( 1984, galaga3m, gaplus,   gaplus,   galaga3m, gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (set 5)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS )
+GAME( 1984, galaga3c, gaplus,   gaplus,   galaga3a, gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (set 4)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1984, galaga3m, gaplus,   gaplus,   galaga3m, gaplus_state, galaga3, ROT90, "Namco", "Galaga 3 (set 5)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+
+/* This is an odd mix of Galaga3 and Gaplus, main code seems closest to galaga3m but still has significant changes, copyright is modified to 1992, has Galaga 3 style high scores, PARSEF spelling error on high score table */
+GAME( 1992, gaplust,  gaplus,   gaplus,   galaga3m, gaplus_state, galaga3, ROT90, "bootleg (Tecfri)", "Gaplus (Tecfri PCB)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )

@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     ldpr8210.c
 
     Pioneer PR-8210 laserdisc emulation.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 **************************************************************************
 
@@ -436,7 +407,7 @@ machine_config_constructor pioneer_pr8210_device::device_mconfig_additions() con
 //  start of the blanking period
 //-------------------------------------------------
 
-void pioneer_pr8210_device::player_vsync(const vbi_metadata &vbi, int fieldnum, attotime curtime)
+void pioneer_pr8210_device::player_vsync(const vbi_metadata &vbi, int fieldnum, const attotime &curtime)
 {
 	// logging
 	if (LOG_VBLANK_VBI)
@@ -461,7 +432,7 @@ void pioneer_pr8210_device::player_vsync(const vbi_metadata &vbi, int fieldnum, 
 //  first visible line of the frame
 //-------------------------------------------------
 
-INT32 pioneer_pr8210_device::player_update(const vbi_metadata &vbi, int fieldnum, attotime curtime)
+INT32 pioneer_pr8210_device::player_update(const vbi_metadata &vbi, int fieldnum, const attotime &curtime)
 {
 	// logging
 	if (LOG_VBLANK_VBI)
@@ -544,7 +515,7 @@ READ8_MEMBER( pioneer_pr8210_device::i8049_pia_r )
 			break;
 
 		default:
-			mame_printf_debug("%03X:Unknown PR-8210 PIA read from offset %02X\n", space.device().safe_pc(), offset);
+			osd_printf_debug("%03X:Unknown PR-8210 PIA read from offset %02X\n", space.device().safe_pc(), offset);
 			break;
 	}
 	return result;
@@ -616,7 +587,7 @@ WRITE8_MEMBER( pioneer_pr8210_device::i8049_pia_w )
 
 		// no other writes known
 		default:
-			mame_printf_debug("%03X:Unknown PR-8210 PIA write to offset %02X = %02X\n", space.device().safe_pc(), offset, data);
+			osd_printf_debug("%03X:Unknown PR-8210 PIA write to offset %02X = %02X\n", space.device().safe_pc(), offset, data);
 			break;
 	}
 }
@@ -963,7 +934,7 @@ void simutrek_special_device::set_external_audio_squelch(int state)
 //  start of the blanking period
 //-------------------------------------------------
 
-void simutrek_special_device::player_vsync(const vbi_metadata &vbi, int fieldnum, attotime curtime)
+void simutrek_special_device::player_vsync(const vbi_metadata &vbi, int fieldnum, const attotime &curtime)
 {
 	// latch the control state after the second field
 	if (fieldnum == 1)

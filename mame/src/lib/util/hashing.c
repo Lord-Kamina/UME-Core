@@ -1,44 +1,15 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     hashing.c
 
     Hashing helper classes.
 
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
-
 ***************************************************************************/
 
 #include "hashing.h"
-#include "zlib.h"
+#include <zlib.h>
 
 
 //**************************************************************************
@@ -108,12 +79,12 @@ bool sha1_t::from_string(const char *string, int length)
 //  as_string - convert to a string
 //-------------------------------------------------
 
-const char *sha1_t::as_string(astring &buffer) const
+const char *sha1_t::as_string(std::string &buffer) const
 {
-	buffer.reset();
+	buffer.clear();
 	for (int i = 0; i < ARRAY_LENGTH(m_raw); i++)
-		buffer.catformat("%02x", m_raw[i]);
-	return buffer;
+		strcatprintf(buffer, "%02x", m_raw[i]);
+	return buffer.c_str();
 }
 
 
@@ -151,12 +122,12 @@ bool md5_t::from_string(const char *string, int length)
 //  as_string - convert to a string
 //-------------------------------------------------
 
-const char *md5_t::as_string(astring &buffer) const
+const char *md5_t::as_string(std::string &buffer) const
 {
-	buffer.reset();
+	buffer.clear();
 	for (int i = 0; i < ARRAY_LENGTH(m_raw); i++)
-		buffer.catformat("%02x", m_raw[i]);
-	return buffer;
+		strcatprintf(buffer, "%02x", m_raw[i]);
+	return buffer.c_str();
 }
 
 
@@ -195,9 +166,10 @@ bool crc32_t::from_string(const char *string, int length)
 //  as_string - convert to a string
 //-------------------------------------------------
 
-const char *crc32_t::as_string(astring &buffer) const
+const char *crc32_t::as_string(std::string &buffer) const
 {
-	return buffer.format("%08x", m_raw);
+	strprintf(buffer, "%08x", m_raw);
+	return buffer.c_str();
 }
 
 
@@ -242,21 +214,34 @@ bool crc16_t::from_string(const char *string, int length)
 	return true;
 }
 
+/**
+ * @fn  const char *crc16_t::as_string(std::string &buffer) const
+ *
+ * @brief   -------------------------------------------------
+ *            as_string - convert to a string
+ *          -------------------------------------------------.
+ *
+ * @param [in,out]  buffer  The buffer.
+ *
+ * @return  null if it fails, else a char*.
+ */
 
-//-------------------------------------------------
-//  as_string - convert to a string
-//-------------------------------------------------
-
-const char *crc16_t::as_string(astring &buffer) const
+const char *crc16_t::as_string(std::string &buffer) const
 {
-	return buffer.format("%04x", m_raw);
+	strprintf(buffer, "%04x", m_raw);
+	return buffer.c_str();
 }
 
-
-//-------------------------------------------------
-//  append - hash a block of data, appending to
-//  the currently-accumulated value
-//-------------------------------------------------
+/**
+ * @fn  void crc16_creator::append(const void *data, UINT32 length)
+ *
+ * @brief   -------------------------------------------------
+ *            append - hash a block of data, appending to the currently-accumulated value
+ *          -------------------------------------------------.
+ *
+ * @param   data    The data.
+ * @param   length  The length.
+ */
 
 void crc16_creator::append(const void *data, UINT32 length)
 {

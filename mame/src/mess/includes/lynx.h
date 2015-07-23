@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner
 /*****************************************************************************
  *
  * includes/lynx.h
@@ -8,8 +10,9 @@
 #define LYNX_H_
 
 #include "audio/lynx.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/snapquik.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 
 #define LYNX_CART       0
 #define LYNX_QUICKLOAD  1
@@ -111,7 +114,9 @@ public:
 		m_mem_fe00(*this, "mem_fe00"),
 		m_mem_fffa(*this, "mem_fffa"),
 		m_maincpu(*this, "maincpu"),
-		m_sound(*this, "custom") { }
+		m_sound(*this, "custom"),
+		m_cart(*this, "cartslot"),
+		m_palette(*this, "palette")  { }
 
 	virtual void video_start();
 
@@ -124,11 +129,12 @@ public:
 	required_shared_ptr<UINT8> m_mem_fffa;
 	required_device<cpu_device> m_maincpu;
 	required_device<lynx_sound_device> m_sound;
-
+	required_device<generic_slot_device> m_cart;
+	required_device<palette_device> m_palette;
 	UINT16 m_granularity;
 	int m_sign_AB;
 	int m_sign_CD;
-	UINT32 m_palette[0x10];
+	UINT32 m_lynx_palette[0x10];
 	int m_rotate;
 	UINT8 m_memory_config;
 
@@ -154,7 +160,7 @@ public:
 	void lynx_timer_write(int which, int offset, UINT8 data);
 	virtual void machine_start();
 	virtual void machine_reset();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(lynx);
 	void sound_cb();
 	TIMER_CALLBACK_MEMBER(lynx_blitter_timer);
 	TIMER_CALLBACK_MEMBER(lynx_timer_shot);
@@ -182,10 +188,6 @@ protected:
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
 };
 
-
-/*----------- defined in machine/lynx.c -----------*/
-
-MACHINE_CONFIG_EXTERN( lynx_cartslot );
 
 /*---------- suzy registers ------------- */
 #define TMPADRL 0x00    // Temporary address (not sure what this is used for)

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /***************************************************************************
 
         Heathkit H19
@@ -16,7 +18,7 @@
         Either device will signal an interrupt to the CPU when a key
         is pressed/sent.
 
-        For the moment, the "terminal" device is used for the keyboard.
+        For the moment, the "ascii keyboard" device is used for the keyboard.
 
         TODO:
         - Create device or HLE of MM5740N keyboard controller
@@ -25,7 +27,10 @@
         - Finish connecting up the 8250
         - Verify beep lengths
         - Verify ram size
-        - When the internal keyboard works, get rid of the generic_terminal.
+        - When the internal keyboard works, get rid of the "ascii_keyboard".
+
+        Bios 1 (super19) has the videoram at D800. This is not emulated.
+        However, a keyclick can be heard, to assure you it does in fact work.
 
 ****************************************************************************/
 
@@ -36,6 +41,7 @@
 #include "machine/ins8250.h"
 #include "machine/keyboard.h"
 
+#define KEYBOARD_TAG "keyboard"
 
 #define H19_CLOCK (XTAL_12_288MHz / 6)
 #define H19_BEEP_FRQ (H19_CLOCK / 1024)
@@ -51,12 +57,14 @@ public:
 
 	h19_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_maincpu(*this, "maincpu"),
-			m_crtc(*this, "crtc"),
-			m_ace(*this, "ins8250"),
-			m_beep(*this, "beeper"),
-			m_p_videoram(*this, "p_videoram")
-	{ }
+		m_maincpu(*this, "maincpu"),
+		m_crtc(*this, "crtc"),
+		m_ace(*this, "ins8250"),
+		m_beep(*this, "beeper"),
+		m_p_videoram(*this, "videoram"),
+		m_palette(*this, "palette")
+	{
+	}
 
 	required_device<cpu_device> m_maincpu;
 	required_device<mc6845_device> m_crtc;
@@ -66,7 +74,9 @@ public:
 	DECLARE_READ8_MEMBER(h19_a0_r);
 	DECLARE_WRITE8_MEMBER(h19_c0_w);
 	DECLARE_WRITE8_MEMBER(h19_kbd_put);
+	MC6845_UPDATE_ROW(crtc_update_row);
 	required_shared_ptr<UINT8> m_p_videoram;
+	required_device<palette_device> m_palette;
 	UINT8 *m_p_chargen;
 	UINT8 m_term_data;
 	virtual void machine_reset();
@@ -121,7 +131,7 @@ static ADDRESS_MAP_START(h19_mem, AS_PROGRAM, 8, h19_state)
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x0000, 0x1fff) AM_ROM
 	AM_RANGE(0x2000, 0xf7ff) AM_RAM
-	AM_RANGE(0xf800, 0xffff) AM_RAM AM_SHARE("p_videoram")
+	AM_RANGE(0xf800, 0xffff) AM_RAM AM_SHARE("videoram")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( h19_io, AS_IO, 8, h19_state)
@@ -313,10 +323,9 @@ void h19_state::video_start()
 	m_p_chargen = memregion("chargen")->base();
 }
 
-static MC6845_UPDATE_ROW( h19_update_row )
+MC6845_UPDATE_ROW( h19_state::crtc_update_row )
 {
-	h19_state *state = device->machine().driver_data<h19_state>();
-	const rgb_t *palette = palette_entry_list_raw(bitmap.palette());
+	const rgb_t *palette = m_palette->palette()->entry_list_raw();
 	UINT8 chr,gfx;
 	UINT16 mem,x;
 	UINT32 *p = &bitmap.pix32(y);
@@ -326,7 +335,7 @@ static MC6845_UPDATE_ROW( h19_update_row )
 		UINT8 inv=0;
 		if (x == cursor_x) inv=0xff;
 		mem = (ma + x) & 0x7ff;
-		chr = state->m_p_videoram[mem];
+		chr = m_p_videoram[mem];
 
 		if (chr & 0x80)
 		{
@@ -335,7 +344,7 @@ static MC6845_UPDATE_ROW( h19_update_row )
 		}
 
 		/* get pattern of pixels for that character scanline */
-		gfx = state->m_p_chargen[(chr<<4) | ra] ^ inv;
+		gfx = m_p_chargen[(chr<<4) | ra] ^ inv;
 
 		/* Display a scanline of a character (8 pixels) */
 		*p++ = palette[BIT(gfx, 7)];
@@ -353,32 +362,6 @@ WRITE_LINE_MEMBER(h19_state::h19_ace_irq)
 {
 	m_maincpu->set_input_line(0, (state ? HOLD_LINE : CLEAR_LINE));
 }
-
-static const ins8250_interface h19_ace_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(h19_state, h19_ace_irq), // interrupt
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
-static MC6845_INTERFACE( h19_crtc6845_interface )
-{
-	"screen",
-	false,
-	8 /*?*/,
-	NULL,
-	h19_update_row,
-	NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_CPU_INPUT_LINE("maincpu", INPUT_LINE_NMI), // frame pulse
-	NULL
-};
 
 /* F4 Character Displayer */
 static const gfx_layout h19_charlayout =
@@ -404,11 +387,6 @@ WRITE8_MEMBER( h19_state::h19_kbd_put )
 	m_maincpu->set_input_line(0, HOLD_LINE);
 }
 
-static ASCII_KEYBOARD_INTERFACE( keyboard_intf )
-{
-	DEVCB_DRIVER_MEMBER(h19_state, h19_kbd_put)
-};
-
 static MACHINE_CONFIG_START( h19, h19_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu",Z80, H19_CLOCK) // From schematics
@@ -423,13 +401,20 @@ static MACHINE_CONFIG_START( h19, h19_state )
 	MCFG_SCREEN_UPDATE_DEVICE("crtc", mc6845_device, screen_update)
 	MCFG_SCREEN_SIZE(640, 200)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640 - 1, 0, 200 - 1)
-	MCFG_GFXDECODE(h19)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(monochrome_green)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", h19)
+	MCFG_PALETTE_ADD_MONOCHROME_GREEN("palette")
 
-	MCFG_MC6845_ADD("crtc", MC6845, XTAL_12_288MHz / 8, h19_crtc6845_interface) // clk taken from schematics
-	MCFG_INS8250_ADD( "ins8250", h19_ace_interface, XTAL_12_288MHz / 4) // 3.072mhz clock which gets divided down for the various baud rates
-	MCFG_ASCII_KEYBOARD_ADD(KEYBOARD_TAG, keyboard_intf)
+	MCFG_MC6845_ADD("crtc", MC6845, "screen", XTAL_12_288MHz / 8) // clk taken from schematics
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8) /*?*/
+	MCFG_MC6845_UPDATE_ROW_CB(h19_state, crtc_update_row)
+	MCFG_MC6845_OUT_VSYNC_CB(INPUTLINE("maincpu", INPUT_LINE_NMI)) // frame pulse
+
+	MCFG_DEVICE_ADD("ins8250", INS8250, XTAL_12_288MHz / 4) // 3.072mhz clock which gets divided down for the various baud rates
+	MCFG_INS8250_OUT_INT_CB(WRITELINE(h19_state, h19_ace_irq)) // interrupt
+
+	MCFG_DEVICE_ADD(KEYBOARD_TAG, GENERIC_KEYBOARD, 0)
+	MCFG_GENERIC_KEYBOARD_CB(WRITE8(h19_state, h19_kbd_put))
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -442,10 +427,10 @@ ROM_START( h19 )
 	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
 	// Original
 	ROM_SYSTEM_BIOS(0, "orig", "Original")
-	ROMX_LOAD( "2732_444-46_h19code.bin", 0x0000, 0x1000, CRC(F4447DA0) SHA1(fb4093d5b763be21a9580a0defebed664b1f7a7b), ROM_BIOS(1))
+	ROMX_LOAD( "2732_444-46_h19code.bin", 0x0000, 0x1000, CRC(f4447da0) SHA1(fb4093d5b763be21a9580a0defebed664b1f7a7b), ROM_BIOS(1))
 	// Super H19 ROM (
 	ROM_SYSTEM_BIOS(1, "super", "Super 19")
-	ROMX_LOAD( "2732_super19_h447.bin", 0x0000, 0x1000, CRC(68FBFF54) SHA1(c0aa7199900709d717b07e43305dfdf36824da9b), ROM_BIOS(2))
+	ROMX_LOAD( "2732_super19_h447.bin", 0x0000, 0x1000, CRC(6c51aaa6) SHA1(5e368b39fe2f1af44a905dc474663198ab630117), ROM_BIOS(2))
 	// Watzman ROM
 	ROM_SYSTEM_BIOS(2, "watzman", "Watzman")
 	ROMX_LOAD( "watzman.bin", 0x0000, 0x1000, CRC(8168b6dc) SHA1(bfaebb9d766edbe545d24bc2b6630be4f3aa0ce9), ROM_BIOS(3))

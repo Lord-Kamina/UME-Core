@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /***************************************************************************
 
     Beta Computer
@@ -23,18 +25,83 @@
 
     TODO:
 
-    - write EPROM back to file
+    - verify whether feeding a 0xff-filled 2K binary file as cart allows
+      to write back correctly EPROM or not
 
 */
 
-#include "includes/beta.h"
+#include "emu.h"
+#include "cpu/m6502/m6502.h"
+#include "machine/mos6530n.h"
+#include "machine/ram.h"
+#include "sound/speaker.h"
+
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
+
 #include "beta.lh"
+
+#define SCREEN_TAG      "screen"
+#define M6502_TAG       "m6502"
+#define M6532_TAG       "m6532"
+#define EPROM_TAG       "eprom"
+//#define SPEAKER_TAG       "b237"
+
+class beta_state : public driver_device
+{
+public:
+	beta_state(const machine_config &mconfig, device_type type, const char *tag)
+		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, M6502_TAG),
+		m_speaker(*this, "speaker"),
+		m_eprom(*this, EPROM_TAG),
+		m_q6(*this, "Q6"),
+		m_q7(*this, "Q7"),
+		m_q8(*this, "Q8"),
+		m_q9(*this, "Q9")
+	{ }
+
+	required_device<cpu_device> m_maincpu;
+	required_device<speaker_sound_device> m_speaker;
+	required_device<generic_slot_device> m_eprom;
+	required_ioport m_q6;
+	required_ioport m_q7;
+	required_ioport m_q8;
+	required_ioport m_q9;
+
+	virtual void machine_start();
+
+	DECLARE_READ8_MEMBER( riot_pa_r );
+	DECLARE_WRITE8_MEMBER( riot_pa_w );
+	DECLARE_READ8_MEMBER( riot_pb_r );
+	DECLARE_WRITE8_MEMBER( riot_pb_w );
+	DECLARE_INPUT_CHANGED_MEMBER( trigger_reset );
+
+	DECLARE_DEVICE_IMAGE_LOAD_MEMBER( beta_eprom );
+	DECLARE_DEVICE_IMAGE_UNLOAD_MEMBER( beta_eprom );
+
+	/* EPROM state */
+	int m_eprom_oe;
+	int m_eprom_ce;
+	UINT16 m_eprom_addr;
+	UINT8 m_eprom_data;
+	UINT8 m_old_data;
+	dynamic_buffer m_eprom_rom;
+
+	/* display state */
+	UINT8 m_ls145_p;
+	UINT8 m_segment;
+
+	emu_timer *m_led_refresh_timer;
+	TIMER_CALLBACK_MEMBER(led_refresh);
+};
+
 
 /* Memory Maps */
 
 static ADDRESS_MAP_START( beta_mem, AS_PROGRAM, 8, beta_state )
-	AM_RANGE(0x0000, 0x007f) AM_MIRROR(0x7f00) AM_RAM // 6532 RAM
-	AM_RANGE(0x0080, 0x00ff) AM_MIRROR(0x7f00) AM_DEVREADWRITE(M6532_TAG, riot6532_device, read, write)
+	AM_RANGE(0x0000, 0x007f) AM_MIRROR(0x7f00) AM_DEVICE(M6532_TAG, mos6532_t, ram_map)
+	AM_RANGE(0x0080, 0x00ff) AM_MIRROR(0x7f00) AM_DEVICE(M6532_TAG, mos6532_t, io_map)
 	AM_RANGE(0x8000, 0x87ff) AM_MIRROR(0x7800) AM_ROM
 ADDRESS_MAP_END
 
@@ -120,7 +187,7 @@ READ8_MEMBER( beta_state::riot_pa_r )
 	default:
 		if (!m_eprom_oe && !m_eprom_ce)
 		{
-			data = m_eprom->base()[m_eprom_addr & 0x7ff];
+			data = m_eprom_rom[m_eprom_addr & 0x7ff];
 			popmessage("EPROM read %04x = %02x\n", m_eprom_addr & 0x7ff, data);
 		}
 	}
@@ -207,28 +274,34 @@ WRITE8_MEMBER( beta_state::riot_pb_w )
 	if (BIT(data, 6) && (!BIT(m_old_data, 7) && BIT(data, 7)))
 	{
 		popmessage("EPROM write %04x = %02x\n", m_eprom_addr & 0x7ff, m_eprom_data);
-		m_eprom->base()[m_eprom_addr & 0x7ff] &= m_eprom_data;
+		m_eprom_rom[m_eprom_addr & 0x7ff] &= m_eprom_data;
 	}
 
 	m_old_data = data;
 }
 
-static const riot6532_interface beta_riot_interface =
-{
-	DEVCB_DRIVER_MEMBER(beta_state, riot_pa_r),
-	DEVCB_DRIVER_MEMBER(beta_state, riot_pb_r),
-	DEVCB_DRIVER_MEMBER(beta_state, riot_pa_w),
-	DEVCB_DRIVER_MEMBER(beta_state, riot_pb_w),
-	DEVCB_CPU_INPUT_LINE(M6502_TAG, M6502_IRQ_LINE)
-};
+/* EPROM socket */
 
-/* Quickload */
+DEVICE_IMAGE_LOAD_MEMBER( beta_state, beta_eprom )
+{
+	UINT32 size = m_eprom->common_get_size("rom");
+
+	if (size != 0x800)
+	{
+		image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unsupported cartridge size");
+		return IMAGE_INIT_FAIL;
+	}
+
+	m_eprom->rom_alloc(size, GENERIC_ROM8_WIDTH, ENDIANNESS_LITTLE);
+	m_eprom->common_load_rom(m_eprom->get_rom_base(), size, "rom");
+
+	return IMAGE_INIT_PASS;
+}
 
 DEVICE_IMAGE_UNLOAD_MEMBER( beta_state, beta_eprom )
 {
-	UINT8 *ptr = m_eprom->base();
-
-	image.fwrite(ptr, 0x800);
+	if (image.software_entry() == NULL)
+		image.fwrite(&m_eprom_rom[0], 0x800);
 }
 
 /* Machine Initialization */
@@ -237,12 +310,23 @@ void beta_state::machine_start()
 {
 	m_led_refresh_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(beta_state::led_refresh),this));
 
+	m_eprom_rom.resize(0x800);
+
+	if (!m_eprom->exists())
+		memset(&m_eprom_rom[0], 0xff, 0x800);
+	else
+	{
+		std::string region_tag;
+		memcpy(&m_eprom_rom[0], memregion(region_tag.assign(m_eprom->tag()).append(GENERIC_ROM_REGION_TAG).c_str())->base(), 0x800);
+	}
+
 	// state saving
 	save_item(NAME(m_eprom_oe));
 	save_item(NAME(m_eprom_ce));
 	save_item(NAME(m_eprom_addr));
 	save_item(NAME(m_eprom_data));
 	save_item(NAME(m_old_data));
+	save_item(NAME(m_eprom_rom));
 	save_item(NAME(m_ls145_p));
 	save_item(NAME(m_segment));
 }
@@ -263,13 +347,18 @@ static MACHINE_CONFIG_START( beta, beta_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* devices */
-	MCFG_RIOT6532_ADD(M6532_TAG, XTAL_4MHz/4, beta_riot_interface)
+	MCFG_DEVICE_ADD(M6532_TAG, MOS6532n, XTAL_4MHz/4)
+	MCFG_MOS6530n_IN_PA_CB(READ8(beta_state, riot_pa_r))
+	MCFG_MOS6530n_OUT_PA_CB(WRITE8(beta_state, riot_pa_w))
+	MCFG_MOS6530n_IN_PB_CB(READ8(beta_state, riot_pb_r))
+	MCFG_MOS6530n_OUT_PB_CB(WRITE8(beta_state, riot_pb_w))
+	MCFG_MOS6530n_IRQ_CB(INPUTLINE(M6502_TAG, M6502_IRQ_LINE))
 
 	/* EPROM socket */
-	MCFG_CARTSLOT_ADD(EPROM_TAG)
-	MCFG_CARTSLOT_EXTENSION_LIST("bin,rom")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_UNLOAD(beta_state,beta_eprom)
+	MCFG_GENERIC_CARTSLOT_ADD(EPROM_TAG, generic_plain_slot, NULL)
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
+	MCFG_GENERIC_LOAD(beta_state, beta_eprom)
+	MCFG_GENERIC_UNLOAD(beta_state, beta_eprom)
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -281,9 +370,6 @@ MACHINE_CONFIG_END
 ROM_START( beta )
 	ROM_REGION( 0x10000, M6502_TAG, 0 )
 	ROM_LOAD( "beta.rom", 0x8000, 0x0800, CRC(d42fdb17) SHA1(595225a0cd43dd76c46b2aff6c0f27d5991cc4f0))
-
-	ROM_REGION( 0x800, EPROM_TAG, ROMREGION_ERASEFF )
-	ROM_CART_LOAD( EPROM_TAG, 0x0000, 0x0800, ROM_FULLSIZE )
 ROM_END
 
 /* System Drivers */

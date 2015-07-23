@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Sinclair ZX8301 emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -17,7 +16,6 @@
 
 */
 
-#include "emu.h"
 #include "zx8301.h"
 
 
@@ -33,16 +31,16 @@
 static const int ZX8301_COLOR_MODE4[] = { 0, 2, 4, 7 };
 
 
-static const rgb_t PALETTE[] =
+static const rgb_t PALETTE_ZX8301[] =
 {
-	MAKE_RGB(0x00, 0x00, 0x00), // black
-	MAKE_RGB(0x00, 0x00, 0xff), // blue
-	MAKE_RGB(0xff, 0x00, 0x00), // red
-	MAKE_RGB(0xff, 0x00, 0xff), // magenta
-	MAKE_RGB(0x00, 0xff, 0x00), // green
-	MAKE_RGB(0x00, 0xff, 0xff), // cyan
-	MAKE_RGB(0xff, 0xff, 0x00), // yellow
-	MAKE_RGB(0xff, 0xff, 0xff) // white
+	rgb_t(0x00, 0x00, 0x00), // black
+	rgb_t(0x00, 0x00, 0xff), // blue
+	rgb_t(0xff, 0x00, 0x00), // red
+	rgb_t(0xff, 0x00, 0xff), // magenta
+	rgb_t(0x00, 0xff, 0x00), // green
+	rgb_t(0x00, 0xff, 0xff), // cyan
+	rgb_t(0xff, 0xff, 0x00), // yellow
+	rgb_t(0xff, 0xff, 0xff) // white
 };
 
 
@@ -60,6 +58,7 @@ static ADDRESS_MAP_START( zx8301, AS_0, 8, zx8301_device )
 	AM_RANGE(0x00000, 0x1ffff) AM_RAM
 ADDRESS_MAP_END
 
+
 //-------------------------------------------------
 //  memory_space_config - return a description of
 //  any address spaces owned by this device
@@ -68,27 +67,6 @@ ADDRESS_MAP_END
 const address_space_config *zx8301_device::memory_space_config(address_spacenum spacenum) const
 {
 	return (spacenum == AS_0) ? &m_space_config : NULL;
-}
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void zx8301_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const zx8301_interface *intf = reinterpret_cast<const zx8301_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<zx8301_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&out_vsync_cb, 0, sizeof(out_vsync_cb));
-	}
 }
 
 
@@ -127,9 +105,12 @@ inline void zx8301_device::writebyte(offs_t address, UINT8 data)
 //-------------------------------------------------
 
 zx8301_device::zx8301_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, ZX8301, "Sinclair ZX8301", tag, owner, clock),
+	: device_t(mconfig, ZX8301, "Sinclair ZX8301", tag, owner, clock, "zx8301", __FILE__),
 		device_memory_interface(mconfig, *this),
+		device_video_interface(mconfig, *this),
 		m_space_config("videoram", ENDIANNESS_LITTLE, 8, 17, 0, NULL, *ADDRESS_MAP_NAME(zx8301)),
+		m_cpu(*this),
+		m_write_vsync(*this),
 		m_dispoff(1),
 		m_mode8(0),
 		m_base(0),
@@ -146,16 +127,8 @@ zx8301_device::zx8301_device(const machine_config &mconfig, const char *tag, dev
 
 void zx8301_device::device_start()
 {
-	// get the CPU
-	m_cpu = machine().device<cpu_device>(cpu_tag);
-	assert(m_cpu != NULL);
-
-	// get the screen device
-	m_screen = machine().device<screen_device>(screen_tag);
-	assert(m_screen != NULL);
-
 	// resolve callbacks
-	m_out_vsync_func.resolve(out_vsync_cb, *this);
+	m_write_vsync.resolve_safe();
 
 	// allocate timers
 	m_vsync_timer = timer_alloc(TIMER_VSYNC);
@@ -185,7 +158,7 @@ void zx8301_device::device_timer(emu_timer &timer, device_timer_id id, int param
 	{
 	case TIMER_VSYNC:
 		//m_vsync = !m_vsync;
-		m_out_vsync_func(m_vsync);
+		m_write_vsync(m_vsync);
 		break;
 
 	case TIMER_FLASH:
@@ -282,7 +255,7 @@ void zx8301_device::draw_line_mode4(bitmap_rgb32 &bitmap, int y, UINT16 da)
 			int green = BIT(byte_high, 7);
 			int color = (green << 1) | red;
 
-			bitmap.pix32(y, x++) = PALETTE[ZX8301_COLOR_MODE4[color]];
+			bitmap.pix32(y, x++) = PALETTE_ZX8301[ZX8301_COLOR_MODE4[color]];
 
 			byte_high <<= 1;
 			byte_low <<= 1;
@@ -318,8 +291,8 @@ void zx8301_device::draw_line_mode8(bitmap_rgb32 &bitmap, int y, UINT16 da)
 				color = 0;
 			}
 
-			bitmap.pix32(y, x++) = PALETTE[color];
-			bitmap.pix32(y, x++) = PALETTE[color];
+			bitmap.pix32(y, x++) = PALETTE_ZX8301[color];
+			bitmap.pix32(y, x++) = PALETTE_ZX8301[color];
 
 			byte_high <<= 2;
 			byte_low <<= 2;
@@ -354,7 +327,7 @@ UINT32 zx8301_device::screen_update(screen_device &screen, bitmap_rgb32 &bitmap,
 	}
 	else
 	{
-		bitmap.fill(RGB_BLACK, cliprect);
+		bitmap.fill(rgb_t::black, cliprect);
 	}
 
 	return 0;

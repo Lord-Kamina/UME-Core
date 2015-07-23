@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Andreas Naive, Charles MacDonald
 /***************************************************************************
 
     Hitachi FD1094 encryption emulation
@@ -54,7 +56,7 @@ protected:
 	UINT32                  m_baseaddress;
 	UINT32                  m_size;
 	UINT32                  m_rgnoffset;
-	dynamic_array<UINT16>   m_decrypted_opcodes[256];
+	std::vector<UINT16>          m_decrypted_opcodes[256];
 };
 
 
@@ -86,6 +88,8 @@ public:
 	};
 
 protected:
+	required_memory_bank m_decrypted_opcodes_bank;
+
 	// device overrides
 	virtual void device_start();
 	virtual void device_reset();
@@ -98,8 +102,8 @@ protected:
 	IRQ_CALLBACK_MEMBER( irq_callback );
 
 	// static helpers
-	static void cmp_callback(device_t *device, UINT32 val, UINT8 reg);
-	static void rte_callback(device_t *device);
+	DECLARE_WRITE32_MEMBER(cmp_callback);
+	DECLARE_WRITE_LINE_MEMBER(rte_callback);
 
 	// internal state
 	UINT8                   m_state;

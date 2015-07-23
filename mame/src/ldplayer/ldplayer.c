@@ -1,11 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     ldplayer.c
 
     Laserdisc player driver.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **************************************************************************/
 
@@ -60,7 +59,7 @@ const char * emulator_info::get_usage() { return USAGE;}
 const char * emulator_info::get_xml_root() { return XML_ROOT;}
 const char * emulator_info::get_xml_top() { return XML_TOP;}
 const char * emulator_info::get_state_magic_num() { return STATE_MAGIC_NUM;}
-void emulator_info::printf_usage(const char *par1, const char *par2) { mame_printf_info(USAGE, par1, par2); }
+void emulator_info::printf_usage(const char *par1, const char *par2) { osd_printf_info(USAGE, par1, par2); }
 
 /*************************************
  *
@@ -137,7 +136,7 @@ protected:
 	};
 
 	// internal state
-	astring m_filename;
+	std::string m_filename;
 	ioport_value m_last_controls;
 	bool m_playing;
 };
@@ -229,14 +228,14 @@ chd_file *ldplayer_state::get_disc()
 			file_error filerr = image_file.open(dir->name);
 			if (filerr == FILERR_NONE)
 			{
-				astring fullpath(image_file.fullpath());
+				std::string fullpath(image_file.fullpath());
 				image_file.close();
 
 				// try to open the CHD
 
-				if (set_disk_handle(machine(), "laserdisc", fullpath) == CHDERR_NONE)
+				if (set_disk_handle(machine(), "laserdisc", fullpath.c_str()) == CHDERR_NONE)
 				{
-					m_filename.cpy(dir->name);
+					m_filename.assign(dir->name);
 					found = TRUE;
 					break;
 				}
@@ -343,8 +342,8 @@ void ldplayer_state::device_timer(emu_timer &timer, device_timer_id id, int para
 				process_commands();
 
 			// set a timer to go off on the next VBLANK
-			int vblank_scanline = machine().primary_screen->visible_area().max_y + 1;
-			attotime target = machine().primary_screen->time_until_pos(vblank_scanline);
+			int vblank_scanline = machine().first_screen()->visible_area().max_y + 1;
+			attotime target = machine().first_screen()->time_until_pos(vblank_scanline);
 			timer_set(target, TIMER_ID_VSYNC_UPDATE);
 			break;
 		}
@@ -371,7 +370,7 @@ void ldplayer_state::machine_reset()
 	timer_set(attotime::zero, TIMER_ID_AUTOPLAY);
 
 	// indicate the name of the file we opened
-	popmessage("Opened %s\n", m_filename.cstr());
+	popmessage("Opened %s\n", m_filename.c_str());
 }
 
 

@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Kevin Thacker, Robbbert
 /******************************************************************************
 
   Exidy Sorcerer system driver
@@ -161,7 +163,8 @@ static ADDRESS_MAP_START( sorcerer_mem, AS_PROGRAM, 8, sorcerer_state)
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x0000, 0x07ff) AM_RAMBANK("boot")
 	AM_RANGE(0x0800, 0xbfff) AM_RAM
-	AM_RANGE(0xc000, 0xefff) AM_ROM                     /* rom pac and bios */
+	//AM_RANGE(0xc000, 0xdfff)      // mapped by the cartslot
+	AM_RANGE(0xe000, 0xefff) AM_ROM                     /* rom pac and bios */
 	AM_RANGE(0xf000, 0xf7ff) AM_RAM AM_REGION("maincpu", 0xf000)        /* screen ram */
 	AM_RANGE(0xf800, 0xfbff) AM_ROM                     /* char rom */
 	AM_RANGE(0xfc00, 0xffff) AM_RAM AM_REGION("maincpu", 0xfc00)        /* programmable chars */
@@ -172,8 +175,9 @@ static ADDRESS_MAP_START( sorcererd_mem, AS_PROGRAM, 8, sorcerer_state)
 	AM_RANGE(0x0000, 0x07ff) AM_RAMBANK("boot")
 	AM_RANGE(0x0800, 0xbbff) AM_RAM
 	AM_RANGE(0xbc00, 0xbcff) AM_ROM
-	AM_RANGE(0xbe00, 0xbe03) AM_DEVREADWRITE_LEGACY("fdc", micropolis_r, micropolis_w)
-	AM_RANGE(0xc000, 0xefff) AM_ROM                     /* rom pac and bios */
+	AM_RANGE(0xbe00, 0xbe03) AM_DEVREADWRITE("fdc", micropolis_device, read, write)
+	//AM_RANGE(0xc000, 0xdfff)      // mapped by the cartslot
+	AM_RANGE(0xe000, 0xefff) AM_ROM                     /* rom pac and bios */
 	AM_RANGE(0xf000, 0xf7ff) AM_RAM AM_REGION("maincpu", 0xf000)        /* screen ram */
 	AM_RANGE(0xf800, 0xfbff) AM_ROM                     /* char rom */
 	AM_RANGE(0xfc00, 0xffff) AM_RAM AM_REGION("maincpu", 0xfc00)        /* programmable chars */
@@ -185,7 +189,8 @@ static ADDRESS_MAP_START( sorcerer_io, AS_IO, 8, sorcerer_state)
 	AM_RANGE(0xfc, 0xfc) AM_READWRITE( sorcerer_fc_r, sorcerer_fc_w )
 	AM_RANGE(0xfd, 0xfd) AM_READWRITE( sorcerer_fd_r, sorcerer_fd_w )
 	AM_RANGE(0xfe, 0xfe) AM_READWRITE( sorcerer_fe_r, sorcerer_fe_w )
-	AM_RANGE(0xff, 0xff) AM_READWRITE( sorcerer_ff_r, sorcerer_ff_w )
+	AM_RANGE(0xff, 0xff) AM_DEVREAD("cent_status_in", input_buffer_device, read)
+	AM_RANGE(0xff, 0xff) AM_WRITE( sorcerer_ff_w )
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START(sorcerer)
@@ -312,10 +317,9 @@ static INPUT_PORTS_START(sorcerer)
 	PORT_CONFSETTING(    0x00, DEF_STR(No))
 	PORT_CONFSETTING(    0x01, DEF_STR(Yes))
 	/* hardware connected to printer port */
-	PORT_CONFNAME( 0x06, 0x00, "Parallel port" )
-	PORT_CONFSETTING(    0x00, "Speaker" )
-	PORT_CONFSETTING(    0x02, "Printer (7-bit)" )
-	PORT_CONFSETTING(    0x04, "Printer (8-bit)" )
+	PORT_CONFNAME( 0x02, 0x02, "Parallel port" )
+	PORT_CONFSETTING(    0x00, "7-bit" )
+	PORT_CONFSETTING(    0x02, "8-bit" )
 	PORT_CONFNAME( 0x08, 0x08, "Cassette Speaker")
 	PORT_CONFSETTING(    0x08, DEF_STR(On))
 	PORT_CONFSETTING(    0x00, DEF_STR(Off))
@@ -384,36 +388,11 @@ UINT32 sorcerer_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap
 
 /**********************************************************************************************************/
 
-static const ay31015_config sorcerer_ay31015_config =
-{
-	4800.0,
-	4800.0,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
-static const cassette_interface sorcerer_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_PLAY | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	"sorcerer_cass",
-	NULL
-};
-
 static const floppy_interface sorcerer_floppy_interface =
 {
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
 	FLOPPY_STANDARD_8_SSSD,
 	LEGACY_FLOPPY_OPTIONS_NAME(sorcerer),
-	"floppy_8",
-	NULL
+	"floppy_8"
 };
 
 
@@ -423,7 +402,6 @@ static MACHINE_CONFIG_START( sorcerer, sorcerer_state )
 	MCFG_CPU_PROGRAM_MAP(sorcerer_mem)
 	MCFG_CPU_IO_MAP(sorcerer_io)
 
-
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(50)
@@ -431,9 +409,10 @@ static MACHINE_CONFIG_START( sorcerer, sorcerer_state )
 	MCFG_SCREEN_SIZE(64*8, 30*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 64*8-1, 0, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(sorcerer_state, screen_update)
-	MCFG_GFXDECODE(sorcerer)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(black_and_white)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", sorcerer)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -441,25 +420,37 @@ static MACHINE_CONFIG_START( sorcerer, sorcerer_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25) // cass1 speaker
 	MCFG_SOUND_WAVE_ADD(WAVE2_TAG, "cassette2")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25) // cass2 speaker
-	MCFG_SOUND_ADD("dac", DAC, 0)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.75) // speaker or music card on parallel port
 
-	MCFG_AY31015_ADD( "uart", sorcerer_ay31015_config )
+	MCFG_DEVICE_ADD( "uart", AY31015, 0 )
+	MCFG_AY31015_TX_CLOCK(4800.0)
+	MCFG_AY31015_RX_CLOCK(4800.0)
 
 	/* printer */
-	MCFG_CENTRONICS_PRINTER_ADD("centronics", standard_centronics)
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "covox")
+
+	/* The use of the parallel port as a general purpose port is not emulated.
+	Currently the only use is to read the printer status in the Centronics CENDRV bios routine. */
+	MCFG_CENTRONICS_BUSY_HANDLER(DEVWRITELINE("cent_status_in", input_buffer_device, write_bit7))
+
+	MCFG_DEVICE_ADD("cent_status_in", INPUT_BUFFER, 0)
 
 	/* quickload */
 	MCFG_SNAPSHOT_ADD("snapshot", sorcerer_state, sorcerer, "snp", 2)
 	MCFG_QUICKLOAD_ADD("quickload", sorcerer_state, sorcerer, "bin", 3)
 
-	MCFG_CASSETTE_ADD( "cassette", sorcerer_cassette_interface )
-	MCFG_CASSETTE_ADD( "cassette2", sorcerer_cassette_interface )
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_FORMATS(sorcerer_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_PLAY | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("sorcerer_cass")
+
+	MCFG_CASSETTE_ADD( "cassette2" )
+	MCFG_CASSETTE_FORMATS(sorcerer_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_PLAY | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("sorcerer_cass")
 
 	/* cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_INTERFACE("sorcerer_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "sorcerer_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* software lists */
 	MCFG_SOFTWARE_LIST_ADD("cart_list","sorcerer_cart")
@@ -474,14 +465,18 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( sorcererd, sorcerer )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(sorcererd_mem)
+
 	MCFG_MACHINE_START_OVERRIDE(sorcerer_state, sorcererd )
-	MCFG_MICROPOLIS_ADD("fdc", default_micropolis_interface )
+
+	MCFG_DEVICE_ADD("fdc", MICROPOLIS, 0)
+	MCFG_MICROPOLIS_DEFAULT_DRIVE4_TAGS
+
 	MCFG_LEGACY_FLOPPY_4_DRIVES_ADD(sorcerer_floppy_interface)
 	MCFG_SOFTWARE_LIST_ADD("flop_list","sorcerer_flop")
 MACHINE_CONFIG_END
 
 
-DRIVER_INIT_MEMBER(sorcerer_state,sorcerer)
+DRIVER_INIT_MEMBER(sorcerer_state, sorcerer)
 {
 	UINT8 *RAM = memregion("maincpu")->base();
 	membank("boot")->configure_entries(0, 2, &RAM[0x0000], 0xe000);
@@ -497,7 +492,6 @@ ROM_START(sorcerer)
 	ROM_LOAD("exmo1-1.dat", 0xe000, 0x0800, CRC(ac924f67) SHA1(72fcad6dd1ed5ec0527f967604401284d0e4b6a1) ) /* monitor roms */
 	ROM_LOAD("exmo1-2.dat", 0xe800, 0x0800, CRC(ead1d0f6) SHA1(c68bed7344091bca135e427b4793cc7d49ca01be) )
 	ROM_LOAD("exchr-1.dat", 0xf800, 0x0400, CRC(4a7e1cdd) SHA1(2bf07a59c506b6e0c01ec721fb7b747b20f5dced) ) /* char rom */
-	ROM_CART_LOAD("cart",   0xc000, 0x2000, ROM_OPTIONAL)
 ROM_END
 
 ROM_START(sorcererd)
@@ -506,7 +500,6 @@ ROM_START(sorcererd)
 	ROM_LOAD("exmo1-1.dat", 0xe000, 0x0800, CRC(ac924f67) SHA1(72fcad6dd1ed5ec0527f967604401284d0e4b6a1) ) /* monitor roms */
 	ROM_LOAD("exmo1-2.dat", 0xe800, 0x0800, CRC(ead1d0f6) SHA1(c68bed7344091bca135e427b4793cc7d49ca01be) )
 	ROM_LOAD("exchr-1.dat", 0xf800, 0x0400, CRC(4a7e1cdd) SHA1(2bf07a59c506b6e0c01ec721fb7b747b20f5dced) ) /* char rom */
-	ROM_CART_LOAD("cart",   0xc000, 0x2000, ROM_OPTIONAL)
 
 	ROM_REGION( 0x200, "proms", 0 )
 	ROM_LOAD_OPTIONAL("bruce.dat",  0x0000, 0x0020, CRC(fae922cb) SHA1(470a86844cfeab0d9282242e03ff1d8a1b2238d1) ) /* video prom */

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /********************************************************************
 
     Support for PMD 85 cassette images
@@ -7,6 +9,8 @@
     - ptp: PMD 85 tape package
 
 ********************************************************************/
+
+#include <assert.h>
 
 #include "pmd_cas.h"
 

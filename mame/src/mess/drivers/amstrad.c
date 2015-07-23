@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Kevin Thacker, Barry Rodewald
 /******************************************************************************
 
     amstrad.c
@@ -98,14 +100,12 @@ Some bugs left :
 #include "sound/ay8910.h"
 #include "sound/wave.h"
 #include "machine/mc146818.h"  /* Aleste RTC */
-#include "machine/ctronics.h"
+#include "bus/centronics/ctronics.h"
 
 /* Devices */
 #include "imagedev/snapquik.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/cassette.h"
 #include "formats/tzx_cas.h"
-#include "formats/dsk_dsk.h"
 
 #include "machine/ram.h"
 
@@ -117,25 +117,6 @@ Some bugs left :
 #define SYSTEM_CPC    0
 #define SYSTEM_PLUS   1
 #define SYSTEM_GX4000 2
-
-
-/* -----------------------------
-   - amstrad_ppi8255_interface -
-   -----------------------------*/
-static I8255_INTERFACE( amstrad_ppi8255_interface )
-{
-	DEVCB_DRIVER_MEMBER(amstrad_state,amstrad_ppi_porta_r), /* port A read */
-	DEVCB_DRIVER_MEMBER(amstrad_state,amstrad_ppi_porta_w), /* port A write */
-	DEVCB_DRIVER_MEMBER(amstrad_state,amstrad_ppi_portb_r), /* port B read */
-	DEVCB_NULL,                         /* port B write */
-	DEVCB_NULL,                         /* port C read */
-	DEVCB_DRIVER_MEMBER(amstrad_state,amstrad_ppi_portc_w)  /* port C write */
-};
-
-DRIVER_INIT_MEMBER(amstrad_state,aleste)
-{
-	m_fdc->setup_intrq_cb(i8272a_device::line_cb(FUNC(amstrad_state::aleste_interrupt), this));
-}
 
 
 /* Memory is banked in 16k blocks. However, the multiface
@@ -167,8 +148,7 @@ ADDRESS_MAP_END
  *************************************/
 
 static INPUT_PORTS_START( amstrad_keyboard )
-	/* keyboard row 0 */
-	PORT_START("keyboard_row_0")
+	PORT_START("kbrow.0")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME(UTF8_UP)          PORT_CODE(KEYCODE_UP)         PORT_CHAR(UCHAR_MAMEKEY(UP))
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME(UTF8_RIGHT)          PORT_CODE(KEYCODE_RIGHT)      PORT_CHAR(UCHAR_MAMEKEY(RIGHT))
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME(UTF8_DOWN)          PORT_CODE(KEYCODE_DOWN)       PORT_CHAR(UCHAR_MAMEKEY(DOWN))
@@ -178,8 +158,7 @@ static INPUT_PORTS_START( amstrad_keyboard )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad Enter")          PORT_CODE(KEYCODE_ENTER_PAD)  PORT_CHAR(UCHAR_MAMEKEY(ENTER_PAD))
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad .")              PORT_CODE(KEYCODE_DEL_PAD)    PORT_CHAR(UCHAR_MAMEKEY(DEL_PAD))
 
-	/* keyboard line 1 */
-	PORT_START("keyboard_row_1")
+	PORT_START("kbrow.1")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME(UTF8_LEFT)          PORT_CODE(KEYCODE_LEFT)       PORT_CHAR(UCHAR_MAMEKEY(LEFT))
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Copy")                  PORT_CODE(KEYCODE_END)        PORT_CHAR(UCHAR_MAMEKEY(END))
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad 7")              PORT_CODE(KEYCODE_7_PAD)      PORT_CHAR(UCHAR_MAMEKEY(7_PAD))
@@ -189,8 +168,7 @@ static INPUT_PORTS_START( amstrad_keyboard )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad 2")              PORT_CODE(KEYCODE_2_PAD)      PORT_CHAR(UCHAR_MAMEKEY(2_PAD))
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad 0")              PORT_CODE(KEYCODE_0_PAD)      PORT_CHAR(UCHAR_MAMEKEY(0_PAD))
 
-	/* keyboard row 2 */
-	PORT_START("keyboard_row_2")
+	PORT_START("kbrow.2")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Clr")                   PORT_CODE(KEYCODE_BACKSPACE)  PORT_CHAR(UCHAR_MAMEKEY(HOME))
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("[")                     PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR('[') PORT_CHAR('{')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Enter")                 PORT_CODE(KEYCODE_ENTER)      PORT_CHAR(13)
@@ -200,8 +178,7 @@ static INPUT_PORTS_START( amstrad_keyboard )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("\\")                    PORT_CODE(KEYCODE_RCONTROL)   PORT_CHAR('\\') PORT_CHAR('`')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Ctrl")                  PORT_CODE(KEYCODE_RALT)       PORT_CHAR(UCHAR_SHIFT_2)
 
-	/* keyboard row 3 */
-	PORT_START("keyboard_row_3")
+	PORT_START("kbrow.3")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("\xE2\x86\x91 \xC2\xA3") PORT_CODE(KEYCODE_EQUALS)     PORT_CHAR('^') PORT_CHAR(0xa3)
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_MINUS)      PORT_CHAR('-') PORT_CHAR('=')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("@ \xC2\xA6")            PORT_CODE(KEYCODE_OPENBRACE)  PORT_CHAR('@') PORT_CHAR('|')
@@ -211,8 +188,7 @@ static INPUT_PORTS_START( amstrad_keyboard )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_SLASH)      PORT_CHAR('/') PORT_CHAR('?')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_STOP)       PORT_CHAR('.') PORT_CHAR('>')
 
-	/* keyboard line 4 */
-	PORT_START("keyboard_row_4")
+	PORT_START("kbrow.4")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_0)          PORT_CHAR('0') PORT_CHAR('_')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_9)          PORT_CHAR('9') PORT_CHAR(')')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_O)          PORT_CHAR('o') PORT_CHAR('O')
@@ -222,8 +198,7 @@ static INPUT_PORTS_START( amstrad_keyboard )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_M)          PORT_CHAR('m') PORT_CHAR('M')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_COMMA)      PORT_CHAR(',') PORT_CHAR('<')
 
-	/* keyboard line 5 */
-	PORT_START("keyboard_row_5")
+	PORT_START("kbrow.5")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_8)          PORT_CHAR('8') PORT_CHAR('(')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_7)          PORT_CHAR('7') PORT_CHAR('\'')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_U)          PORT_CHAR('u') PORT_CHAR('U')
@@ -233,8 +208,7 @@ static INPUT_PORTS_START( amstrad_keyboard )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_N)          PORT_CHAR('n') PORT_CHAR('N')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Space")                 PORT_CODE(KEYCODE_SPACE)      PORT_CHAR(32)
 
-	/* keyboard line 6 */
-	PORT_START("keyboard_row_6")
+	PORT_START("kbrow.6")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_6)          PORT_CHAR('6') PORT_CHAR('&')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_5)          PORT_CHAR('5') PORT_CHAR('%')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_R)          PORT_CHAR('r') PORT_CHAR('R')
@@ -244,8 +218,7 @@ static INPUT_PORTS_START( amstrad_keyboard )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_B)          PORT_CHAR('b') PORT_CHAR('B')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_V)          PORT_CHAR('v') PORT_CHAR('V')
 
-	/* keyboard line 7 */
-	PORT_START("keyboard_row_7")
+	PORT_START("kbrow.7")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_4)          PORT_CHAR('4') PORT_CHAR('$')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_3)          PORT_CHAR('3') PORT_CHAR('#')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_E)          PORT_CHAR('e') PORT_CHAR('E')
@@ -255,8 +228,7 @@ static INPUT_PORTS_START( amstrad_keyboard )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_C)          PORT_CHAR('c') PORT_CHAR('C')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_X)          PORT_CHAR('x') PORT_CHAR('X')
 
-	/* keyboard line 8 */
-	PORT_START("keyboard_row_8")
+	PORT_START("kbrow.8")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_1)          PORT_CHAR('1') PORT_CHAR('!')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_2)          PORT_CHAR('2') PORT_CHAR('\"') PORT_CHAR('~')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Esc")                   PORT_CODE(KEYCODE_TILDE)      PORT_CHAR(27)
@@ -266,8 +238,7 @@ static INPUT_PORTS_START( amstrad_keyboard )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Caps Lock")             PORT_CODE(KEYCODE_CAPSLOCK)   PORT_CHAR(UCHAR_MAMEKEY(CAPSLOCK)) PORT_TOGGLE
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_Z)          PORT_CHAR('z') PORT_CHAR('Z')
 
-	/* keyboard line 9 */
-	PORT_START("keyboard_row_9")
+	PORT_START("kbrow.9")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_JOYSTICK_UP)    PORT_PLAYER(1) PORT_8WAY
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN)  PORT_PLAYER(1) PORT_8WAY
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT)  PORT_PLAYER(1) PORT_8WAY
@@ -295,20 +266,20 @@ INPUT_CHANGED_MEMBER(amstrad_state::cpc_monitor_changed)
 {
 	if ( (m_io_green_display->read()) & 0x01 )
 	{
-		PALETTE_INIT_CALL_MEMBER( amstrad_cpc_green );
+		PALETTE_INIT_NAME( amstrad_cpc_green )(m_palette);
 	}
 	else
 	{
-		PALETTE_INIT_CALL_MEMBER( amstrad_cpc );
+		PALETTE_INIT_NAME( amstrad_cpc )(m_palette);
 	}
 }
 
 
 static INPUT_PORTS_START( crtc_links )
 
-/* the following are defined as dipswitches, but are in fact solder links on the
- * curcuit board. The links are open or closed when the PCB is made, and are set depending on which country
- * the Amstrad system was to go to (reference: http://amstrad.cpc.free.fr/article.php?sid=26)
+/* the following are solder links on the circuit board. The links are open or closed when the
+ * PCB is made, and are set depending on which country the Amstrad system was to go to
+ * (reference: http://amstrad.cpc.free.fr/article.php?sid=26)
 
 lk1 lk2 lk3 Manufacturer Name (CPC and CPC+ only):
 
@@ -326,21 +297,18 @@ lk4     Frequency
 1       50 Hz
 */
 	PORT_START("solder_links")
-	PORT_DIPNAME(0x07, 0x07, "Manufacturer Name")
-	PORT_DIPLOCATION("LK:3,2,1")
-	PORT_DIPSETTING(0x00, "Isp")
-	PORT_DIPSETTING(0x01, "Triumph")
-	PORT_DIPSETTING(0x02, "Saisho")
-	PORT_DIPSETTING(0x03, "Solavox")
-	PORT_DIPSETTING(0x04, "Awa")
-	PORT_DIPSETTING(0x05, "Schneider")
-	PORT_DIPSETTING(0x06, "Orion")
-	PORT_DIPSETTING(0x07, "Amstrad")
-
-	PORT_DIPNAME(0x10, 0x10, "TV Refresh Rate")
-	PORT_DIPLOCATION("LK:4")
-	PORT_DIPSETTING(0x00, "60 Hz")
-	PORT_DIPSETTING(0x10, "50 Hz")
+	PORT_CONFNAME(0x07, 0x07, "Manufacturer Name")
+	PORT_CONFSETTING(0x00, "Isp")
+	PORT_CONFSETTING(0x01, "Triumph")
+	PORT_CONFSETTING(0x02, "Saisho")
+	PORT_CONFSETTING(0x03, "Solavox")
+	PORT_CONFSETTING(0x04, "Awa")
+	PORT_CONFSETTING(0x05, "Schneider")
+	PORT_CONFSETTING(0x06, "Orion")
+	PORT_CONFSETTING(0x07, "Amstrad")
+	PORT_CONFNAME(0x10, 0x10, "TV Refresh Rate")
+	PORT_CONFSETTING(0x00, "60 Hz")
+	PORT_CONFSETTING(0x10, "50 Hz")
 
 /* Part number Manufacturer Type number
    UM6845      UMC          0
@@ -367,22 +335,42 @@ As far as I know, the KC compact used HD6845S only.
 
 INPUT_PORTS_END
 
+static INPUT_PORTS_START( amx_mouse )
+	PORT_START("mouse_input1")
+	PORT_BIT(0xff , 0, IPT_MOUSE_X) PORT_SENSITIVITY(100) PORT_KEYDELTA(10) PORT_PLAYER(1) PORT_CONDITION("controller_type", 0x01, EQUALS, 0x01)
+
+	PORT_START("mouse_input2")
+	PORT_BIT(0xff , 0, IPT_MOUSE_Y) PORT_SENSITIVITY(100) PORT_KEYDELTA(10) PORT_PLAYER(1) PORT_CONDITION("controller_type", 0x01, EQUALS, 0x01)
+
+	PORT_START("mouse_input3")
+	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_BUTTON4) PORT_NAME("Left mouse button") PORT_CODE(MOUSECODE_BUTTON1) PORT_CONDITION("controller_type", 0x01, EQUALS, 0x01)
+	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_BUTTON5) PORT_NAME("Right mouse button") PORT_CODE(MOUSECODE_BUTTON2) PORT_CONDITION("controller_type", 0x01, EQUALS, 0x01)
+	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_BUTTON6) PORT_NAME("Middle mouse button") PORT_CODE(MOUSECODE_BUTTON3) PORT_CONDITION("controller_type", 0x01, EQUALS, 0x01)
+
+	PORT_START("controller_type")
+	PORT_CONFNAME( 0x03, 0x00, "Joystick port device" )
+	PORT_CONFSETTING(0x00, "2-button Joystick" )
+	PORT_CONFSETTING(0x01, "AMX mouse interface" )
+	PORT_CONFSETTING(0x02, "Nothing" )
+
+INPUT_PORTS_END
 
 static INPUT_PORTS_START( cpc464 )
 	PORT_INCLUDE(amstrad_keyboard)
 	PORT_INCLUDE(crtc_links)
+	PORT_INCLUDE(amx_mouse)
 INPUT_PORTS_END
 
 
 static INPUT_PORTS_START( cpc664 )
 	PORT_INCLUDE(amstrad_keyboard)
 
-	PORT_MODIFY("keyboard_row_0")
+	PORT_MODIFY("kbrow.0")
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad f9")             PORT_CODE(KEYCODE_9_PAD)      PORT_CHAR(UCHAR_MAMEKEY(9_PAD))
 	PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad f6")             PORT_CODE(KEYCODE_6_PAD)      PORT_CHAR(UCHAR_MAMEKEY(6_PAD))
 	PORT_BIT(0x20, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad f3")             PORT_CODE(KEYCODE_3_PAD)      PORT_CHAR(UCHAR_MAMEKEY(3_PAD))
 
-	PORT_MODIFY("keyboard_row_1")
+	PORT_MODIFY("kbrow.1")
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad f7")             PORT_CODE(KEYCODE_7_PAD)      PORT_CHAR(UCHAR_MAMEKEY(7_PAD))
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad f8")             PORT_CODE(KEYCODE_8_PAD)      PORT_CHAR(UCHAR_MAMEKEY(8_PAD))
 	PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad f5")             PORT_CODE(KEYCODE_5_PAD)      PORT_CHAR(UCHAR_MAMEKEY(5_PAD))
@@ -390,26 +378,27 @@ static INPUT_PORTS_START( cpc664 )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad f2")             PORT_CODE(KEYCODE_2_PAD)      PORT_CHAR(UCHAR_MAMEKEY(2_PAD))
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad f0")             PORT_CODE(KEYCODE_0_PAD)      PORT_CHAR(UCHAR_MAMEKEY(0_PAD))
 
-	PORT_MODIFY("keyboard_row_2")
+	PORT_MODIFY("kbrow.2")
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR('[') PORT_CHAR('{')
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_BACKSLASH)  PORT_CHAR(']') PORT_CHAR('}')
 	PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Keypad f4")             PORT_CODE(KEYCODE_4_PAD)      PORT_CHAR(UCHAR_MAMEKEY(4_PAD))
 
 	PORT_INCLUDE(crtc_links)
+	PORT_INCLUDE(amx_mouse)
 INPUT_PORTS_END
 
 
 static INPUT_PORTS_START( cpc6128 )
 	PORT_INCLUDE(amstrad_keyboard)
 
-	PORT_MODIFY("keyboard_row_0")
+	PORT_MODIFY("kbrow.0")
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f9")                    PORT_CODE(KEYCODE_9_PAD)      PORT_CHAR(UCHAR_MAMEKEY(9_PAD))
 	PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f6")                    PORT_CODE(KEYCODE_6_PAD)      PORT_CHAR(UCHAR_MAMEKEY(6_PAD))
 	PORT_BIT(0x20, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f3")                    PORT_CODE(KEYCODE_3_PAD)      PORT_CHAR(UCHAR_MAMEKEY(3_PAD))
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Enter")                 PORT_CODE(KEYCODE_RALT)       PORT_CHAR(UCHAR_MAMEKEY(ENTER_PAD))
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME(".")                     PORT_CODE(KEYCODE_DEL_PAD)    PORT_CHAR(UCHAR_MAMEKEY(DEL_PAD))
 
-	PORT_MODIFY("keyboard_row_1")
+	PORT_MODIFY("kbrow.1")
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Copy")                  PORT_CODE(KEYCODE_LALT)       PORT_CHAR(UCHAR_MAMEKEY(END))
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f7")                    PORT_CODE(KEYCODE_7_PAD)      PORT_CHAR(UCHAR_MAMEKEY(7_PAD))
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f8")                    PORT_CODE(KEYCODE_8_PAD)      PORT_CHAR(UCHAR_MAMEKEY(8_PAD))
@@ -418,7 +407,7 @@ static INPUT_PORTS_START( cpc6128 )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f2")                    PORT_CODE(KEYCODE_2_PAD)      PORT_CHAR(UCHAR_MAMEKEY(2_PAD))
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f0")                    PORT_CODE(KEYCODE_0_PAD)      PORT_CHAR(UCHAR_MAMEKEY(0_PAD))
 
-	PORT_MODIFY("keyboard_row_2")
+	PORT_MODIFY("kbrow.2")
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR('[') PORT_CHAR('{')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Return")                PORT_CODE(KEYCODE_ENTER)      PORT_CHAR(13)
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_BACKSLASH)  PORT_CHAR(']') PORT_CHAR('}')
@@ -427,6 +416,7 @@ static INPUT_PORTS_START( cpc6128 )
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Control")               PORT_CODE(KEYCODE_LCONTROL)   PORT_CHAR(UCHAR_SHIFT_2)
 
 	PORT_INCLUDE(crtc_links)
+	PORT_INCLUDE(amx_mouse)
 INPUT_PORTS_END
 
 
@@ -434,14 +424,14 @@ INPUT_PORTS_END
 static INPUT_PORTS_START( cpc6128f )
 	PORT_INCLUDE(amstrad_keyboard)
 
-	PORT_MODIFY("keyboard_row_0")
+	PORT_MODIFY("kbrow.0")
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f9")                    PORT_CODE(KEYCODE_9_PAD)      PORT_CHAR(UCHAR_MAMEKEY(9_PAD))
 	PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f6")                    PORT_CODE(KEYCODE_6_PAD)      PORT_CHAR(UCHAR_MAMEKEY(6_PAD))
 	PORT_BIT(0x20, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f3")                    PORT_CODE(KEYCODE_3_PAD)      PORT_CHAR(UCHAR_MAMEKEY(3_PAD))
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Enter")                 PORT_CODE(KEYCODE_RALT)       PORT_CHAR(UCHAR_MAMEKEY(ENTER_PAD))
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME(".")                     PORT_CODE(KEYCODE_DEL_PAD)    PORT_CHAR(UCHAR_MAMEKEY(DEL_PAD))
 
-	PORT_MODIFY("keyboard_row_1")
+	PORT_MODIFY("kbrow.1")
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Copy")                  PORT_CODE(KEYCODE_LALT)       PORT_CHAR(UCHAR_MAMEKEY(END))
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f7")                    PORT_CODE(KEYCODE_7_PAD)      PORT_CHAR(UCHAR_MAMEKEY(7_PAD))
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f8")                    PORT_CODE(KEYCODE_8_PAD)      PORT_CHAR(UCHAR_MAMEKEY(8_PAD))
@@ -450,7 +440,7 @@ static INPUT_PORTS_START( cpc6128f )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f2")                    PORT_CODE(KEYCODE_2_PAD)      PORT_CHAR(UCHAR_MAMEKEY(2_PAD))
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f0")                    PORT_CODE(KEYCODE_0_PAD)      PORT_CHAR(UCHAR_MAMEKEY(0_PAD))
 
-	PORT_MODIFY("keyboard_row_2")
+	PORT_MODIFY("kbrow.2")
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR('*') PORT_CHAR('<')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Return")                PORT_CODE(KEYCODE_ENTER)      PORT_CHAR(13)
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_BACKSLASH)  PORT_CHAR('#') PORT_CHAR('>')
@@ -458,7 +448,7 @@ static INPUT_PORTS_START( cpc6128f )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_RCONTROL)   PORT_CHAR('$') PORT_CHAR('@') PORT_CHAR('\\')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Control")               PORT_CODE(KEYCODE_LCONTROL)   PORT_CHAR(UCHAR_SHIFT_2)
 
-	PORT_MODIFY("keyboard_row_3")
+	PORT_MODIFY("kbrow.3")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_EQUALS)     PORT_CHAR('-') PORT_CHAR('_')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_MINUS)      PORT_CHAR(')') PORT_CHAR('[')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("^   \xC2\xA6")          PORT_CODE(KEYCODE_OPENBRACE)  PORT_CHAR('^') PORT_CHAR('|')
@@ -467,26 +457,26 @@ static INPUT_PORTS_START( cpc6128f )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_SLASH)      PORT_CHAR('=') PORT_CHAR('+')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_STOP)       PORT_CHAR(':') PORT_CHAR('/')
 
-	PORT_MODIFY("keyboard_row_4")
+	PORT_MODIFY("kbrow.4")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("\xC3\xA0   0")          PORT_CODE(KEYCODE_0)          PORT_CHAR(0xE0) PORT_CHAR('0')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("\xC3\xA7   9")          PORT_CODE(KEYCODE_9)          PORT_CHAR(0xE7) PORT_CHAR('9')
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_M)          PORT_CHAR(',') PORT_CHAR('?')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_COMMA)      PORT_CHAR(';') PORT_CHAR('.')
 
-	PORT_MODIFY("keyboard_row_5")
+	PORT_MODIFY("kbrow.5")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_8)          PORT_CHAR('!') PORT_CHAR('8')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("\xC3\xA9   7")          PORT_CODE(KEYCODE_7)          PORT_CHAR(0xE8) PORT_CHAR('7')
 
-	PORT_MODIFY("keyboard_row_6")
+	PORT_MODIFY("kbrow.6")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_6)          PORT_CHAR(']') PORT_CHAR('6')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_5)          PORT_CHAR('(') PORT_CHAR('5')
 
-	PORT_MODIFY("keyboard_row_7")
+	PORT_MODIFY("kbrow.7")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_4)          PORT_CHAR('\'') PORT_CHAR('4')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_3)          PORT_CHAR('\"') PORT_CHAR('3')
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_W)          PORT_CHAR('z') PORT_CHAR('Z')
 
-	PORT_MODIFY("keyboard_row_8")
+	PORT_MODIFY("kbrow.8")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_1)          PORT_CHAR('&') PORT_CHAR('1')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("\xC3\xA9   2   ~")      PORT_CODE(KEYCODE_2)          PORT_CHAR(0xE9) PORT_CHAR('2') PORT_CHAR('~')
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_Q)          PORT_CHAR('a') PORT_CHAR('A')
@@ -494,17 +484,18 @@ static INPUT_PORTS_START( cpc6128f )
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_Z)          PORT_CHAR('w') PORT_CHAR('W')
 
 	PORT_INCLUDE(crtc_links)
+	PORT_INCLUDE(amx_mouse)
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( cpc6128s )
 	PORT_INCLUDE(cpc6128)
 
-	PORT_MODIFY("keyboard_row_2")
+	PORT_MODIFY("kbrow.2")
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("\xC3\x9C")              PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR(0x00DC)
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("\xC3\x89")              PORT_CODE(KEYCODE_BACKSLASH)  PORT_CHAR(0x00E9)
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_RCONTROL)   PORT_CHAR('/') PORT_CHAR('?')
 
-	PORT_MODIFY("keyboard_row_3")
+	PORT_MODIFY("kbrow.3")
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_EQUALS)     PORT_CHAR('+') PORT_CHAR('*')
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_MINUS)      PORT_CHAR('-') PORT_CHAR('=')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("\xC3\x85")              PORT_CODE(KEYCODE_OPENBRACE)  PORT_CHAR(0x00C5)
@@ -513,7 +504,7 @@ static INPUT_PORTS_START( cpc6128s )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_SLASH)      PORT_CHAR('<') PORT_CHAR('>')
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_STOP)       PORT_CHAR('.') PORT_CHAR(':')
 
-	PORT_MODIFY("keyboard_row_4")
+	PORT_MODIFY("kbrow.4")
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_COMMA)      PORT_CHAR(',') PORT_CHAR(';')
 INPUT_PORTS_END
 
@@ -526,14 +517,14 @@ INPUT_PORTS_END
 static INPUT_PORTS_START( kccomp )
 	PORT_INCLUDE(amstrad_keyboard)
 
-	PORT_MODIFY("keyboard_row_0")
+	PORT_MODIFY("kbrow.0")
 	PORT_BIT(0x08, 0x08, IPT_UNUSED)
 	PORT_BIT(0x10, 0x10, IPT_UNUSED)
 	PORT_BIT(0x20, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f3")                    PORT_CODE(KEYCODE_3_PAD)      PORT_CHAR(UCHAR_MAMEKEY(3_PAD))
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Enter")                 PORT_CODE(KEYCODE_LCONTROL)   PORT_CHAR(UCHAR_MAMEKEY(ENTER_PAD))
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME(".")                     PORT_CODE(KEYCODE_DEL_PAD)    PORT_CHAR(UCHAR_MAMEKEY(DEL_PAD))
 
-	PORT_MODIFY("keyboard_row_1")
+	PORT_MODIFY("kbrow.1")
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Copy")                  PORT_CODE(KEYCODE_RALT)       PORT_CHAR(UCHAR_MAMEKEY(END))
 	PORT_BIT(0x04, 0x04, IPT_UNUSED)
 	PORT_BIT(0x08, 0x08, IPT_UNUSED)
@@ -542,7 +533,7 @@ static INPUT_PORTS_START( kccomp )
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f2")                    PORT_CODE(KEYCODE_2_PAD)      PORT_CHAR(UCHAR_MAMEKEY(2_PAD))
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("f0")                    PORT_CODE(KEYCODE_0_PAD)      PORT_CHAR(UCHAR_MAMEKEY(0_PAD))
 
-	PORT_MODIFY("keyboard_row_2")
+	PORT_MODIFY("kbrow.2")
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR('[') PORT_CHAR('{')
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Return")                PORT_CODE(KEYCODE_ENTER)      PORT_CHAR(13)
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_KEYBOARD)                                    PORT_CODE(KEYCODE_BACKSLASH)  PORT_CHAR(']') PORT_CHAR('}')
@@ -551,12 +542,12 @@ static INPUT_PORTS_START( kccomp )
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Control")               PORT_CODE(KEYCODE_LALT)       PORT_CHAR(UCHAR_SHIFT_2)
 
 	PORT_INCLUDE(crtc_links)
+	PORT_INCLUDE(amx_mouse)
 INPUT_PORTS_END
 
 
 static INPUT_PORTS_START( plus )
-	PORT_INCLUDE(amstrad_keyboard)
-	PORT_INCLUDE(crtc_links)
+	PORT_INCLUDE(cpc664)
 
 	/* The CPC+ and GX4000 adds support for analogue controllers.
 	   Up to two joysticks or four paddles can be used, although the ASIC supports twice that.
@@ -571,50 +562,50 @@ static INPUT_PORTS_START( plus )
 
 	The connectors' description for both CPCs and CPC+'s can be found at http://www.hardwarebook.info/Category:Computer */
 
-	PORT_START("analog1")
-	PORT_BIT(0x3f , 0, IPT_TRACKBALL_X)
+	PORT_START("analog.0")
+	PORT_BIT(0x3f , 0, IPT_AD_STICK_X)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(1)
 
-	PORT_START("analog2")
-	PORT_BIT(0x3f , 0, IPT_TRACKBALL_Y)
+	PORT_START("analog.1")
+	PORT_BIT(0x3f , 0, IPT_AD_STICK_Y)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(1)
 
-	PORT_START("analog3")
-	PORT_BIT(0x3f , 0, IPT_TRACKBALL_X)
+	PORT_START("analog.2")
+	PORT_BIT(0x3f , 0, IPT_AD_STICK_X)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(2)
 
-	PORT_START("analog4")
-	PORT_BIT(0x3f , 0, IPT_TRACKBALL_Y)
+	PORT_START("analog.3")
+	PORT_BIT(0x3f , 0, IPT_AD_STICK_Y)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(2)
 
 // Not used, but are here for completeness
-	PORT_START("analog5")
+	PORT_START("analog.4")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_X)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(3)
 
-	PORT_START("analog6")
+	PORT_START("analog.5")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_Y)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(3)
 
-	PORT_START("analog7")
+	PORT_START("analog.6")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_X)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(4)
 
-	PORT_START("analog8")
+	PORT_START("analog.7")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_Y)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
@@ -625,94 +616,94 @@ INPUT_PORTS_END
 static INPUT_PORTS_START( gx4000 )
 
 	// The GX4000 is a console, so no keyboard access other than the joysticks.
-	PORT_START("keyboard_row_0")
+	PORT_START("kbrow.0")
 	PORT_BIT(0xff, IP_ACTIVE_LOW, IPT_UNUSED)
 
-	PORT_START("keyboard_row_1")
+	PORT_START("kbrow.1")
 	PORT_BIT(0xff, IP_ACTIVE_LOW, IPT_UNUSED)
 
-	PORT_START("keyboard_row_2")
+	PORT_START("kbrow.2")
 	PORT_BIT(0xff, IP_ACTIVE_LOW, IPT_UNUSED)
 
-	PORT_START("keyboard_row_3")
+	PORT_START("kbrow.3")
 	PORT_BIT(0xff, IP_ACTIVE_LOW, IPT_UNUSED)
 
-	PORT_START("keyboard_row_4")
+	PORT_START("kbrow.4")
 	PORT_BIT(0xff, IP_ACTIVE_LOW, IPT_UNUSED)
 
-	PORT_START("keyboard_row_5")
+	PORT_START("kbrow.5")
 	PORT_BIT(0xff, IP_ACTIVE_LOW, IPT_UNUSED)
 
-	PORT_START("keyboard_row_6")  // Joystick 2
+	PORT_START("kbrow.6")  // Joystick 2
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_JOYSTICK_UP)    PORT_PLAYER(2) PORT_8WAY
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN)  PORT_PLAYER(2) PORT_8WAY
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT)  PORT_PLAYER(2) PORT_8WAY
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT) PORT_PLAYER(2) PORT_8WAY
 	PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_BUTTON1)        PORT_PLAYER(2)
 	PORT_BIT(0x20, IP_ACTIVE_LOW, IPT_BUTTON2)        PORT_PLAYER(2)
-	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_UNUSED)
+	PORT_BIT(0xc0, IP_ACTIVE_LOW, IPT_UNUSED)
 
-	PORT_START("keyboard_row_7")
+	PORT_START("kbrow.7")
 	PORT_BIT(0xff, IP_ACTIVE_LOW, IPT_UNUSED)
 
-	PORT_START("keyboard_row_8")
+	PORT_START("kbrow.8")
 	PORT_BIT(0xff, IP_ACTIVE_LOW, IPT_UNUSED)
 
-	PORT_START("keyboard_row_9")  // Joystick 1
+	PORT_START("kbrow.9")  // Joystick 1
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_JOYSTICK_UP)    PORT_PLAYER(1) PORT_8WAY
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN)  PORT_PLAYER(1) PORT_8WAY
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT)  PORT_PLAYER(1) PORT_8WAY
 	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT) PORT_PLAYER(1) PORT_8WAY
 	PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_BUTTON1)        PORT_PLAYER(1)
 	PORT_BIT(0x20, IP_ACTIVE_LOW, IPT_BUTTON2)        PORT_PLAYER(1)
-	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_UNUSED)
+	PORT_BIT(0xc0, IP_ACTIVE_LOW, IPT_UNUSED)
 
 	PORT_INCLUDE(crtc_links)  // included to keep the driver happy
 
-	PORT_START("analog1")
+	PORT_START("analog.0")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_X)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(1)
 
-	PORT_START("analog2")
+	PORT_START("analog.1")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_Y)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(1)
 
-	PORT_START("analog3")
+	PORT_START("analog.2")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_X)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(2)
 
-	PORT_START("analog4")
+	PORT_START("analog.3")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_Y)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(2)
 
 // Not used, but are here for completeness
-	PORT_START("analog5")
+	PORT_START("analog.4")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_X)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(3)
 
-	PORT_START("analog6")
+	PORT_START("analog.5")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_Y)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(3)
 
-	PORT_START("analog7")
+	PORT_START("analog.6")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_X)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
 	PORT_PLAYER(4)
 
-	PORT_START("analog8")
+	PORT_START("analog.7")
 	PORT_BIT(0x3f , 0, IPT_TRACKBALL_Y)
 	PORT_SENSITIVITY(100)
 	PORT_KEYDELTA(10)
@@ -723,11 +714,11 @@ INPUT_PORTS_END
 static INPUT_PORTS_START( aleste )
 	PORT_INCLUDE(amstrad_keyboard)
 
-	PORT_MODIFY( "keyboard_row_9" )
+	PORT_MODIFY( "kbrow.9" )
 	/* Documentation marks this input as "R/L", it's purpose is unknown - I can't even find it on the keyboard */
 	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("R  L")       PORT_CODE(KEYCODE_PGUP)
 
-	PORT_START( "keyboard_row_10" )
+	PORT_START( "kbrow.10" )
 	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD)  PORT_NAME("F1  F6")    PORT_CODE(KEYCODE_F1)
 	PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD)  PORT_NAME("F2  F7")    PORT_CODE(KEYCODE_F2)
 	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD)  PORT_NAME("F3  F8")    PORT_CODE(KEYCODE_F3)
@@ -738,22 +729,11 @@ static INPUT_PORTS_START( aleste )
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD)  PORT_NAME("Funny looking Russian symbol")     PORT_CODE(KEYCODE_END)
 
 	PORT_INCLUDE(crtc_links)
+	PORT_INCLUDE(amx_mouse)
 INPUT_PORTS_END
 
 
-/* --------------------
-   - ay8910_interface -
-   --------------------*/
-static const ay8910_interface ay8912_interface =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(amstrad_state, amstrad_psg_porta_read), /* portA read */
-	DEVCB_DRIVER_MEMBER(amstrad_state, amstrad_psg_porta_read), /* portB read */
-	DEVCB_NULL,                 /* portA write */
-	DEVCB_NULL                  /* portB write */
-};
-
+#if 0
 
 static const gfx_layout asic_sprite_layout =
 {
@@ -769,6 +749,7 @@ static const gfx_layout asic_sprite_layout =
 static GFXDECODE_START( asic_sprite )
 	GFXDECODE_ENTRY( "user1", 0, asic_sprite_layout, 32, 1 )
 GFXDECODE_END
+#endif
 
 
 
@@ -797,66 +778,117 @@ speed of 3.8 MHz */
  */
 
 
-static const cassette_interface amstrad_cassette_interface =
-{
-	cdt_cassette_formats,
-	NULL,
-	(cassette_state) (CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	"cpc_cass",
-	NULL
-};
-
 static SLOT_INTERFACE_START( amstrad_floppies )
 	SLOT_INTERFACE( "3ssdd", FLOPPY_3_SSDD )
+	SLOT_INTERFACE( "35ssdd", FLOPPY_35_DD )
 SLOT_INTERFACE_END
 
 static SLOT_INTERFACE_START( aleste_floppies )
 	SLOT_INTERFACE( "525hd", FLOPPY_525_HD )
 SLOT_INTERFACE_END
 
-CPC_EXPANSION_INTERFACE(cpc_exp_intf)
-{
-	DEVCB_CPU_INPUT_LINE("maincpu", 0),
-	DEVCB_CPU_INPUT_LINE("maincpu", INPUT_LINE_NMI),
-	DEVCB_NULL,  // RESET
-	DEVCB_LINE(cpc_romdis),  // ROMDIS
-	DEVCB_LINE(cpc_romen)  // /ROMEN
-};
-
 static MACHINE_CONFIG_FRAGMENT( cpcplus_cartslot )
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("cpr,bin")
-	MCFG_CARTSLOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("gx4000_cart")
-	MCFG_CARTSLOT_LOAD(amstrad_state,amstrad_plus_cartridge)
-	MCFG_SOFTWARE_LIST_ADD("cart_list","gx4000")
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "gx4000_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,cpr")
+	MCFG_GENERIC_MANDATORY
+	MCFG_GENERIC_LOAD(amstrad_state, amstrad_plus_cartridge)
+
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "gx4000")
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_START( amstrad_nofdc, amstrad_state )
+SLOT_INTERFACE_START(cpc464_exp_cards)
+	SLOT_INTERFACE("ddi1", CPC_DDI1)
+	SLOT_INTERFACE("ssa1", CPC_SSA1)
+	SLOT_INTERFACE("dkspeech", CPC_DKSPEECH)
+	SLOT_INTERFACE("rom", CPC_ROM)
+	SLOT_INTERFACE("multiface2", CPC_MFACE2)
+	SLOT_INTERFACE("pds", CPC_PDS)
+	SLOT_INTERFACE("rs232", CPC_RS232)
+	SLOT_INTERFACE("amsrs232", CPC_RS232_AMS)
+	SLOT_INTERFACE("sf2", CPC_SYMBIFACE2)
+	SLOT_INTERFACE("amdrum", CPC_AMDRUM)
+	SLOT_INTERFACE("playcity", CPC_PLAYCITY)
+	SLOT_INTERFACE("smartwatch", CPC_SMARTWATCH)
+	SLOT_INTERFACE("brunword4", CPC_BRUNWORD_MK4)
+	SLOT_INTERFACE("hd20", CPC_HD20)
+SLOT_INTERFACE_END
+
+SLOT_INTERFACE_START(cpc_exp_cards)
+	SLOT_INTERFACE("ssa1", CPC_SSA1)
+	SLOT_INTERFACE("dkspeech", CPC_DKSPEECH)
+	SLOT_INTERFACE("rom", CPC_ROM)
+	SLOT_INTERFACE("multiface2", CPC_MFACE2)
+	SLOT_INTERFACE("pds", CPC_PDS)
+	SLOT_INTERFACE("rs232", CPC_RS232)
+	SLOT_INTERFACE("amsrs232", CPC_RS232_AMS)
+	SLOT_INTERFACE("sf2", CPC_SYMBIFACE2)
+	SLOT_INTERFACE("amdrum", CPC_AMDRUM)
+	SLOT_INTERFACE("playcity", CPC_PLAYCITY)
+	SLOT_INTERFACE("smartwatch", CPC_SMARTWATCH)
+	SLOT_INTERFACE("brunword4", CPC_BRUNWORD_MK4)
+	SLOT_INTERFACE("hd20", CPC_HD20)
+SLOT_INTERFACE_END
+
+SLOT_INTERFACE_START(cpcplus_exp_cards)
+	SLOT_INTERFACE("ssa1", CPC_SSA1)
+	SLOT_INTERFACE("dkspeech", CPC_DKSPEECH)
+	SLOT_INTERFACE("rom", CPC_ROM)
+	SLOT_INTERFACE("pds", CPC_PDS)
+	SLOT_INTERFACE("rs232", CPC_RS232)
+	SLOT_INTERFACE("amsrs232", CPC_RS232_AMS)
+	SLOT_INTERFACE("sf2", CPC_SYMBIFACE2)
+	SLOT_INTERFACE("amdrum", CPC_AMDRUM)
+	SLOT_INTERFACE("playcity", CPC_PLAYCITY)
+	SLOT_INTERFACE("smartwatch", CPC_SMARTWATCH)
+	SLOT_INTERFACE("hd20", CPC_HD20)
+SLOT_INTERFACE_END
+
+SLOT_INTERFACE_START(amstrad_centronics_devices)
+	SLOT_INTERFACE("pl80", COMX_PL80)
+	SLOT_INTERFACE("ex800", EPSON_EX800)
+	SLOT_INTERFACE("lx800", EPSON_LX800)
+	SLOT_INTERFACE("lx810l", EPSON_LX810L)
+	SLOT_INTERFACE("ap2000", EPSON_AP2000)
+	SLOT_INTERFACE("printer", CENTRONICS_PRINTER)
+	SLOT_INTERFACE("digiblst", CENTRONICS_DIGIBLASTER)
+SLOT_INTERFACE_END
+
+static MACHINE_CONFIG_START( amstrad_base, amstrad_state )
 	/* Machine hardware */
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_16MHz / 4)
 	MCFG_CPU_PROGRAM_MAP(amstrad_mem)
 	MCFG_CPU_IO_MAP(amstrad_io)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(amstrad_state,amstrad_cpu_acknowledge_int)
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
 
 	MCFG_MACHINE_START_OVERRIDE(amstrad_state, amstrad )
 	MCFG_MACHINE_RESET_OVERRIDE(amstrad_state, amstrad )
 
-	MCFG_I8255_ADD( "ppi8255", amstrad_ppi8255_interface )
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(amstrad_state, amstrad_ppi_porta_r))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(amstrad_state, amstrad_ppi_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(amstrad_state, amstrad_ppi_portb_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(amstrad_state, amstrad_ppi_portc_w))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS( XTAL_16MHz, 1024, 32, 32 + 640 + 64, 312, 56 + 15, 200 + 15 )
 	MCFG_SCREEN_UPDATE_DRIVER(amstrad_state, screen_update_amstrad)
 	MCFG_SCREEN_VBLANK_DRIVER(amstrad_state, screen_eof_amstrad)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
+	MCFG_PALETTE_ADD("palette", 32)
+	MCFG_PALETTE_INIT_OWNER(amstrad_state,amstrad_cpc)
 
-	MCFG_PALETTE_LENGTH(32)
-	MCFG_PALETTE_INIT_OVERRIDE(amstrad_state,amstrad_cpc)
-
-	MCFG_MC6845_ADD( "mc6845", MC6845, XTAL_16MHz / 16, amstrad_mc6845_intf )
+	MCFG_MC6845_ADD("mc6845", MC6845, NULL, XTAL_16MHz / 16)
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(16)
+	MCFG_MC6845_OUT_DE_CB(WRITELINE(amstrad_state, amstrad_de_changed))
+	MCFG_MC6845_OUT_HSYNC_CB(WRITELINE(amstrad_state, amstrad_hsync_changed))
+	MCFG_MC6845_OUT_VSYNC_CB(WRITELINE(amstrad_state, amstrad_vsync_changed))
+	MCFG_MC6845_OUT_CUR_CB(DEVWRITELINE("exp", cpc_expansion_slot_device, cursor_w))
 
 	MCFG_VIDEO_START_OVERRIDE(amstrad_state,amstrad)
 
@@ -865,44 +897,84 @@ static MACHINE_CONFIG_START( amstrad_nofdc, amstrad_state )
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 	MCFG_SOUND_ADD("ay", AY8912, XTAL_16MHz / 16)
-	MCFG_SOUND_CONFIG(ay8912_interface)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(amstrad_state, amstrad_psg_porta_read)) /* portA read */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* printer */
-	MCFG_CENTRONICS_PRINTER_ADD("centronics", standard_centronics)
+	MCFG_CENTRONICS_ADD("centronics", amstrad_centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(amstrad_state, write_centronics_busy))
 
 	/* snapshot */
 	MCFG_SNAPSHOT_ADD("snapshot", amstrad_state, amstrad, "sna", 0)
 
-	MCFG_CASSETTE_ADD( "cassette", amstrad_cassette_interface )
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_FORMATS(cdt_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("cpc_cass")
+
 	MCFG_SOFTWARE_LIST_ADD("cass_list","cpc_cass")
 
-	MCFG_CPC_EXPANSION_SLOT_ADD("exp",cpc_exp_intf,cpc_exp_cards,NULL)
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( cpc464, amstrad_base )
+	MCFG_DEVICE_ADD("exp", CPC_EXPANSION_SLOT, 0)
+	MCFG_DEVICE_SLOT_INTERFACE(cpc464_exp_cards, NULL, false)
+	MCFG_CPC_EXPANSION_SLOT_OUT_IRQ_CB(INPUTLINE("maincpu", 0))
+	MCFG_CPC_EXPANSION_SLOT_OUT_NMI_CB(INPUTLINE("maincpu", INPUT_LINE_NMI))
+	MCFG_CPC_EXPANSION_SLOT_OUT_ROMDIS_CB(WRITELINE(amstrad_state, cpc_romdis))  // ROMDIS
+	MCFG_CPC_EXPANSION_SLOT_ROM_SELECT(WRITE8(amstrad_state,rom_select))
+
+	/* internal ram */
+	MCFG_RAM_ADD(RAM_TAG)
+	MCFG_RAM_DEFAULT_SIZE("64K")
+	MCFG_RAM_EXTRA_OPTIONS("128K,320K,576K")
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( cpc664, amstrad_base )
+	MCFG_UPD765A_ADD("upd765", true, true)
+	MCFG_FLOPPY_DRIVE_ADD("upd765:0", amstrad_floppies, "3ssdd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("upd765:1", amstrad_floppies, "35ssdd", floppy_image_device::default_floppy_formats)
+	MCFG_SOFTWARE_LIST_ADD("flop_list","cpc_flop")
+
+	MCFG_DEVICE_ADD("exp", CPC_EXPANSION_SLOT, 0)
+	MCFG_DEVICE_SLOT_INTERFACE(cpc_exp_cards, NULL, false)
+	MCFG_CPC_EXPANSION_SLOT_OUT_IRQ_CB(INPUTLINE("maincpu", 0))
+	MCFG_CPC_EXPANSION_SLOT_OUT_NMI_CB(INPUTLINE("maincpu", INPUT_LINE_NMI))
+	MCFG_CPC_EXPANSION_SLOT_OUT_ROMDIS_CB(WRITELINE(amstrad_state, cpc_romdis))  // ROMDIS
+	MCFG_CPC_EXPANSION_SLOT_ROM_SELECT(WRITE8(amstrad_state,rom_select))
+
+	/* internal ram */
+	MCFG_RAM_ADD(RAM_TAG)
+	MCFG_RAM_DEFAULT_SIZE("64K")
+	MCFG_RAM_EXTRA_OPTIONS("128K,320K,576K")
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( cpc6128, amstrad_base )
+	MCFG_UPD765A_ADD("upd765", true, true)
+	MCFG_FLOPPY_DRIVE_ADD("upd765:0", amstrad_floppies, "3ssdd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("upd765:1", amstrad_floppies, "35ssdd", floppy_image_device::default_floppy_formats)
+	MCFG_SOFTWARE_LIST_ADD("flop_list","cpc_flop")
+
+	MCFG_DEVICE_ADD("exp", CPC_EXPANSION_SLOT, 0)
+	MCFG_DEVICE_SLOT_INTERFACE(cpc_exp_cards, NULL, false)
+	MCFG_CPC_EXPANSION_SLOT_OUT_IRQ_CB(INPUTLINE("maincpu", 0))
+	MCFG_CPC_EXPANSION_SLOT_OUT_NMI_CB(INPUTLINE("maincpu", INPUT_LINE_NMI))
+	MCFG_CPC_EXPANSION_SLOT_OUT_ROMDIS_CB(WRITELINE(amstrad_state, cpc_romdis))  // ROMDIS
+	MCFG_CPC_EXPANSION_SLOT_ROM_SELECT(WRITE8(amstrad_state,rom_select))
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("128K")
-MACHINE_CONFIG_END
-
-FLOPPY_FORMATS_MEMBER( amstrad_state::floppy_formats )
-	FLOPPY_DSK_FORMAT
-FLOPPY_FORMATS_END
-
-static MACHINE_CONFIG_DERIVED( amstrad, amstrad_nofdc )
-	MCFG_UPD765A_ADD("upd765", true, true)
-
-	MCFG_FLOPPY_DRIVE_ADD("upd765:0", amstrad_floppies, "3ssdd", amstrad_state::floppy_formats)
-	MCFG_FLOPPY_DRIVE_ADD("upd765:1", amstrad_floppies, "3ssdd", amstrad_state::floppy_formats)
-
-	MCFG_SOFTWARE_LIST_ADD("flop_list","cpc_flop")
+	MCFG_RAM_EXTRA_OPTIONS("320K,576K")
 MACHINE_CONFIG_END
 
 
-static MACHINE_CONFIG_DERIVED( kccomp, amstrad )
+static MACHINE_CONFIG_DERIVED( kccomp, cpc6128 )
 	MCFG_MACHINE_START_OVERRIDE(amstrad_state,kccomp)
 	MCFG_MACHINE_RESET_OVERRIDE(amstrad_state,kccomp)
 
-	MCFG_PALETTE_INIT_OVERRIDE(amstrad_state,kccomp)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_INIT_OWNER(amstrad_state,kccomp)
 MACHINE_CONFIG_END
 
 
@@ -911,26 +983,36 @@ static MACHINE_CONFIG_START( cpcplus, amstrad_state )
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_40MHz / 10)
 	MCFG_CPU_PROGRAM_MAP(amstrad_mem)
 	MCFG_CPU_IO_MAP(amstrad_io)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(amstrad_state,amstrad_cpu_acknowledge_int)
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
 
 	MCFG_MACHINE_START_OVERRIDE(amstrad_state, plus )
 	MCFG_MACHINE_RESET_OVERRIDE(amstrad_state, plus )
 
-	MCFG_I8255_ADD( "ppi8255", amstrad_ppi8255_interface )
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(amstrad_state, amstrad_ppi_porta_r))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(amstrad_state, amstrad_ppi_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(amstrad_state, amstrad_ppi_portb_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(amstrad_state, amstrad_ppi_portc_w))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS( ( XTAL_40MHz * 2 ) / 5, 1024, 32, 32 + 640 + 64, 312, 56 + 15, 200 + 15 )
 	MCFG_SCREEN_UPDATE_DRIVER(amstrad_state, screen_update_amstrad)
 	MCFG_SCREEN_VBLANK_DRIVER(amstrad_state, screen_eof_amstrad)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
+	MCFG_PALETTE_ADD("palette", 4096)
+	MCFG_PALETTE_INIT_OWNER(amstrad_state,amstrad_plus)
 
-	MCFG_PALETTE_LENGTH(4096)
-	MCFG_PALETTE_INIT_OVERRIDE(amstrad_state,amstrad_plus)
-
-	MCFG_MC6845_ADD( "mc6845", MC6845, XTAL_40MHz / 40, amstrad_plus_mc6845_intf )
+	MCFG_MC6845_ADD("mc6845", MC6845, NULL, XTAL_40MHz / 40)
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(16)
+	MCFG_MC6845_OUT_DE_CB(WRITELINE(amstrad_state, amstrad_plus_de_changed))
+	MCFG_MC6845_OUT_HSYNC_CB(WRITELINE(amstrad_state, amstrad_plus_hsync_changed))
+	MCFG_MC6845_OUT_VSYNC_CB(WRITELINE(amstrad_state, amstrad_plus_vsync_changed))
 
 	MCFG_VIDEO_START_OVERRIDE(amstrad_state,amstrad)
 
@@ -939,29 +1021,39 @@ static MACHINE_CONFIG_START( cpcplus, amstrad_state )
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 	MCFG_SOUND_ADD("ay", AY8912, XTAL_40MHz / 40)
-	MCFG_SOUND_CONFIG(ay8912_interface)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(amstrad_state, amstrad_psg_porta_read)) /* portA read */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* printer */
-	MCFG_CENTRONICS_PRINTER_ADD("centronics", standard_centronics)
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(amstrad_state, write_centronics_busy))
 
 	/* snapshot */
 	MCFG_SNAPSHOT_ADD("snapshot", amstrad_state, amstrad, "sna", 0)
 
-	MCFG_CASSETTE_ADD( "cassette", amstrad_cassette_interface )
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_FORMATS(cdt_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("cpc_cass")
 
 	MCFG_UPD765A_ADD("upd765", true, true)
 
 	MCFG_FRAGMENT_ADD(cpcplus_cartslot)
 
-	MCFG_FLOPPY_DRIVE_ADD("upd765:0", amstrad_floppies, "3ssdd", amstrad_state::floppy_formats)
-	MCFG_FLOPPY_DRIVE_ADD("upd765:1", amstrad_floppies, "3ssdd", amstrad_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("upd765:0", amstrad_floppies, "3ssdd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("upd765:1", amstrad_floppies, "35ssdd", floppy_image_device::default_floppy_formats)
 
-	MCFG_CPC_EXPANSION_SLOT_ADD("exp",cpc_exp_intf,cpc_exp_cards,NULL)
+	MCFG_DEVICE_ADD("exp", CPC_EXPANSION_SLOT, 0)
+	MCFG_DEVICE_SLOT_INTERFACE(cpcplus_exp_cards, NULL, false)
+	MCFG_CPC_EXPANSION_SLOT_OUT_IRQ_CB(INPUTLINE("maincpu", 0))
+	MCFG_CPC_EXPANSION_SLOT_OUT_NMI_CB(INPUTLINE("maincpu", INPUT_LINE_NMI))
+	MCFG_CPC_EXPANSION_SLOT_OUT_ROMDIS_CB(WRITELINE(amstrad_state, cpc_romdis))  // ROMDIS
+	MCFG_CPC_EXPANSION_SLOT_ROM_SELECT(WRITE8(amstrad_state,rom_select))
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("128K")
+	MCFG_RAM_EXTRA_OPTIONS("64K,320K,576K")
 MACHINE_CONFIG_END
 
 
@@ -970,33 +1062,43 @@ static MACHINE_CONFIG_START( gx4000, amstrad_state )
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_40MHz / 10)
 	MCFG_CPU_PROGRAM_MAP(amstrad_mem)
 	MCFG_CPU_IO_MAP(amstrad_io)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(amstrad_state,amstrad_cpu_acknowledge_int)
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
 
 	MCFG_MACHINE_START_OVERRIDE(amstrad_state, gx4000 )
 	MCFG_MACHINE_RESET_OVERRIDE(amstrad_state, gx4000 )
 
-	MCFG_I8255_ADD( "ppi8255", amstrad_ppi8255_interface )
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(amstrad_state, amstrad_ppi_porta_r))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(amstrad_state, amstrad_ppi_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(amstrad_state, amstrad_ppi_portb_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(amstrad_state, amstrad_ppi_portc_w))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS( ( XTAL_40MHz * 2 ) / 5, 1024, 32, 32 + 640 + 64, 312, 56 + 15, 200 + 15 )
 	MCFG_SCREEN_UPDATE_DRIVER(amstrad_state, screen_update_amstrad)
 	MCFG_SCREEN_VBLANK_DRIVER(amstrad_state, screen_eof_amstrad)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
+	MCFG_PALETTE_ADD("palette", 4096)
+	MCFG_PALETTE_INIT_OWNER(amstrad_state,amstrad_plus)
 
-	MCFG_PALETTE_LENGTH(4096)
-	MCFG_PALETTE_INIT_OVERRIDE(amstrad_state,amstrad_plus)
-
-	MCFG_MC6845_ADD( "mc6845", MC6845, XTAL_40MHz / 40, amstrad_plus_mc6845_intf )
+	MCFG_MC6845_ADD("mc6845", MC6845, NULL, XTAL_40MHz / 40)
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(16)
+	MCFG_MC6845_OUT_DE_CB(WRITELINE(amstrad_state, amstrad_plus_de_changed))
+	MCFG_MC6845_OUT_HSYNC_CB(WRITELINE(amstrad_state, amstrad_plus_hsync_changed))
+	MCFG_MC6845_OUT_VSYNC_CB(WRITELINE(amstrad_state, amstrad_plus_vsync_changed))
 
 	MCFG_VIDEO_START_OVERRIDE(amstrad_state,amstrad)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("ay", AY8912, XTAL_40MHz / 40)
-	MCFG_SOUND_CONFIG(ay8912_interface)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(amstrad_state, amstrad_psg_porta_read)) /* portA read */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	MCFG_FRAGMENT_ADD(cpcplus_cartslot)
@@ -1007,22 +1109,28 @@ static MACHINE_CONFIG_START( gx4000, amstrad_state )
 MACHINE_CONFIG_END
 
 
-static MACHINE_CONFIG_DERIVED( aleste, amstrad )
+static MACHINE_CONFIG_DERIVED( aleste, cpc6128 )
 	MCFG_MACHINE_START_OVERRIDE(amstrad_state,aleste)
 	MCFG_MACHINE_RESET_OVERRIDE(amstrad_state,aleste)
 
 	MCFG_SOUND_REPLACE("ay", AY8912, XTAL_16MHz / 16)
-	MCFG_SOUND_CONFIG(ay8912_interface)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(amstrad_state, amstrad_psg_porta_read)) /* portA read */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
-	MCFG_PALETTE_LENGTH(32+64)
-	MCFG_PALETTE_INIT_OVERRIDE(amstrad_state,aleste)
-	MCFG_MC146818_ADD( "rtc", MC146818_IGNORE_CENTURY )
+
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(32+64)
+	MCFG_PALETTE_INIT_OWNER(amstrad_state,aleste)
+	MCFG_MC146818_ADD( "rtc", XTAL_4_194304Mhz )
 
 	MCFG_DEVICE_REMOVE("upd765")
 	MCFG_I8272A_ADD("upd765", true)
 
 	MCFG_FLOPPY_DRIVE_ADD("upd765:0", aleste_floppies, "525hd", floppy_image_device::default_floppy_formats)
 	MCFG_FLOPPY_DRIVE_ADD("upd765:1", aleste_floppies, "525hd", floppy_image_device::default_floppy_formats)
+
+	MCFG_DEVICE_REMOVE("flop_list")
+	MCFG_SOFTWARE_LIST_ADD("flop_list", "aleste")
+	MCFG_SOFTWARE_LIST_COMPATIBLE_ADD("cpc_list", "cpc_flop")
 
 	/* internal ram */
 	MCFG_RAM_MODIFY(RAM_TAG)
@@ -1076,7 +1184,6 @@ ROM_START( cpc464 )
 	ROM_REGION(0x01c000, "maincpu", 0)
 	/* load the os to offset 0x01000 from memory base */
 	ROM_LOAD("cpc464.rom",  0x10000, 0x8000, CRC(40852f25) SHA1(56d39c463da60968d93e58b4ba0e675829412a20))
-	ROM_LOAD("cpcados.rom", 0x18000, 0x4000, CRC(1fe22ecd) SHA1(39102c8e9cb55fcc0b9b62098780ed4a3cb6a4bb))
 ROM_END
 
 
@@ -1084,15 +1191,16 @@ ROM_START( cpc664 )
 	/* this defines the total memory size - 64k ram, 16k OS, 16k BASIC, 16k DOS */
 	ROM_REGION(0x01c000, "maincpu", 0)
 	/* load the os to offset 0x01000 from memory base */
-	ROM_LOAD("cpc664.rom",  0x10000, 0x8000, CRC(9AB5A036) SHA1(073a7665527b5bd8a148747a3947dbd3328682c8))
+	ROM_LOAD("cpc664.rom",  0x10000, 0x8000, CRC(9ab5a036) SHA1(073a7665527b5bd8a148747a3947dbd3328682c8))
 	ROM_LOAD("cpcados.rom", 0x18000, 0x4000, CRC(1fe22ecd) SHA1(39102c8e9cb55fcc0b9b62098780ed4a3cb6a4bb))
 ROM_END
 
 
 ROM_START( kccomp )
-	ROM_REGION(0x018000, "maincpu", 0)
+	ROM_REGION(0x01c000, "maincpu", 0)
 	ROM_LOAD("kccos.rom",  0x10000, 0x4000, CRC(7f9ab3f7) SHA1(f828045e98e767f737fd93df0af03917f936ad08))
 	ROM_LOAD("kccbas.rom", 0x14000, 0x4000, CRC(ca6af63d) SHA1(d7d03755099d0aff501fa5fffc9c0b14c0825448))
+	ROM_RELOAD(0x18000, 0x4000)  // has no AMSDOS ROM, so just reload BASIC in it's place (BASIC appears in any unused ROM slot)
 
 	ROM_REGION(0x018000+0x0800, "proms", 0)
 	ROM_LOAD("farben.rom", 0x18000, 0x0800, CRC(a50fa3cf) SHA1(2f229ac9f62d56973139dad9992c208421bc0f51))
@@ -1107,7 +1215,6 @@ ROM_START(cpc6128p)
 	ROM_REGION(0x80000, "maincpu", ROMREGION_ERASEFF)
 	ROM_REGION(0x04000, "user1", ROMREGION_ERASEFF)
 ROM_END
-
 
 #define rom_cpc464p  rom_cpc6128p
 #define rom_gx4000  rom_cpc6128p
@@ -1139,14 +1246,14 @@ ROM_END
  *
  *************************************/
 
-/*    YEAR  NAME      PARENT    COMPAT  MACHINE  INPUT     INIT     COMPANY                FULLNAME                                     FLAGS */
-COMP( 1984, cpc464,   0,        0,      amstrad, cpc464, driver_device,   0,       "Amstrad plc",         "Amstrad CPC464",                            0 )
-COMP( 1985, cpc664,   cpc464,   0,      amstrad, cpc664, driver_device,   0,       "Amstrad plc",         "Amstrad CPC664",                            0 )
-COMP( 1985, cpc6128,  cpc464,   0,      amstrad, cpc6128, driver_device,  0,       "Amstrad plc",         "Amstrad CPC6128",                           0 )
-COMP( 1985, cpc6128f, cpc464,   0,      amstrad, cpc6128f, driver_device, 0,       "Amstrad plc",         "Amstrad CPC6128 (France, AZERTY Keyboard)", 0 )
-COMP( 1985, cpc6128s, cpc464,   0,      amstrad, cpc6128s, driver_device, 0,       "Amstrad plc",         "Amstrad CPC6128 (Sweden/Finland)",            0 )
-COMP( 1990, cpc464p,  0,        0,      cpcplus, plus, driver_device,     0,       "Amstrad plc",         "Amstrad CPC464+",                           0 )
-COMP( 1990, cpc6128p, 0,        0,      cpcplus, plus, driver_device,     0,       "Amstrad plc",         "Amstrad CPC6128+",                          0 )
-CONS( 1990, gx4000,   0,        0,      gx4000,  gx4000, driver_device,   0,       "Amstrad plc",         "Amstrad GX4000",                            0 )
-COMP( 1989, kccomp,   cpc464,   0,      kccomp,  kccomp, driver_device,   0,       "VEB Mikroelektronik", "KC Compact",                                0 )
-COMP( 1993, al520ex,  cpc464,   0,      aleste,  aleste, amstrad_state,   aleste,  "Patisonic",           "Aleste 520EX",                              GAME_IMPERFECT_SOUND )
+/*    YEAR  NAME      PARENT    COMPAT  MACHINE        INPUT     INIT     COMPANY                FULLNAME                                     FLAGS */
+COMP( 1984, cpc464,   0,        0,      cpc464,        cpc464, driver_device,   0,       "Amstrad plc",         "Amstrad CPC464",                            0 )
+COMP( 1985, cpc664,   cpc464,   0,      cpc664,       cpc664, driver_device,   0,       "Amstrad plc",         "Amstrad CPC664",                            0 )
+COMP( 1985, cpc6128,  cpc464,   0,      cpc6128,       cpc6128, driver_device,  0,       "Amstrad plc",         "Amstrad CPC6128",                           0 )
+COMP( 1985, cpc6128f, cpc464,   0,      cpc6128,       cpc6128f, driver_device, 0,       "Amstrad plc",         "Amstrad CPC6128 (France, AZERTY Keyboard)", 0 )
+COMP( 1985, cpc6128s, cpc464,   0,      cpc6128,       cpc6128s, driver_device, 0,       "Amstrad plc",         "Amstrad CPC6128 (Sweden/Finland)",            0 )
+COMP( 1990, cpc464p,  0,        0,      cpcplus,       plus, driver_device,     0,       "Amstrad plc",         "Amstrad CPC464+",                           0 )
+COMP( 1990, cpc6128p, 0,        0,      cpcplus,       plus, driver_device,     0,       "Amstrad plc",         "Amstrad CPC6128+",                          0 )
+CONS( 1990, gx4000,   0,        0,      gx4000,        gx4000, driver_device,   0,       "Amstrad plc",         "Amstrad GX4000",                            0 )
+COMP( 1989, kccomp,   cpc464,   0,      kccomp,        kccomp, driver_device,   0,       "VEB Mikroelektronik", "KC Compact",                                0 )
+COMP( 1993, al520ex,  cpc464,   0,      aleste,        aleste, driver_device,   0,       "Patisonic",           "Aleste 520EX",                              GAME_IMPERFECT_SOUND )

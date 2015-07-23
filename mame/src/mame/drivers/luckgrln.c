@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Roberto Fresca, Angelo Salese
 /*
 
  Lucky Girl (newer 1991 version on different hardware?)
@@ -103,7 +105,9 @@ public:
 		m_luck_vram1(*this, "luck_vram1"),
 		m_luck_vram2(*this, "luck_vram2"),
 		m_luck_vram3(*this, "luck_vram3"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	UINT8 m_nmi_enable;
 	tilemap_t *m_reel1_tilemap;
@@ -154,6 +158,8 @@ public:
 	UINT32 screen_update_luckgrln(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(luckgrln_irq);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -180,8 +186,7 @@ TILE_GET_INFO_MEMBER(luckgrln_state::get_luckgrln_reel1_tile_info)
 	code |= (attr & 0xe0)<<3;
 
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			col,
 			0);
@@ -210,8 +215,7 @@ TILE_GET_INFO_MEMBER(luckgrln_state::get_luckgrln_reel2_tile_info)
 	code |= (attr & 0xe0)<<3;
 
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			col,
 			0);
@@ -238,8 +242,7 @@ TILE_GET_INFO_MEMBER(luckgrln_state::get_luckgrln_reel3_tile_info)
 
 	code |= (attr & 0xe0)<<3;
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			col,
 			0);
@@ -266,8 +269,7 @@ TILE_GET_INFO_MEMBER(luckgrln_state::get_luckgrln_reel4_tile_info)
 
 	code |= (attr & 0xe0)<<3;
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			col,
 			0);
@@ -275,10 +277,10 @@ TILE_GET_INFO_MEMBER(luckgrln_state::get_luckgrln_reel4_tile_info)
 
 void luckgrln_state::video_start()
 {
-	m_reel1_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(luckgrln_state::get_luckgrln_reel1_tile_info),this),TILEMAP_SCAN_ROWS, 8, 32, 64, 8);
-	m_reel2_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(luckgrln_state::get_luckgrln_reel2_tile_info),this),TILEMAP_SCAN_ROWS, 8, 32, 64, 8);
-	m_reel3_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(luckgrln_state::get_luckgrln_reel3_tile_info),this),TILEMAP_SCAN_ROWS, 8, 32, 64, 8);
-	m_reel4_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(luckgrln_state::get_luckgrln_reel4_tile_info),this),TILEMAP_SCAN_ROWS, 8, 32, 64, 8);
+	m_reel1_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(luckgrln_state::get_luckgrln_reel1_tile_info),this),TILEMAP_SCAN_ROWS, 8, 32, 64, 8);
+	m_reel2_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(luckgrln_state::get_luckgrln_reel2_tile_info),this),TILEMAP_SCAN_ROWS, 8, 32, 64, 8);
+	m_reel3_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(luckgrln_state::get_luckgrln_reel3_tile_info),this),TILEMAP_SCAN_ROWS, 8, 32, 64, 8);
+	m_reel4_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(luckgrln_state::get_luckgrln_reel4_tile_info),this),TILEMAP_SCAN_ROWS, 8, 32, 64, 8);
 
 	m_reel1_tilemap->set_scroll_cols(64);
 	m_reel2_tilemap->set_scroll_cols(64);
@@ -359,26 +361,26 @@ UINT32 luckgrln_state::screen_update_luckgrln(screen_device &screen, bitmap_ind1
 #if 0 // treat bit as fg enable
 			if (tileattr&0x04)
 			{
-				if (bgenable==0) m_reel1_tilemap->draw(bitmap, clip, 0, 0);
-				if (bgenable==1) m_reel2_tilemap->draw(bitmap, clip, 0, 0);
-				if (bgenable==2) m_reel3_tilemap->draw(bitmap, clip, 0, 0);
-				if (bgenable==3) m_reel4_tilemap->draw(bitmap, clip, 0, 0);
+				if (bgenable==0) m_reel1_tilemap->draw(screen, bitmap, clip, 0, 0);
+				if (bgenable==1) m_reel2_tilemap->draw(screen, bitmap, clip, 0, 0);
+				if (bgenable==2) m_reel3_tilemap->draw(screen, bitmap, clip, 0, 0);
+				if (bgenable==3) m_reel4_tilemap->draw(screen, bitmap, clip, 0, 0);
 			}
 
-			if (tileattr&0x08) drawgfx_transpen(bitmap,clip,machine().gfx[region],tile,col,0,0,x*8,y*8, 0);
+			if (tileattr&0x08) m_gfxdecode->gfx(region)->transpen(bitmap,clip,tile,col,0,0,x*8,y*8, 0);
 
 #else // treat it as priority flag instead (looks better in non-adult title screen - needs verifying)
-			if (!(tileattr&0x08)) drawgfx_transpen(bitmap,clip,machine().gfx[region],tile,col,0,0,x*8,y*8, 0);
+			if (!(tileattr&0x08)) m_gfxdecode->gfx(region)->transpen(bitmap,clip,tile,col,0,0,x*8,y*8, 0);
 
 			if (tileattr&0x04)
 			{
-				if (bgenable==0) m_reel1_tilemap->draw(bitmap, clip, 0, 0);
-				if (bgenable==1) m_reel2_tilemap->draw(bitmap, clip, 0, 0);
-				if (bgenable==2) m_reel3_tilemap->draw(bitmap, clip, 0, 0);
-				if (bgenable==3) m_reel4_tilemap->draw(bitmap, clip, 0, 0);
+				if (bgenable==0) m_reel1_tilemap->draw(screen, bitmap, clip, 0, 0);
+				if (bgenable==1) m_reel2_tilemap->draw(screen, bitmap, clip, 0, 0);
+				if (bgenable==2) m_reel3_tilemap->draw(screen, bitmap, clip, 0, 0);
+				if (bgenable==3) m_reel4_tilemap->draw(screen, bitmap, clip, 0, 0);
 			}
 
-			if ((tileattr&0x08)) drawgfx_transpen(bitmap,clip,machine().gfx[region],tile,col,0,0,x*8,y*8, 0);
+			if ((tileattr&0x08)) m_gfxdecode->gfx(region)->transpen(bitmap,clip,tile,col,0,0,x*8,y*8, 0);
 #endif
 
 			count++;
@@ -468,7 +470,7 @@ WRITE8_MEMBER(luckgrln_state::palette_w)
 		g = (dat >> 5) & 0x1f;
 		b = (dat >> 10) & 0x1f;
 
-		palette_set_color_rgb(machine(), offs/2, pal5bit(r), pal5bit(g), pal5bit(b));
+		m_palette->set_pen_color(offs/2, pal5bit(r), pal5bit(g), pal5bit(b));
 
 	}
 
@@ -975,21 +977,6 @@ static GFXDECODE_START( luckgrln )
 	GFXDECODE_ENTRY( "reels", 0, tiles8x32_layout, 0, 64 )
 GFXDECODE_END
 
-static MC6845_INTERFACE( mc6845_intf )
-{
-	"screen",   /* screen we are acting on */
-	false,      /* show border area */
-	8,          /* number of pixels per video memory address */
-	NULL,       /* before pixel update callback */
-	NULL,       /* row update callback */
-	NULL,       /* after pixel update callback */
-	DEVCB_NULL, /* callback for display state changes */
-	DEVCB_NULL, /* callback for cursor state changes */
-	DEVCB_NULL, /* HSYNC callback */
-	DEVCB_NULL, /* VSYNC callback */
-	NULL        /* update address callback */
-};
-
 INTERRUPT_GEN_MEMBER(luckgrln_state::luckgrln_irq)
 {
 	if(m_nmi_enable)
@@ -1002,7 +989,9 @@ static MACHINE_CONFIG_START( luckgrln, luckgrln_state )
 	MCFG_CPU_IO_MAP(portmap)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", luckgrln_state,  luckgrln_irq)
 
-	MCFG_MC6845_ADD("crtc", H46505, 6000000/4, mc6845_intf) /* unknown clock, hand tuned to get ~60 fps */
+	MCFG_MC6845_ADD("crtc", H46505, "screen", 6000000/4) /* unknown clock, hand tuned to get ~60 fps */
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -1010,10 +999,10 @@ static MACHINE_CONFIG_START( luckgrln, luckgrln_state )
 	MCFG_SCREEN_SIZE(512, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 512-1, 0, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(luckgrln_state, screen_update_luckgrln)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(luckgrln)
-	MCFG_PALETTE_LENGTH(0x8000)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", luckgrln)
+	MCFG_PALETTE_ADD("palette", 0x8000)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
@@ -1102,6 +1091,6 @@ ROM_END
 *                Game Drivers                *
 **********************************************
 
-       YEAR  NAME      PARENT  MACHINE   INPUT     INIT      ROT    COMPANY           FULLNAME                                 FLAGS                                  LAYOUT  */
-GAMEL( 1991, luckgrln, 0,      luckgrln, luckgrln, luckgrln_state, luckgrln, ROT0, "Wing Co., Ltd.", "Lucky Girl (newer Z180 based hardware)", GAME_NO_SOUND, layout_luckgrln )
-GAMEL( 1993, 7smash, 0,        _7smash,  _7smash, driver_device,  0,        ROT0, "Sovic",          "7 Smash", GAME_IMPERFECT_GRAPHICS | GAME_NOT_WORKING | GAME_NO_SOUND, layout_luckgrln )
+       YEAR  NAME      PARENT  MACHINE   INPUT     STATE           INIT      ROT    COMPANY           FULLNAME                                 FLAGS                                                       LAYOUT  */
+GAMEL( 1991, luckgrln, 0,      luckgrln, luckgrln, luckgrln_state, luckgrln, ROT0, "Wing Co., Ltd.", "Lucky Girl (newer Z180 based hardware)", GAME_NO_SOUND,                                              layout_luckgrln )
+GAMEL( 1993, 7smash,   0,      _7smash,  _7smash,  driver_device,  0,        ROT0, "Sovic",          "7 Smash",                                GAME_IMPERFECT_GRAPHICS | GAME_NOT_WORKING | GAME_NO_SOUND, layout_luckgrln )

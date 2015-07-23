@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Astra Fruit Machines
  -- Unknown 68340 based HW platform (seems related to pluto5.c?)
  -- dumps are of an unknown quality
@@ -11,7 +13,7 @@ Platform also used by Lowen? (at least some of their sets use the same address l
 */
 
 #include "emu.h"
-#include "cpu/m68000/m68000.h"
+#include "machine/68340.h"
 
 
 
@@ -113,8 +115,8 @@ public:
 	}
 
 	// devices
-	required_device<cpu_device> m_maincpu;
-	optional_device<cpu_device> m_slavecpu;
+	required_device<m68340cpu_device> m_maincpu;
+	optional_device<m68340cpu_device> m_slavecpu;
 
 	DECLARE_DRIVER_INIT(astradec_sml);
 	DECLARE_DRIVER_INIT(astradec);
@@ -2090,10 +2092,9 @@ ROM_END
 
 void astra_addresslines( UINT16* src, size_t srcsize, int small )
 {
-	UINT16 *dst = (UINT16*)malloc(srcsize);
+	std::vector<UINT16> dst(srcsize/2);
 
 	int blocksize;
-
 
 	if (small) blocksize= 0x100000/2;
 	else blocksize= 0x100000;
@@ -2107,8 +2108,7 @@ void astra_addresslines( UINT16* src, size_t srcsize, int small )
 		}
 	}
 
-	memcpy(src,dst, srcsize);
-	free(dst);
+	memcpy(src,&dst[0], srcsize);
 }
 
 

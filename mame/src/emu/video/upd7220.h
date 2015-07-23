@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese, Miodrag Milanovic, Carl
 /**********************************************************************
 
     NEC uPD7220 Graphics Display Controller emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************
                             _____   _____
@@ -40,23 +39,30 @@
 
 
 //**************************************************************************
-//  MACROS / CONSTANTS
-//**************************************************************************
-
-
-
-
-//**************************************************************************
 //  INTERFACE CONFIGURATION MACROS
 //**************************************************************************
 
-#define MCFG_UPD7220_ADD(_tag, _clock, _config, _map) \
-	MCFG_DEVICE_ADD(_tag, UPD7220, _clock) \
-	MCFG_DEVICE_CONFIG(_config) \
-	MCFG_DEVICE_ADDRESS_MAP(AS_0, _map)
+#define UPD7220_DISPLAY_PIXELS_MEMBER(_name) void _name(bitmap_rgb32 &bitmap, int y, int x, UINT32 address)
+#define UPD7220_DRAW_TEXT_LINE_MEMBER(_name) void _name(bitmap_rgb32 &bitmap, UINT32 addr, int y, int wd, int pitch, int lr, int cursor_on, int cursor_addr)
 
-#define UPD7220_INTERFACE(name) \
-	const upd7220_interface (name) =
+
+#define MCFG_UPD7220_DISPLAY_PIXELS_CALLBACK_OWNER(_class, _method) \
+	upd7220_device::static_set_display_pixels_callback(*device, upd7220_display_pixels_delegate(&_class::_method, #_class "::" #_method, downcast<_class *>(owner)));
+
+#define MCFG_UPD7220_DRAW_TEXT_CALLBACK_OWNER(_class, _method) \
+	upd7220_device::static_set_draw_text_callback(*device, upd7220_draw_text_delegate(&_class::_method, #_class "::" #_method, downcast<_class *>(owner)));
+
+#define MCFG_UPD7220_DRQ_CALLBACK(_write) \
+	devcb = &upd7220_device::set_drq_wr_callback(*device, DEVCB_##_write);
+
+#define MCFG_UPD7220_HSYNC_CALLBACK(_write) \
+	devcb = &upd7220_device::set_hsync_wr_callback(*device, DEVCB_##_write);
+
+#define MCFG_UPD7220_VSYNC_CALLBACK(_write) \
+	devcb = &upd7220_device::set_vsync_wr_callback(*device, DEVCB_##_write);
+
+#define MCFG_UPD7220_BLANK_CALLBACK(_write) \
+	devcb = &upd7220_device::set_blank_wr_callback(*device, DEVCB_##_write);
 
 
 
@@ -64,37 +70,27 @@
 //  TYPE DEFINITIONS
 //**************************************************************************
 
-typedef void (*upd7220_display_pixels_func)(device_t *device, bitmap_rgb32 &bitmap, int y, int x, UINT32 address);
-#define UPD7220_DISPLAY_PIXELS(name) void name(device_t *device, bitmap_rgb32 &bitmap, int y, int x, UINT32 address)
+typedef device_delegate<void (bitmap_rgb32 &bitmap, int y, int x, UINT32 address)> upd7220_display_pixels_delegate;
+typedef device_delegate<void (bitmap_rgb32 &bitmap, UINT32 addr, int y, int wd, int pitch, int lr, int cursor_on, int cursor_addr)> upd7220_draw_text_delegate;
 
-typedef void (*upd7220_draw_text_line)(device_t *device, bitmap_rgb32 &bitmap, UINT32 addr, int y, int wd, int pitch, int lr, int cursor_on, int cursor_addr);
-#define UPD7220_DRAW_TEXT_LINE(name) void name(device_t *device, bitmap_rgb32 &bitmap, UINT32 addr, int y, int wd, int pitch, int lr, int cursor_on, int cursor_addr)
-
-
-// ======================> upd7220_interface
-
-struct upd7220_interface
-{
-	const char *m_screen_tag;
-
-	upd7220_display_pixels_func m_display_cb;
-	upd7220_draw_text_line m_draw_text_cb;
-
-	devcb_write_line        m_out_drq_cb;
-	devcb_write_line        m_out_hsync_cb;
-	devcb_write_line        m_out_vsync_cb;
-	devcb_write_line        m_out_blank_cb;
-};
 
 // ======================> upd7220_device
 
 class upd7220_device :  public device_t,
 						public device_memory_interface,
-						public upd7220_interface
+						public device_video_interface
 {
 public:
 	// construction/destruction
 	upd7220_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+	static void static_set_display_pixels_callback(device_t &device, upd7220_display_pixels_delegate callback) { downcast<upd7220_device &>(device).m_display_cb = callback; }
+	static void static_set_draw_text_callback(device_t &device, upd7220_draw_text_delegate callback) { downcast<upd7220_device &>(device).m_draw_text_cb = callback; }
+
+	template<class _Object> static devcb_base &set_drq_wr_callback(device_t &device, _Object object) { return downcast<upd7220_device &>(device).m_write_drq.set_callback(object); }
+	template<class _Object> static devcb_base &set_hsync_wr_callback(device_t &device, _Object object) { return downcast<upd7220_device &>(device).m_write_hsync.set_callback(object); }
+	template<class _Object> static devcb_base &set_vsync_wr_callback(device_t &device, _Object object) { return downcast<upd7220_device &>(device).m_write_vsync.set_callback(object); }
+	template<class _Object> static devcb_base &set_blank_wr_callback(device_t &device, _Object object) { return downcast<upd7220_device &>(device).m_write_blank.set_callback(object); }
 
 	DECLARE_READ8_MEMBER( read );
 	DECLARE_WRITE8_MEMBER( write );
@@ -118,15 +114,19 @@ protected:
 	virtual void device_start();
 	virtual void device_reset();
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
-	virtual void device_config_complete();
 
 private:
-	static const device_timer_id TIMER_VSYNC = 0;
-	static const device_timer_id TIMER_HSYNC = 1;
-	static const device_timer_id TIMER_BLANK = 2;
+	enum
+	{
+		TIMER_VSYNC,
+		TIMER_HSYNC,
+		TIMER_BLANK
+	};
 
 	inline UINT8 readbyte(offs_t address);
 	inline void writebyte(offs_t address, UINT8 data);
+	inline UINT16 readword(offs_t address);
+	inline void writeword(offs_t address, UINT16 data);
 	inline void fifo_clear();
 	inline int fifo_param_count();
 	inline void fifo_set_direction(int dir);
@@ -137,29 +137,30 @@ private:
 	inline void update_blank_timer(int state);
 	inline void recompute_parameters();
 	inline void reset_figs_param();
-	inline void advance_ead();
 	inline void read_vram(UINT8 type, UINT8 mod);
 	inline void write_vram(UINT8 type, UINT8 mod);
-	inline UINT16 check_pattern(UINT16 pattern);
 	inline void get_text_partition(int index, UINT32 *sad, UINT16 *len, int *im, int *wd);
 	inline void get_graphics_partition(int index, UINT32 *sad, UINT16 *len, int *im, int *wd);
 
-	void draw_pixel(int x, int y, UINT8 tile_data);
+	void draw_pixel(int x, int y, int xi, UINT16 tile_data);
 	void draw_line(int x, int y);
 	void draw_rectangle(int x, int y);
+	void draw_arc(int x, int y);
 	void draw_char(int x, int y);
 	int translate_command(UINT8 data);
 	void process_fifo();
+	void continue_command();
 	void update_text(bitmap_rgb32 &bitmap, const rectangle &cliprect);
-	void draw_graphics_line(bitmap_rgb32 &bitmap, UINT32 addr, int y, int wd);
+	void draw_graphics_line(bitmap_rgb32 &bitmap, UINT32 addr, int y, int wd, int pitch);
 	void update_graphics(bitmap_rgb32 &bitmap, const rectangle &cliprect, int force_bitmap);
 
-	devcb_resolved_write_line   m_out_drq_func;
-	devcb_resolved_write_line   m_out_hsync_func;
-	devcb_resolved_write_line   m_out_vsync_func;
-	devcb_resolved_write_line   m_out_blank_func;
+	upd7220_display_pixels_delegate     m_display_cb;
+	upd7220_draw_text_delegate          m_draw_text_cb;
 
-	screen_device *m_screen;
+	devcb_write_line   m_write_drq;
+	devcb_write_line   m_write_hsync;
+	devcb_write_line   m_write_vsync;
+	devcb_write_line   m_write_blank;
 
 	UINT16 m_mask;                  // mask register
 	UINT8 m_pitch;                  // number of word addresses in display memory in the horizontal direction
@@ -181,7 +182,6 @@ private:
 	int m_fifo_dir;                 // FIFO direction
 
 	UINT8 m_mode;                   // mode of operation
-	UINT8 m_draw_mode;              // mode of drawing
 
 	int m_de;                       // display enabled
 	int m_m;                        // 0 = accept external vertical sync (slave mode) / 1 = generate & output vertical sync (master mode)
@@ -210,6 +210,7 @@ private:
 		UINT8 m_dir;                // figs param 0: drawing direction
 		UINT8 m_figure_type;        // figs param 1: figure type
 		UINT16 m_dc;                // figs param 2:
+		UINT8  m_gd;                // mixed mode only
 		UINT16 m_d;                 // figs param 3:
 		UINT16 m_d1;                // figs param 4:
 		UINT16 m_d2;                // figs param 5:

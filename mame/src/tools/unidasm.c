@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     mamedasm.c
 
     Generic MAME disassembler.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ****************************************************************************/
 
@@ -88,6 +59,7 @@ struct options
 CPU_DISASSEMBLE( adsp21xx );
 CPU_DISASSEMBLE( alpha8201 );
 CPU_DISASSEMBLE( am29000 );
+CPU_DISASSEMBLE( amis2000 );
 CPU_DISASSEMBLE( apexc );
 CPU_DISASSEMBLE( arm );
 CPU_DISASSEMBLE( arm_be );
@@ -112,25 +84,25 @@ CPU_DISASSEMBLE( ds5002fp );
 CPU_DISASSEMBLE( dsp16a );
 CPU_DISASSEMBLE( dsp32c );
 CPU_DISASSEMBLE( dsp56k );
+CPU_DISASSEMBLE( e0c6200 );
 CPU_DISASSEMBLE( esrip );
 CPU_DISASSEMBLE( f8 );
 CPU_DISASSEMBLE( g65816_generic );
 CPU_DISASSEMBLE( h6280 );
-CPU_DISASSEMBLE( h8 );
-CPU_DISASSEMBLE( h8_24 );
-CPU_DISASSEMBLE( h8_32 );
 CPU_DISASSEMBLE( hc11 );
 CPU_DISASSEMBLE( hcd62121 );
 CPU_DISASSEMBLE( hd61700 );
 CPU_DISASSEMBLE( hd6301 );
 CPU_DISASSEMBLE( hd6309 );
 CPU_DISASSEMBLE( hd63701 );
+CPU_DISASSEMBLE( hmcs40 );
 CPU_DISASSEMBLE( hyperstone_generic );
 CPU_DISASSEMBLE( i4004 );
 CPU_DISASSEMBLE( i8008 );
 CPU_DISASSEMBLE( i8051 );
 CPU_DISASSEMBLE( i8052 );
 CPU_DISASSEMBLE( i8085 );
+CPU_DISASSEMBLE( i8089 );
 CPU_DISASSEMBLE( i80c51 );
 CPU_DISASSEMBLE( i80c52 );
 CPU_DISASSEMBLE( i860 );
@@ -141,6 +113,7 @@ CPU_DISASSEMBLE( jaguargpu );
 CPU_DISASSEMBLE( konami );
 CPU_DISASSEMBLE( lh5801 );
 CPU_DISASSEMBLE( lr35902 );
+CPU_DISASSEMBLE( m58846 );
 CPU_DISASSEMBLE( m37710_generic );
 CPU_DISASSEMBLE( m6800 );
 CPU_DISASSEMBLE( m68000 );
@@ -163,6 +136,7 @@ CPU_DISASSEMBLE( minx );
 CPU_DISASSEMBLE( mips3be );
 CPU_DISASSEMBLE( mips3le );
 CPU_DISASSEMBLE( mn10200 );
+CPU_DISASSEMBLE( n8x300 );
 CPU_DISASSEMBLE( nec );
 CPU_DISASSEMBLE( nsc8105 );
 CPU_DISASSEMBLE( pdp1 );
@@ -184,6 +158,7 @@ CPU_DISASSEMBLE( sh2 );
 CPU_DISASSEMBLE( sh4 );
 CPU_DISASSEMBLE( sh4be );
 CPU_DISASSEMBLE( sharc );
+CPU_DISASSEMBLE( sm510 );
 CPU_DISASSEMBLE( sm8500 );
 CPU_DISASSEMBLE( spc700 );
 CPU_DISASSEMBLE( ssem );
@@ -208,6 +183,7 @@ CPU_DISASSEMBLE( tms9980 );
 CPU_DISASSEMBLE( tms9995 );
 CPU_DISASSEMBLE( tx0_64kw );
 CPU_DISASSEMBLE( tx0_8kw );
+CPU_DISASSEMBLE( ucom4 );
 CPU_DISASSEMBLE( unsp );
 CPU_DISASSEMBLE( upd7725 );
 CPU_DISASSEMBLE( upd7801 );
@@ -229,9 +205,11 @@ CPU_DISASSEMBLE( z8000 );
 
 static const dasm_table_entry dasm_table[] =
 {
+	{ "8x300",      _16be,  0, CPU_DISASSEMBLE_NAME(n8x300) },
 	{ "adsp21xx",   _24le, -2, CPU_DISASSEMBLE_NAME(adsp21xx) },
 	{ "alpha8201",  _8bit,  0, CPU_DISASSEMBLE_NAME(alpha8201) },
 	{ "am29000",    _32be,  0, CPU_DISASSEMBLE_NAME(am29000) },
+	{ "amis2000",   _8bit,  0, CPU_DISASSEMBLE_NAME(amis2000) },
 	{ "apexc",      _32be,  0, CPU_DISASSEMBLE_NAME(apexc) },
 	{ "arm",        _32le,  0, CPU_DISASSEMBLE_NAME(arm) },
 	{ "arm_be",     _32be,  0, CPU_DISASSEMBLE_NAME(arm_be) },
@@ -256,25 +234,28 @@ static const dasm_table_entry dasm_table[] =
 	{ "dsp16a",     _16le, -1, CPU_DISASSEMBLE_NAME(dsp16a) },
 	{ "dsp32c",     _32le,  0, CPU_DISASSEMBLE_NAME(dsp32c) },
 	{ "dsp56k",     _16le, -1, CPU_DISASSEMBLE_NAME(dsp56k) },
+	{ "e0c6200",    _16be, -1, CPU_DISASSEMBLE_NAME(e0c6200) },
 	{ "esrip",      _64be,  0, CPU_DISASSEMBLE_NAME(esrip) },
 	{ "f8",         _8bit,  0, CPU_DISASSEMBLE_NAME(f8) },
 	{ "g65816",     _8bit,  0, CPU_DISASSEMBLE_NAME(g65816_generic) },
 	{ "h6280",      _8bit,  0, CPU_DISASSEMBLE_NAME(h6280) },
-	{ "h8",         _16be,  0, CPU_DISASSEMBLE_NAME(h8) },
-	{ "h8_24",      _16be,  0, CPU_DISASSEMBLE_NAME(h8_24) },
-	{ "h8_32",      _16be,  0, CPU_DISASSEMBLE_NAME(h8_32) },
+//  { "h8",         _16be,  0, CPU_DISASSEMBLE_NAME(h8) },
+//  { "h8_24",      _16be,  0, CPU_DISASSEMBLE_NAME(h8_24) },
+//  { "h8_32",      _16be,  0, CPU_DISASSEMBLE_NAME(h8_32) },
 	{ "hc11",       _8bit,  0, CPU_DISASSEMBLE_NAME(mb88) },
 	{ "hcd62121",   _16be,  0, CPU_DISASSEMBLE_NAME(hcd62121) },
 	{ "hd61700",    _8bit,  0, CPU_DISASSEMBLE_NAME(hd61700) },
 	{ "hd6301",     _8bit,  0, CPU_DISASSEMBLE_NAME(hd6301) },
 	{ "hd6309",     _8bit,  0, CPU_DISASSEMBLE_NAME(hd6309) },
 	{ "hd63701",    _8bit,  0, CPU_DISASSEMBLE_NAME(hd63701) },
+	{ "hmcs40",     _16le, -1, CPU_DISASSEMBLE_NAME(hmcs40) },
 	{ "hyperstone", _16be,  0, CPU_DISASSEMBLE_NAME(hyperstone_generic) },
 	{ "i4004",      _8bit,  0, CPU_DISASSEMBLE_NAME(i4004) },
 	{ "i8008",      _8bit,  0, CPU_DISASSEMBLE_NAME(i8008) },
 	{ "i8051",      _8bit,  0, CPU_DISASSEMBLE_NAME(i8051) },
 	{ "i8052",      _8bit,  0, CPU_DISASSEMBLE_NAME(i8052) },
 	{ "i8085",      _8bit,  0, CPU_DISASSEMBLE_NAME(i8085) },
+	{ "i8089",      _8bit,  0, CPU_DISASSEMBLE_NAME(i8089) },
 	{ "i80c51",     _8bit,  0, CPU_DISASSEMBLE_NAME(i80c51) },
 	{ "i80c52",     _8bit,  0, CPU_DISASSEMBLE_NAME(i80c52) },
 	{ "i860",       _64le,  0, CPU_DISASSEMBLE_NAME(i860) },
@@ -285,6 +266,7 @@ static const dasm_table_entry dasm_table[] =
 	{ "konami",     _8bit,  0, CPU_DISASSEMBLE_NAME(konami) },
 	{ "lh5801",     _8bit,  0, CPU_DISASSEMBLE_NAME(lh5801) },
 	{ "lr35902",    _8bit,  0, CPU_DISASSEMBLE_NAME(lr35902) },
+	{ "m58846",     _16le, -1, CPU_DISASSEMBLE_NAME(m58846) },
 	{ "m37710",     _8bit,  0, CPU_DISASSEMBLE_NAME(m37710_generic) },
 	{ "m6800",      _8bit,  0, CPU_DISASSEMBLE_NAME(m6800) },
 	{ "m68000",     _16be,  0, CPU_DISASSEMBLE_NAME(m68000) },
@@ -328,6 +310,7 @@ static const dasm_table_entry dasm_table[] =
 	{ "sh4",        _16le,  0, CPU_DISASSEMBLE_NAME(sh4) },
 	{ "sh4be",      _16be,  0, CPU_DISASSEMBLE_NAME(sh4be) },
 	{ "sharc",      _48le, -2, CPU_DISASSEMBLE_NAME(sharc) },
+	{ "sm510",      _8bit,  0, CPU_DISASSEMBLE_NAME(sm510) },
 	{ "sm8500",     _8bit,  0, CPU_DISASSEMBLE_NAME(sm8500) },
 	{ "spc700",     _8bit,  0, CPU_DISASSEMBLE_NAME(spc700) },
 	{ "ssem",       _32le,  0, CPU_DISASSEMBLE_NAME(ssem) },
@@ -352,6 +335,7 @@ static const dasm_table_entry dasm_table[] =
 	{ "tms9995",    _8bit,  0, CPU_DISASSEMBLE_NAME(tms9995) },
 	{ "tx0_64kw",   _32be, -2, CPU_DISASSEMBLE_NAME(tx0_64kw) },
 	{ "tx0_8kw",    _32be, -2, CPU_DISASSEMBLE_NAME(tx0_8kw) },
+	{ "ucom4",      _8bit,  0, CPU_DISASSEMBLE_NAME(ucom4) },
 	{ "unsp",       _16be,  0, CPU_DISASSEMBLE_NAME(unsp) },
 	{ "upd7725",    _32be,  0, CPU_DISASSEMBLE_NAME(unsp) },
 	{ "upd7801",    _8bit,  0, CPU_DISASSEMBLE_NAME(upd7801) },
@@ -371,15 +355,15 @@ static const dasm_table_entry dasm_table[] =
 //  { "z8000",      _16be,  0, CPU_DISASSEMBLE_NAME(z8000) },
 };
 
-void CLIB_DECL logerror(const char *format, ...)
+void CLIB_DECL ATTR_PRINTF(1,2) logerror(const char *format, ...)
 {
 	/* silent logerrors are allowed in disassemblers */
 }
 
 
-void CLIB_DECL mame_printf_debug(const char *format, ...)
+void CLIB_DECL ATTR_PRINTF(1,2) osd_printf_debug(const char *format, ...)
 {
-	/* silent mame_printf_debugs are allowed in disassemblers */
+	/* silent osd_printf_debugs are allowed in disassemblers */
 }
 
 
@@ -672,20 +656,29 @@ int main(int argc, char *argv[])
 	catch (emu_fatalerror &fatal)
 	{
 		fprintf(stderr, "%s\n", fatal.string());
+		result = 1;
 		if (fatal.exitcode() != 0)
 			result = fatal.exitcode();
 	}
 	catch (emu_exception &)
 	{
 		fprintf(stderr, "Caught unhandled emulator exception\n");
+		result = 1;
 	}
-	catch (std::bad_alloc &)
+	catch (add_exception &aex)
 	{
-		fprintf(stderr, "Out of memory!\n");
+		fprintf(stderr, "Tag '%s' already exists in tagged_list\n", aex.tag());
+		result = 1;
+	}
+	catch (std::exception &ex)
+	{
+		fprintf(stderr, "Caught unhandled %s exception: %s\n", typeid(ex).name(), ex.what());
+		result = 1;
 	}
 	catch (...)
 	{
 		fprintf(stderr, "Caught unhandled exception\n");
+		result = 1;
 	}
 
 	osd_free(data);

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Jonathan Gevaryahu, Kevin Horton
 /******************************************************************************
 *
 *  Bare bones Realvoice PC driver
@@ -15,6 +17,8 @@
 #include "machine/terminal.h"
 
 /* Defines */
+
+#define TERMINAL_TAG "terminal"
 
 /* Components */
 
@@ -354,11 +358,6 @@ WRITE8_MEMBER(rvoice_state::null_kbd_put)
 {
 }
 
-static GENERIC_TERMINAL_INTERFACE( dectalk_terminal_intf )
-{
-	DEVCB_DRIVER_MEMBER(rvoice_state,null_kbd_put)
-};
-
 static MACHINE_CONFIG_START( rvoicepc, rvoice_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", HD63701, XTAL_7_3728MHz)
@@ -370,13 +369,15 @@ static MACHINE_CONFIG_START( rvoicepc, rvoice_state )
 	//MCFG_CPU_IO_MAP(hd63701_slave_io)
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
 
-	MCFG_MOS6551_ADD("acia65c51", XTAL_1_8432MHz, NULL)
+	MCFG_DEVICE_ADD("acia65c51", MOS6551, 0)
+	MCFG_MOS6551_XTAL(XTAL_1_8432MHz)
 
 	/* video hardware */
 	//MCFG_DEFAULT_LAYOUT(layout_dectalk) // hack to avoid screenless system crash
 
 	/* sound hardware */
-	MCFG_GENERIC_TERMINAL_ADD(TERMINAL_TAG,dectalk_terminal_intf)
+	MCFG_DEVICE_ADD(TERMINAL_TAG, GENERIC_TERMINAL, 0)
+	MCFG_GENERIC_TERMINAL_KEYBOARD_CB(WRITE8(rvoice_state, null_kbd_put))
 
 MACHINE_CONFIG_END
 
@@ -389,7 +390,7 @@ MACHINE_CONFIG_END
 ROM_START(rvoicepc)
 
 	ROM_REGION(0x10000, "maincpu", 0)
-	ROM_LOAD("rv_pc.bin", 0x08000, 0x08000, CRC(4001CD5F) SHA1(D973C6E19E493EEDD4F7216BC530DDB0B6C4921E))
+	ROM_LOAD("rv_pc.bin", 0x08000, 0x08000, CRC(4001cd5f) SHA1(d973c6e19e493eedd4f7216bc530ddb0b6c4921e))
 	ROM_CONTINUE(0x8000, 0x8000) // first half of 27c512 rom is blank due to stupid address decoder circuit
 
 ROM_END

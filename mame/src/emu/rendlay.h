@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     rendlay.h
 
     Core rendering layout parser and manager.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -58,7 +29,7 @@ enum item_layer
 	ITEM_LAYER_MARQUEE,
 	ITEM_LAYER_MAX
 };
-DECLARE_ENUM_OPERATORS(item_layer);
+DECLARE_ENUM_OPERATORS(item_layer)
 
 
 
@@ -81,7 +52,7 @@ public:
 
 	// getters
 	layout_element *next() const { return m_next; }
-	const char *name() const { return m_name; }
+	const char *name() const { return m_name.c_str(); }
 	running_machine &machine() const { return m_machine; }
 	int default_state() const { return m_defstate; }
 	int maxstate() const { return m_maxstate; }
@@ -116,6 +87,7 @@ private:
 			CTYPE_DISK,
 			CTYPE_TEXT,
 			CTYPE_LED7SEG,
+			CTYPE_LED8SEG_GTS1,
 			CTYPE_LED14SEG,
 			CTYPE_LED16SEG,
 			CTYPE_LED14SEGSC,
@@ -134,9 +106,11 @@ private:
 		void draw_text(running_machine &machine, bitmap_argb32 &dest, const rectangle &bounds);
 		void draw_simplecounter(running_machine &machine, bitmap_argb32 &dest, const rectangle &bounds, int state);
 		void draw_reel(running_machine &machine, bitmap_argb32 &dest, const rectangle &bounds, int state);
+		void draw_beltreel(running_machine &machine, bitmap_argb32 &dest, const rectangle &bounds, int state);
 		void load_bitmap();
 		void load_reel_bitmap(int number);
 		void draw_led7seg(bitmap_argb32 &dest, const rectangle &bounds, int pattern);
+		void draw_led8seg_gts1(bitmap_argb32 &dest, const rectangle &bounds, int pattern);
 		void draw_led14seg(bitmap_argb32 &dest, const rectangle &bounds, int pattern);
 		void draw_led14segsc(bitmap_argb32 &dest, const rectangle &bounds, int pattern);
 		void draw_led16seg(bitmap_argb32 &dest, const rectangle &bounds, int pattern);
@@ -160,24 +134,24 @@ private:
 		int                 m_state;                    // state where this component is visible (-1 means all states)
 		render_bounds       m_bounds;                   // bounds of the element
 		render_color        m_color;                    // color of the element
-		astring             m_string;                   // string for text components
+		std::string         m_string;                   // string for text components
 		int                 m_digits;                   // number of digits for simple counters
 		int                 m_textalign;                // text alignment to box
 		bitmap_argb32       m_bitmap[MAX_BITMAPS];      // source bitmap for images
-		astring             m_dirname;                  // directory name of image file (for lazy loading)
-		emu_file *          m_file[MAX_BITMAPS];        // file object for reading image/alpha files
-		astring             m_imagefile[MAX_BITMAPS];   // name of the image file (for lazy loading)
-		astring             m_alphafile[MAX_BITMAPS];   // name of the alpha file (for lazy loading)
+		std::string         m_dirname;                  // directory name of image file (for lazy loading)
+		auto_pointer<emu_file> m_file[MAX_BITMAPS];        // file object for reading image/alpha files
+		std::string         m_imagefile[MAX_BITMAPS];   // name of the image file (for lazy loading)
+		std::string         m_alphafile[MAX_BITMAPS];   // name of the alpha file (for lazy loading)
 		bool                m_hasalpha[MAX_BITMAPS];    // is there any alpha component present?
 
 		// stuff for fruit machine reels
 		// basically made up of multiple text strings / gfx
 		int                 m_numstops;
-		astring             m_stopnames[MAX_BITMAPS];
+		std::string         m_stopnames[MAX_BITMAPS];
 		int                 m_stateoffset;
 		int                 m_reelreversed;
 		int                 m_numsymbolsvisible;
-
+		int                 m_beltreel;
 	};
 
 	// a texture encapsulates a texture for a given element in a given state
@@ -198,11 +172,11 @@ private:
 	// internal state
 	layout_element *    m_next;             // link to next element
 	running_machine &   m_machine;          // reference to the owning machine
-	astring             m_name;             // name of this element
+	std::string         m_name;             // name of this element
 	simple_list<component> m_complist;      // list of components
 	int                 m_defstate;         // default state of this element
 	int                 m_maxstate;         // maximum state value for all components
-	texture *           m_elemtex;          // array of element textures used for managing the scaled bitmaps
+	std::vector<texture>     m_elemtex;       // array of element textures used for managing the scaled bitmaps
 };
 
 
@@ -232,9 +206,9 @@ public:
 		const render_bounds &bounds() const { return m_bounds; }
 		const render_color &color() const { return m_color; }
 		int orientation() const { return m_orientation; }
-		render_container *screen_container(running_machine &machine) const { return (m_screen != NULL) ? &m_screen->container() : NULL; }
-		bool has_input() const { return bool(m_input_tag); }
-		const char *input_tag_and_mask(ioport_value &mask) const { mask = m_input_mask; return m_input_tag; }
+		render_container *screen_container(running_machine &machine) const;
+		bool has_input() const { return !m_input_tag.empty(); }
+		const char *input_tag_and_mask(ioport_value &mask) const { mask = m_input_mask; return m_input_tag.c_str(); }
 
 		// fetch state based on configured source
 		int state() const;
@@ -243,8 +217,8 @@ public:
 		// internal state
 		item *              m_next;             // link to next item
 		layout_element *    m_element;          // pointer to the associated element (non-screens only)
-		astring             m_output_name;      // name of this item
-		astring             m_input_tag;        // input tag of this item
+		std::string         m_output_name;      // name of this item
+		std::string         m_input_tag;        // input tag of this item
 		ioport_value        m_input_mask;       // input mask of this item
 		screen_device *     m_screen;           // pointer to screen
 		int                 m_orientation;      // orientation of this item
@@ -260,7 +234,7 @@ public:
 	// getters
 	layout_view *next() const { return m_next; }
 	item *first_item(item_layer layer) const;
-	const char *name() const { return m_name; }
+	const char *name() const { return m_name.c_str(); }
 	const render_screen_list &screens() const { return m_screens; }
 	bool layer_enabled(item_layer layer) const { return m_layenabled[layer]; }
 
@@ -274,7 +248,7 @@ public:
 private:
 	// internal state
 	layout_view *       m_next;             // pointer to next layout in the list
-	astring             m_name;             // name of the layout
+	std::string         m_name;             // name of the layout
 	float               m_aspect;           // X/Y of the layout
 	float               m_scraspect;        // X/Y of the screen areas
 	render_screen_list  m_screens;          // list of active screens

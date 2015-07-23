@@ -1,10 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, Dirk Best
 /***************************************************************************
 
-    mc10.c
-
     TRS-80 Radio Shack MicroColor Computer
-
-    Nate Woods
 
 ***************************************************************************/
 
@@ -47,7 +45,7 @@ public:
 	m_printer(*this, "printer")
 	{ }
 
-	required_device<cpu_device> m_maincpu;
+	required_device<m6803_cpu_device> m_maincpu;
 	optional_device<mc6847_base_device> m_mc6847;
 	optional_device<ef9345_device> m_ef9345;
 	required_device<dac_device> m_dac;
@@ -73,7 +71,7 @@ public:
 	DECLARE_WRITE8_MEMBER( mc10_port1_w );
 	DECLARE_READ8_MEMBER( mc10_port2_r );
 	DECLARE_WRITE8_MEMBER( mc10_port2_w );
-	DECLARE_READ8_MEMBER( mc10_mc6847_videoram_r );
+	DECLARE_READ8_MEMBER( mc6847_videoram_r );
 	DECLARE_DRIVER_INIT(mc10);
 	TIMER_DEVICE_CALLBACK_MEMBER(alice32_scanline);
 };
@@ -215,7 +213,7 @@ WRITE8_MEMBER( mc10_state::mc10_port2_w )
     VIDEO EMULATION
 ***************************************************************************/
 
-READ8_MEMBER( mc10_state::mc10_mc6847_videoram_r )
+READ8_MEMBER( mc10_state::mc6847_videoram_r )
 {
 	if (offset == ~0) return 0xff;
 	m_mc6847->inv_w(BIT(m_ram_base[offset], 6));
@@ -260,7 +258,7 @@ DRIVER_INIT_MEMBER(mc10_state,mc10)
 
 	//for alice32 force port4 DDR to 0xff at startup
 	if (!strcmp(machine().system().name, "alice32") || !strcmp(machine().system().name, "alice90"))
-		m6801_io_w(prg, 0x05, 0xff);
+		m_maincpu->m6801_io_w(prg, 0x05, 0xff);
 }
 
 
@@ -478,30 +476,6 @@ INPUT_PORTS_END
     MACHINE DRIVERS
 ***************************************************************************/
 
-static const cassette_interface mc10_cassette_interface =
-{
-	coco_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_SPEAKER_ENABLED | CASSETTE_MOTOR_ENABLED),
-	NULL,
-	NULL
-};
-
-static const cassette_interface alice32_cassette_interface =
-{
-	alice32_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_SPEAKER_ENABLED | CASSETTE_MOTOR_ENABLED),
-	"alice32_cass",
-	NULL
-};
-
-static const mc6847_interface mc10_mc6847_intf =
-{
-	"screen",
-	DEVCB_DRIVER_MEMBER(mc10_state, mc10_mc6847_videoram_r)
-};
-
 static MACHINE_CONFIG_START( mc10, mc10_state )
 
 	/* basic machine hardware */
@@ -511,28 +485,31 @@ static MACHINE_CONFIG_START( mc10, mc10_state )
 
 	/* video hardware */
 	MCFG_SCREEN_MC6847_NTSC_ADD("screen", "mc6847")
-	MCFG_MC6847_ADD("mc6847", MC6847_NTSC, XTAL_3_579545MHz, mc10_mc6847_intf)
+
+	MCFG_DEVICE_ADD("mc6847", MC6847_NTSC, XTAL_3_579545MHz)
+	MCFG_MC6847_INPUT_CALLBACK(READ8(mc10_state, mc6847_videoram_r))
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("dac", DAC, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 
-	MCFG_CASSETTE_ADD("cassette", mc10_cassette_interface)
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(coco_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_SPEAKER_ENABLED | CASSETTE_MOTOR_ENABLED)
+	MCFG_CASSETTE_INTERFACE("mc10_cass")
 
 	/* printer */
-	MCFG_PRINTER_ADD("printer")
+	MCFG_DEVICE_ADD("printer", PRINTER, 0)
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("20K")
 	MCFG_RAM_EXTRA_OPTIONS("4K")
-MACHINE_CONFIG_END
 
-static const ef9345_interface alice32_ef9345_config =
-{
-	"screen"            /* screen we are acting on */
-};
+	/* Software lists */
+	MCFG_SOFTWARE_LIST_ADD("cass_list", "mc10")
+MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( alice32, mc10_state )
 
@@ -547,9 +524,10 @@ static MACHINE_CONFIG_START( alice32, mc10_state )
 	MCFG_SCREEN_UPDATE_DEVICE("ef9345", ef9345_device, screen_update)
 	MCFG_SCREEN_SIZE(336, 270)
 	MCFG_SCREEN_VISIBLE_AREA(00, 336-1, 00, 270-1)
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_PALETTE_ADD("palette", 8)
 
-	MCFG_EF9345_ADD("ef9345", alice32_ef9345_config)
+	MCFG_DEVICE_ADD("ef9345", EF9345, 0)
+	MCFG_EF9345_PALETTE("palette")
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("alice32_sl", mc10_state, alice32_scanline, "screen", 0, 10)
 
 	/* sound hardware */
@@ -557,10 +535,13 @@ static MACHINE_CONFIG_START( alice32, mc10_state )
 	MCFG_SOUND_ADD("dac", DAC, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 
-	MCFG_CASSETTE_ADD("cassette", alice32_cassette_interface)
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(alice32_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_SPEAKER_ENABLED | CASSETTE_MOTOR_ENABLED)
+	MCFG_CASSETTE_INTERFACE("mc10_cass")
 
 	/* printer */
-	MCFG_PRINTER_ADD("printer")
+	MCFG_DEVICE_ADD("printer", PRINTER, 0)
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -569,6 +550,7 @@ static MACHINE_CONFIG_START( alice32, mc10_state )
 
 	/* Software lists */
 	MCFG_SOFTWARE_LIST_ADD("cass_list", "alice32")
+	MCFG_SOFTWARE_LIST_COMPATIBLE_ADD("mc10_cass", "mc10")
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( alice90, alice32 )
@@ -581,6 +563,7 @@ static MACHINE_CONFIG_DERIVED( alice90, alice32 )
 	/* Software lists */
 	MCFG_SOFTWARE_LIST_MODIFY("cass_list", "alice90")
 	MCFG_SOFTWARE_LIST_COMPATIBLE_ADD("alice32_cass", "alice32")
+	MCFG_DEVICE_REMOVE("mc10_cass")
 MACHINE_CONFIG_END
 
 

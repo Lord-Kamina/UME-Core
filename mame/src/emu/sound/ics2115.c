@@ -1,5 +1,7 @@
+// license:???
+// copyright-holders:Alex Marshall,nimitz,austere
 //ICS2115 by Raiden II team (c) 2010
-//members: austere, nimitz, trap15
+//members: austere, nimitz, Alex Marshal
 //
 //Original driver by O. Galibert, ElSemi
 //
@@ -15,25 +17,21 @@
 // device type definition
 const device_type ICS2115 = &device_creator<ics2115_device>;
 
-void ics2115_device::static_set_irqf(device_t &device, void (*irqf)(device_t *device, int state))
-{
-	ics2115_device &ics2115 = downcast<ics2115_device &>(device);
-	ics2115.m_irq_cb = irqf;
-}
-
 ics2115_device::ics2115_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, ICS2115, "ICS2115", tag, owner, clock),
+	: device_t(mconfig, ICS2115, "ICS2115", tag, owner, clock, "ics2115", __FILE__),
 		device_sound_interface(mconfig, *this),
-		m_irq_cb(NULL)
+		m_rom(*this, DEVICE_SELF),
+		m_irq_cb(*this)
 {
 }
 
 void ics2115_device::device_start()
 {
-	m_rom = *region();
-	m_timer[0].timer = machine().scheduler().timer_alloc(FUNC(timer_cb_0), this);
-	m_timer[1].timer = machine().scheduler().timer_alloc(FUNC(timer_cb_1), this);
+	m_timer[0].timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(ics2115_device::timer_cb_0),this), this);
+	m_timer[1].timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(ics2115_device::timer_cb_1),this), this);
 	m_stream = machine().sound().stream_alloc(*this, 0, 2, 33075);
+
+	m_irq_cb.resolve_safe();
 
 	//Exact formula as per patent 5809466
 	//This seems to give the ok fit but it is not good enough.
@@ -108,6 +106,7 @@ void ics2115_device::device_reset()
 	m_osc_select = 0;
 	m_reg_select = 0;
 	m_vmode = 0;
+	m_irq_on = false;
 	memset(m_voice, 0, sizeof(m_voice));
 	for(int i = 0; i < 2; ++i)
 	{
@@ -139,10 +138,10 @@ void ics2115_device::device_reset()
 int ics2115_voice::update_volume_envelope()
 {
 	int ret = 0;
-	if(vol_ctrl.done || vol_ctrl.stop)
+	if(vol_ctrl.bitflags.done || vol_ctrl.bitflags.stop)
 		return ret;
 
-	if(vol_ctrl.invert) {
+	if(vol_ctrl.bitflags.invert) {
 		vol.acc -= vol.add;
 		vol.left = vol.acc - vol.start;
 	} else {
@@ -153,26 +152,26 @@ int ics2115_voice::update_volume_envelope()
 	if(vol.left > 0)
 		return ret;
 
-	if(vol_ctrl.irq) {
-		vol_ctrl.irq_pending = true;
+	if(vol_ctrl.bitflags.irq) {
+		vol_ctrl.bitflags.irq_pending = true;
 		ret = 1;
 	}
 
-	if(osc_conf.eightbit)
+	if(osc_conf.bitflags.eightbit)
 		return ret;
 
-	if(vol_ctrl.loop) {
-		if(vol_ctrl.loop_bidir)
-			vol_ctrl.invert = !vol_ctrl.invert;
+	if(vol_ctrl.bitflags.loop) {
+		if(vol_ctrl.bitflags.loop_bidir)
+			vol_ctrl.bitflags.invert = !vol_ctrl.bitflags.invert;
 
-		if(vol_ctrl.invert)
+		if(vol_ctrl.bitflags.invert)
 			vol.acc = vol.end + vol.left;
 		else
 			vol.acc = vol.start - vol.left;
 	} else {
-		state.on = false;
-		vol_ctrl.done = true;
-		if(vol_ctrl.invert)
+		state.bitflags.on = false;
+		vol_ctrl.bitflags.done = true;
+		if(vol_ctrl.bitflags.invert)
 			vol.acc = vol.end;
 		else
 			vol.acc = vol.start;
@@ -199,9 +198,9 @@ int ics2115_voice::update_volume_envelope()
 int ics2115_voice::update_oscillator()
 {
 	int ret = 0;
-	if(osc_conf.stop)
+	if(osc_conf.bitflags.stop)
 		return ret;
-	if(osc_conf.invert) {
+	if(osc_conf.bitflags.invert) {
 		osc.acc -= osc.fc << 2;
 		osc.left = osc.acc - osc.start;
 	} else {
@@ -211,17 +210,17 @@ int ics2115_voice::update_oscillator()
 	// > instead of >= to stop crackling?
 	if(osc.left > 0)
 		return ret;
-	if(osc_conf.irq) {
-		osc_conf.irq_pending = true;
+	if(osc_conf.bitflags.irq) {
+		osc_conf.bitflags.irq_pending = true;
 		ret = 1;
 	}
-	if(osc_conf.loop) {
-		if(osc_conf.loop_bidir)
-			osc_conf.invert = !osc_conf.invert;
+	if(osc_conf.bitflags.loop) {
+		if(osc_conf.bitflags.loop_bidir)
+			osc_conf.bitflags.invert = !osc_conf.bitflags.invert;
 		//else
 		//    printf("click!\n");
 
-		if(osc_conf.invert) {
+		if(osc_conf.bitflags.invert) {
 			osc.acc = osc.end + osc.left;
 			osc.left = osc.acc - osc.start;
 		}
@@ -230,9 +229,9 @@ int ics2115_voice::update_oscillator()
 			osc.left = osc.end - osc.acc;
 		}
 	} else {
-		state.on = false;
-		osc_conf.stop = true;
-		if(!osc_conf.invert)
+		state.bitflags.on = false;
+		osc_conf.bitflags.stop = true;
+		if(!osc_conf.bitflags.invert)
 			osc.acc = osc.end;
 		else
 			osc.acc = osc.start;
@@ -246,7 +245,7 @@ stream_sample_t ics2115_device::get_sample(ics2115_voice& voice)
 	UINT32 curaddr = ((voice.osc.saddr << 20) & 0xffffff) | (voice.osc.acc >> 12);
 	UINT32 nextaddr;
 
-	if (voice.state.on && voice.osc_conf.loop && !voice.osc_conf.loop_bidir &&
+	if (voice.state.bitflags.on && voice.osc_conf.bitflags.loop && !voice.osc_conf.bitflags.loop_bidir &&
 			(voice.osc.left < (voice.osc.fc <<2))) {
 		//printf("C?[%x:%x]", voice.osc.left, voice.osc.acc);
 		nextaddr = ((voice.osc.saddr << 20) & 0xffffff) | (voice.osc.start >> 12);
@@ -256,7 +255,7 @@ stream_sample_t ics2115_device::get_sample(ics2115_voice& voice)
 
 
 	INT16 sample1, sample2;
-	if (voice.osc_conf.eightbit) {
+	if (voice.osc_conf.bitflags.eightbit) {
 		sample1 = ((INT8)m_rom[curaddr]) << 8;
 		sample2 = ((INT8)m_rom[curaddr + 1]) << 8;
 	}
@@ -284,21 +283,21 @@ stream_sample_t ics2115_device::get_sample(ics2115_voice& voice)
 
 bool ics2115_voice::playing()
 {
-	return state.on && !((vol_ctrl.done || vol_ctrl.stop) && osc_conf.stop);
+	return state.bitflags.on && !((vol_ctrl.bitflags.done || vol_ctrl.bitflags.stop) && osc_conf.bitflags.stop);
 }
 
 void ics2115_voice::update_ramp() {
 	//slow attack
-	if (state.on && !osc_conf.stop) {
-		if (state.ramp < 0x40)
-			state.ramp += 0x1;
+	if (state.bitflags.on && !osc_conf.bitflags.stop) {
+		if (state.bitflags.ramp < 0x40)
+			state.bitflags.ramp += 0x1;
 		else
-			state.ramp = 0x40;
+			state.bitflags.ramp = 0x40;
 	}
 	//slow release
 	else {
-		if (state.ramp)
-			state.ramp -= 0x1;
+		if (state.bitflags.ramp)
+			state.bitflags.ramp -= 0x1;
 	}
 }
 
@@ -310,7 +309,7 @@ int ics2115_device::fill_output(ics2115_voice& voice, stream_sample_t *outputs[2
 
 	for (int i = 0; i < samples; i++) {
 		UINT32 volacc = (voice.vol.acc >> 10) & 0xffff;
-		UINT32 volume = (m_volume[volacc >> 4] * voice.state.ramp) >> 6;
+		UINT32 volume = (m_volume[volacc >> 4] * voice.state.bitflags.ramp) >> 6;
 		UINT16 vleft = volume; //* (255 - voice.vol.pan) / 0x80];
 		UINT16 vright = volume; //* (voice.vol.pan + 1) / 0x80];
 
@@ -320,7 +319,7 @@ int ics2115_device::fill_output(ics2115_voice& voice, stream_sample_t *outputs[2
 		//that the voice is pointing at is contributing to the summation.
 		//(austere note: this will of course fix some of the glitches due to multiple transition)
 		stream_sample_t sample;
-		if(voice.osc_conf.ulaw) {
+		if(voice.osc_conf.bitflags.ulaw) {
 			UINT32 curaddr = ((voice.osc.saddr << 20) & 0xffffff) | (voice.osc.acc >> 12);
 			sample = m_ulaw[m_rom[curaddr]];
 		}
@@ -362,7 +361,7 @@ void ics2115_device::sound_stream_update(sound_stream &stream, stream_sample_t *
 #ifdef ICS2115_DEBUG
         UINT32 curaddr = ((voice.osc.saddr << 20) & 0xffffff) | (voice.osc.acc >> 12);
         stream_sample_t sample;
-        if(voice.osc_conf.ulaw)
+        if(voice.osc_conf.bitflags.ulaw)
             sample = m_ulaw[m_rom[curaddr]];
         else
             sample = get_sample(voice);
@@ -375,7 +374,7 @@ void ics2115_device::sound_stream_update(sound_stream &stream, stream_sample_t *
 #ifdef ICS2115_DEBUG
 		if(voice.playing()) {
 			printf("%d", osc);
-			if (voice.osc_conf.invert)
+			if (voice.osc_conf.bitflags.invert)
 				printf("+");
 			else if ((voice.osc.fc >> 1) > 0x1ff)
 				printf("*");
@@ -489,10 +488,10 @@ UINT16 ics2115_device::reg_read() {
 			// may expect |8 on reg 0 on voice irq with &80 == 0
 			// ret = 0xFF;
 			if (!m_vmode)
-				ret = voice.vol_ctrl.irq ? 0x81 : 0x01;
+				ret = voice.vol_ctrl.bitflags.irq ? 0x81 : 0x01;
 			else
 				ret = 0x01;
-			//ret = voice.vol_ctrl.value | 0x1;
+			//ret = voice.vol_ctrl.bitflags.value | 0x1;
 			ret <<= 8;
 			break;
 
@@ -504,17 +503,17 @@ UINT16 ics2115_device::reg_read() {
 			ret = 0xff;
 			for (int i = 0; i <= m_active_osc; i++) {
 				ics2115_voice& v = m_voice[i];
-				if (v.osc_conf.irq_pending || v.vol_ctrl.irq_pending) {
+				if (v.osc_conf.bitflags.irq_pending || v.vol_ctrl.bitflags.irq_pending) {
 					ret = i | 0xe0;
-					ret &= v.vol_ctrl.irq_pending ? (~0x40) : 0xff;
-					ret &= v.osc_conf.irq_pending ? (~0x80) : 0xff;
+					ret &= v.vol_ctrl.bitflags.irq_pending ? (~0x40) : 0xff;
+					ret &= v.osc_conf.bitflags.irq_pending ? (~0x80) : 0xff;
 					recalc_irq();
-					if (v.osc_conf.irq_pending) {
-						v.osc_conf.irq_pending = 0;
+					if (v.osc_conf.bitflags.irq_pending) {
+						v.osc_conf.bitflags.irq_pending = 0;
 						ret &= ~0x80;
 					}
-					if (v.vol_ctrl.irq_pending) {
-						v.vol_ctrl.irq_pending = 0;
+					if (v.vol_ctrl.bitflags.irq_pending) {
+						v.vol_ctrl.bitflags.irq_pending = 0;
 						ret &= ~0x40;
 					}
 					break;
@@ -695,14 +694,14 @@ void ics2115_device::reg_write(UINT8 data, bool msb) {
 #ifdef ICS2115_ISOLATE
 					if (m_osc_select == ICS2115_ISOLATE)
 #endif
-					if (!voice.osc_conf.stop || !voice.vol_ctrl.stop)
+					if (!voice.osc_conf.bitflags.stop || !voice.vol_ctrl.bitflags.stop)
 						printf("[%02d STOP]\n", m_osc_select);
 #endif
 					if (!m_vmode) {
-						voice.osc_conf.stop = true;
-						voice.vol_ctrl.stop = true;
+						voice.osc_conf.bitflags.stop = true;
+						voice.vol_ctrl.bitflags.stop = true;
 						//try to key it off as well!
-						voice.state.on = false;
+						voice.state.bitflags.on = false;
 					}
 				}
 #ifdef ICS2115_DEBUG
@@ -758,22 +757,20 @@ void ics2115_device::reg_write(UINT8 data, bool msb) {
 	}
 }
 
-//UINT8 ics2115_device::read (offs_t offset)
-READ8_DEVICE_HANDLER(ics2115_device::read)
+READ8_MEMBER(ics2115_device::read)
 {
-	ics2115_device *chip = downcast<ics2115_device *>(device);
 	UINT8 ret = 0;
 
 	switch(offset) {
 		case 0:
 			//TODO: check this suspect code
-			if (chip->m_irq_on) {
+			if (m_irq_on) {
 				ret |= 0x80;
-				if (chip->m_irq_enabled && (chip->m_irq_pending & 3))
+				if (m_irq_enabled && (m_irq_pending & 3))
 					ret |= 1;
-				for (int i = 0; i <= chip->m_active_osc; i++) {
-					if (//chip->m_voice[i].vol_ctrl.irq_pending ||
-						chip->m_voice[i].osc_conf.irq_pending) {
+				for (int i = 0; i <= m_active_osc; i++) {
+					if (//m_voice[i].vol_ctrl.bitflags.irq_pending ||
+						m_voice[i].osc_conf.bitflags.irq_pending) {
 						ret |= 2;
 						break;
 					}
@@ -782,13 +779,13 @@ READ8_DEVICE_HANDLER(ics2115_device::read)
 
 			break;
 		case 1:
-			ret = chip->m_reg_select;
+			ret = m_reg_select;
 			break;
 		case 2:
-			ret = (UINT8)(chip->reg_read());
+			ret = (UINT8)(reg_read());
 			break;
 		case 3:
-			ret = chip->reg_read() >> 8;
+			ret = reg_read() >> 8;
 			break;
 		default:
 #ifdef ICS2115_DEBUG
@@ -799,19 +796,17 @@ READ8_DEVICE_HANDLER(ics2115_device::read)
 	return ret;
 }
 
-//UINT8 ics2115_device::write(offs_t offset, UINT8 data)
-WRITE8_DEVICE_HANDLER(ics2115_device::write)
+WRITE8_MEMBER(ics2115_device::write)
 {
-	ics2115_device *chip = downcast<ics2115_device *>(device);
 	switch(offset) {
 		case 1:
-			chip->m_reg_select = data;
+			m_reg_select = data;
 			break;
 		case 2:
-			chip->reg_write(data,0);
+			reg_write(data,0);
 			break;
 		case 3:
-			chip->reg_write(data,1);
+			reg_write(data,1);
 			break;
 		default:
 #ifdef ICS2115_DEBUG
@@ -828,9 +823,9 @@ void ics2115_device::keyon()
 		return;
 #endif
 	//set initial condition (may need to invert?) -- does NOT work since these are set to zero even
-	m_voice[m_osc_select].state.on = true;
+	m_voice[m_osc_select].state.bitflags.on = true;
 	//no ramp up...
-	m_voice[m_osc_select].state.ramp = 0x40;
+	m_voice[m_osc_select].state.bitflags.ramp = 0x40;
 
 #ifdef ICS2115_DEBUG
 	printf("[%02d vs:%04x ve:%04x va:%04x vi:%02x vc:%02x os:%06x oe:%06x oa:%06x of:%04x SA:%02x oc:%02x][%04x]\n", m_osc_select,
@@ -857,24 +852,22 @@ void ics2115_device::recalc_irq()
 	//Suspect
 	bool irq = (m_irq_pending & m_irq_enabled);
 	for(int i = 0; (!irq) && (i < 32); i++)
-		irq |=  m_voice[i].vol_ctrl.irq_pending && m_voice[i].osc_conf.irq_pending;
+		irq |=  m_voice[i].vol_ctrl.bitflags.irq_pending && m_voice[i].osc_conf.bitflags.irq_pending;
 	m_irq_on = irq;
-	if(m_irq_cb)
-		m_irq_cb(this, irq ? ASSERT_LINE : CLEAR_LINE);
+	if(!m_irq_cb.isnull())
+		m_irq_cb(irq ? ASSERT_LINE : CLEAR_LINE);
 }
 
-TIMER_CALLBACK( ics2115_device::timer_cb_0 )
+TIMER_CALLBACK_MEMBER( ics2115_device::timer_cb_0 )
 {
-	ics2115_device *chip = (ics2115_device *)ptr;
-	chip->m_irq_pending |= 1 << 0;
-	chip->recalc_irq();
+	m_irq_pending |= 1 << 0;
+	recalc_irq();
 }
 
-TIMER_CALLBACK( ics2115_device::timer_cb_1 )
+TIMER_CALLBACK_MEMBER( ics2115_device::timer_cb_1 )
 {
-	ics2115_device *chip = (ics2115_device *)ptr;
-	chip->m_irq_pending |= 1 << 1;
-	chip->recalc_irq();
+	m_irq_pending |= 1 << 1;
+	recalc_irq();
 }
 
 void ics2115_device::recalc_timer(int timer)

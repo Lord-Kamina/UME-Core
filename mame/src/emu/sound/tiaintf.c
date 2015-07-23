@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Ron Fries,Dan Boris
 #include "emu.h"
 #include "tiaintf.h"
 #include "tiasound.h"
@@ -15,7 +17,7 @@ const device_type TIA = &device_creator<tia_device>;
 //-------------------------------------------------
 
 tia_device::tia_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, TIA, "TIA", tag, owner, clock),
+	: device_t(mconfig, TIA, "TIA", tag, owner, clock, "tia_sound", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_channel(NULL),
 		m_chip(NULL)
@@ -30,7 +32,7 @@ tia_device::tia_device(const machine_config &mconfig, const char *tag, device_t 
 void tia_device::device_start()
 {
 	m_channel = stream_alloc(0, 1, clock());
-	m_chip = tia_sound_init(clock(), clock(), 16);
+	m_chip = tia_sound_init(this, clock(), clock(), 16);
 	assert_always(m_chip != NULL, "Error creating TIA chip");
 }
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Midway MCR-68k system
@@ -25,7 +27,7 @@ TILE_GET_INFO_MEMBER(mcr68_state::get_bg_tile_info)
 	int code = (data & 0x3ff) | ((data >> 4) & 0xc00);
 	int color = (~data >> 12) & 3;
 	SET_TILE_INFO_MEMBER(0, code, color, TILE_FLIPYX((data >> 10) & 3));
-	if (machine().gfx[0]->elements() < 0x1000)
+	if (m_gfxdecode->gfx(0)->elements() < 0x1000)
 		tileinfo.category = (data >> 15) & 1;
 }
 
@@ -59,7 +61,7 @@ TILE_GET_INFO_MEMBER(mcr68_state::zwackery_get_fg_tile_info)
 VIDEO_START_MEMBER(mcr68_state,mcr68)
 {
 	/* initialize the background tilemap */
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(mcr68_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,  16,16, 32,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(mcr68_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,  16,16, 32,32);
 	m_bg_tilemap->set_transparent_pen(0);
 }
 
@@ -67,17 +69,17 @@ VIDEO_START_MEMBER(mcr68_state,mcr68)
 VIDEO_START_MEMBER(mcr68_state,zwackery)
 {
 	const UINT8 *colordatabase = (const UINT8 *)memregion("gfx3")->base();
-	gfx_element *gfx0 = machine().gfx[0];
-	gfx_element *gfx2 = machine().gfx[2];
+	gfx_element *gfx0 = m_gfxdecode->gfx(0);
+	gfx_element *gfx2 = m_gfxdecode->gfx(2);
 	UINT8 *srcdata0, *dest0;
 	UINT8 *srcdata2, *dest2;
 	int code, y, x;
 
 	/* initialize the background tilemap */
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(mcr68_state::zwackery_get_bg_tile_info),this), TILEMAP_SCAN_ROWS,  16,16, 32,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(mcr68_state::zwackery_get_bg_tile_info),this), TILEMAP_SCAN_ROWS,  16,16, 32,32);
 
 	/* initialize the foreground tilemap */
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(mcr68_state::zwackery_get_fg_tile_info),this), TILEMAP_SCAN_ROWS,  16,16, 32,32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(mcr68_state::zwackery_get_fg_tile_info),this), TILEMAP_SCAN_ROWS,  16,16, 32,32);
 	m_fg_tilemap->set_transparent_pen(0);
 
 	/* allocate memory for the assembled gfx data */
@@ -141,7 +143,7 @@ WRITE16_MEMBER(mcr68_state::mcr68_paletteram_w)
 
 	COMBINE_DATA(&m_generic_paletteram_16[offset]);
 	newword = m_generic_paletteram_16[offset];
-	palette_set_color_rgb(machine(), offset, pal3bit(newword >> 6), pal3bit(newword >> 0), pal3bit(newword >> 3));
+	m_palette->set_pen_color(offset, pal3bit(newword >> 6), pal3bit(newword >> 0), pal3bit(newword >> 3));
 }
 
 
@@ -151,7 +153,7 @@ WRITE16_MEMBER(mcr68_state::zwackery_paletteram_w)
 
 	COMBINE_DATA(&m_generic_paletteram_16[offset]);
 	newword = m_generic_paletteram_16[offset];
-	palette_set_color_rgb(machine(), offset, pal5bit(~newword >> 10), pal5bit(~newword >> 0), pal5bit(~newword >> 5));
+	m_palette->set_pen_color(offset, pal5bit(~newword >> 10), pal5bit(~newword >> 0), pal5bit(~newword >> 5));
 }
 
 
@@ -195,9 +197,9 @@ WRITE16_MEMBER(mcr68_state::zwackery_spriteram_w)
  *
  *************************************/
 
-void mcr68_state::mcr68_update_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, int priority)
+void mcr68_state::mcr68_update_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int priority)
 {
-	rectangle sprite_clip = machine().primary_screen->visible_area();
+	rectangle sprite_clip = m_screen->visible_area();
 	UINT16 *spriteram = m_spriteram;
 	int offs;
 
@@ -206,7 +208,7 @@ void mcr68_state::mcr68_update_sprites(bitmap_ind16 &bitmap, const rectangle &cl
 	sprite_clip.max_x -= m_sprite_clip;
 	sprite_clip &= cliprect;
 
-	machine().priority_bitmap.fill(1, sprite_clip);
+	screen.priority().fill(1, sprite_clip);
 
 	/* loop over sprite RAM */
 	for (offs = m_spriteram.bytes() / 2 - 4;offs >= 0;offs -= 4)
@@ -238,22 +240,22 @@ void mcr68_state::mcr68_update_sprites(bitmap_ind16 &bitmap, const rectangle &cl
 		    The color 8 is used to cover over other sprites. */
 
 		/* first draw the sprite, visible */
-		pdrawgfx_transmask(bitmap, sprite_clip, machine().gfx[1], code, color, flipx, flipy, x, y,
-				machine().priority_bitmap, 0x00, 0x0101);
+		m_gfxdecode->gfx(1)->prio_transmask(bitmap,sprite_clip, code, color, flipx, flipy, x, y,
+				screen.priority(), 0x00, 0x0101);
 
 		/* then draw the mask, behind the background but obscuring following sprites */
-		pdrawgfx_transmask(bitmap, sprite_clip, machine().gfx[1], code, color, flipx, flipy, x, y,
-				machine().priority_bitmap, 0x02, 0xfeff);
+		m_gfxdecode->gfx(1)->prio_transmask(bitmap,sprite_clip, code, color, flipx, flipy, x, y,
+				screen.priority(), 0x02, 0xfeff);
 	}
 }
 
 
-void mcr68_state::zwackery_update_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, int priority)
+void mcr68_state::zwackery_update_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int priority)
 {
 	UINT16 *spriteram = m_spriteram;
 	int offs;
 
-	machine().priority_bitmap.fill(1, cliprect);
+	screen.priority().fill(1, cliprect);
 
 	/* loop over sprite RAM */
 	for (offs = m_spriteram.bytes() / 2 - 4;offs >= 0;offs -= 4)
@@ -295,12 +297,12 @@ void mcr68_state::zwackery_update_sprites(bitmap_ind16 &bitmap, const rectangle 
 		    The color 8 is used to cover over other sprites. */
 
 		/* first draw the sprite, visible */
-		pdrawgfx_transmask(bitmap, cliprect, machine().gfx[1], code, color, flipx, flipy, x, y,
-				machine().priority_bitmap, 0x00, 0x0101);
+		m_gfxdecode->gfx(1)->prio_transmask(bitmap,cliprect, code, color, flipx, flipy, x, y,
+				screen.priority(), 0x00, 0x0101);
 
 		/* then draw the mask, behind the background but obscuring following sprites */
-		pdrawgfx_transmask(bitmap, cliprect, machine().gfx[1], code, color, flipx, flipy, x, y,
-				machine().priority_bitmap, 0x02, 0xfeff);
+		m_gfxdecode->gfx(1)->prio_transmask(bitmap,cliprect, code, color, flipx, flipy, x, y,
+				screen.priority(), 0x02, 0xfeff);
 	}
 }
 
@@ -315,16 +317,16 @@ void mcr68_state::zwackery_update_sprites(bitmap_ind16 &bitmap, const rectangle 
 UINT32 mcr68_state::screen_update_mcr68(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	/* draw the background */
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE | TILEMAP_DRAW_ALL_CATEGORIES, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE | TILEMAP_DRAW_ALL_CATEGORIES, 0);
 
 	/* draw the low-priority sprites */
-	mcr68_update_sprites(bitmap, cliprect, 0);
+	mcr68_update_sprites(screen, bitmap, cliprect, 0);
 
 	/* redraw tiles with priority over sprites */
-	m_bg_tilemap->draw(bitmap, cliprect, 1, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 1, 0);
 
 	/* draw the high-priority sprites */
-	mcr68_update_sprites(bitmap, cliprect, 1);
+	mcr68_update_sprites(screen, bitmap, cliprect, 1);
 	return 0;
 }
 
@@ -332,15 +334,15 @@ UINT32 mcr68_state::screen_update_mcr68(screen_device &screen, bitmap_ind16 &bit
 UINT32 mcr68_state::screen_update_zwackery(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	/* draw the background */
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	/* draw the low-priority sprites */
-	zwackery_update_sprites(bitmap, cliprect, 0);
+	zwackery_update_sprites(screen, bitmap, cliprect, 0);
 
 	/* redraw tiles with priority over sprites */
-	m_fg_tilemap->draw(bitmap, cliprect, 1, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 1, 0);
 
 	/* draw the high-priority sprites */
-	zwackery_update_sprites(bitmap, cliprect, 1);
+	zwackery_update_sprites(screen, bitmap, cliprect, 1);
 	return 0;
 }

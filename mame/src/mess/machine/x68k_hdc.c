@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Barry Rodewald
 /*
 
     X68000 custom SASI Hard Disk controller
@@ -22,7 +24,7 @@
 const device_type X68KHDC = &device_creator<x68k_hdc_image_device>;
 
 x68k_hdc_image_device::x68k_hdc_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, X68KHDC, "SASI Hard Disk", tag, owner, clock),
+	: device_t(mconfig, X68KHDC, "SASI Hard Disk", tag, owner, clock, "x68k_hdc_image", __FILE__),
 		device_image_interface(mconfig, *this)
 {
 }
@@ -66,7 +68,7 @@ bool x68k_hdc_image_device::call_create(int format_type, option_resolution *form
 WRITE16_MEMBER( x68k_hdc_image_device::hdc_w )
 {
 	unsigned int lba = 0;
-	char* blk;
+	std::vector<char> blk;
 	switch(offset)
 	{
 	case 0x00:  // data I/O
@@ -265,11 +267,10 @@ WRITE16_MEMBER( x68k_hdc_image_device::hdc_w )
 						lba |= m_command[2] << 8;
 						lba |= (m_command[1] & 0x1f) << 16;
 						fseek(lba * 256,SEEK_SET);
-						blk = (char*)malloc(256*33);
-						memset(blk,0,256*33);
+						blk.resize(256*33);
+						memset(&blk[0], 0, 256*33);
 						// formats 33 256-byte blocks
-						fwrite(blk,256*33);
-						free(blk);
+						fwrite(&blk[0],256*33);
 						logerror("SASI: FORMAT UNIT (LBA 0x%06x)\n",lba);
 					break;
 				default:

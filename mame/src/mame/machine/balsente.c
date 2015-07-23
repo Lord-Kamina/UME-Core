@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Bally/Sente SAC-1 system
@@ -30,15 +32,15 @@ TIMER_DEVICE_CALLBACK_MEMBER(balsente_state::balsente_interrupt_timer)
 {
 	/* next interrupt after scanline 256 is scanline 64 */
 	if (param == 256)
-		m_scanline_timer->adjust(machine().primary_screen->time_until_pos(64), 64);
+		m_scanline_timer->adjust(m_screen->time_until_pos(64), 64);
 	else
-		m_scanline_timer->adjust(machine().primary_screen->time_until_pos(param + 64), param + 64);
+		m_scanline_timer->adjust(m_screen->time_until_pos(param + 64), param + 64);
 
 	/* IRQ starts on scanline 0, 64, 128, etc. */
 	m_maincpu->set_input_line(M6809_IRQ_LINE, ASSERT_LINE);
 
 	/* it will turn off on the next HBLANK */
-	machine().scheduler().timer_set(machine().primary_screen->time_until_pos(param, BALSENTE_HBSTART), timer_expired_delegate(FUNC(balsente_state::irq_off),this));
+	machine().scheduler().timer_set(m_screen->time_until_pos(param, BALSENTE_HBSTART), timer_expired_delegate(FUNC(balsente_state::irq_off),this));
 
 	/* if this is Grudge Match, update the steering */
 	if (m_grudge_steering_result & 0x80)
@@ -82,14 +84,14 @@ void balsente_state::machine_start()
 	/* register for saving */
 	for (i = 0; i < 3; i++)
 	{
-		state_save_register_item(machine(), "8253counter", NULL, i, m_counter[i].timer_active);
-		state_save_register_item(machine(), "8253counter", NULL, i, m_counter[i].initial);
-		state_save_register_item(machine(), "8253counter", NULL, i, m_counter[i].count);
-		state_save_register_item(machine(), "8253counter", NULL, i, m_counter[i].gate);
-		state_save_register_item(machine(), "8253counter", NULL, i, m_counter[i].out);
-		state_save_register_item(machine(), "8253counter", NULL, i, m_counter[i].mode);
-		state_save_register_item(machine(), "8253counter", NULL, i, m_counter[i].readbyte);
-		state_save_register_item(machine(), "8253counter", NULL, i, m_counter[i].writebyte);
+		save_item(m_counter[i].timer_active, "8253counter[i].timer_active", i);
+		save_item(m_counter[i].initial, "8253counter[i].initial", i);
+		save_item(m_counter[i].count, "8253counter[i].count", i);
+		save_item(m_counter[i].gate, "8253counter[i].gate", i);
+		save_item(m_counter[i].out, "8253counter[i].out", i);
+		save_item(m_counter[i].mode, "8253counter[i].mode", i);
+		save_item(m_counter[i].readbyte, "8253counter[i].readbyte", i);
+		save_item(m_counter[i].writebyte, "8253counter[i].writebyte", i);
 	}
 
 	save_item(NAME(m_counter_control));
@@ -168,7 +170,7 @@ void balsente_state::machine_reset()
 	m_maincpu->reset();
 
 	/* start a timer to generate interrupts */
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(0));
+	m_scanline_timer->adjust(m_screen->time_until_pos(0));
 }
 
 
@@ -204,32 +206,28 @@ void balsente_state::poly17_init()
 }
 
 
-void balsente_noise_gen(device_t *device, int count, short *buffer)
+inline void balsente_state::noise_gen_chip(int chip, int count, short *buffer)
 {
-	balsente_state *state = device->machine().driver_data<balsente_state>();
-	int chip;
-	UINT32 step, noise_counter;
-
-	/* find the chip we are referring to */
-	for (chip = 0; chip < ARRAY_LENGTH(state->m_cem_device); chip++)
-		if (device == state->m_cem_device[chip])
-			break;
-	assert(chip < ARRAY_LENGTH(state->m_cem_device));
-
 	/* noise generator runs at 100kHz */
-	step = (100000 << 14) / CEM3394_SAMPLE_RATE;
-	noise_counter = state->m_noise_position[chip];
+	UINT32 step = (100000 << 14) / CEM3394_SAMPLE_RATE;
+	UINT32 noise_counter = m_noise_position[chip];
 
 	while (count--)
 	{
-		*buffer++ = state->m_poly17[(noise_counter >> 14) & POLY17_SIZE] << 12;
+		*buffer++ = m_poly17[(noise_counter >> 14) & POLY17_SIZE] << 12;
 		noise_counter += step;
 	}
 
 	/* remember the noise position */
-	state->m_noise_position[chip] = noise_counter;
+	m_noise_position[chip] = noise_counter;
 }
 
+CEM3394_EXT_INPUT(balsente_state::noise_gen_0) { noise_gen_chip(0, count, buffer); }
+CEM3394_EXT_INPUT(balsente_state::noise_gen_1) { noise_gen_chip(1, count, buffer); }
+CEM3394_EXT_INPUT(balsente_state::noise_gen_2) { noise_gen_chip(2, count, buffer); }
+CEM3394_EXT_INPUT(balsente_state::noise_gen_3) { noise_gen_chip(3, count, buffer); }
+CEM3394_EXT_INPUT(balsente_state::noise_gen_4) { noise_gen_chip(4, count, buffer); }
+CEM3394_EXT_INPUT(balsente_state::noise_gen_5) { noise_gen_chip(5, count, buffer); }
 
 
 /*************************************
@@ -249,7 +247,7 @@ READ8_MEMBER(balsente_state::balsente_random_num_r)
 	UINT32 cc;
 
 	/* CPU runs at 1.25MHz, noise source at 100kHz --> multiply by 12.5 */
-	cc = machine().firstcpu->total_cycles();
+	cc = m_maincpu->total_cycles();
 
 	/* 12.5 = 8 + 4 + 0.5 */
 	cc = (cc << 3) + (cc << 2) + (cc >> 1);
@@ -756,7 +754,6 @@ READ8_MEMBER(balsente_state::balsente_counter_8253_r)
 				m_counter[which].readbyte = 0;
 				return (m_counter[which].count >> 8) & 0xff;
 			}
-			break;
 	}
 	return 0;
 }
@@ -928,8 +925,7 @@ WRITE8_MEMBER(balsente_state::balsente_counter_control_w)
 	/* bit D0 enables/disables audio */
 	if (diff_counter_control & 0x01)
 	{
-		int ch;
-		for (ch = 0; ch < 6; ch++)
+		for (int ch = 0; ch < 6; ch++)
 			m_cem_device[ch]->set_output_gain(0, (data & 0x01) ? 1.0 : 0);
 	}
 
@@ -1144,7 +1140,7 @@ void balsente_state::update_grudge_steering()
 
 READ8_MEMBER(balsente_state::grudge_steering_r)
 {
-	logerror("%04X:grudge_steering_r(@%d)\n", space.device().safe_pc(), machine().primary_screen->vpos());
+	logerror("%04X:grudge_steering_r(@%d)\n", space.device().safe_pc(), m_screen->vpos());
 	m_grudge_steering_result |= 0x80;
 	return m_grudge_steering_result;
 }

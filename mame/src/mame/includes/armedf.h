@@ -1,3 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Phil Stroffolino, Carlos A. Lozano
+#include "includes/nb1414m4.h"
 #include "video/bufsprite.h"
 
 class armedf_state : public driver_device
@@ -5,20 +8,31 @@ class armedf_state : public driver_device
 public:
 	armedf_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_extra(*this, "extra"),
+		m_nb1414m4(*this, "nb1414m4"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
 		m_spriteram(*this, "spriteram"),
 		m_spr_pal_clut(*this, "spr_pal_clut"),
 		m_fg_videoram(*this, "fg_videoram"),
-		m_bg_videoram(*this, "bg_videoram"),
-		m_maincpu(*this, "maincpu"),
-		m_extra(*this, "extra") { }
+		m_bg_videoram(*this, "bg_videoram")
+		{ }
+
+	/* devices */
+	required_device<cpu_device> m_maincpu;
+	optional_device<cpu_device> m_extra;
+	optional_device<nb1414m4_device> m_nb1414m4;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+	required_device<buffered_spriteram16_device> m_spriteram;
 
 	/* memory pointers */
-	UINT8  *  m_text_videoram;
-	required_device<buffered_spriteram16_device> m_spriteram;
+	UINT8 *m_text_videoram;
 	required_shared_ptr<UINT16> m_spr_pal_clut;
 	required_shared_ptr<UINT16> m_fg_videoram;
 	required_shared_ptr<UINT16> m_bg_videoram;
-	UINT16 m_legion_cmd[4]; // legiono only!
+	UINT16 m_legion_cmd[4]; // legionjb only!
 //  UINT16 *  m_paletteram;   // currently this uses generic palette handling
 
 	/* video-related */
@@ -43,7 +57,7 @@ public:
 	DECLARE_READ8_MEMBER(soundlatch_clear_r);
 	DECLARE_WRITE16_MEMBER(irq_lv1_ack_w);
 	DECLARE_WRITE16_MEMBER(irq_lv2_ack_w);
-	DECLARE_WRITE8_MEMBER(legiono_fg_scroll_w);
+	DECLARE_WRITE8_MEMBER(legionjb_fg_scroll_w);
 	DECLARE_READ8_MEMBER(blitter_txram_r);
 	DECLARE_WRITE8_MEMBER(blitter_txram_w);
 	DECLARE_WRITE8_MEMBER(fg_scrollx_w);
@@ -66,7 +80,7 @@ public:
 	DECLARE_DRIVER_INIT(armedf);
 	DECLARE_DRIVER_INIT(legion);
 	DECLARE_DRIVER_INIT(terrafu);
-	DECLARE_DRIVER_INIT(legiono);
+	DECLARE_DRIVER_INIT(legionjb);
 	DECLARE_DRIVER_INIT(kozure);
 	DECLARE_DRIVER_INIT(terraf);
 	DECLARE_DRIVER_INIT(terrafjb);
@@ -86,9 +100,6 @@ public:
 	void armedf_drawgfx(bitmap_ind16 &dest_bmp,const rectangle &clip,gfx_element *gfx,
 						UINT32 code,UINT32 color, UINT32 clut,int flipx,int flipy,int offsx,int offsy,
 						int transparent_color);
-
-	required_device<cpu_device> m_maincpu;
-	optional_device<cpu_device> m_extra;
 };
 
 class bigfghtr_state : public armedf_state

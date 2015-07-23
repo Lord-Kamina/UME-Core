@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /************************************************************
 
 PC Engine CD HW notes:
@@ -201,6 +203,14 @@ void pce_cd_device::device_reset()
 	m_regs[0x0c] &= ~PCE_CD_ADPCM_PLAY_FLAG;
 	//m_regs[0x03] = (m_regs[0x03] & ~0x0c) | (PCE_CD_SAMPLE_STOP_PLAY);
 	m_msm_idle = 1;
+
+	m_scsi_RST = 0;
+	m_scsi_last_RST = 0;
+	m_scsi_SEL = 0;
+	m_scsi_BSY = 0;
+	m_selected = 0;
+	m_scsi_ATN = 0;
+	m_end_mark = 0;
 }
 
 
@@ -221,29 +231,26 @@ void pce_cd_device::late_setup()
 	m_msm->change_clock_w((PCE_CD_CLOCK / 6) / m_adpcm_clock_divider);
 }
 
-struct cdrom_interface pce_cdrom =
+void pce_cd_device::nvram_init(nvram_device &nvram, void *data, size_t size)
 {
-	"pce_cdrom",
-	NULL
-};
+	static const UINT8 init[8] = { 0x48, 0x55, 0x42, 0x4d, 0x00, 0xa0, 0x10, 0x80 };
 
-static const msm5205_interface pce_cd_msm5205_interface =
-{
-	DEVCB_DEVICE_LINE_MEMBER(DEVICE_SELF_OWNER, pce_cd_device, msm5205_int), /* interrupt function */
-	MSM5205_S48_4B      /* 1/48 prescaler, 4bit data */
-};
-
+	memset(data, 0x00, size);
+	memcpy(data, init, sizeof(init));
+}
 
 // TODO: left and right speaker tags should be passed from the parent config, instead of using the hard-coded ones below!?!
 static MACHINE_CONFIG_FRAGMENT( pce_cd )
-	MCFG_NVRAM_ADD_0FILL("bram")
+	MCFG_NVRAM_ADD_CUSTOM_DRIVER("bram", pce_cd_device, nvram_init)
 
-	MCFG_CDROM_ADD("cdrom", pce_cdrom)
+	MCFG_CDROM_ADD("cdrom")
+	MCFG_CDROM_INTERFACE("pce_cdrom")
 
 	MCFG_SOUND_ADD( "msm5205", MSM5205, PCE_CD_CLOCK / 6 )
-	MCFG_SOUND_CONFIG( pce_cd_msm5205_interface )
-	MCFG_SOUND_ROUTE( ALL_OUTPUTS, "^:lspeaker", 0.00 )
-	MCFG_SOUND_ROUTE( ALL_OUTPUTS, "^:rspeaker", 0.00 )
+	MCFG_MSM5205_VCLK_CB(WRITELINE(pce_cd_device, msm5205_int)) /* interrupt function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)      /* 1/48 prescaler, 4bit data */
+	MCFG_SOUND_ROUTE( ALL_OUTPUTS, "^:lspeaker", 0.50 )
+	MCFG_SOUND_ROUTE( ALL_OUTPUTS, "^:rspeaker", 0.50 )
 
 	MCFG_SOUND_ADD( "cdda", CDDA, 0 )
 	MCFG_SOUND_ROUTE( 0, "^:lspeaker", 1.00 )
@@ -943,7 +950,7 @@ TIMER_CALLBACK_MEMBER(pce_cd_device::data_timer_callback)
 		}
 		else
 		{
-			logerror("Succesfully read mode1 frame #%d\n", m_current_frame);
+			logerror("Successfully read mode1 frame #%d\n", m_current_frame);
 		}
 
 		m_data_buffer_index = 0;
@@ -1426,8 +1433,6 @@ READ8_MEMBER(pce_cd_device::acard_r)
 		case 0x09: return m_acard_ctrl[r_num];
 		default:   return 0;
 	}
-
-	return 0;
 }
 
 WRITE8_MEMBER(pce_cd_device::acard_w)

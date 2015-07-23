@@ -1,10 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Simple 156 based board
 
 */
 
 #include "emu.h"
 #include "includes/simpl156.h"
-#include "video/deco16ic.h"
 
 
 
@@ -14,7 +15,6 @@ void simpl156_state::video_start()
 	m_pf1_rowscroll = auto_alloc_array_clear(machine(), UINT16, 0x800/2);
 	m_pf2_rowscroll = auto_alloc_array_clear(machine(), UINT16, 0x800/2);
 	m_spriteram = auto_alloc_array_clear(machine(), UINT16, 0x2000/2);
-	m_generic_paletteram_16.allocate(0x1000/2);
 
 	memset(m_spriteram, 0xff, 0x2000);
 
@@ -26,14 +26,14 @@ void simpl156_state::video_start()
 
 UINT32 simpl156_state::screen_update_simpl156(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	machine().priority_bitmap.fill(0);
+	screen.priority().fill(0);
 
-	deco16ic_pf_update(m_deco_tilegen1, m_pf1_rowscroll, m_pf2_rowscroll);
+	m_deco_tilegen1->pf_update(m_pf1_rowscroll, m_pf2_rowscroll);
 
 	bitmap.fill(256, cliprect);
 
-	deco16ic_tilemap_2_draw(m_deco_tilegen1, bitmap, cliprect, 0, 2);
-	deco16ic_tilemap_1_draw(m_deco_tilegen1, bitmap, cliprect, 0, 4);
+	m_deco_tilegen1->tilemap_2_draw(screen, bitmap, cliprect, 0, 2);
+	m_deco_tilegen1->tilemap_1_draw(screen, bitmap, cliprect, 0, 4);
 
 	//FIXME: flip_screen_x should not be written!
 	flip_screen_set_no_update(1);

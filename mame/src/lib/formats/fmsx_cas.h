@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Sean Young
 /*********************************************************************
 
     fmsx_cas.h
 
-    Format code for MSX casette files
+    Format code for MSX cassette files
 
 *********************************************************************/
 

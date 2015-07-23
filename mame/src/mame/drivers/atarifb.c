@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Mike Balfour, Patrick Lawrence, Brad Oliver
 /***************************************************************************
 
     Atari Football hardware
@@ -117,25 +119,25 @@
  *
  *************************************/
 
-void atarifb_state::palette_init()
+PALETTE_INIT_MEMBER(atarifb_state, atarifb)
 {
 	/* chars */
-	palette_set_color(machine(), 0, MAKE_RGB(0xff,0xff,0xff)); /* white  */
-	palette_set_color(machine(), 1, MAKE_RGB(0x00,0x00,0x00)); /* black  */
+	palette.set_pen_color(0, rgb_t(0xff,0xff,0xff)); /* white  */
+	palette.set_pen_color(1, rgb_t(0x00,0x00,0x00)); /* black  */
 
 	/* sprites */
-	palette_set_color(machine(), 2, MAKE_RGB(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
-	palette_set_color(machine(), 3, MAKE_RGB(0xff,0xff,0xff)); /* white  */
-	palette_set_color(machine(), 4, MAKE_RGB(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
-	palette_set_color(machine(), 5, MAKE_RGB(0x00,0x00,0x00)); /* black  */
+	palette.set_pen_color(2, rgb_t(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
+	palette.set_pen_color(3, rgb_t(0xff,0xff,0xff)); /* white  */
+	palette.set_pen_color(4, rgb_t(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
+	palette.set_pen_color(5, rgb_t(0x00,0x00,0x00)); /* black  */
 
 	/* sprite masks */
-	palette_set_color(machine(), 6, MAKE_RGB(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
-	palette_set_color(machine(), 7, MAKE_RGB(0x80,0x80,0x80)); /* grey  */
-	palette_set_color(machine(), 8, MAKE_RGB(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
-	palette_set_color(machine(), 9, MAKE_RGB(0x00,0x00,0x00)); /* black  */
-	palette_set_color(machine(), 10, MAKE_RGB(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
-	palette_set_color(machine(), 11, MAKE_RGB(0xff,0xff,0xff)); /* white  */
+	palette.set_pen_color(6, rgb_t(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
+	palette.set_pen_color(7, rgb_t(0x80,0x80,0x80)); /* grey  */
+	palette.set_pen_color(8, rgb_t(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
+	palette.set_pen_color(9, rgb_t(0x00,0x00,0x00)); /* black  */
+	palette.set_pen_color(10, rgb_t(0x40,0x40,0x40)); /* dark grey (?) - used in Soccer only */
+	palette.set_pen_color(11, rgb_t(0xff,0xff,0xff)); /* white  */
 }
 
 
@@ -561,16 +563,17 @@ static MACHINE_CONFIG_START( atarifb, atarifb_state )
 	MCFG_SCREEN_SIZE(38*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 38*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(atarifb_state, screen_update_atarifb)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(atarifb)
-	MCFG_PALETTE_LENGTH(12)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", atarifb)
+	MCFG_PALETTE_ADD("palette", 12)
+	MCFG_PALETTE_INIT_OWNER(atarifb_state, atarifb)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(atarifb)
+	MCFG_DISCRETE_INTF(atarifb)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.18)
 MACHINE_CONFIG_END
 
@@ -595,7 +598,7 @@ static MACHINE_CONFIG_DERIVED( abaseb, atarifb )
 
 	/* sound hardware */
 	MCFG_SOUND_REPLACE("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(abaseb)
+	MCFG_DISCRETE_INTF(abaseb)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.24)
 MACHINE_CONFIG_END
 
@@ -610,7 +613,7 @@ static MACHINE_CONFIG_DERIVED( soccer, atarifb )
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 38*8-1, 2*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(atarifb_state, screen_update_soccer)
-	MCFG_GFXDECODE(soccer)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", soccer)
 MACHINE_CONFIG_END
 
 
@@ -650,6 +653,19 @@ ROM_START( atarifb1 )
 	ROM_LOAD_NIB_HIGH( "033031.d5", 0x0000, 0x0200, CRC(89d619b8) SHA1(0af5d1f4e6f9a377dc2d49a8039866b1857af01f) )
 ROM_END
 
+ROM_START( atarifb2 ) // built from original Atari source code
+	ROM_REGION( 0x8000, "maincpu", 0 )
+	ROM_LOAD( "035348-01.m1", 0x6800, 0x0800, CRC(eec61633) SHA1(e578f9392d18a5dbcb678c4e922da10c87ff6670) )
+	ROM_LOAD( "035350-01.p1", 0x7000, 0x0800, CRC(e3ec76d6) SHA1(2b9b544e7bf1624e6d0ec1fdc7b9d096bae87b30) )
+	ROM_LOAD( "035349-01.n1", 0x7800, 0x0800, CRC(c1e9d379) SHA1(77320dd8b74447cc55ba1cc3a50e7a9085f96c76) )
+
+	ROM_REGION( 0x0400, "gfx1", 0 )
+	ROM_LOAD_NIB_LOW ( "033029.n7", 0x0000, 0x0400, CRC(12f43dca) SHA1(a463f5068d5522ddf74052429aa6da23e5475844) )
+
+	ROM_REGION( 0x0200, "gfx2", 0 )
+	ROM_LOAD_NIB_LOW ( "033030.c5", 0x0000, 0x0200, CRC(eac9ef90) SHA1(0e6284392852695ab7323be82105d32f57ad00f1) )
+	ROM_LOAD_NIB_HIGH( "033031.d5", 0x0000, 0x0200, CRC(89d619b8) SHA1(0af5d1f4e6f9a377dc2d49a8039866b1857af01f) )
+ROM_END
 
 ROM_START( atarifb4 )
 	ROM_REGION( 0x8000, "maincpu", 0 ) /* 64k for code, the ROMs are nibble-wide */
@@ -773,6 +789,7 @@ ROM_END
 /*     YEAR  NAME      PARENT   MACHINE   INPUT */
 GAMEL( 1978, atarifb,  0,       atarifb,  atarifb, driver_device,  0, ROT0, "Atari", "Atari Football (revision 2)", GAME_SUPPORTS_SAVE, layout_atarifb )
 GAMEL( 1978, atarifb1, atarifb, atarifb,  atarifb, driver_device,  0, ROT0, "Atari", "Atari Football (revision 1)", GAME_SUPPORTS_SAVE, layout_atarifb )
+GAMEL( 1978, atarifb2, atarifb, atarifb,  atarifb, driver_device,  0, ROT0, "Atari", "Atari Football II", GAME_SUPPORTS_SAVE, layout_atarifb )
 GAMEL( 1979, atarifb4, atarifb, atarifb4, atarifb4, driver_device, 0, ROT0, "Atari", "Atari Football (4 players)", GAME_SUPPORTS_SAVE, layout_atarifb4 )
 GAMEL( 1979, abaseb,   0,       abaseb,   abaseb, driver_device,   0, ROT0, "Atari", "Atari Baseball (set 1)", GAME_SUPPORTS_SAVE, layout_abaseb )
 GAMEL( 1979, abaseb2,  abaseb,  abaseb,   abaseb, driver_device,   0, ROT0, "Atari", "Atari Baseball (set 2)", GAME_SUPPORTS_SAVE, layout_abaseb )

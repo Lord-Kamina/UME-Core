@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Dan Boris
 /* Hit Me driver by the EMUL8, led by Dan Boris */
 
 /*
@@ -55,13 +57,13 @@ WRITE8_MEMBER(hitme_state::hitme_vidram_w)
 
 void hitme_state::video_start()
 {
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(hitme_state::get_hitme_tile_info),this), TILEMAP_SCAN_ROWS, 8, 10, 40, 19);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(hitme_state::get_hitme_tile_info),this), TILEMAP_SCAN_ROWS, 8, 10, 40, 19);
 }
 
 
 VIDEO_START_MEMBER(hitme_state,barricad)
 {
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(hitme_state::get_hitme_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 24);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(hitme_state::get_hitme_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 24);
 }
 
 
@@ -79,7 +81,7 @@ UINT32 hitme_state::screen_update_hitme(screen_device &screen, bitmap_ind16 &bit
 	offs_t offs = 0;
 
 	/* start by drawing the tilemap */
-	m_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	/* now loop over and invert anything */
 	for (y = 0; y < 19; y++)
@@ -114,7 +116,7 @@ UINT32 hitme_state::screen_update_hitme(screen_device &screen, bitmap_ind16 &bit
 
 UINT32 hitme_state::screen_update_barricad(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -140,7 +142,7 @@ UINT8 hitme_state::read_port_and_t0( int port )
 UINT8 hitme_state::read_port_and_t0_and_hblank( int port )
 {
 	UINT8 val = read_port_and_t0(port);
-	if (machine().primary_screen->hpos() < (machine().primary_screen->width() * 9 / 10))
+	if (m_screen->hpos() < (m_screen->width() * 9 / 10))
 		val ^= 0x04;
 	return val;
 }
@@ -190,15 +192,15 @@ WRITE8_MEMBER(hitme_state::output_port_0_w)
 	attotime duration = attotime(0, ATTOSECONDS_PER_SECOND * 0.45 * 6.8e-6 * resistance * (data + 1));
 	m_timeout_time = machine().time() + duration;
 
-	discrete_sound_w(m_discrete, space, HITME_DOWNCOUNT_VAL, data);
-	discrete_sound_w(m_discrete, space, HITME_OUT0, 1);
+	m_discrete->write(space, HITME_DOWNCOUNT_VAL, data);
+	m_discrete->write(space, HITME_OUT0, 1);
 }
 
 
 WRITE8_MEMBER(hitme_state::output_port_1_w)
 {
-	discrete_sound_w(m_discrete, space, HITME_ENABLE_VAL, data);
-	discrete_sound_w(m_discrete, space, HITME_OUT1, 1);
+	m_discrete->write(space, HITME_ENABLE_VAL, data);
+	m_discrete->write(space, HITME_OUT1, 1);
 }
 
 
@@ -299,6 +301,7 @@ GFXDECODE_END
 
 void hitme_state::machine_start()
 {
+	save_item(NAME(m_timeout_time));
 }
 
 void hitme_state::machine_reset()
@@ -321,16 +324,16 @@ static MACHINE_CONFIG_START( hitme, hitme_state )
 	MCFG_SCREEN_SIZE(40*8, 19*10)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 0*8, 19*10-1)
 	MCFG_SCREEN_UPDATE_DRIVER(hitme_state, screen_update_hitme)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(hitme)
-	MCFG_PALETTE_LENGTH(2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", hitme)
 
-	MCFG_PALETTE_INIT(black_and_white)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(hitme)
+	MCFG_DISCRETE_INTF(hitme)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -351,7 +354,7 @@ static MACHINE_CONFIG_DERIVED( barricad, hitme )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 24*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(hitme_state, screen_update_barricad)
 
-	MCFG_GFXDECODE(barricad)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", barricad)
 
 	MCFG_VIDEO_START_OVERRIDE(hitme_state,barricad)
 MACHINE_CONFIG_END

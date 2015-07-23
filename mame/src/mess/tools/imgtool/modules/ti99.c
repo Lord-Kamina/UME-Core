@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Raphael Nabet
 /*
     Handlers for ti99 disk images
 
@@ -496,7 +498,7 @@ struct dsk_subdir
 /*
     DSK VIB record
 
-    Most fields in this record are only revelant to level 2 routines, but level
+    Most fields in this record are only relevant to level 2 routines, but level
     1 routines need the disk geometry information extracted from the VIB.
 */
 struct dsk_vib
@@ -968,7 +970,7 @@ static imgtoolerr_t open_image_lvl1(imgtool_stream *file_handle, ti99_img_format
 {
 	imgtoolerr_t err;
 	int reply;
-	int totphysrecs;
+	UINT16 totphysrecs;
 
 
 	l1_img->img_format = img_format;
@@ -1030,7 +1032,7 @@ static imgtoolerr_t open_image_lvl1(imgtool_stream *file_handle, ti99_img_format
 				|| (totphysrecs < 2)
 				|| memcmp(vib->id, "DSK", 3) || (! strchr(" P", vib->protection))
 				|| (((img_format == if_mess) || (img_format == if_v9t9))
-					&& (stream_size(file_handle) != totphysrecs*256)))
+					&& (stream_size(file_handle) != totphysrecs*256U)))
 			return (imgtoolerr_t)IMGTOOLERR_CORRUPTIMAGE;
 
 		if ((img_format == if_pc99_fm) || (img_format == if_pc99_mfm))
@@ -1830,7 +1832,7 @@ static int dsk_read_catalog(struct ti99_lvl2_imgref *l2_img, int aphysrec, ti99_
 			|| ((dest->files[i].fdr_ptr && dest->files[i+1].fdr_ptr) && (memcmp(dest->files[i].name, dest->files[i+1].name, 10) >= 0)))
 		{
 			/* if the catalog is not sorted, we repair it */
-			qsort(dest->files, sizeof(dest->files)/sizeof(dest->files[0]), sizeof(dest->files[0]),
+			qsort(dest->files, ARRAY_LENGTH(dest->files), sizeof(dest->files[0]),
 					cat_file_compare_qsort);
 			break;
 		}

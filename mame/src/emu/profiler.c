@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     profiler.c
 
     Functions to manage profiling of MAME execution.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ****************************************************************************
 
@@ -141,7 +112,7 @@ void real_profiler_state::reset(bool enabled)
 
 
 //-------------------------------------------------
-//  text - return the current text in an astring
+//  text - return the current text in an std::string
 //-------------------------------------------------
 
 const char *real_profiler_state::text(running_machine &machine)
@@ -159,13 +130,13 @@ const char *real_profiler_state::text(running_machine &machine)
 	}
 
 	stop();
-	return m_text;
+	return m_text.c_str();
 }
 
 
 
 //-------------------------------------------------
-//  update_text - update the current astring
+//  update_text - update the current std::string
 //-------------------------------------------------
 
 void real_profiler_state::update_text(running_machine &machine)
@@ -214,7 +185,7 @@ void real_profiler_state::update_text(running_machine &machine)
 
 	// this becomes the total; if we end up with 0 for anything, we were just started, so return empty
 	UINT64 total = computed;
-	m_text.reset();
+	m_text.clear();
 	if (total == 0 || normalize == 0)
 	{
 		return;
@@ -231,25 +202,25 @@ void real_profiler_state::update_text(running_machine &machine)
 		if (computed != 0)
 		{
 			// start with the un-normalized percentage
-			m_text.catprintf("%02d%% ", (int)((computed * 100 + total/2) / total));
+			strcatprintf(m_text, "%02d%% ", (int)((computed * 100 + total / 2) / total));
 
 			// followed by the normalized percentage for everything but profiler and idle
 			if (curtype < PROFILER_PROFILER)
-				m_text.catprintf("%02d%% ", (int)((computed * 100 + normalize/2) / normalize));
+				strcatprintf(m_text, "%02d%% ", (int)((computed * 100 + normalize / 2) / normalize));
 
 			// and then the text
 			if (curtype >= PROFILER_DEVICE_FIRST && curtype <= PROFILER_DEVICE_MAX)
-				m_text.catprintf("'%s'", iter.byindex(curtype - PROFILER_DEVICE_FIRST)->tag());
+				strcatprintf(m_text, "'%s'", iter.byindex(curtype - PROFILER_DEVICE_FIRST)->tag());
 			else
 				for (int nameindex = 0; nameindex < ARRAY_LENGTH(names); nameindex++)
 					if (names[nameindex].type == curtype)
 					{
-						m_text.cat(names[nameindex].string);
+						m_text.append(names[nameindex].string);
 						break;
 					}
 
 			// followed by a carriage return
-			m_text.cat("\n");
+			m_text.append("\n");
 		}
 	}
 

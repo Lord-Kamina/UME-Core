@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*********************************************************************
 
     dvstate.c
 
     State debugger view.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -104,15 +75,15 @@ void debug_view_state::enumerate_sources()
 
 	// iterate over devices that have state interfaces
 	state_interface_iterator iter(machine().root_device());
-	astring name;
+	std::string name;
 	for (device_state_interface *state = iter.first(); state != NULL; state = iter.next())
 	{
-		name.printf("%s '%s'", state->device().name(), state->device().tag());
-		m_source_list.append(*auto_alloc(machine(), debug_view_state_source(name, state->device())));
+		strprintf(name,"%s '%s'", state->device().name(), state->device().tag());
+		m_source_list.append(*global_alloc(debug_view_state_source(name.c_str(), state->device())));
 	}
 
 	// reset the source to a known good entry
-	set_source(*m_source_list.head());
+	set_source(*m_source_list.first());
 }
 
 
@@ -171,7 +142,12 @@ void debug_view_state::recompute()
 
 	// add all registers into it
 	for (const device_state_entry *entry = source.m_stateintf->state_first(); entry != NULL; entry = entry->next())
-		if (entry->visible())
+		if (entry->divider())
+		{
+			*tailptr = auto_alloc(machine(), state_item(REG_DIVIDER, "", 0));
+			tailptr = &(*tailptr)->m_next;
+		}
+		else if (entry->visible())
 		{
 			*tailptr = auto_alloc(machine(), state_item(entry->index(), entry->symbol(), source.m_stateintf->state_string_max_length(entry->index())));
 			tailptr = &(*tailptr)->m_next;
@@ -184,7 +160,7 @@ void debug_view_state::recompute()
 	for (state_item *item = m_state_list; item != NULL; item = item->m_next)
 	{
 		count++;
-		maxtaglen = MAX(maxtaglen, item->m_symbol.len());
+		maxtaglen = MAX(maxtaglen, item->m_symbol.length());
 		maxvallen = MAX(maxvallen, item->m_vallen);
 	}
 
@@ -235,8 +211,8 @@ void debug_view_state::view_update()
 		curitem = curitem->m_next;
 
 	// loop over visible rows
-	screen_device *screen = machine().primary_screen;
-	debug_view_char *dest = m_viewdata;
+	screen_device *screen = machine().first_screen();
+	debug_view_char *dest = &m_viewdata[0];
 	for (UINT32 row = 0; row < m_visible.y; row++)
 	{
 		UINT32 col = 0;
@@ -247,7 +223,7 @@ void debug_view_state::view_update()
 			UINT32 effcol = m_topleft.x;
 			UINT8 attrib = DCA_NORMAL;
 			UINT32 len = 0;
-			astring valstr;
+			std::string valstr;
 
 			// get the effective string
 			if (curitem->m_index >= REG_FRAME && curitem->m_index <= REG_DIVIDER)
@@ -257,16 +233,16 @@ void debug_view_state::view_update()
 				{
 					case REG_DIVIDER:
 						curitem->m_vallen = 0;
-						curitem->m_symbol.reset();
+						curitem->m_symbol.clear();
 						for (int i = 0; i < m_total.x; i++)
-							curitem->m_symbol.cat("-");
+							curitem->m_symbol.append("-");
 						break;
 
 					case REG_CYCLES:
 						if (source.m_execintf != NULL)
 						{
 							curitem->m_currval = source.m_execintf->cycles_remaining();
-							valstr.printf("%-8d", (UINT32)curitem->m_currval);
+							strprintf(valstr, "%-8d", (UINT32)curitem->m_currval);
 						}
 						break;
 
@@ -274,7 +250,7 @@ void debug_view_state::view_update()
 						if (screen != NULL)
 						{
 							curitem->m_currval = screen->hpos();
-							valstr.printf("%4d", (UINT32)curitem->m_currval);
+							strprintf(valstr, "%4d", (UINT32)curitem->m_currval);
 						}
 						break;
 
@@ -282,7 +258,7 @@ void debug_view_state::view_update()
 						if (screen != NULL)
 						{
 							curitem->m_currval = screen->vpos();
-							valstr.printf("%4d", (UINT32)curitem->m_currval);
+							strprintf(valstr, "%4d", (UINT32)curitem->m_currval);
 						}
 						break;
 
@@ -290,7 +266,7 @@ void debug_view_state::view_update()
 						if (screen != NULL)
 						{
 							curitem->m_currval = screen->frame_number();
-							valstr.printf("%6d", (UINT32)curitem->m_currval);
+							strprintf(valstr, "%6d", (UINT32)curitem->m_currval);
 						}
 						break;
 				}
@@ -309,19 +285,19 @@ void debug_view_state::view_update()
 
 			// build up a string
 			char temp[256];
-			if (curitem->m_symbol.len() < m_divider - 1)
+			if (curitem->m_symbol.length() < m_divider - 1)
 			{
-				memset(&temp[len], ' ', m_divider - 1 - curitem->m_symbol.len());
-				len += m_divider - 1 - curitem->m_symbol.len();
+				memset(&temp[len], ' ', m_divider - 1 - curitem->m_symbol.length());
+				len += m_divider - 1 - curitem->m_symbol.length();
 			}
 
-			memcpy(&temp[len], curitem->m_symbol.cstr(), curitem->m_symbol.len());
-			len += curitem->m_symbol.len();
+			memcpy(&temp[len], curitem->m_symbol.c_str(), curitem->m_symbol.length());
+			len += curitem->m_symbol.length();
 
 			temp[len++] = ' ';
 			temp[len++] = ' ';
 
-			memcpy(&temp[len], valstr.cstr(), curitem->m_vallen);
+			memcpy(&temp[len], valstr.c_str(), curitem->m_vallen);
 			len += curitem->m_vallen;
 
 			temp[len++] = ' ';

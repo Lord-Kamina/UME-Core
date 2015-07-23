@@ -1,10 +1,15 @@
+// license:BSD-3-Clause
+// copyright-holders:Mathis Rosenhauer
 /*************************************************************************
 
     Exidy Vertigo hardware
 
 *************************************************************************/
 
+#include "audio/exidy440.h"
 #include "machine/pit8253.h"
+#include "machine/74148.h"
+#include "video/vector.h"
 
 /*************************************
  *
@@ -26,9 +31,6 @@ struct am2901
 class vector_generator
 {
 public:
-	running_machine &machine() const { assert(m_machine != NULL); return *m_machine; }
-	void set_machine(running_machine &machine) { m_machine = &machine; }
-
 	UINT32 sreg;      /* shift register */
 	UINT32 l1;        /* latch 1 adder operand only */
 	UINT32 l2;        /* latch 2 adder operand only */
@@ -49,7 +51,6 @@ public:
 	UINT32 ven;       /* vector intensity enable */
 
 private:
-	running_machine *m_machine;
 };
 
 struct microcode
@@ -91,15 +92,19 @@ public:
 			m_maincpu(*this, "maincpu"),
 			m_audiocpu(*this, "audiocpu"),
 			m_pit(*this, "pit8254"),
+			m_custom(*this, "custom"),
+			m_ttl74148(*this, "74148"),
+			m_vector(*this, "vector"),
 			m_vectorram(*this, "vectorram")
 	{ }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
 	required_device<pit8254_device> m_pit;
+	required_device<exidy440_sound_device> m_custom;
+	required_device<ttl74148_device> m_ttl74148;
+	required_device<vector_device> m_vector;
 	required_shared_ptr<UINT16> m_vectorram;
-	device_t *m_ttl74148;
-	device_t *m_custom;
 	attotime m_irq4_time;
 	UINT8 m_irq_state;
 	UINT8 m_adc_result;
@@ -123,6 +128,8 @@ public:
 	TIMER_CALLBACK_MEMBER(sound_command_w);
 	DECLARE_WRITE_LINE_MEMBER(v_irq4_w);
 	DECLARE_WRITE_LINE_MEMBER(v_irq3_w);
+	TTL74148_OUTPUT_CB(update_irq);
+
 	void vertigo_vproc_init();
 	void vertigo_vproc_reset();
 	void am2901x4 (am2901 *bsp, microcode *mc);
@@ -130,9 +137,3 @@ public:
 	void vertigo_vproc(int cycles, int irq4);
 	void update_irq_encoder(int line, int state);
 };
-
-/*----------- defined in machine/vertigo.c -----------*/
-
-void vertigo_update_irq(device_t *device);
-
-extern const struct pit8253_interface vertigo_pit8254_config;

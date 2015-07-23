@@ -1,15 +1,22 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
-  video.c
+  route16.c
 
   Functions to emulate the video hardware of the machine.
 
 ***************************************************************************/
 
 #include "emu.h"
-#include "sound/sn76477.h"
 #include "includes/route16.h"
 
+void route16_state::video_start()
+{
+	save_item(NAME(m_flipscreen));
+	save_item(NAME(m_palette_1));
+	save_item(NAME(m_palette_2));
+}
 
 /*************************************
  *
@@ -17,7 +24,7 @@
  *
  *************************************/
 
-WRITE8_MEMBER(route16_state::route16_out0_w)
+WRITE8_MEMBER(route16_state::out0_w)
 {
 	m_palette_1 = data & 0x1f;
 
@@ -25,7 +32,7 @@ WRITE8_MEMBER(route16_state::route16_out0_w)
 }
 
 
-WRITE8_MEMBER(route16_state::route16_out1_w)
+WRITE8_MEMBER(route16_state::out1_w)
 {
 	m_palette_2 = data & 0x1f;
 
@@ -42,7 +49,7 @@ WRITE8_MEMBER(route16_state::route16_out1_w)
 
 pen_t route16_state::route16_make_pen(UINT8 color)
 {
-	return MAKE_RGB(pal1bit((color >> 0) & 0x01),
+	return rgb_t(pal1bit((color >> 0) & 0x01),
 					pal1bit((color >> 1) & 0x01),
 					pal1bit((color >> 2) & 0x01));
 
@@ -51,7 +58,7 @@ pen_t route16_state::route16_make_pen(UINT8 color)
 
 pen_t route16_state::ttmajng_make_pen(UINT8 color)
 {
-	return MAKE_RGB(pal1bit((color >> 2) & 0x01),
+	return rgb_t(pal1bit((color >> 2) & 0x01),
 					pal1bit((color >> 1) & 0x01),
 					pal1bit((color >> 0) & 0x01));
 

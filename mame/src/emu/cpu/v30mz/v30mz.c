@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol,Bryan McPhail
 /****************************************************************************
 
     NEC V20/V30/V33 emulator modified to a v30mz emulator
@@ -96,7 +98,7 @@ const device_type V30MZ = &device_creator<v30mz_cpu_device>;
 
 
 v30mz_cpu_device::v30mz_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: cpu_device(mconfig, V30MZ, "V30MZ", tag, owner, clock)
+	: cpu_device(mconfig, V30MZ, "V30MZ", tag, owner, clock, "v30mz", __FILE__)
 	, m_program_config("program", ENDIANNESS_LITTLE, 8, 20, 0)
 	, m_io_config("io", ENDIANNESS_LITTLE, 8, 16, 0)
 	, m_ip(0)
@@ -128,6 +130,8 @@ v30mz_cpu_device::v30mz_cpu_device(const machine_config &mconfig, const char *ta
 		m_Mod_RM.RM.w[i] = (WREGS)( i & 7 );
 		m_Mod_RM.RM.b[i] = (BREGS)reg_name[i & 7];
 	}
+
+	memset(&m_regs, 0x00, sizeof(m_regs));
 }
 
 
@@ -181,18 +185,18 @@ void v30mz_cpu_device::device_start()
 }
 
 
-void v30mz_cpu_device::state_string_export(const device_state_entry &entry, astring &string)
+void v30mz_cpu_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case STATE_GENPC:
-			string.printf("%08X", pc() );
+			strprintf(str, "%08X", pc());
 			break;
 
 		case STATE_GENFLAGS:
 			{
 				UINT16 flags = CompressFlags();
-				string.printf("%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
+				strprintf(str, "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c",
 					flags & 0x8000 ? 'M':'.',
 					flags & 0x4000 ? '?':'.',
 					flags & 0x2000 ? '?':'.',
@@ -304,7 +308,7 @@ inline void v30mz_cpu_device::write_port(UINT16 port, UINT8 data)
 
 inline UINT8 v30mz_cpu_device::fetch_op()
 {
-	UINT8 data = m_direct->read_decrypted_byte( pc() );
+	UINT8 data = m_direct->read_byte( pc() );
 	m_ip++;
 	return data;
 }
@@ -312,7 +316,7 @@ inline UINT8 v30mz_cpu_device::fetch_op()
 
 inline UINT8 v30mz_cpu_device::fetch()
 {
-	UINT8 data = m_direct->read_raw_byte( pc() );
+	UINT8 data = m_direct->read_byte( pc() );
 	m_ip++;
 	return data;
 }

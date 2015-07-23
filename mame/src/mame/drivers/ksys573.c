@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, smf
 /***************************************************************************
 
   Konami System 573
@@ -18,10 +20,6 @@
   back to "game" and select reset.
 
   Note 4: Some games require you to press f2 to skip the rtc cleared note.
-
-  TODO:
-  * integrate ATAPI code with Aaron's ATA/IDE code
-  * emulate memory card board GE885-PWB(A)A ( contains Toshiba tmpr3904af, ram, rom, tranceiver and glue ).
 
   -----------------------------------------------------------------------------------------
 
@@ -121,7 +119,8 @@ P Konami 80's AC Special                        1998       GC826 UA          826
 D *Mambo a GoGo                                 2001.06
 D Punchmania Hokuto no Ken                      2000.03                      918 JA B02
 D Punchmania Hokuto no Ken 2                    2000.12                      A09 JA A02
-P Salary Man Champ                              2001.02    GCA18 JA          A18 JA(needs redump)
+P Salary Man Champ
+P Salary Man Champ - 2 Player                   2001.02    GCA18 JA          A18 JA(needs redump)
 P *Step Champ                                   1999.12
 
 P: plain System573
@@ -132,9 +131,7 @@ G: gun mania only, drives air soft gun (this game uses real BB bullet)
 
   Note:
        Not all games listed above are confirmed to run on System 573.
-       * - denotes not dumped yet. If you can help with the remaining undumped System 573 games,
-       please contact http://members.iinet.net.au/~lantra9jp1/gurudumps/
-
+       * - denotes not dumped yet.
 
   Main PCB Layout
   ---------------
@@ -293,139 +290,6 @@ G: gun mania only, drives air soft gun (this game uses real BB bullet)
         (CN4, CN3, CN2 is printed pattern only, no actual connector)
 
 
-
-  Digital I/O PCB
-  ---------------
-
-  GX894-PWB(B)A (C)1999 KONAMI CO. LTD.
-
-             |-------------|
-             |        CN12 |
-             |             |
-             | PC847 PC847 |
-             |             |
-             |        CN11 |
-             |             |
-             | PC847 PC847 |
-             |             |
-             | DS2401 CN10 |
-             |             |
-             | PC847 PC847 |
-             |             |
-             |  CN14  CN13 |
-  |----------|             |----------|
-  |                  PC847            |
-  | ADM232 CN17              XC9536   |
-  |                                   |
-  |                    19.6608MHz     |-----------|
-  | ADM232 CN15  CY7C109                          |
-  |                       HY51V65164A HY51V65164A |
-  |                            HY51V65164A        |
-  |      CN16    XCS40XL                          |
-  |                                               |
-  | AK4309B   CN18         29.450MHz  MAS3507D    |
-  |                                               |
-  |                           CN3                 |
-  | HYC24855  RCA-L/R                             |
-  |-----------------------------------------------|
-
-  Notes:
-
-  PC847       - High Density Mounting Type Photocoupler
-  CN12        - 13 pin connector with 8 wires to external connectors
-  CN11        - 12 pin connector with 8 wires to external connectors
-  DS2401      - DS2401 911C2  Silicon serial number
-  CN10        - 10 pin connector with 8 wires to external connectors
-  CN14        - 7 pin connector
-  CN13        - 5 pin connector with 2 wires to external connectors
-  ADM232      - ADM232AARN 9933 H48475  High Speed, 5 V, 0.1 uF CMOS RS-232 Drivers/Receivers
-  CN17        - 3 pin connector
-  XC9536      - XILINX XC9536 PC44AEM9933 F1096429A 15C
-  CN15        - 8 pin connector
-  CY7C109     - CY7C109-25VC 931 H 04 404825  128k x 8 Static RAM
-  HY51V65164A - 64M bit dynamic EDO RAM
-  CN16        - 4 pin connector joining this PCB to the CD-DA IN on the MAIN PCB.
-  XCS40XL     - XILINX XCS40XL PQ208AKP9929 A2033251A 4C
-  AK4309B     - AKM AK4309B 3N932N  16bit SCF DAC
-  CN18        - 6 pin connector
-  MAS3507D    - IM MAS3507D D8 9173 51 HM U 072953.000 ES  MPEG 1/2 Layer 2/3 Audio Decoder
-  CN3         - Connector joining this PCB to the MAIN PCB
-  HYC24855    - ?
-  RCA-L/R     - RCA connectors for left/right audio output
-
-  Drummania 10th Mix Multisession
-  -------------------------------
-
-  This box is used with multi-session System 573 games.
-
-  Main board is standard GX700 PCB with CDROM (Drummania 10th Mix Multisession)
-  and Digital I/O Board GX894-PWB(B)A
-  BIOS is on a small plug-in daughterboard.
-  Daughterboard contains one EPROM, one PAL22V10, 2 logic chips and a PIC16F84.
-  The dumps provided are the EPROM dumped separately and a dump of the 'board'
-  with it plugged in (reading may be affected by the PIC)
-
-
-  PCB Layout of External Multisession Box
-  ---------------------------------------
-
-  GXA25-PWB(A)(C)2000 KONAMI
-  |--------------------------------------------------------------------------|
-  |CN9  ADM232  LS273        PC16552          PC16552         XC9536(1)  CN13|
-  |DSW(8)  LS245   LS273            18.432MHz                        DS2401  |
-  |         |-------|      |-------|       |-------|      |-------|          |
-  | MB3793  |TOSHIBA|      |TOSHIBA|       |TOSHIBA|      |TOSHIBA|M48T58Y.6T|
-  |         |TC9446F|      |TC9446F|       |TC9446F|      |TC9446F|          |
-  |         |-016   |      |-016   |       |-016   |      |-016   |      CN12|
-  |         |-------|      |-------|       |-------|      |-------|          |
-  |       LV14                    XC9572XL                                   |
-  | CN16                 CN17                 CN18             CN19 XC9536(2)|
-  |PQ30RV21        LCX245   LCX245                                       CN11|
-  |                                  33.8688MHz              PQ30RV21        |
-  |    8.25MHz   HY57V641620                                                 |
-  |  |------------|     HY57V641620   XC2S200                                |
-  |  |TOSHIBA     |                                          FLASH.20T       |
-  |  |TMPR3927AF  |                                                      CN10|
-  |  |            |                                                          |
-  |  |            |                                     LS245   F245  F245   |
-  |  |            |HY57V641620  LCX245     DIP40                             |
-  |  |------------|     HY57V641620  LCX245                   ATAPI44        |
-  |                             LCX245              LED(HDD)  ATAPI40        |
-  |    CN7                      LCX245      CN14    LED(CD)           CN5    |
-  |--------------------------------------------------------------------------|
-  Notes: (all IC's shown)
-          TMPR3927     - Toshiba TMPR3927AF Risc Microprocessor (QFP240)
-          FLASH.20T    - Fujitsu 29F400TC Flash ROM (TSOP48)
-          ATAPI44      - IDE44 44-pin laptop type HDD connector (not used)
-          ATAPI40      - IDE40 40-pin flat cable HDD connector used for connection of CDROM drive
-          XC9572XL     - XILINX XC9572XL In-system Programmable CPLD stamped 'XA25A1' (TQFP100)
-          XC9536(1)    - XILINX CPLD stamped 'XA25A3' (PLCC44)
-          XC9536(2)    - XILINX CPLD stamped 'XA25A2' (PLCC44)
-          XC2S200      - XILINX XC2S200 SPARTAN FPGA (QFP208)
-          DS2401       - MAXIM Dallas DS2401 Silicon Serial Number (SOIC6)
-          M48T58Y      - ST M48T58Y Timekeeper NVRAM 8k bytes x8-bit (DIP28). Chip appears empty (0x04 fill) or unused
-          MB3793       - Fujitsu MB3793 Power-Voltage Monitoring IC with Watchdog Timer (SOIC8)
-          DIP40        - Empty DIP40 socket
-          HY57V641620  - Hyundai/Hynix HY57V641620 4 Banks x 1M x 16Bit Synchronous DRAM
-          PC16552D     - National PC16552D Dual Universal Asynchronous Receiver/Transmitter with FIFO's
-          TC9446F      - Toshiba TC9446F-016 Audio Digital Processor for Decode of Dolby Digital (AC-3) MPEG2 Audio
-          CN16-CN19    - Connector for sub board (3 of them are present). One board connects via a thin cable from
-                         CN1 to the main board to a connector on the security board labelled 'AMP BOX'.
-
-  Sub Board Layout
-  ----------------
-
-  GXA25-PWB(B) (C) 2000 KONAMI
-  |---------------------------------|
-  | TLP2630  LV14          ADM232   |
-  |CN2                           CN1|
-  |A2430         AK5330             |
-  |                                 |
-  |                          RCA L/R|
-  |ZUS1R50505        6379A          |
-  |                          LM358  |
-  |---------------------------------|
-
   PCMCIA Flash Card
   -----------------
 
@@ -480,138 +344,121 @@ G: gun mania only, drives air soft gun (this game uses real BB bullet)
 
   */
 
-#include "cdrom.h"
 #include "cpu/psx/psx.h"
 #include "machine/adc083x.h"
+#include "machine/ataintf.h"
 #include "machine/bankdev.h"
 #include "machine/cr589.h"
 #include "machine/ds2401.h"
 #include "machine/linflash.h"
 #include "machine/k573cass.h"
+#include "machine/k573dio.h"
+#include "machine/k573mcr.h"
+#include "machine/k573msu.h"
+#include "machine/k573npu.h"
 #include "machine/mb89371.h"
-#include "machine/mpeg573.h"
 #include "machine/timekpr.h"
 #include "machine/upd4701.h"
 #include "sound/spu.h"
 #include "sound/cdda.h"
 #include "video/psx.h"
+#include "cdrom.h"
 
 #define VERBOSE_LEVEL ( 0 )
 
-#define ATAPI_CYCLES_PER_SECTOR (5000)  // plenty of time to allow DMA setup etc.  BIOS requires this be at least 2000, individual games may vary.
-
-#define ATAPI_STAT_BSY     0x80
-#define ATAPI_STAT_DRDY    0x40
-#define ATAPI_STAT_DMARDDF 0x20
-#define ATAPI_STAT_SERVDSC 0x10
-#define ATAPI_STAT_DRQ     0x08
-#define ATAPI_STAT_CORR    0x04
-#define ATAPI_STAT_CHECK   0x01
-
-#define ATAPI_INTREASON_COMMAND 0x01
-#define ATAPI_INTREASON_IO      0x02
-#define ATAPI_INTREASON_RELEASE 0x04
-
-#define ATAPI_REG_DATA      0
-#define ATAPI_REG_ERRFEAT   1
-#define ATAPI_REG_INTREASON 2
-#define ATAPI_REG_SAMTAG    3
-#define ATAPI_REG_COUNTLOW  4
-#define ATAPI_REG_COUNTHIGH 5
-#define ATAPI_REG_DRIVESEL  6
-#define ATAPI_REG_CMDSTATUS 7
-#define ATAPI_REG_MAX 16
-
-#define ATAPI_DATA_SIZE ( 64 * 1024 )
-
-#define MAX_TRANSFER_SIZE ( 63488 )
-
+#define ATAPI_CYCLES_PER_SECTOR ( 5000 )  // plenty of time to allow DMA setup etc.  BIOS requires this be at least 2000, individual games may vary.
 
 class ksys573_state : public driver_device
 {
 public:
-	ksys573_state(const machine_config &mconfig, device_type type, const char *tag) :
-		driver_device(mconfig, type, tag),
-		m_analog0(*this, "analog0"),
-		m_analog1(*this, "analog1"),
-		m_analog2(*this, "analog2"),
-		m_analog3(*this, "analog3"),
-		m_pads(*this, "PADS"),
-		m_psxirq(*this, ":maincpu:irq"),
-		m_cr589(*this, ":cdrom"),
-		m_maincpu(*this, "maincpu"),
-		m_ram(*this, "maincpu:ram"),
-		m_flashbank(*this, "flashbank"),
-		m_out1(*this, "OUT1"),
-		m_out2(*this, "OUT2"),
-		m_cd(*this, "CD"),
-		m_upd4701(*this, "upd4701"),
-		m_upd4701_y(*this, "uPD4701_y"),
-		m_upd4701_switches(*this, "uPD4701_switches"),
-		m_stage(*this, "STAGE"),
-		m_gunx(*this, "GUNX"),
-		m_sensor(*this, "SENSOR"),
-		m_encoder(*this, "ENCODER"),
-		m_gunmania_id(*this, "gunmania_id")
+	ksys573_state( const machine_config &mconfig, device_type type, const char *tag ) :
+		driver_device( mconfig, type, tag ),
+		m_analog0(*this, "analog0" ),
+		m_analog1(*this, "analog1" ),
+		m_analog2(*this, "analog2" ),
+		m_analog3(*this, "analog3" ),
+		m_pads(*this, "PADS" ),
+		m_psxirq(*this, ":maincpu:irq" ),
+		m_ata(*this, "ata" ),
+		m_h8_response(*this, "h8_response"),
+		m_maincpu(*this, "maincpu" ),
+		m_ram(*this, "maincpu:ram" ),
+		m_flashbank(*this, "flashbank" ),
+		m_out1(*this, "OUT1" ),
+		m_out2(*this, "OUT2" ),
+		m_cd(*this, "CD" ),
+		m_upd4701(*this, "upd4701" ),
+		m_upd4701_y(*this, "uPD4701_y" ),
+		m_upd4701_switches(*this, "uPD4701_switches" ),
+		m_stage(*this, "STAGE" ),
+		m_gunx(*this, "GUNX" ),
+		m_sensor(*this, "SENSOR" ),
+		m_encoder(*this, "ENCODER" ),
+		m_gunmania_id(*this, "gunmania_id" )
 	{
 	}
 
-	DECLARE_CUSTOM_INPUT_MEMBER(gn845pwbb_read);
-	DECLARE_CUSTOM_INPUT_MEMBER(gunmania_tank_shutter_sensor);
-	DECLARE_CUSTOM_INPUT_MEMBER(gunmania_cable_holder_sensor);
-	DECLARE_READ16_MEMBER(control_r);
-	DECLARE_WRITE16_MEMBER(control_w);
-	DECLARE_READ16_MEMBER(atapi_r);
-	DECLARE_WRITE16_MEMBER(atapi_w);
-	DECLARE_WRITE16_MEMBER(atapi_reset_w);
-	DECLARE_WRITE16_MEMBER(security_w);
-	DECLARE_READ16_MEMBER(security_r);
-	DECLARE_READ16_MEMBER(ge765pwbba_r);
-	DECLARE_WRITE16_MEMBER(ge765pwbba_w);
-	DECLARE_READ16_MEMBER(gx700pwbf_io_r);
-	DECLARE_WRITE16_MEMBER(gx700pwbf_io_w);
-	DECLARE_WRITE16_MEMBER(gunmania_w);
-	DECLARE_READ16_MEMBER(gunmania_r);
-	DECLARE_DRIVER_INIT(salarymc);
-	DECLARE_DRIVER_INIT(pnchmn);
-	DECLARE_DRIVER_INIT(ddr);
-	DECLARE_DRIVER_INIT(hyperbbc);
-	DECLARE_DRIVER_INIT(drmn);
-	DECLARE_MACHINE_RESET(konami573);
-	DECLARE_WRITE_LINE_MEMBER(gtrfrks_lamps_b7);
-	DECLARE_WRITE_LINE_MEMBER(gtrfrks_lamps_b6);
-	DECLARE_WRITE_LINE_MEMBER(gtrfrks_lamps_b5);
-	DECLARE_WRITE_LINE_MEMBER(gtrfrks_lamps_b4);
-	DECLARE_WRITE_LINE_MEMBER(dmx_lamps_b0);
-	DECLARE_WRITE_LINE_MEMBER(dmx_lamps_b1);
-	DECLARE_WRITE_LINE_MEMBER(dmx_lamps_b2);
-	DECLARE_WRITE_LINE_MEMBER(dmx_lamps_b3);
-	DECLARE_WRITE_LINE_MEMBER(dmx_lamps_b4);
-	DECLARE_WRITE_LINE_MEMBER(dmx_lamps_b5);
-	DECLARE_WRITE_LINE_MEMBER(mamboagg_lamps_b3);
-	DECLARE_WRITE_LINE_MEMBER(mamboagg_lamps_b4);
-	DECLARE_WRITE_LINE_MEMBER(mamboagg_lamps_b5);
-	DECLARE_WRITE_LINE_MEMBER(salarymc_lamp_rst);
-	DECLARE_WRITE_LINE_MEMBER(salarymc_lamp_d);
-	DECLARE_WRITE_LINE_MEMBER(salarymc_lamp_clk);
-	DECLARE_WRITE_LINE_MEMBER(hyperbbc_lamp_red);
-	DECLARE_WRITE_LINE_MEMBER(hyperbbc_lamp_green);
-	DECLARE_WRITE_LINE_MEMBER(hyperbbc_lamp_blue);
-	DECLARE_WRITE_LINE_MEMBER(hyperbbc_lamp_start);
-	DECLARE_WRITE_LINE_MEMBER(hyperbbc_lamp_strobe1);
-	DECLARE_WRITE_LINE_MEMBER(hyperbbc_lamp_strobe2);
-	DECLARE_WRITE_LINE_MEMBER(hyperbbc_lamp_strobe3);
-	TIMER_CALLBACK_MEMBER(atapi_xfer_end);
-	DECLARE_WRITE8_MEMBER(ddr_output_callback);
-	DECLARE_WRITE8_MEMBER(ddrsolo_output_callback);
-	DECLARE_WRITE8_MEMBER(drmn_output_callback);
-	DECLARE_WRITE8_MEMBER(dmx_output_callback);
-	DECLARE_WRITE8_MEMBER(mamboagg_output_callback);
-	DECLARE_WRITE8_MEMBER(punchmania_output_callback);
+	DECLARE_CUSTOM_INPUT_MEMBER( gn845pwbb_read );
+	DECLARE_CUSTOM_INPUT_MEMBER( gunmania_tank_shutter_sensor );
+	DECLARE_CUSTOM_INPUT_MEMBER( gunmania_cable_holder_sensor );
+	DECLARE_READ16_MEMBER( control_r );
+	DECLARE_WRITE16_MEMBER( control_w );
+	DECLARE_WRITE16_MEMBER( atapi_reset_w );
+	DECLARE_WRITE16_MEMBER( security_w );
+	DECLARE_READ16_MEMBER( security_r );
+	DECLARE_READ16_MEMBER( ge765pwbba_r );
+	DECLARE_WRITE16_MEMBER( ge765pwbba_w );
+	DECLARE_READ16_MEMBER( gx700pwbf_io_r );
+	DECLARE_WRITE16_MEMBER( gx700pwbf_io_w );
+	DECLARE_WRITE16_MEMBER( gunmania_w );
+	DECLARE_READ16_MEMBER( gunmania_r );
+	DECLARE_DRIVER_INIT( salarymc );
+	DECLARE_DRIVER_INIT( pnchmn );
+	DECLARE_DRIVER_INIT( ddr );
+	DECLARE_DRIVER_INIT( hyperbbc );
+	DECLARE_DRIVER_INIT( drmn );
+	DECLARE_MACHINE_RESET( konami573 );
+	WRITE_LINE_MEMBER( h8_clk_w );
+	DECLARE_READ_LINE_MEMBER( h8_d0_r );
+	DECLARE_READ_LINE_MEMBER( h8_d1_r );
+	DECLARE_READ_LINE_MEMBER( h8_d2_r );
+	DECLARE_READ_LINE_MEMBER( h8_d3_r );
+	DECLARE_WRITE_LINE_MEMBER( gtrfrks_lamps_b7 );
+	DECLARE_WRITE_LINE_MEMBER( gtrfrks_lamps_b6 );
+	DECLARE_WRITE_LINE_MEMBER( gtrfrks_lamps_b5 );
+	DECLARE_WRITE_LINE_MEMBER( gtrfrks_lamps_b4 );
+	DECLARE_WRITE_LINE_MEMBER( dmx_lamps_b0 );
+	DECLARE_WRITE_LINE_MEMBER( dmx_lamps_b1 );
+	DECLARE_WRITE_LINE_MEMBER( dmx_lamps_b2 );
+	DECLARE_WRITE_LINE_MEMBER( dmx_lamps_b3 );
+	DECLARE_WRITE_LINE_MEMBER( dmx_lamps_b4 );
+	DECLARE_WRITE_LINE_MEMBER( dmx_lamps_b5 );
+	DECLARE_WRITE_LINE_MEMBER( mamboagg_lamps_b3 );
+	DECLARE_WRITE_LINE_MEMBER( mamboagg_lamps_b4 );
+	DECLARE_WRITE_LINE_MEMBER( mamboagg_lamps_b5 );
+	DECLARE_WRITE_LINE_MEMBER( salarymc_lamp_rst );
+	DECLARE_WRITE_LINE_MEMBER( salarymc_lamp_d );
+	DECLARE_WRITE_LINE_MEMBER( salarymc_lamp_clk );
+	DECLARE_WRITE_LINE_MEMBER( hyperbbc_lamp_red );
+	DECLARE_WRITE_LINE_MEMBER( hyperbbc_lamp_green );
+	DECLARE_WRITE_LINE_MEMBER( hyperbbc_lamp_blue );
+	DECLARE_WRITE_LINE_MEMBER( hyperbbc_lamp_start );
+	DECLARE_WRITE_LINE_MEMBER( hyperbbc_lamp_strobe1 );
+	DECLARE_WRITE_LINE_MEMBER( hyperbbc_lamp_strobe2 );
+	DECLARE_WRITE_LINE_MEMBER( hyperbbc_lamp_strobe3 );
+	DECLARE_WRITE_LINE_MEMBER( ata_interrupt );
+	TIMER_CALLBACK_MEMBER( atapi_xfer_end );
+	DECLARE_WRITE8_MEMBER( ddr_output_callback );
+	DECLARE_WRITE8_MEMBER( ddrsolo_output_callback );
+	DECLARE_WRITE8_MEMBER( drmn_output_callback );
+	DECLARE_WRITE8_MEMBER( dmx_output_callback );
+	DECLARE_WRITE8_MEMBER( mamboagg_output_callback );
+	DECLARE_WRITE8_MEMBER( punchmania_output_callback );
+	ADC083X_INPUT_CB(analogue_inputs_callback);
 
 	void cdrom_dma_read( UINT32 *ram, UINT32 n_address, INT32 n_size );
 	void cdrom_dma_write( UINT32 *ram, UINT32 n_address, INT32 n_size );
-	void sys573_vblank(screen_device &screen, bool vblank_state);
+	void sys573_vblank( screen_device &screen, bool vblank_state );
 	double m_pad_position[ 6 ];
 	required_ioport m_analog0;
 	required_ioport m_analog1;
@@ -623,31 +470,30 @@ protected:
 	virtual void driver_start();
 
 private:
-	inline void ATTR_PRINTF(3,4) verboselog( int n_level, const char *s_fmt, ... );
-	void atapi_init();
-	void update_mode();
+	inline void ATTR_PRINTF( 3,4 ) verboselog( int n_level, const char *s_fmt, ... );
+	void update_disc();
 	void gx700pwbf_output( int offset, UINT8 data );
-	void gx700pwfbf_init( void (ksys573_state::*output_callback_func)( address_space &space, ATTR_UNUSED offs_t offset, ATTR_UNUSED UINT8 data, ATTR_UNUSED UINT8 mem_mask ) );
+	void gx700pwfbf_init( void ( ksys573_state::*output_callback_func )( address_space &space, ATTR_UNUSED offs_t offset, ATTR_UNUSED UINT8 data, ATTR_UNUSED UINT8 mem_mask ) );
 	void gn845pwbb_do_w( int offset, int data );
 	void gn845pwbb_clk_w( int offset, int data );
 
 	required_device<psxirq_device> m_psxirq;
 
-	emu_timer *m_atapi_timer;
-	required_device<scsihle_device> m_cr589;
+	required_device<ata_interface_device> m_ata;
 	cdrom_file *m_available_cdroms[ 2 ];
-	int m_atapi_data_ptr;
-	int m_atapi_data_len;
-	int m_atapi_xferlen;
+	emu_timer *m_atapi_timer;
 	int m_atapi_xferbase;
-	int m_atapi_cdata_wait;
-	int m_atapi_xfermod;
+	int m_atapi_xfersize;
 
 	UINT32 m_control;
 	UINT16 m_n_security_control;
 
+	required_region_ptr<UINT8> m_h8_response;
+	int m_h8_index;
+	int m_h8_clk;
+
 	UINT8 m_gx700pwbf_output_data[ 4 ];
-	void (ksys573_state::*m_gx700pwfbf_output_callback)( address_space &space, ATTR_UNUSED offs_t offset, ATTR_UNUSED UINT8 data, ATTR_UNUSED UINT8 mem_mask );
+	void ( ksys573_state::*m_gx700pwfbf_output_callback )( address_space &space, ATTR_UNUSED offs_t offset, ATTR_UNUSED UINT8 data, ATTR_UNUSED UINT8 mem_mask );
 
 	UINT32 m_stage_mask;
 	struct
@@ -658,14 +504,6 @@ private:
 		int state;
 		int bit;
 	} m_stage_state[ 2 ];
-
-	//int m_f;
-	//int m_o;
-	//int m_s;
-	//UINT32 m_a;
-	//UINT32 m_b;
-	//UINT32 m_c;
-	//UINT32 m_d;
 
 	int m_salarymc_lamp_bits;
 	int m_salarymc_lamp_shift;
@@ -681,10 +519,6 @@ private:
 	int m_hyperbbc_lamp_strobe3;
 
 	UINT32 *m_p_n_psxram;
-
-	/* memory */
-	UINT8 m_atapi_regs[ATAPI_REG_MAX];
-	UINT8 m_atapi_data[ATAPI_DATA_SIZE];
 
 	int m_tank_shutter_position;
 	int m_cable_holder_release;
@@ -705,7 +539,7 @@ private:
 	optional_device<ds2401_device> m_gunmania_id;
 };
 
-void ATTR_PRINTF(3,4)  ksys573_state::verboselog( int n_level, const char *s_fmt, ... )
+void ATTR_PRINTF( 3,4 )  ksys573_state::verboselog( int n_level, const char *s_fmt, ... )
 {
 	if( VERBOSE_LEVEL >= n_level )
 	{
@@ -719,563 +553,145 @@ void ATTR_PRINTF(3,4)  ksys573_state::verboselog( int n_level, const char *s_fmt
 }
 
 static ADDRESS_MAP_START( konami573_map, AS_PROGRAM, 32, ksys573_state )
-	AM_RANGE(0x1f000000, 0x1f3fffff) AM_DEVICE16("flashbank", address_map_bank_device, amap16, 0xffffffff)
-	AM_RANGE(0x1f400000, 0x1f400003) AM_READ_PORT("IN0") AM_WRITE_PORT("OUT0")
-	AM_RANGE(0x1f400004, 0x1f400007) AM_READ_PORT("IN1")
-	AM_RANGE(0x1f400008, 0x1f40000b) AM_READ_PORT("IN2")
-	AM_RANGE(0x1f40000c, 0x1f40000f) AM_READ_PORT("IN3")
-	AM_RANGE(0x1f480000, 0x1f48000f) AM_READWRITE16(atapi_r, atapi_w, 0xffffffff)    // IDE controller, used mostly in ATAPI mode (only 3 pure IDE commands seen so far)
-	AM_RANGE(0x1f500000, 0x1f500003) AM_READWRITE16(control_r, control_w, 0x0000ffff)    // Konami can't make a game without a "control" register.
-	AM_RANGE(0x1f560000, 0x1f560003) AM_WRITE16(atapi_reset_w, 0x0000ffff)
-	AM_RANGE(0x1f5c0000, 0x1f5c0003) AM_WRITENOP                // watchdog?
-	AM_RANGE(0x1f600000, 0x1f600003) AM_WRITE_PORT("LAMPS")
-	AM_RANGE(0x1f620000, 0x1f623fff) AM_DEVREADWRITE8("m48t58", timekeeper_device, read, write, 0x00ff00ff)
-	AM_RANGE(0x1f680000, 0x1f68001f) AM_DEVREADWRITE8("mb89371", mb89371_device, read, write, 0x00ff00ff)
-	AM_RANGE(0x1f6a0000, 0x1f6a0003) AM_READWRITE16(security_r, security_w, 0x0000ffff)
+	AM_RANGE( 0x1f000000, 0x1f3fffff ) AM_DEVICE16( "flashbank", address_map_bank_device, amap16, 0xffffffff )
+	AM_RANGE( 0x1f400000, 0x1f400003 ) AM_READ_PORT( "IN0" ) AM_WRITE_PORT( "OUT0" )
+	AM_RANGE( 0x1f400004, 0x1f400007 ) AM_READ_PORT( "IN1" )
+	AM_RANGE( 0x1f400008, 0x1f40000b ) AM_READ_PORT( "IN2" )
+	AM_RANGE( 0x1f40000c, 0x1f40000f ) AM_READ_PORT( "IN3" )
+	AM_RANGE( 0x1f480000, 0x1f48000f ) AM_DEVREADWRITE16( "ata", ata_interface_device, read_cs0, write_cs0, 0xffffffff )
+	AM_RANGE( 0x1f500000, 0x1f500003 ) AM_READWRITE16( control_r, control_w, 0x0000ffff )    // Konami can't make a game without a "control" register.
+	AM_RANGE( 0x1f560000, 0x1f560003 ) AM_WRITE16( atapi_reset_w, 0x0000ffff )
+	AM_RANGE( 0x1f5c0000, 0x1f5c0003 ) AM_WRITENOP                // watchdog?
+	AM_RANGE( 0x1f600000, 0x1f600003 ) AM_WRITE_PORT( "LAMPS" )
+	AM_RANGE( 0x1f620000, 0x1f623fff ) AM_DEVREADWRITE8( "m48t58", timekeeper_device, read, write, 0x00ff00ff )
+	AM_RANGE( 0x1f680000, 0x1f68001f ) AM_DEVREADWRITE8( "mb89371", mb89371_device, read, write, 0x00ff00ff )
+	AM_RANGE( 0x1f6a0000, 0x1f6a0003 ) AM_READWRITE16( security_r, security_w, 0x0000ffff )
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( flashbank_map, AS_PROGRAM, 16, ksys573_state )
-	AM_RANGE(0x0000000, 0x03fffff) AM_DEVREADWRITE8("29f016a.31m", intelfsh8_device, read, write, 0x00ff)
-	AM_RANGE(0x0000000, 0x03fffff) AM_DEVREADWRITE8("29f016a.27m", intelfsh8_device, read, write, 0xff00)
-	AM_RANGE(0x0400000, 0x07fffff) AM_DEVREADWRITE8("29f016a.31l", intelfsh8_device, read, write, 0x00ff)
-	AM_RANGE(0x0400000, 0x07fffff) AM_DEVREADWRITE8("29f016a.27l", intelfsh8_device, read, write, 0xff00)
-	AM_RANGE(0x0800000, 0x0bfffff) AM_DEVREADWRITE8("29f016a.31j", intelfsh8_device, read, write, 0x00ff)
-	AM_RANGE(0x0800000, 0x0bfffff) AM_DEVREADWRITE8("29f016a.27j", intelfsh8_device, read, write, 0xff00)
-	AM_RANGE(0x0c00000, 0x0ffffff) AM_DEVREADWRITE8("29f016a.31h", intelfsh8_device, read, write, 0x00ff)
-	AM_RANGE(0x0c00000, 0x0ffffff) AM_DEVREADWRITE8("29f016a.27h", intelfsh8_device, read, write, 0xff00)
-	AM_RANGE(0x4000000, 0x7ffffff) AM_DEVREADWRITE("pccard1", pccard_slot_device, read_memory, write_memory)
-	AM_RANGE(0x8000000, 0xbffffff) AM_DEVREADWRITE("pccard2", pccard_slot_device, read_memory, write_memory)
+	AM_RANGE( 0x0000000, 0x03fffff ) AM_DEVREADWRITE8( "29f016a.31m", intelfsh8_device, read, write, 0x00ff )
+	AM_RANGE( 0x0000000, 0x03fffff ) AM_DEVREADWRITE8( "29f016a.27m", intelfsh8_device, read, write, 0xff00 )
+	AM_RANGE( 0x0400000, 0x07fffff ) AM_DEVREADWRITE8( "29f016a.31l", intelfsh8_device, read, write, 0x00ff )
+	AM_RANGE( 0x0400000, 0x07fffff ) AM_DEVREADWRITE8( "29f016a.27l", intelfsh8_device, read, write, 0xff00 )
+	AM_RANGE( 0x0800000, 0x0bfffff ) AM_DEVREADWRITE8( "29f016a.31j", intelfsh8_device, read, write, 0x00ff )
+	AM_RANGE( 0x0800000, 0x0bfffff ) AM_DEVREADWRITE8( "29f016a.27j", intelfsh8_device, read, write, 0xff00 )
+	AM_RANGE( 0x0c00000, 0x0ffffff ) AM_DEVREADWRITE8( "29f016a.31h", intelfsh8_device, read, write, 0x00ff )
+	AM_RANGE( 0x0c00000, 0x0ffffff ) AM_DEVREADWRITE8( "29f016a.27h", intelfsh8_device, read, write, 0xff00 )
+	AM_RANGE( 0x4000000, 0x7ffffff ) AM_DEVREADWRITE( "pccard1", pccard_slot_device, read_memory, write_memory )
+	AM_RANGE( 0x8000000, 0xbffffff ) AM_DEVREADWRITE( "pccard2", pccard_slot_device, read_memory, write_memory )
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( konami573d_map, AS_PROGRAM, 32, ksys573_state )
-	AM_IMPORT_FROM(konami573_map)
-	AM_RANGE(0x1f640000, 0x1f6400ff) AM_DEVICE16("mpeg573", mpeg573_device, amap, 0xffffffff)
+	AM_IMPORT_FROM( konami573_map )
+	AM_RANGE( 0x1f640000, 0x1f6400ff ) AM_DEVICE16( "k573dio", k573dio_device, amap, 0xffffffff )
 ADDRESS_MAP_END
 
-static ADDRESS_MAP_START(konami573a_map, AS_PROGRAM, 32, ksys573_state)
-	AM_IMPORT_FROM(konami573_map)
-	AM_RANGE(0x1f640000, 0x1f6400ff) AM_READWRITE16(gx700pwbf_io_r, gx700pwbf_io_w, 0xffffffff)
+static ADDRESS_MAP_START( konami573a_map, AS_PROGRAM, 32, ksys573_state )
+	AM_IMPORT_FROM( konami573_map )
+	AM_RANGE( 0x1f640000, 0x1f6400ff ) AM_READWRITE16( gx700pwbf_io_r, gx700pwbf_io_w, 0xffffffff )
 ADDRESS_MAP_END
 
-static ADDRESS_MAP_START(fbaitbc_map, AS_PROGRAM, 32, ksys573_state)
-	AM_IMPORT_FROM(konami573_map)
-	AM_RANGE(0x1f640000, 0x1f6400ff) AM_READWRITE16(ge765pwbba_r, ge765pwbba_w, 0xffffffff)
+static ADDRESS_MAP_START( fbaitbc_map, AS_PROGRAM, 32, ksys573_state )
+	AM_IMPORT_FROM( konami573_map )
+	AM_RANGE( 0x1f640000, 0x1f6400ff ) AM_READWRITE16( ge765pwbba_r, ge765pwbba_w, 0xffffffff )
 ADDRESS_MAP_END
 
-static ADDRESS_MAP_START(gunmania_map, AS_PROGRAM, 32, ksys573_state)
-	AM_IMPORT_FROM(konami573_map)
-	AM_RANGE( 0x1f640000, 0x1f6400ff) AM_READWRITE16(gunmania_r, gunmania_w, 0xffffffff)
+static ADDRESS_MAP_START( gunmania_map, AS_PROGRAM, 32, ksys573_state )
+	AM_IMPORT_FROM( konami573_map )
+	AM_RANGE( 0x1f640000, 0x1f6400ff ) AM_READWRITE16( gunmania_r, gunmania_w, 0xffffffff )
 ADDRESS_MAP_END
 
-READ16_MEMBER(ksys573_state::control_r)
+READ16_MEMBER( ksys573_state::control_r )
 {
-	verboselog(2, "control_r( %08x, %08x ) %08x\n", offset, mem_mask, m_control );
+	verboselog( 2, "control_r( %08x, %08x ) %08x\n", offset, mem_mask, m_control );
 
 	return m_control;
 }
 
-WRITE16_MEMBER(ksys573_state::control_w)
+WRITE16_MEMBER( ksys573_state::control_w )
 {
-	COMBINE_DATA(&m_control);
+	COMBINE_DATA( &m_control );
 
-	verboselog(2, "control_w( %08x, %08x, %08x )\n", offset, mem_mask, data );
+	verboselog( 2, "control_w( %08x, %08x, %08x )\n", offset, mem_mask, data );
 
 	m_out2->write( data, mem_mask );
 
 	m_flashbank->set_bank( m_control & 0x3f );
 }
 
-TIMER_CALLBACK_MEMBER(ksys573_state::atapi_xfer_end)
+TIMER_CALLBACK_MEMBER( ksys573_state::atapi_xfer_end )
 {
-	UINT32 *p_n_psxram = m_p_n_psxram;
-	int i, n_state;
-	UINT8 sector_buffer[ 4096 ];
+	/// TODO: respect timing of data from ATAPI device.
 
-	m_atapi_timer->adjust(attotime::never);
+	m_atapi_timer->adjust( attotime::never );
 
-//  verboselog(2, "atapi_xfer_end( %d ) atapi_xferlen = %d, atapi_xfermod=%d\n", x, atapi_xfermod, atapi_xferlen );
+	address_space &space = m_maincpu->space( AS_PROGRAM );
 
-//  mame_printf_debug("ATAPI: xfer_end.  xferlen = %d, atapi_xfermod = %d\n", atapi_xferlen, atapi_xfermod);
-
-	while( m_atapi_xferlen > 0 )
+	for( int i = 0; i < m_atapi_xfersize; i++ )
 	{
-		// get a sector from the SCSI device
-		m_cr589->ReadData( sector_buffer, 2048 );
+		UINT32 d = m_ata->read_cs0( space, (UINT32) 0, (UINT32) 0xffff ) << 0;
+		d |= m_ata->read_cs0( space, (UINT32) 0, (UINT32) 0xffff ) << 16;
 
-		m_atapi_xferlen -= 2048;
-
-		i = 0;
-		n_state = 2048 / 4;
-		while( n_state > 0 )
-		{
-			p_n_psxram[ m_atapi_xferbase / 4 ] =
-				( sector_buffer[ i + 0 ] << 0 ) |
-				( sector_buffer[ i + 1 ] << 8 ) |
-				( sector_buffer[ i + 2 ] << 16 ) |
-				( sector_buffer[ i + 3 ] << 24 );
-			m_atapi_xferbase += 4;
-			i += 4;
-			n_state--;
-		}
+		m_p_n_psxram[ m_atapi_xferbase / 4 ] = d;
+		m_atapi_xferbase += 4;
 	}
 
-	if (m_atapi_xfermod > MAX_TRANSFER_SIZE)
+	/// HACK: konami80s only works if you dma more data than requested
+	if( ( m_ata->read_cs1( space, (UINT32) 6, (UINT32) 0xffff ) & 8 ) != 0 )
 	{
-		m_atapi_xferlen = MAX_TRANSFER_SIZE;
-		m_atapi_xfermod = m_atapi_xfermod - MAX_TRANSFER_SIZE;
-	}
-	else
-	{
-		m_atapi_xferlen = m_atapi_xfermod;
-		m_atapi_xfermod = 0;
-	}
-
-
-	if (m_atapi_xferlen > 0)
-	{
-		//mame_printf_debug("ATAPI: starting next piece of multi-part transfer\n");
-		m_atapi_regs[ATAPI_REG_COUNTLOW] = m_atapi_xferlen & 0xff;
-		m_atapi_regs[ATAPI_REG_COUNTHIGH] = (m_atapi_xferlen>>8)&0xff;
-
-		m_atapi_timer->adjust(m_maincpu->cycles_to_attotime((ATAPI_CYCLES_PER_SECTOR * (m_atapi_xferlen/2048))));
-	}
-	else
-	{
-		//mame_printf_debug("ATAPI: Transfer completed, dropping DRQ\n");
-		m_atapi_regs[ATAPI_REG_CMDSTATUS] = ATAPI_STAT_DRDY;
-		m_atapi_regs[ATAPI_REG_INTREASON] = ATAPI_INTREASON_IO | ATAPI_INTREASON_COMMAND;
-	}
-
-	m_psxirq->intin10(1);
-
-	verboselog(2, "atapi_xfer_end: %d %d\n", m_atapi_xferlen, m_atapi_xfermod );
-}
-
-READ16_MEMBER(ksys573_state::atapi_r)
-{
-	int data;
-
-	if (offset == 0 && mem_mask == 0xffff) // word-wide command read
-	{
-//      mame_printf_debug("ATAPI: packet read = %04x\n", atapi_data[atapi_data_ptr]);
-
-		// assert IRQ and drop DRQ
-		if (m_atapi_data_ptr == 0 && m_atapi_data_len == 0)
-		{
-			// get the data from the device
-			if( m_atapi_xferlen > 0 )
-			{
-				m_cr589->ReadData( m_atapi_data, m_atapi_xferlen );
-				m_atapi_data_len = m_atapi_xferlen;
-			}
-
-			if (m_atapi_xfermod > MAX_TRANSFER_SIZE)
-			{
-				m_atapi_xferlen = MAX_TRANSFER_SIZE;
-				m_atapi_xfermod = m_atapi_xfermod - MAX_TRANSFER_SIZE;
-			}
-			else
-			{
-				m_atapi_xferlen = m_atapi_xfermod;
-				m_atapi_xfermod = 0;
-			}
-
-			verboselog(2, "atapi_r: atapi_xferlen=%d\n", m_atapi_xferlen );
-			if( m_atapi_xferlen != 0 )
-			{
-				m_atapi_regs[ATAPI_REG_CMDSTATUS] = ATAPI_STAT_DRQ | ATAPI_STAT_SERVDSC;
-				m_atapi_regs[ATAPI_REG_INTREASON] = ATAPI_INTREASON_IO;
-			}
-			else
-			{
-				//mame_printf_debug("ATAPI: dropping DRQ\n");
-				m_atapi_regs[ATAPI_REG_CMDSTATUS] = 0;
-				m_atapi_regs[ATAPI_REG_INTREASON] = ATAPI_INTREASON_IO;
-			}
-
-			m_atapi_regs[ATAPI_REG_COUNTLOW] = m_atapi_xferlen & 0xff;
-			m_atapi_regs[ATAPI_REG_COUNTHIGH] = (m_atapi_xferlen>>8)&0xff;
-
-			m_psxirq->intin10(1);
-		}
-
-		if( m_atapi_data_ptr < m_atapi_data_len )
-		{
-			data = m_atapi_data[m_atapi_data_ptr++];
-			data |= ( m_atapi_data[m_atapi_data_ptr++] << 8 );
-			if( m_atapi_data_ptr >= m_atapi_data_len )
-			{
-//              verboselog(2, "atapi_r: read all bytes\n" );
-				m_atapi_data_ptr = 0;
-				m_atapi_data_len = 0;
-
-				if( m_atapi_xferlen == 0 )
-				{
-					m_atapi_regs[ATAPI_REG_CMDSTATUS] = 0;
-					m_atapi_regs[ATAPI_REG_INTREASON] = ATAPI_INTREASON_IO;
-					m_psxirq->intin10(1);
-				}
-			}
-		}
-		else
-		{
-			data = 0;
-		}
-	}
-	else
-	{
-		data = m_atapi_regs[offset];
-
-		switch( offset )
-		{
-		case ATAPI_REG_DATA:
-			verboselog(1, "atapi_r: data=%02x\n", data );
-			break;
-		case ATAPI_REG_ERRFEAT:
-			verboselog(1, "atapi_r: errfeat=%02x\n", data );
-			break;
-		case ATAPI_REG_INTREASON:
-			verboselog(1, "atapi_r: intreason=%02x\n", data );
-			break;
-		case ATAPI_REG_SAMTAG:
-			verboselog(1, "atapi_r: samtag=%02x\n", data );
-			break;
-		case ATAPI_REG_COUNTLOW:
-			verboselog(1, "atapi_r: countlow=%02x\n", data );
-			break;
-		case ATAPI_REG_COUNTHIGH:
-			verboselog(1, "atapi_r: counthigh=%02x\n", data );
-			break;
-		case ATAPI_REG_DRIVESEL:
-			verboselog(1, "atapi_r: drivesel=%02x\n", data );
-			break;
-		case ATAPI_REG_CMDSTATUS:
-			verboselog(1, "atapi_r: cmdstatus=%02x\n", data );
-			break;
-		}
-
-//      mame_printf_debug("ATAPI: read reg %d = %x (PC=%x)\n", reg, data, m_maincpu->pc());
-	}
-
-	verboselog(2, "atapi_r( %08x, %08x ) %08x\n", offset, mem_mask, data );
-	return data;
-}
-
-WRITE16_MEMBER(ksys573_state::atapi_w)
-{
-	verboselog(2, "atapi_w( %08x, %08x, %08x )\n", offset, mem_mask, data );
-
-	if (offset == 0 && mem_mask == 0xffff) // word-wide command write
-	{
-		verboselog(2, "atapi_w: data=%04x\n", data );
-
-//      mame_printf_debug("ATAPI: packet write %04x\n", data);
-		m_atapi_data[m_atapi_data_ptr++] = data & 0xff;
-		m_atapi_data[m_atapi_data_ptr++] = data >> 8;
-
-		if (m_atapi_cdata_wait)
-		{
-//          mame_printf_debug("ATAPI: waiting, ptr %d wait %d\n", m_atapi_data_ptr, m_atapi_cdata_wait);
-			if (m_atapi_data_ptr == m_atapi_cdata_wait)
-			{
-				// send it to the device
-				m_cr589->WriteData( m_atapi_data, m_atapi_cdata_wait );
-
-				// assert IRQ
-				m_psxirq->intin10(1);
-
-				// not sure here, but clear DRQ at least?
-				m_atapi_regs[ATAPI_REG_CMDSTATUS] = 0;
-			}
-		}
-
-		else if ( m_atapi_data_ptr == 12 )
-		{
-			int phase;
-
-			verboselog(2, "atapi_w: command %02x\n", m_atapi_data[0]&0xff );
-
-			// reset data pointer for reading SCSI results
-			m_atapi_data_ptr = 0;
-			m_atapi_data_len = 0;
-
-			// send it to the SCSI device
-			m_cr589->SetCommand( m_atapi_data, 12 );
-			m_cr589->ExecCommand( &m_atapi_xferlen );
-			m_cr589->GetPhase( &phase );
-
-			if (m_atapi_xferlen != -1)
-			{
-//              mame_printf_debug("ATAPI: SCSI command %02x returned %d bytes from the device\n", m_atapi_data[0]&0xff, m_atapi_xferlen);
-
-				// store the returned command length in the ATAPI regs, splitting into
-				// multiple transfers if necessary
-				m_atapi_xfermod = 0;
-				if (m_atapi_xferlen > MAX_TRANSFER_SIZE)
-				{
-					m_atapi_xfermod = m_atapi_xferlen - MAX_TRANSFER_SIZE;
-					m_atapi_xferlen = MAX_TRANSFER_SIZE;
-				}
-
-				m_atapi_regs[ATAPI_REG_COUNTLOW] = m_atapi_xferlen & 0xff;
-				m_atapi_regs[ATAPI_REG_COUNTHIGH] = (m_atapi_xferlen>>8)&0xff;
-
-				if (m_atapi_xferlen == 0)
-				{
-					// if no data to return, set the registers properly
-					m_atapi_regs[ATAPI_REG_CMDSTATUS] = ATAPI_STAT_DRDY;
-					m_atapi_regs[ATAPI_REG_INTREASON] = ATAPI_INTREASON_IO|ATAPI_INTREASON_COMMAND;
-				}
-				else
-				{
-					// indicate data ready: set DRQ and DMA ready, and IO in INTREASON
-					m_atapi_regs[ATAPI_REG_CMDSTATUS] = ATAPI_STAT_DRQ | ATAPI_STAT_SERVDSC;
-					m_atapi_regs[ATAPI_REG_INTREASON] = ATAPI_INTREASON_IO;
-				}
-
-				switch( phase )
-				{
-				case SCSI_PHASE_DATAOUT:
-					m_atapi_cdata_wait = m_atapi_xferlen;
-					break;
-				}
-
-				// perform special ATAPI processing of certain commands
-				switch (m_atapi_data[0]&0xff)
-				{
-					case 0x00: // BUS RESET / TEST UNIT READY
-					case 0xbb: // SET CDROM SPEED
-						m_atapi_regs[ATAPI_REG_CMDSTATUS] = 0;
-						break;
-
-					case 0x45: // PLAY
-						m_atapi_regs[ATAPI_REG_CMDSTATUS] = ATAPI_STAT_BSY;
-						m_atapi_timer->adjust( m_maincpu->cycles_to_attotime( ATAPI_CYCLES_PER_SECTOR ) );
-						break;
-				}
-
-				// assert IRQ
-				m_psxirq->intin10(1);
-			}
-			else
-			{
-//              mame_printf_debug("ATAPI: SCSI device returned error!\n");
-
-				m_atapi_regs[ATAPI_REG_CMDSTATUS] = ATAPI_STAT_DRQ | ATAPI_STAT_CHECK;
-				m_atapi_regs[ATAPI_REG_ERRFEAT] = 0x50;   // sense key = ILLEGAL REQUEST
-				m_atapi_regs[ATAPI_REG_COUNTLOW] = 0;
-				m_atapi_regs[ATAPI_REG_COUNTHIGH] = 0;
-			}
-		}
-	}
-	else
-	{
-		switch( offset )
-		{
-		case ATAPI_REG_DATA:
-			verboselog(1, "atapi_w: data=%02x\n", data );
-			break;
-		case ATAPI_REG_ERRFEAT:
-			verboselog(1, "atapi_w: errfeat=%02x\n", data );
-			break;
-		case ATAPI_REG_INTREASON:
-			verboselog(1, "atapi_w: intreason=%02x\n", data );
-			break;
-		case ATAPI_REG_SAMTAG:
-			verboselog(1, "atapi_w: samtag=%02x\n", data );
-			break;
-		case ATAPI_REG_COUNTLOW:
-			verboselog(1, "atapi_w: countlow=%02x\n", data );
-			break;
-		case ATAPI_REG_COUNTHIGH:
-			verboselog(1, "atapi_w: counthigh=%02x\n", data );
-			break;
-		case ATAPI_REG_DRIVESEL:
-			verboselog(1, "atapi_w: drivesel=%02x\n", data );
-			break;
-		case ATAPI_REG_CMDSTATUS:
-			verboselog(1, "atapi_w: cmdstatus=%02x\n", data );
-			break;
-		}
-
-		m_atapi_regs[offset] = data;
-//      mame_printf_debug("ATAPI: reg %d = %x (offset %x mask %x PC=%x)\n", reg, data, offset, mem_mask, m_maincpu->pc());
-
-		if (offset == ATAPI_REG_CMDSTATUS)
-		{
-//          mame_printf_debug("ATAPI command %x issued! (PC=%x)\n", data, m_maincpu->pc());
-
-			switch (data)
-			{
-				case 0xa0:  // PACKET
-					m_atapi_regs[ATAPI_REG_CMDSTATUS] = ATAPI_STAT_DRQ;
-					m_atapi_regs[ATAPI_REG_INTREASON] = ATAPI_INTREASON_COMMAND;
-
-					m_atapi_data_ptr = 0;
-					m_atapi_data_len = 0;
-
-					/* we have no data */
-					m_atapi_xferlen = 0;
-					m_atapi_xfermod = 0;
-
-					m_atapi_cdata_wait = 0;
-					break;
-
-				case 0xa1:  // IDENTIFY PACKET DEVICE
-					m_atapi_regs[ATAPI_REG_CMDSTATUS] = ATAPI_STAT_DRQ;
-
-					m_atapi_data_ptr = 0;
-					m_atapi_data_len = 512;
-
-					/* we have no data */
-					m_atapi_xferlen = 0;
-					m_atapi_xfermod = 0;
-
-					memset( m_atapi_data, 0, m_atapi_data_len );
-
-					m_atapi_data[ 0 ^ 1 ] = 0x85; // ATAPI device, cmd set 5 compliant, DRQ within 3 ms of PACKET command
-					m_atapi_data[ 1 ^ 1 ] = 0x00;
-
-					memset( &m_atapi_data[ 46 ], ' ', 8 );
-					m_atapi_data[ 46 ^ 1 ] = '1';
-					m_atapi_data[ 47 ^ 1 ] = '.';
-					m_atapi_data[ 48 ^ 1 ] = '0';
-
-					memset( &m_atapi_data[ 54 ], ' ', 40 );
-					m_atapi_data[ 54 ^ 1 ] = 'M';
-					m_atapi_data[ 55 ^ 1 ] = 'A';
-					m_atapi_data[ 56 ^ 1 ] = 'T';
-					m_atapi_data[ 57 ^ 1 ] = 'S';
-					m_atapi_data[ 58 ^ 1 ] = 'H';
-					m_atapi_data[ 59 ^ 1 ] = 'I';
-					m_atapi_data[ 60 ^ 1 ] = 'T';
-					m_atapi_data[ 61 ^ 1 ] = 'A';
-					m_atapi_data[ 62 ^ 1 ] = ' ';
-					m_atapi_data[ 63 ^ 1 ] = 'C';
-					m_atapi_data[ 64 ^ 1 ] = 'R';
-					m_atapi_data[ 65 ^ 1 ] = '-';
-					m_atapi_data[ 66 ^ 1 ] = '5';
-					m_atapi_data[ 67 ^ 1 ] = '8';
-					m_atapi_data[ 68 ^ 1 ] = '9';
-					m_atapi_data[ 69 ^ 1 ] = ' ';
-
-					m_atapi_data[ 98 ^ 1 ] = 0x04; // IORDY may be disabled
-					m_atapi_data[ 99 ^ 1 ] = 0x00;
-
-					m_atapi_regs[ATAPI_REG_COUNTLOW] = 0;
-					m_atapi_regs[ATAPI_REG_COUNTHIGH] = 2;
-
-					m_psxirq->intin10(1);
-					break;
-
-				case 0xef:  // SET FEATURES
-					m_atapi_regs[ATAPI_REG_CMDSTATUS] = 0;
-
-					m_atapi_data_ptr = 0;
-					m_atapi_data_len = 0;
-
-					m_psxirq->intin10(1);
-					break;
-
-				default:
-					mame_printf_debug("ATAPI: Unknown IDE command %x\n", data);
-					break;
-			}
-		}
+		m_atapi_timer->adjust( m_maincpu->cycles_to_attotime( ( ATAPI_CYCLES_PER_SECTOR * ( m_atapi_xfersize / 64 ) ) ) );
 	}
 }
 
-void ksys573_state::atapi_init()
+WRITE_LINE_MEMBER( ksys573_state::ata_interrupt )
 {
-	m_atapi_regs[ATAPI_REG_CMDSTATUS] = 0;
-	m_atapi_regs[ATAPI_REG_ERRFEAT] = 1;
-	m_atapi_regs[ATAPI_REG_COUNTLOW] = 0x14;
-	m_atapi_regs[ATAPI_REG_COUNTHIGH] = 0xeb;
-
-	m_atapi_data_ptr = 0;
-	m_atapi_data_len = 0;
-	m_atapi_cdata_wait = 0;
-
-	m_atapi_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(ksys573_state::atapi_xfer_end),this));
-	m_atapi_timer->adjust(attotime::never);
-
-	m_available_cdroms[ 0 ] = cdrom_open( get_disk_handle( machine(), ":cdrom0" ) );
-	m_available_cdroms[ 1 ] = cdrom_open( get_disk_handle( machine(), ":cdrom1" ) );
-
-	save_item( NAME(m_atapi_regs) );
-	save_item( NAME(m_atapi_data) );
-	save_item( NAME(m_atapi_data_ptr) );
-	save_item( NAME(m_atapi_data_len) );
-	save_item( NAME(m_atapi_xferlen) );
-	save_item( NAME(m_atapi_xferbase) );
-	save_item( NAME(m_atapi_cdata_wait) );
-	save_item( NAME(m_atapi_xfermod) );
+	m_psxirq->intin10( state );
 }
 
-WRITE16_MEMBER(ksys573_state::atapi_reset_w)
+WRITE16_MEMBER( ksys573_state::atapi_reset_w )
 {
-	UINT8 *atapi_regs = m_atapi_regs;
-
-	verboselog(2, "atapi_reset_w( %08x, %08x, %08x )\n", offset, mem_mask, data );
-
-	if (data)
+	if( !( data & 1 ) )
 	{
-		verboselog(2, "atapi_reset_w: reset\n" );
-
-//      mame_printf_debug("ATAPI reset\n");
-
-		atapi_regs[ATAPI_REG_CMDSTATUS] = 0;
-		atapi_regs[ATAPI_REG_ERRFEAT] = 1;
-		atapi_regs[ATAPI_REG_COUNTLOW] = 0x14;
-		atapi_regs[ATAPI_REG_COUNTHIGH] = 0xeb;
-
-		m_atapi_data_ptr = 0;
-		m_atapi_data_len = 0;
-		m_atapi_cdata_wait = 0;
-
-		m_atapi_xferlen = 0;
-		m_atapi_xfermod = 0;
+		m_ata->reset();
 	}
 }
 
 void ksys573_state::cdrom_dma_read( UINT32 *ram, UINT32 n_address, INT32 n_size )
 {
-	verboselog(2, "cdrom_dma_read( %08x, %08x )\n", n_address, n_size );
-//  mame_printf_debug("DMA read: address %08x size %08x\n", n_address, n_size);
+	verboselog( 2, "cdrom_dma_read( %08x, %08x )\n", n_address, n_size );
+//  osd_printf_debug( "DMA read: address %08x size %08x\n", n_address, n_size );
 }
 
 void ksys573_state::cdrom_dma_write( UINT32 *ram, UINT32 n_address, INT32 n_size )
 {
 	m_p_n_psxram = ram;
 
-	verboselog(2, "cdrom_dma_write( %08x, %08x )\n", n_address, n_size );
-//  mame_printf_debug("DMA write: address %08x size %08x\n", n_address, n_size);
+	verboselog( 2, "cdrom_dma_write( %08x, %08x )\n", n_address, n_size );
+//  osd_printf_debug( "DMA write: address %08x size %08x\n", n_address, n_size );
 
 	m_atapi_xferbase = n_address;
-
-	verboselog(2, "atapi_xfer_end: %d %d\n", m_atapi_xferlen, m_atapi_xfermod );
-
-	// set a transfer complete timer (Note: CYCLES_PER_SECTOR can't be lower than 2000 or the BIOS ends up "out of order")
-	m_atapi_timer->adjust(m_maincpu->cycles_to_attotime((ATAPI_CYCLES_PER_SECTOR * (m_atapi_xferlen/2048))));
+	m_atapi_xfersize = n_size;
+	// set a transfer complete timer ( Note: CYCLES_PER_SECTOR can't be lower than 2000 or the BIOS ends up "out of order" )
+	m_atapi_timer->adjust( m_maincpu->cycles_to_attotime( ( ATAPI_CYCLES_PER_SECTOR * ( n_size / 512 ) ) ) );
 }
 
-WRITE16_MEMBER(ksys573_state::security_w)
+WRITE16_MEMBER( ksys573_state::security_w )
 {
 	COMBINE_DATA( &m_n_security_control );
 
-	verboselog(2, "security_w( %08x, %08x, %08x )\n", offset, mem_mask, data );
+	verboselog( 2, "security_w( %08x, %08x, %08x )\n", offset, mem_mask, data );
 
 	m_out1->write( data, mem_mask );
 }
 
-READ16_MEMBER(ksys573_state::security_r)
+READ16_MEMBER( ksys573_state::security_r )
 {
 	UINT16 data = m_n_security_control;
-	verboselog(2, "security_r( %08x, %08x ) %08x\n", offset, mem_mask, data );
+	verboselog( 2, "security_r( %08x, %08x ) %08x\n", offset, mem_mask, data );
 	return data;
 }
 
-void ksys573_state::update_mode()
+void ksys573_state::update_disc()
 {
 	int cd = m_cd->read();
 	cdrom_file *new_cdrom;
@@ -1289,36 +705,47 @@ void ksys573_state::update_mode()
 		new_cdrom = m_available_cdroms[ 0 ];
 	}
 
-	void *current_cdrom;
-	m_cr589->GetDevice( &current_cdrom );
-
-	if( current_cdrom != new_cdrom )
+	atapi_hle_device *image = machine().device<atapi_hle_device>( "ata:0:cr589" );
+	if( image != NULL )
 	{
-		current_cdrom = new_cdrom;
+		void *current_cdrom = NULL;
+		image->GetDevice( &current_cdrom );
 
-		m_cr589->SetDevice( new_cdrom );
+		if( current_cdrom != new_cdrom )
+		{
+			current_cdrom = new_cdrom;
+
+			image->SetDevice( new_cdrom );
+		}
 	}
 }
 
 void ksys573_state::driver_start()
 {
-	atapi_init();
+	m_atapi_timer = machine().scheduler().timer_alloc( timer_expired_delegate( FUNC( ksys573_state::atapi_xfer_end ),this ) );
+	m_atapi_timer->adjust( attotime::never );
+
+	m_available_cdroms[ 0 ] = cdrom_open( get_disk_handle( machine(), ":cdrom0" ) );
+	m_available_cdroms[ 1 ] = cdrom_open( get_disk_handle( machine(), ":cdrom1" ) );
 
 	m_n_security_control = 0;
 	m_control = 0;
 
-	save_item( NAME(m_n_security_control) );
-	save_item( NAME(m_control) );
+	save_item( NAME( m_n_security_control ) );
+	save_item( NAME( m_control ) );
 }
 
-MACHINE_RESET_MEMBER(ksys573_state,konami573)
+MACHINE_RESET_MEMBER( ksys573_state,konami573 )
 {
-	update_mode();
+	update_disc();
+
+	m_h8_index = 0;
+	m_h8_clk = 0;
 }
 
-void ksys573_state::sys573_vblank(screen_device &screen, bool vblank_state)
+void ksys573_state::sys573_vblank( screen_device &screen, bool vblank_state )
 {
-	update_mode();
+	update_disc();
 
 	/// TODO: emulate the memory controller board
 	if( strcmp( machine().system().name, "ddr2ml" ) == 0 )
@@ -1360,6 +787,45 @@ void ksys573_state::sys573_vblank(screen_device &screen, bool vblank_state)
 	}
 }
 
+// H8 check at startup (JVS related)
+
+WRITE_LINE_MEMBER( ksys573_state::h8_clk_w )
+{
+	if( m_h8_clk != state )
+	{
+		if( state )
+		{
+			if( m_h8_index < m_h8_response.length() - 1 )
+			{
+				m_h8_index++;
+			}
+		}
+
+		m_h8_clk = state;
+	}
+}
+
+READ_LINE_MEMBER( ksys573_state::h8_d0_r )
+{
+	return ( m_h8_response[ m_h8_index ] >> 0 ) & 1;
+}
+
+READ_LINE_MEMBER( ksys573_state::h8_d1_r )
+{
+	return ( m_h8_response[ m_h8_index ] >> 1 ) & 1;
+}
+
+READ_LINE_MEMBER( ksys573_state::h8_d2_r )
+{
+	return ( m_h8_response[ m_h8_index ] >> 2 ) & 1;
+}
+
+READ_LINE_MEMBER( ksys573_state::h8_d3_r )
+{
+	return ( m_h8_response[ m_h8_index ] >> 3 ) & 1;
+}
+
+
 /*
 GE765-PWB(B)A
 
@@ -1370,7 +836,7 @@ todo:
 
 */
 
-READ16_MEMBER(ksys573_state::ge765pwbba_r)
+READ16_MEMBER( ksys573_state::ge765pwbba_r )
 {
 	UINT32 data = 0;
 
@@ -1378,60 +844,60 @@ READ16_MEMBER(ksys573_state::ge765pwbba_r)
 	{
 	case 0x4c:
 	case 0x4d:
-		m_upd4701->y_add(m_upd4701_y->read());
-		m_upd4701->switches_set(m_upd4701_switches->read());
+		m_upd4701->y_add( m_upd4701_y->read() );
+		m_upd4701->switches_set( m_upd4701_switches->read() );
 
-		m_upd4701->cs_w(0);
-		m_upd4701->xy_w(1);
+		m_upd4701->cs_w( 0 );
+		m_upd4701->xy_w( 1 );
 
 		if( offset == 0x4c )
 		{
-			m_upd4701->ul_w(0);
+			m_upd4701->ul_w( 0 );
 		}
 		else
 		{
-			m_upd4701->ul_w(1);
+			m_upd4701->ul_w( 1 );
 		}
 
-		data = m_upd4701->d_r(space, 0, 0xffff);
-		m_upd4701->cs_w(1);
+		data = m_upd4701->d_r( space, 0, 0xffff );
+		m_upd4701->cs_w( 1 );
 		break;
 
 	default:
-		verboselog(0, "ge765pwbba_r: unhandled offset %08x %08x\n", offset, mem_mask);
+		verboselog( 0, "ge765pwbba_r: unhandled offset %08x %08x\n", offset, mem_mask );
 		break;
 	}
 
-	verboselog(2, "ge765pwbba_r( %08x, %08x ) %08x\n", offset, mem_mask, data);
+	verboselog( 2, "ge765pwbba_r( %08x, %08x ) %08x\n", offset, mem_mask, data );
 	return data;
 }
 
-WRITE16_MEMBER(ksys573_state::ge765pwbba_w)
+WRITE16_MEMBER( ksys573_state::ge765pwbba_w )
 {
-	switch (offset)
+	switch( offset )
 	{
 	case 0x08:
 		break;
 
 	case 0x40:
-		output_set_value("motor", data & 0xff);
+		output_set_value( "motor", data & 0xff );
 		break;
 
 	case 0x44:
-		output_set_value("brake", data & 0xff);
+		output_set_value( "brake", data & 0xff );
 		break;
 
 	case 0x50:
-		m_upd4701->resety_w(1);
-		m_upd4701->resety_w(0);
+		m_upd4701->resety_w( 1 );
+		m_upd4701->resety_w( 0 );
 		break;
 
 	default:
-		verboselog(0, "ge765pwbba_w: unhandled offset %08x %08x %08x\n", offset, mem_mask, data);
+		verboselog( 0, "ge765pwbba_w: unhandled offset %08x %08x %08x\n", offset, mem_mask, data );
 		break;
 	}
 
-	verboselog(2, "ge765pwbba_w( %08x, %08x, %08x )\n", offset, mem_mask, data);
+	verboselog( 2, "ge765pwbba_w( %08x, %08x, %08x )\n", offset, mem_mask, data );
 }
 
 /*
@@ -1442,7 +908,7 @@ Analogue I/O board
 
 */
 
-READ16_MEMBER(ksys573_state::gx700pwbf_io_r)
+READ16_MEMBER( ksys573_state::gx700pwbf_io_r )
 {
 	UINT32 data = 0;
 	switch( offset )
@@ -1468,7 +934,7 @@ READ16_MEMBER(ksys573_state::gx700pwbf_io_r)
 		break;
 	}
 
-	verboselog(2, "gx700pwbf_io_r( %08x, %08x ) %08x\n", offset, mem_mask, data );
+	verboselog( 2, "gx700pwbf_io_r( %08x, %08x ) %08x\n", offset, mem_mask, data );
 
 	return data;
 }
@@ -1485,16 +951,16 @@ void ksys573_state::gx700pwbf_output( int offset, UINT8 data )
 			int newbit = ( data >> shift[ i ] ) & 1;
 			if( oldbit != newbit )
 			{
-				(this->*m_gx700pwfbf_output_callback)( m_maincpu->space(AS_PROGRAM), ( offset * 8 ) + i, newbit, 0xff );
+				( this->*m_gx700pwfbf_output_callback )( m_maincpu->space( AS_PROGRAM ), ( offset * 8 ) + i, newbit, 0xff );
 			}
 		}
 	}
 	m_gx700pwbf_output_data[ offset ] = data;
 }
 
-WRITE16_MEMBER(ksys573_state::gx700pwbf_io_w)
+WRITE16_MEMBER( ksys573_state::gx700pwbf_io_w )
 {
-	verboselog(2, "gx700pwbf_io_w( %08x, %08x, %08x )\n", offset, mem_mask, data );
+	verboselog( 2, "gx700pwbf_io_w( %08x, %08x, %08x )\n", offset, mem_mask, data );
 
 	switch( offset )
 	{
@@ -1520,18 +986,18 @@ WRITE16_MEMBER(ksys573_state::gx700pwbf_io_w)
 	}
 }
 
-void ksys573_state::gx700pwfbf_init( void (ksys573_state::*output_callback_func)( address_space &space, ATTR_UNUSED offs_t offset, ATTR_UNUSED UINT8 data, ATTR_UNUSED UINT8 mem_mask ) )
+void ksys573_state::gx700pwfbf_init( void ( ksys573_state::*output_callback_func )( address_space &space, ATTR_UNUSED offs_t offset, ATTR_UNUSED UINT8 data, ATTR_UNUSED UINT8 mem_mask ) )
 {
 	memset( m_gx700pwbf_output_data, 0, sizeof( m_gx700pwbf_output_data ) );
 
 	m_gx700pwfbf_output_callback = output_callback_func;
 
-	save_item( NAME(m_gx700pwbf_output_data) );
+	save_item( NAME( m_gx700pwbf_output_data ) );
 }
 
 /*
 
-GN845-PWB(B)
+GN845-PWB( B )
 
 DDR Stage Multiplexor
 
@@ -1603,12 +1069,12 @@ void ksys573_state::gn845pwbb_clk_w( int offset, int data )
 		m_stage_state[ offset ].state, m_stage_state[ offset ].DO, m_stage_state[ offset ].shift, m_stage_state[ offset ].bit, m_stage_mask );
 }
 
-CUSTOM_INPUT_MEMBER(ksys573_state::gn845pwbb_read)
+CUSTOM_INPUT_MEMBER( ksys573_state::gn845pwbb_read )
 {
 	return m_stage->read() & m_stage_mask;
 }
 
-WRITE8_MEMBER(ksys573_state::ddr_output_callback)
+WRITE8_MEMBER( ksys573_state::ddr_output_callback )
 {
 	switch( offset )
 	{
@@ -1690,44 +1156,44 @@ WRITE8_MEMBER(ksys573_state::ddr_output_callback)
 		break;
 
 	default:
-//        printf( "%d=%d\n", offset, data );
+//      printf( "%d=%d\n", offset, data );
 		break;
 	}
 }
 
-DRIVER_INIT_MEMBER(ksys573_state,ddr)
+DRIVER_INIT_MEMBER( ksys573_state, ddr )
 {
 	m_stage_mask = 0xffffffff;
 	gx700pwfbf_init( &ksys573_state::ddr_output_callback );
 
-	save_item( NAME(m_stage_mask) );
+	save_item( NAME( m_stage_mask ) );
 }
 
 /* Guitar freaks */
 
-WRITE_LINE_MEMBER(ksys573_state::gtrfrks_lamps_b7)
+WRITE_LINE_MEMBER( ksys573_state::gtrfrks_lamps_b7 )
 {
 	output_set_value( "spot left", state );
 }
 
-WRITE_LINE_MEMBER(ksys573_state::gtrfrks_lamps_b6)
+WRITE_LINE_MEMBER( ksys573_state::gtrfrks_lamps_b6 )
 {
 	output_set_value( "spot right", state );
 }
 
-WRITE_LINE_MEMBER(ksys573_state::gtrfrks_lamps_b5)
+WRITE_LINE_MEMBER( ksys573_state::gtrfrks_lamps_b5 )
 {
 	output_set_led_value( 0, state ); // start left
 }
 
-WRITE_LINE_MEMBER(ksys573_state::gtrfrks_lamps_b4)
+WRITE_LINE_MEMBER( ksys573_state::gtrfrks_lamps_b4 )
 {
 	output_set_led_value( 1, state ); // start right
 }
 
 /* ddr solo */
 
-WRITE8_MEMBER(ksys573_state::ddrsolo_output_callback)
+WRITE8_MEMBER( ksys573_state::ddrsolo_output_callback )
 {
 	switch( offset )
 	{
@@ -1782,7 +1248,7 @@ WRITE8_MEMBER(ksys573_state::ddrsolo_output_callback)
 
 /* drummania */
 
-WRITE8_MEMBER(ksys573_state::drmn_output_callback)
+WRITE8_MEMBER( ksys573_state::drmn_output_callback )
 {
 	switch( offset )
 	{
@@ -1846,14 +1312,14 @@ WRITE8_MEMBER(ksys573_state::drmn_output_callback)
 	}
 }
 
-DRIVER_INIT_MEMBER(ksys573_state,drmn)
+DRIVER_INIT_MEMBER( ksys573_state,drmn )
 {
 	gx700pwfbf_init( &ksys573_state::drmn_output_callback );
 }
 
 /* dance maniax */
 
-WRITE8_MEMBER(ksys573_state::dmx_output_callback)
+WRITE8_MEMBER( ksys573_state::dmx_output_callback )
 {
 	switch( offset )
 	{
@@ -1971,32 +1437,32 @@ WRITE8_MEMBER(ksys573_state::dmx_output_callback)
 	}
 }
 
-WRITE_LINE_MEMBER(ksys573_state::dmx_lamps_b0)
+WRITE_LINE_MEMBER( ksys573_state::dmx_lamps_b0 )
 {
 	output_set_value( "left 2p", state );
 }
 
-WRITE_LINE_MEMBER(ksys573_state::dmx_lamps_b1)
+WRITE_LINE_MEMBER( ksys573_state::dmx_lamps_b1 )
 {
 	output_set_led_value( 1, state ); // start 1p
 }
 
-WRITE_LINE_MEMBER(ksys573_state::dmx_lamps_b2)
+WRITE_LINE_MEMBER( ksys573_state::dmx_lamps_b2 )
 {
 	output_set_value( "right 2p", state );
 }
 
-WRITE_LINE_MEMBER(ksys573_state::dmx_lamps_b3)
+WRITE_LINE_MEMBER( ksys573_state::dmx_lamps_b3 )
 {
 	output_set_value( "left 1p", state );
 }
 
-WRITE_LINE_MEMBER(ksys573_state::dmx_lamps_b4)
+WRITE_LINE_MEMBER( ksys573_state::dmx_lamps_b4 )
 {
 	output_set_led_value( 0, state ); // start 2p
 }
 
-WRITE_LINE_MEMBER(ksys573_state::dmx_lamps_b5)
+WRITE_LINE_MEMBER( ksys573_state::dmx_lamps_b5 )
 {
 	output_set_value( "right 1p", state );
 }
@@ -2050,23 +1516,23 @@ WRITE_LINE_MEMBER( ksys573_state::salarymc_lamp_clk )
 }
 
 static MACHINE_CONFIG_FRAGMENT( salarymc_cassette_install )
-	MCFG_DEVICE_MODIFY(DEVICE_SELF)
-	MCFG_KONAMI573_CASSETTE_Y_D5_HANDLER(DEVWRITELINE(":", ksys573_state, salarymc_lamp_clk))
-	MCFG_KONAMI573_CASSETTE_Y_D6_HANDLER(DEVWRITELINE(":", ksys573_state, salarymc_lamp_rst))
-	MCFG_KONAMI573_CASSETTE_Y_D7_HANDLER(DEVWRITELINE(":", ksys573_state, salarymc_lamp_d))
+	MCFG_DEVICE_MODIFY( DEVICE_SELF )
+	MCFG_KONAMI573_CASSETTE_Y_D5_HANDLER( DEVWRITELINE( ":", ksys573_state, salarymc_lamp_clk ) )
+	MCFG_KONAMI573_CASSETTE_Y_D6_HANDLER( DEVWRITELINE( ":", ksys573_state, salarymc_lamp_rst ) )
+	MCFG_KONAMI573_CASSETTE_Y_D7_HANDLER( DEVWRITELINE( ":", ksys573_state, salarymc_lamp_d ) )
 MACHINE_CONFIG_END
 
-DRIVER_INIT_MEMBER(ksys573_state,salarymc)
+DRIVER_INIT_MEMBER( ksys573_state, salarymc )
 {
 	m_salarymc_lamp_bits = 0;
 	m_salarymc_lamp_shift = 0;
 	m_salarymc_lamp_d = 0;
 	m_salarymc_lamp_clk = 0;
 
-	save_item( NAME(m_salarymc_lamp_bits) );
-	save_item( NAME(m_salarymc_lamp_shift) );
-	save_item( NAME(m_salarymc_lamp_d) );
-	save_item( NAME(m_salarymc_lamp_clk) );
+	save_item( NAME( m_salarymc_lamp_bits ) );
+	save_item( NAME( m_salarymc_lamp_shift ) );
+	save_item( NAME( m_salarymc_lamp_d ) );
+	save_item( NAME( m_salarymc_lamp_clk ) );
 }
 
 /* Hyper Bishi Bashi Champ */
@@ -2131,26 +1597,26 @@ WRITE_LINE_MEMBER( ksys573_state::hyperbbc_lamp_strobe3 )
 }
 
 static MACHINE_CONFIG_FRAGMENT( hyperbbc_cassette_install )
-	MCFG_DEVICE_MODIFY(DEVICE_SELF)
-	MCFG_KONAMI573_CASSETTE_Y_D0_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_strobe3)) // line shared with x76f100 sda
-	MCFG_KONAMI573_CASSETTE_Y_D1_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_strobe2)) // line shared with x76f100 scl
-	MCFG_KONAMI573_CASSETTE_Y_D3_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_strobe1)) // line shared with x76f100 rst
-	MCFG_KONAMI573_CASSETTE_Y_D4_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_green))
-	MCFG_KONAMI573_CASSETTE_Y_D5_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_blue))
-	MCFG_KONAMI573_CASSETTE_Y_D6_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_red))
-	MCFG_KONAMI573_CASSETTE_Y_D7_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_start))
+	MCFG_DEVICE_MODIFY( DEVICE_SELF )
+	MCFG_KONAMI573_CASSETTE_Y_D0_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_strobe3 ) ) // line shared with x76f100 sda
+	MCFG_KONAMI573_CASSETTE_Y_D1_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_strobe2 ) ) // line shared with x76f100 scl
+	MCFG_KONAMI573_CASSETTE_Y_D3_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_strobe1 ) ) // line shared with x76f100 rst
+	MCFG_KONAMI573_CASSETTE_Y_D4_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_green ) )
+	MCFG_KONAMI573_CASSETTE_Y_D5_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_blue ) )
+	MCFG_KONAMI573_CASSETTE_Y_D6_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_red ) )
+	MCFG_KONAMI573_CASSETTE_Y_D7_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_start ) )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_FRAGMENT( hypbbc2p_cassette_install )
-	MCFG_DEVICE_MODIFY(DEVICE_SELF)
-	MCFG_KONAMI573_CASSETTE_Y_D0_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_strobe2)) // line shared with x76f100 sda
-	MCFG_KONAMI573_CASSETTE_Y_D3_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_strobe1)) // line shared with x76f100 rst
-	MCFG_KONAMI573_CASSETTE_Y_D4_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_green))
-	MCFG_KONAMI573_CASSETTE_Y_D5_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_blue))
-	MCFG_KONAMI573_CASSETTE_Y_D6_HANDLER(DEVWRITELINE(":", ksys573_state, hyperbbc_lamp_red))
+	MCFG_DEVICE_MODIFY( DEVICE_SELF )
+	MCFG_KONAMI573_CASSETTE_Y_D0_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_strobe2 ) ) // line shared with x76f100 sda
+	MCFG_KONAMI573_CASSETTE_Y_D3_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_strobe1 ) ) // line shared with x76f100 rst
+	MCFG_KONAMI573_CASSETTE_Y_D4_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_green ) )
+	MCFG_KONAMI573_CASSETTE_Y_D5_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_blue ) )
+	MCFG_KONAMI573_CASSETTE_Y_D6_HANDLER( DEVWRITELINE( ":", ksys573_state, hyperbbc_lamp_red ) )
 MACHINE_CONFIG_END
 
-DRIVER_INIT_MEMBER(ksys573_state,hyperbbc)
+DRIVER_INIT_MEMBER( ksys573_state, hyperbbc )
 {
 	m_hyperbbc_lamp_red = 0;
 	m_hyperbbc_lamp_green = 0;
@@ -2160,18 +1626,18 @@ DRIVER_INIT_MEMBER(ksys573_state,hyperbbc)
 	m_hyperbbc_lamp_strobe2 = 0;
 	m_hyperbbc_lamp_strobe3 = 0;
 
-	save_item( NAME(m_hyperbbc_lamp_red) );
-	save_item( NAME(m_hyperbbc_lamp_green) );
-	save_item( NAME(m_hyperbbc_lamp_blue) );
-	save_item( NAME(m_hyperbbc_lamp_start) );
-	save_item( NAME(m_hyperbbc_lamp_strobe1) );
-	save_item( NAME(m_hyperbbc_lamp_strobe2) );
-	save_item( NAME(m_hyperbbc_lamp_strobe3) );
+	save_item( NAME( m_hyperbbc_lamp_red ) );
+	save_item( NAME( m_hyperbbc_lamp_green ) );
+	save_item( NAME( m_hyperbbc_lamp_blue ) );
+	save_item( NAME( m_hyperbbc_lamp_start ) );
+	save_item( NAME( m_hyperbbc_lamp_strobe1 ) );
+	save_item( NAME( m_hyperbbc_lamp_strobe2 ) );
+	save_item( NAME( m_hyperbbc_lamp_strobe3 ) );
 }
 
 /* Mambo A Go Go */
 
-WRITE8_MEMBER(ksys573_state::mamboagg_output_callback)
+WRITE8_MEMBER( ksys573_state::mamboagg_output_callback )
 {
 	switch( offset )
 	{
@@ -2199,17 +1665,17 @@ WRITE8_MEMBER(ksys573_state::mamboagg_output_callback)
 	}
 }
 
-WRITE_LINE_MEMBER(ksys573_state::mamboagg_lamps_b3)
+WRITE_LINE_MEMBER( ksys573_state::mamboagg_lamps_b3 )
 {
 	output_set_led_value( 0, state ); // start 1p
 }
 
-WRITE_LINE_MEMBER(ksys573_state::mamboagg_lamps_b4)
+WRITE_LINE_MEMBER( ksys573_state::mamboagg_lamps_b4 )
 {
 	output_set_value( "select right", state );
 }
 
-WRITE_LINE_MEMBER(ksys573_state::mamboagg_lamps_b5)
+WRITE_LINE_MEMBER( ksys573_state::mamboagg_lamps_b5 )
 {
 	output_set_value( "select left", state );
 }
@@ -2218,10 +1684,9 @@ WRITE_LINE_MEMBER(ksys573_state::mamboagg_lamps_b5)
 /* punch mania */
 
 
-static double punchmania_inputs_callback( device_t *device, UINT8 input )
+ADC083X_INPUT_CB(konami573_cassette_xi_device::punchmania_inputs_callback)
 {
-	ksys573_state *state = device->machine().driver_data<ksys573_state>();
-
+	ksys573_state *state = machine().driver_data<ksys573_state>();
 	double *pad_position = state->m_pad_position;
 	int pads = state->m_pads->read();
 	for( int i = 0; i < 6; i++ )
@@ -2256,14 +1721,14 @@ static double punchmania_inputs_callback( device_t *device, UINT8 input )
 
 
 static MACHINE_CONFIG_FRAGMENT( punchmania_cassette_install )
-	MCFG_DEVICE_MODIFY("adc0838")
-	MCFG_ADC083X_INPUT_CALLBACK(punchmania_inputs_callback)
+	MCFG_DEVICE_MODIFY( "adc0838" )
+	MCFG_ADC083X_INPUT_CB( konami573_cassette_xi_device, punchmania_inputs_callback )
 MACHINE_CONFIG_END
 
 
 int pad_light[ 6 ];
 
-WRITE8_MEMBER( ksys573_state::punchmania_output_callback)
+WRITE8_MEMBER( ksys573_state::punchmania_output_callback )
 {
 	double *pad_position = m_pad_position;
 	char pad[ 7 ];
@@ -2374,8 +1839,8 @@ WRITE8_MEMBER( ksys573_state::punchmania_output_callback)
 		break;
 	}
 	sprintf( pad, "%d%d%d%d%d%d",
-		(int)pad_position[ 0 ], (int)pad_position[ 1 ], (int)pad_position[ 2 ],
-		(int)pad_position[ 3 ], (int)pad_position[ 4 ], (int)pad_position[ 5 ] );
+		( int )pad_position[ 0 ], ( int )pad_position[ 1 ], ( int )pad_position[ 2 ],
+		( int )pad_position[ 3 ], ( int )pad_position[ 4 ], ( int )pad_position[ 5 ] );
 
 	if( pad_light[ 0 ] ) pad[ 0 ] = '*';
 	if( pad_light[ 1 ] ) pad[ 1 ] = '*';
@@ -2387,14 +1852,14 @@ WRITE8_MEMBER( ksys573_state::punchmania_output_callback)
 	popmessage( "%s", pad );
 }
 
-DRIVER_INIT_MEMBER(ksys573_state,pnchmn)
+DRIVER_INIT_MEMBER( ksys573_state,pnchmn )
 {
 	gx700pwfbf_init( &ksys573_state::punchmania_output_callback );
 }
 
 /* GunMania */
 
-WRITE16_MEMBER(ksys573_state::gunmania_w)
+WRITE16_MEMBER( ksys573_state::gunmania_w )
 {
 	char s[ 1024 ] = "";
 
@@ -2435,7 +1900,7 @@ WRITE16_MEMBER(ksys573_state::gunmania_w)
 			break;
 
 		case 0x50:
-			strcat( s, "bullet shutter motor unknown ");
+			strcat( s, "bullet shutter motor unknown " );
 			break;
 		}
 
@@ -2462,7 +1927,7 @@ WRITE16_MEMBER(ksys573_state::gunmania_w)
 			break;
 
 		case 0x0a:
-			strcat( s, "tank shutter motor unknown ");
+			strcat( s, "tank shutter motor unknown " );
 			break;
 		}
 
@@ -2481,10 +1946,10 @@ WRITE16_MEMBER(ksys573_state::gunmania_w)
 		break;
 	}
 
-	verboselog(2, "gunmania_w %08x %08x %08x\n", offset, mem_mask, data );
+	verboselog( 2, "gunmania_w %08x %08x %08x\n", offset, mem_mask, data );
 }
 
-CUSTOM_INPUT_MEMBER(ksys573_state::gunmania_tank_shutter_sensor)
+CUSTOM_INPUT_MEMBER( ksys573_state::gunmania_tank_shutter_sensor )
 {
 	if( m_tank_shutter_position == 0 )
 	{
@@ -2494,12 +1959,12 @@ CUSTOM_INPUT_MEMBER(ksys573_state::gunmania_tank_shutter_sensor)
 	return 0;
 }
 
-CUSTOM_INPUT_MEMBER(ksys573_state::gunmania_cable_holder_sensor)
+CUSTOM_INPUT_MEMBER( ksys573_state::gunmania_cable_holder_sensor )
 {
 	return m_cable_holder_release;
 }
 
-READ16_MEMBER(ksys573_state::gunmania_r)
+READ16_MEMBER( ksys573_state::gunmania_r )
 {
 	UINT32 data = 0;
 
@@ -2519,26 +1984,24 @@ READ16_MEMBER(ksys573_state::gunmania_r)
 		break;
 	}
 
-	verboselog(2, "gunmania_r %08x %08x %08x\n", offset, mem_mask, data );
+	verboselog( 2, "gunmania_r %08x %08x %08x\n", offset, mem_mask, data );
 	return data;
 }
 
 /* ADC0834 Interface */
 
-static double analogue_inputs_callback( device_t *device, UINT8 input )
+ADC083X_INPUT_CB(ksys573_state::analogue_inputs_callback)
 {
-	ksys573_state *state = device->machine().driver_data<ksys573_state>();
-
-	switch (input)
+	switch( input )
 	{
 	case ADC083X_CH0:
-		return (double)( 5 * state->m_analog0->read() ) / 255.0;
+		return (double)( 5 * m_analog0->read() ) / 255.0;
 	case ADC083X_CH1:
-		return (double)( 5 * state->m_analog1->read() ) / 255.0;
+		return (double)( 5 * m_analog1->read() ) / 255.0;
 	case ADC083X_CH2:
-		return (double)( 5 * state->m_analog2->read() ) / 255.0;
+		return (double)( 5 * m_analog2->read() ) / 255.0;
 	case ADC083X_CH3:
-		return (double)( 5 * state->m_analog3->read() ) / 255.0;
+		return (double)( 5 * m_analog3->read() ) / 255.0;
 	case ADC083X_AGND:
 		return 0;
 	case ADC083X_VREF:
@@ -2548,116 +2011,109 @@ static double analogue_inputs_callback( device_t *device, UINT8 input )
 	return 0;
 }
 
-SLOT_INTERFACE_START(slot_empty)
-SLOT_INTERFACE_END
+static MACHINE_CONFIG_FRAGMENT( cr589_config )
+	MCFG_DEVICE_MODIFY( "cdda" )
+	MCFG_SOUND_ROUTE( 0, "^^^^lspeaker", 1.0 )
+	MCFG_SOUND_ROUTE( 1, "^^^^rspeaker", 1.0 )
+MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( konami573, ksys573_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD( "maincpu", CXD8530CQ, XTAL_67_7376MHz )
 	MCFG_CPU_PROGRAM_MAP( konami573_map )
 
-	MCFG_RAM_MODIFY("maincpu:ram")
-	MCFG_RAM_DEFAULT_SIZE("4M")
+	MCFG_RAM_MODIFY( "maincpu:ram" )
+	MCFG_RAM_DEFAULT_SIZE( "4M" )
 
 	MCFG_PSX_DMA_CHANNEL_READ( "maincpu", 5, psx_dma_read_delegate( FUNC( ksys573_state::cdrom_dma_read ), (ksys573_state *) owner ) )
 	MCFG_PSX_DMA_CHANNEL_WRITE( "maincpu", 5, psx_dma_write_delegate( FUNC( ksys573_state::cdrom_dma_write ), (ksys573_state *) owner ) )
 
-	MCFG_MACHINE_RESET_OVERRIDE(ksys573_state, konami573)
+	MCFG_MACHINE_RESET_OVERRIDE( ksys573_state, konami573 )
 
-	MCFG_DEVICE_ADD("mb89371", MB89371, 0)
-	MCFG_DEVICE_ADD("cdrom", CR589, 0)
+	MCFG_DEVICE_ADD( "mb89371", MB89371, 0 )
 
-	MCFG_DEVICE_ADD("maincpu:sio1:cassette", KONAMI573_CASSETTE_SLOT_SERIAL, 0)
+	MCFG_DEVICE_ADD( "ata", ATA_INTERFACE, 0 )
+	MCFG_ATA_INTERFACE_IRQ_HANDLER( WRITELINE( ksys573_state, ata_interrupt ) )
 
-	MCFG_DEVICE_ADD("cassette", KONAMI573_CASSETTE_SLOT, 0)
-	MCFG_DEVICE_SLOT_INTERFACE(slot_empty, NULL, false)
+	MCFG_DEVICE_MODIFY( "ata:0" )
+	MCFG_SLOT_OPTION_ADD( "cr589", CR589 )
+	MCFG_SLOT_OPTION_MACHINE_CONFIG( "cr589", cr589_config )
+	MCFG_SLOT_DEFAULT_OPTION( "cr589" )
+
+	MCFG_DEVICE_ADD( "cassette", KONAMI573_CASSETTE_SLOT, 0 )
+	MCFG_KONAMI573_CASSETTE_DSR_HANDLER(DEVWRITELINE( "maincpu:sio1", psxsio1_device, write_dsr ) )
 
 	// onboard flash
-	MCFG_FUJITSU_29F016A_ADD("29f016a.31m")
-	MCFG_FUJITSU_29F016A_ADD("29f016a.27m")
-	MCFG_FUJITSU_29F016A_ADD("29f016a.31l")
-	MCFG_FUJITSU_29F016A_ADD("29f016a.27l")
-	MCFG_FUJITSU_29F016A_ADD("29f016a.31j")
-	MCFG_FUJITSU_29F016A_ADD("29f016a.27j")
-	MCFG_FUJITSU_29F016A_ADD("29f016a.31h")
-	MCFG_FUJITSU_29F016A_ADD("29f016a.27h")
+	MCFG_FUJITSU_29F016A_ADD( "29f016a.31m" )
+	MCFG_FUJITSU_29F016A_ADD( "29f016a.27m" )
+	MCFG_FUJITSU_29F016A_ADD( "29f016a.31l" )
+	MCFG_FUJITSU_29F016A_ADD( "29f016a.27l" )
+	MCFG_FUJITSU_29F016A_ADD( "29f016a.31j" )
+	MCFG_FUJITSU_29F016A_ADD( "29f016a.27j" )
+	MCFG_FUJITSU_29F016A_ADD( "29f016a.31h" )
+	MCFG_FUJITSU_29F016A_ADD( "29f016a.27h" )
 
-	MCFG_DEVICE_ADD("pccard1", PCCARD_SLOT, 0)
-	MCFG_DEVICE_SLOT_INTERFACE(slot_empty, NULL, false)
+	MCFG_DEVICE_ADD( "pccard1", PCCARD_SLOT, 0 )
+	MCFG_DEVICE_ADD( "pccard2", PCCARD_SLOT, 0 )
 
-	MCFG_DEVICE_ADD("pccard2", PCCARD_SLOT, 0)
-	MCFG_DEVICE_SLOT_INTERFACE(slot_empty, NULL, false)
-
-	MCFG_DEVICE_ADD("flashbank", ADDRESS_MAP_BANK, 0)
-	MCFG_DEVICE_PROGRAM_MAP(flashbank_map)
-	MCFG_ADDRESS_MAP_BANK_ENDIANNESS(ENDIANNESS_LITTLE)
-	MCFG_ADDRESS_MAP_BANK_DATABUS_WIDTH(16)
-	MCFG_ADDRESS_MAP_BANK_STRIDE(0x400000)
+	MCFG_DEVICE_ADD( "flashbank", ADDRESS_MAP_BANK, 0 )
+	MCFG_DEVICE_PROGRAM_MAP( flashbank_map )
+	MCFG_ADDRESS_MAP_BANK_ENDIANNESS( ENDIANNESS_LITTLE )
+	MCFG_ADDRESS_MAP_BANK_DATABUS_WIDTH( 16 )
+	MCFG_ADDRESS_MAP_BANK_STRIDE( 0x400000 )
 
 	/* video hardware */
 	MCFG_PSXGPU_ADD( "maincpu", "gpu", CXD8561Q, 0x200000, XTAL_53_693175MHz )
 	MCFG_PSXGPU_VBLANK_CALLBACK( vblank_state_delegate( FUNC( ksys573_state::sys573_vblank ), (ksys573_state *) owner ) )
 
 	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
+	MCFG_SPEAKER_STANDARD_STEREO( "lspeaker", "rspeaker" )
 
 	MCFG_SPU_ADD( "spu", XTAL_67_7376MHz/2 )
 	MCFG_SOUND_ROUTE( 0, "lspeaker", 1.0 )
 	MCFG_SOUND_ROUTE( 1, "rspeaker", 1.0 )
 
-	MCFG_SOUND_MODIFY( "cdrom:cdda" )
-	MCFG_SOUND_ROUTE( 0, "^^lspeaker", 1.0 )
-	MCFG_SOUND_ROUTE( 1, "^^rspeaker", 1.0 )
-
 	MCFG_M48T58_ADD( "m48t58" )
 
 	MCFG_DEVICE_ADD( "adc0834", ADC0834, 0 )
-	MCFG_ADC083X_INPUT_CALLBACK(analogue_inputs_callback)
+	MCFG_ADC083X_INPUT_CB( ksys573_state, analogue_inputs_callback )
 MACHINE_CONFIG_END
 
 // Variants with additional digital sound board
-static MACHINE_CONFIG_DERIVED(k573d, konami573)
-	MCFG_CPU_MODIFY("maincpu")
-	MCFG_CPU_PROGRAM_MAP(konami573d_map)
-	MCFG_MPEG573_ADD( "mpeg573", XTAL_19_6608MHz, NOOP)
+static MACHINE_CONFIG_DERIVED( k573d, konami573 )
+	MCFG_CPU_MODIFY( "maincpu" )
+	MCFG_CPU_PROGRAM_MAP( konami573d_map )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_ADD( "k573dio", XTAL_19_6608MHz )
 MACHINE_CONFIG_END
 
 // Variants with additional analogue i/o board
-static MACHINE_CONFIG_DERIVED(k573a, konami573)
-	MCFG_CPU_MODIFY("maincpu")
-	MCFG_CPU_PROGRAM_MAP(konami573a_map)
+static MACHINE_CONFIG_DERIVED( k573a, konami573 )
+	MCFG_CPU_MODIFY( "maincpu" )
+	MCFG_CPU_PROGRAM_MAP( konami573a_map )
 MACHINE_CONFIG_END
 
-SLOT_INTERFACE_START(slot_linflash16mb)
-	SLOT_INTERFACE("16mb", LINEAR_FLASH_PCCARD_16MB)
-SLOT_INTERFACE_END
-
-SLOT_INTERFACE_START(slot_linflash32mb)
-	SLOT_INTERFACE("32mb", LINEAR_FLASH_PCCARD_32MB)
-SLOT_INTERFACE_END
-
-SLOT_INTERFACE_START(slot_linflash64mb)
-	SLOT_INTERFACE("64mb", LINEAR_FLASH_PCCARD_64MB)
-SLOT_INTERFACE_END
-
 static MACHINE_CONFIG_FRAGMENT( pccard1_16mb )
-	MCFG_DEVICE_MODIFY("pccard1")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_linflash16mb, "16mb", false)
+	MCFG_DEVICE_MODIFY( "pccard1" )
+	MCFG_SLOT_OPTION_ADD( "16mb", LINEAR_FLASH_PCCARD_16MB )
+	MCFG_SLOT_DEFAULT_OPTION( "16mb" )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_FRAGMENT( pccard1_32mb )
-	MCFG_DEVICE_MODIFY("pccard1")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_linflash32mb, "32mb", false)
+	MCFG_DEVICE_MODIFY( "pccard1" )
+	MCFG_SLOT_OPTION_ADD( "32mb", LINEAR_FLASH_PCCARD_32MB )
+	MCFG_SLOT_DEFAULT_OPTION( "32mb" )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_FRAGMENT( pccard2_32mb )
-	MCFG_DEVICE_MODIFY("pccard2")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_linflash32mb, "32mb", false)
+	MCFG_DEVICE_MODIFY( "pccard2" )
+	MCFG_SLOT_OPTION_ADD( "32mb", LINEAR_FLASH_PCCARD_32MB )
+	MCFG_SLOT_DEFAULT_OPTION( "32mb" )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_FRAGMENT( pccard2_64mb )
-	MCFG_DEVICE_MODIFY("pccard2")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_linflash64mb, "64mb", false)
+	MCFG_DEVICE_MODIFY( "pccard2" )
+	MCFG_SLOT_OPTION_ADD( "64mb", LINEAR_FLASH_PCCARD_64MB )
+	MCFG_SLOT_DEFAULT_OPTION( "64mb" )
 MACHINE_CONFIG_END
 
 // Security eeprom variants
@@ -2671,108 +2127,89 @@ MACHINE_CONFIG_END
 //
 // Up to two carts can be used
 
-SLOT_INTERFACE_START(slot_cassx)
-	SLOT_INTERFACE("game", KONAMI573_CASSETTE_X)
-SLOT_INTERFACE_END
-
 static MACHINE_CONFIG_FRAGMENT( cassx )
-	MCFG_DEVICE_MODIFY("cassette")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_cassx, "game", false)
+	MCFG_DEVICE_MODIFY( "cassette" )
+	MCFG_SLOT_OPTION_ADD( "game", KONAMI573_CASSETTE_X )
+	MCFG_SLOT_DEFAULT_OPTION( "game" )
 MACHINE_CONFIG_END
-
-SLOT_INTERFACE_START(slot_cassxi)
-	SLOT_INTERFACE("game", KONAMI573_CASSETTE_XI)
-SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_FRAGMENT( cassxi )
-	MCFG_DEVICE_MODIFY("cassette")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_cassxi, "game", false)
+	MCFG_DEVICE_MODIFY( "cassette" )
+	MCFG_SLOT_OPTION_ADD( "game", KONAMI573_CASSETTE_XI )
+	MCFG_SLOT_DEFAULT_OPTION( "game" )
 MACHINE_CONFIG_END
-
-SLOT_INTERFACE_START(slot_cassy)
-	SLOT_INTERFACE("game", KONAMI573_CASSETTE_Y)
-SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_FRAGMENT( cassy )
-	MCFG_DEVICE_MODIFY("cassette")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_cassy, "game", false)
+	MCFG_DEVICE_MODIFY( "cassette" )
+	MCFG_SLOT_OPTION_ADD( "game", KONAMI573_CASSETTE_Y )
+	MCFG_SLOT_DEFAULT_OPTION( "game" )
 MACHINE_CONFIG_END
-
-SLOT_INTERFACE_START(slot_cassyi)
-	SLOT_INTERFACE("game", KONAMI573_CASSETTE_YI)
-SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_FRAGMENT( cassyi )
-	MCFG_DEVICE_MODIFY("cassette")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_cassyi, "game", false)
+	MCFG_DEVICE_MODIFY( "cassette" )
+	MCFG_SLOT_OPTION_ADD( "game", KONAMI573_CASSETTE_YI )
+	MCFG_SLOT_DEFAULT_OPTION( "game" )
 MACHINE_CONFIG_END
-
-SLOT_INTERFACE_START(slot_cassyyi)
-	SLOT_INTERFACE("game", KONAMI573_CASSETTE_YI)
-	SLOT_INTERFACE("install", KONAMI573_CASSETTE_YI)
-SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_FRAGMENT( cassyyi )
-	MCFG_DEVICE_MODIFY("cassette")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_cassyyi, "game", false)
+	MCFG_DEVICE_MODIFY( "cassette" )
+	MCFG_SLOT_OPTION_ADD( "game", KONAMI573_CASSETTE_YI )
+	MCFG_SLOT_OPTION_ADD( "install", KONAMI573_CASSETTE_YI )
+	MCFG_SLOT_DEFAULT_OPTION( "game" )
 MACHINE_CONFIG_END
-
-SLOT_INTERFACE_START(slot_casszi)
-	SLOT_INTERFACE("game", KONAMI573_CASSETTE_ZI)
-SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_FRAGMENT( casszi )
-	MCFG_DEVICE_MODIFY("cassette")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_casszi, "game", false)
+	MCFG_DEVICE_MODIFY( "cassette" )
+	MCFG_SLOT_OPTION_ADD( "game", KONAMI573_CASSETTE_ZI )
+	MCFG_SLOT_DEFAULT_OPTION( "game" )
 MACHINE_CONFIG_END
 
-SLOT_INTERFACE_START(slot_cassxzi)
-	SLOT_INTERFACE("game", KONAMI573_CASSETTE_ZI)
-	SLOT_INTERFACE("install", KONAMI573_CASSETTE_XI)
-SLOT_INTERFACE_END
-
 static MACHINE_CONFIG_FRAGMENT( cassxzi )
-	MCFG_DEVICE_MODIFY("cassette")
-	MCFG_DEVICE_SLOT_INTERFACE(slot_cassxzi, "game", false)
+	MCFG_DEVICE_MODIFY( "cassette" )
+	MCFG_SLOT_OPTION_ADD( "game", KONAMI573_CASSETTE_ZI )
+	MCFG_SLOT_OPTION_ADD( "install", KONAMI573_CASSETTE_XI )
+	MCFG_SLOT_DEFAULT_OPTION( "game" )
 MACHINE_CONFIG_END
 
 // Dance Dance Revolution
 
-static MACHINE_CONFIG_DERIVED(ddr, k573a)
+static MACHINE_CONFIG_DERIVED( ddr, k573a )
 	MCFG_FRAGMENT_ADD( cassx )
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_DERIVED(ddr2ml, k573a)
+static MACHINE_CONFIG_DERIVED( ddr2ml, k573a )
+	MCFG_DEVICE_ADD( "k573mcr", KONAMI_573_MEMORY_CARD_READER, 0 )
+
 	MCFG_FRAGMENT_ADD( pccard1_16mb )
 	MCFG_FRAGMENT_ADD( cassx )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ddr3m, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, ddr_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, ddr_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( pccard2_32mb )
 	MCFG_FRAGMENT_ADD( cassyyi )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ddr3mp, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, ddr_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, ddr_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( pccard2_32mb )
 	MCFG_FRAGMENT_ADD( cassxzi )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ddrusa, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, ddr_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, ddr_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( casszi )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ddr5m, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, ddr_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, ddr_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( pccard2_32mb )
 	MCFG_FRAGMENT_ADD( casszi )
@@ -2780,25 +2217,25 @@ MACHINE_CONFIG_END
 
 // Dancing Stage
 
-static MACHINE_CONFIG_DERIVED(dsfdcta, k573a)
+static MACHINE_CONFIG_DERIVED( dsfdcta, k573a )
 	MCFG_FRAGMENT_ADD( pccard2_32mb )
 	MCFG_FRAGMENT_ADD( cassyyi )
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_DERIVED(dsftkd, k573a)
+static MACHINE_CONFIG_DERIVED( dsftkd, k573a )
 	MCFG_FRAGMENT_ADD( cassyi )
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_DERIVED(dsfdr, k573d)
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, ddr_output_callback))
+static MACHINE_CONFIG_DERIVED( dsfdr, k573d )
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, ddr_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( cassxzi )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( dsem, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, ddr_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, ddr_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( cassxi )
 MACHINE_CONFIG_END
@@ -2806,22 +2243,22 @@ MACHINE_CONFIG_END
 // Dance Dance Revolution Solo
 
 static MACHINE_CONFIG_DERIVED( ddrsolo, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, ddrsolo_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, ddrsolo_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( cassyi )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ddrs2k, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, ddrsolo_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, ddrsolo_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( cassyyi )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ddr4ms, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, ddrsolo_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, ddrsolo_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( pccard2_32mb )
 	MCFG_FRAGMENT_ADD( cassxzi )
@@ -2829,33 +2266,35 @@ MACHINE_CONFIG_END
 
 // DrumMania
 
-static MACHINE_CONFIG_DERIVED(drmn, k573a)
+static MACHINE_CONFIG_DERIVED( drmn, k573a )
 	MCFG_FRAGMENT_ADD( cassx )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( drmn2m, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, drmn_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, drmn_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( cassxzi )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( drmn4m, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, drmn_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, drmn_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( casszi )
+
+	MCFG_DEVICE_ADD( "k573msu", KONAMI_573_MULTI_SESSION_UNIT, 0 )
 MACHINE_CONFIG_END
 
 // Guitar Freaks
 
-static MACHINE_CONFIG_DERIVED(gtrfrks, k573a)
+static MACHINE_CONFIG_DERIVED( gtrfrks, k573a )
 	MCFG_FRAGMENT_ADD( cassx )
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_DERIVED(gtrfrk2m, k573a)
-	MCFG_FRAGMENT_ADD( pccard1_16mb )
+static MACHINE_CONFIG_DERIVED( gtrfrk2m, k573a )
 	MCFG_FRAGMENT_ADD( cassyi )
+	MCFG_FRAGMENT_ADD( pccard1_32mb ) // HACK: The installation tries to check and erase 32mb but only flashes 16mb.
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( gtrfrk3m, k573d )
@@ -2868,38 +2307,47 @@ static MACHINE_CONFIG_DERIVED( gtrfrk5m, k573d )
 	MCFG_FRAGMENT_ADD( pccard1_16mb )
 MACHINE_CONFIG_END
 
+static MACHINE_CONFIG_DERIVED( gtrfrk7m, k573d )
+	MCFG_FRAGMENT_ADD( casszi )
+	MCFG_FRAGMENT_ADD( pccard1_32mb )
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( gtfrk10mb, gtrfrk7m )
+	MCFG_DEVICE_ADD( "k573npu", KONAMI_573_NETWORK_PCB_UNIT, 0 )
+MACHINE_CONFIG_END
+
 // Miscellaneous
 
 static MACHINE_CONFIG_DERIVED( konami573x, konami573 )
 	MCFG_FRAGMENT_ADD( cassx )
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_DERIVED(fbaitbc, konami573)
-	MCFG_CPU_MODIFY("maincpu")
-	MCFG_CPU_PROGRAM_MAP(fbaitbc_map)
+static MACHINE_CONFIG_DERIVED( fbaitbc, konami573 )
+	MCFG_CPU_MODIFY( "maincpu" )
+	MCFG_CPU_PROGRAM_MAP( fbaitbc_map )
 
-	MCFG_UPD4701_ADD("upd4701")
+	MCFG_UPD4701_ADD( "upd4701" )
 	MCFG_FRAGMENT_ADD( cassx )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( hyperbbc, konami573 )
 	MCFG_FRAGMENT_ADD( cassy ) // The game doesn't check the security chip
 
-	MCFG_DEVICE_MODIFY("cassette")
+	MCFG_DEVICE_MODIFY( "cassette" )
 	MCFG_DEVICE_CARD_MACHINE_CONFIG( "game", hyperbbc_cassette_install )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( hypbbc2p, konami573 )
 	MCFG_FRAGMENT_ADD( cassy )
 
-	MCFG_DEVICE_MODIFY("cassette")
+	MCFG_DEVICE_MODIFY( "cassette" )
 	MCFG_DEVICE_CARD_MACHINE_CONFIG( "game", hypbbc2p_cassette_install )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( salarymc, konami573 )
 	MCFG_FRAGMENT_ADD( cassyi )
 
-	MCFG_DEVICE_MODIFY("cassette")
+	MCFG_DEVICE_MODIFY( "cassette" )
 	MCFG_DEVICE_CARD_MACHINE_CONFIG( "game", salarymc_cassette_install )
 MACHINE_CONFIG_END
 
@@ -2909,13 +2357,13 @@ static MACHINE_CONFIG_DERIVED( gchgchmp, konami573 )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( pnchmn, konami573 )
-	MCFG_CPU_MODIFY("maincpu")
-	MCFG_CPU_PROGRAM_MAP(konami573a_map)
+	MCFG_CPU_MODIFY( "maincpu" )
+	MCFG_CPU_PROGRAM_MAP( konami573a_map )
 
 	MCFG_FRAGMENT_ADD( cassxi )
 	MCFG_FRAGMENT_ADD( pccard1_32mb )
 
-	MCFG_DEVICE_MODIFY("cassette")
+	MCFG_DEVICE_MODIFY( "cassette" )
 	MCFG_DEVICE_CARD_MACHINE_CONFIG( "game", punchmania_cassette_install )
 MACHINE_CONFIG_END
 
@@ -2924,65 +2372,72 @@ static MACHINE_CONFIG_DERIVED( pnchmn2, pnchmn )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( gunmania, konami573 )
-	MCFG_CPU_MODIFY("maincpu")
-	MCFG_CPU_PROGRAM_MAP(gunmania_map)
+	MCFG_CPU_MODIFY( "maincpu" )
+	MCFG_CPU_PROGRAM_MAP( gunmania_map )
 
 	MCFG_DS2401_ADD( "gunmania_id" )
 	MCFG_FRAGMENT_ADD( pccard2_32mb )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( dmx, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, dmx_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, dmx_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( casszi )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( mamboagg, k573d )
-	MCFG_DEVICE_MODIFY( "mpeg573" )
-	MCFG_MPEG573_OUTPUT_CALLBACK(WRITE8(ksys573_state, mamboagg_output_callback))
+	MCFG_DEVICE_MODIFY( "k573dio" )
+	MCFG_KONAMI_573_DIGITAL_IO_BOARD_OUTPUT_CALLBACK( WRITE8( ksys573_state, mamboagg_output_callback ) )
 
 	MCFG_FRAGMENT_ADD( casszi )
 MACHINE_CONFIG_END
 
+static MACHINE_CONFIG_DERIVED( mamboagga, mamboagg )
+	MCFG_DEVICE_ADD( "k573npu", KONAMI_573_NETWORK_PCB_UNIT, 0 )
+MACHINE_CONFIG_END
+
 
 static INPUT_PORTS_START( konami573 )
-	PORT_START("IN0")
+	PORT_START( "IN0" )
 	PORT_BIT( 0xffffffff, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
-	PORT_START("OUT0")
-	PORT_BIT( 0x00000002, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("adc0834", adc083x_device, cs_write)
-	PORT_BIT( 0x00000004, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("adc0834", adc083x_device, clk_write)
-	PORT_BIT( 0x00000001, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("adc0834", adc083x_device, di_write)
+	PORT_START( "OUT0" )
+	PORT_BIT( 0x00000002, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "adc0834", adc083x_device, cs_write )
+	PORT_BIT( 0x00000004, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "adc0834", adc083x_device, clk_write )
+	PORT_BIT( 0x00000001, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "adc0834", adc083x_device, di_write )
+	PORT_BIT( 0x00000100, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, h8_clk_w )
 
-	PORT_START("IN1")
+	PORT_START( "IN1" )
 	PORT_DIPNAME( 0x00000001, 0x00000001, "Unused 1" ) PORT_DIPLOCATION( "DIP SW:1" )
 	PORT_DIPSETTING(          0x00000001, DEF_STR( Off ) )
 	PORT_DIPSETTING(          0x00000000, DEF_STR( On ) )
 	PORT_DIPNAME( 0x00000002, 0x00000002, "Screen Flip" ) PORT_DIPLOCATION( "DIP SW:2" )
 	PORT_DIPSETTING(          0x00000002, DEF_STR( Normal ) )
 	PORT_DIPSETTING(          0x00000000, "V-Flip" )
-	PORT_DIPNAME( 0x00000004, 0x00000004, "Unused 2") PORT_DIPLOCATION( "DIP SW:3" )
+	PORT_DIPNAME( 0x00000004, 0x00000004, "Unused 2" ) PORT_DIPLOCATION( "DIP SW:3" )
 	PORT_DIPSETTING(          0x00000004, DEF_STR( Off ) )
 	PORT_DIPSETTING(          0x00000000, DEF_STR( On ) )
 	PORT_DIPNAME( 0x00000008, 0x00000000, "Start Up Device" ) PORT_DIPLOCATION( "DIP SW:4" )
 	PORT_DIPSETTING(          0x00000008, "CD-ROM Drive" )
 	PORT_DIPSETTING(          0x00000000, "Flash ROM" )
-	PORT_BIT( 0x00000030, IP_ACTIVE_HIGH, IPT_SPECIAL )
-	PORT_BIT( 0x000000c0, IP_ACTIVE_LOW, IPT_SPECIAL)
-	PORT_BIT( 0x00000100, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, read_line_adc083x_do)
-	PORT_BIT( 0x00000200, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, read_line_adc083x_sars)
+	PORT_BIT( 0x00000010, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, h8_d0_r )
+	PORT_BIT( 0x00000020, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, h8_d1_r )
+	PORT_BIT( 0x00000040, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, h8_d2_r )
+	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, h8_d3_r )
+	PORT_BIT( 0x00000100, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, read_line_adc083x_do )
+	PORT_BIT( 0x00000200, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, read_line_adc083x_sars )
 //  PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_UNKNOWN )
 //  PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_CONFNAME( 0x00001000, 0x00001000, "Network?" )
 	PORT_CONFSETTING(          0x00001000, DEF_STR( Off ) )
 	PORT_CONFSETTING(          0x00000000, DEF_STR( On ) )
 //  PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x00004000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, read_line_ds2401)
+	PORT_BIT( 0x00004000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, read_line_ds2401 )
 //  PORT_BIT( 0x00008000, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x00010000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("adc0834", adc083x_device, do_read)
+	PORT_BIT( 0x00010000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( "adc0834", adc083x_device, do_read )
 //  PORT_BIT( 0x00020000, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x00040000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, read_line_secflash_sda)
+	PORT_BIT( 0x00040000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, read_line_secflash_sda )
 	PORT_BIT( 0x00080000, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x00100000, IP_ACTIVE_HIGH, IPT_UNKNOWN ) /* skip hang at startup */
 	PORT_BIT( 0x00200000, IP_ACTIVE_HIGH, IPT_UNKNOWN ) /* skip hang at startup */
@@ -2990,8 +2445,8 @@ static INPUT_PORTS_START( konami573 )
 //  PORT_BIT( 0x00800000, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x01000000, IP_ACTIVE_LOW, IPT_COIN1 )
 	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_COIN2 )
-	PORT_BIT( 0x04000000, IP_ACTIVE_LOW, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("pccard1", pccard_slot_device, read_line_inserted)
-	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("pccard2", pccard_slot_device, read_line_inserted)
+	PORT_BIT( 0x04000000, IP_ACTIVE_LOW, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( "pccard1", pccard_slot_device, read_line_inserted )
+	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( "pccard2", pccard_slot_device, read_line_inserted )
 	PORT_BIT( 0x10000000, IP_ACTIVE_LOW, IPT_SERVICE1 )
 //  PORT_BIT( 0x20000000, IP_ACTIVE_LOW, IPT_UNKNOWN )
 //  PORT_BIT( 0x40000000, IP_ACTIVE_LOW, IPT_UNKNOWN )
@@ -2999,49 +2454,49 @@ static INPUT_PORTS_START( konami573 )
 
 	PORT_START( "OUT1" ) // security_w
 	PORT_BIT( 0xffffff00, IP_ACTIVE_HIGH, IPT_OUTPUT )
-	PORT_BIT( 0x00000001, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, write_line_d0)
-	PORT_BIT( 0x00000002, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, write_line_d1)
-	PORT_BIT( 0x00000004, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, write_line_d2)
-	PORT_BIT( 0x00000008, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, write_line_d3)
-	PORT_BIT( 0x00000010, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, write_line_d4)
-	PORT_BIT( 0x00000020, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, write_line_d5)
-	PORT_BIT( 0x00000040, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, write_line_d6)
-	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, write_line_d7)
+	PORT_BIT( 0x00000001, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, write_line_d0 )
+	PORT_BIT( 0x00000002, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, write_line_d1 )
+	PORT_BIT( 0x00000004, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, write_line_d2 )
+	PORT_BIT( 0x00000008, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, write_line_d3 )
+	PORT_BIT( 0x00000010, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, write_line_d4 )
+	PORT_BIT( 0x00000020, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, write_line_d5 )
+	PORT_BIT( 0x00000040, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, write_line_d6 )
+	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, write_line_d7 )
 
 	PORT_START( "OUT2" ) // control_w
-	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("cassette", konami573_cassette_slot_device, write_line_zs01_sda)
+	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( "cassette", konami573_cassette_slot_device, write_line_zs01_sda )
 
-	PORT_START("IN2")
-	PORT_BIT( 0xffff0000, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_8WAY PORT_PLAYER(1)
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_8WAY PORT_PLAYER(1)
-	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_8WAY PORT_PLAYER(1)
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_8WAY PORT_PLAYER(1)
-	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1) /* skip init? */
-	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1)
-	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(1)
+	PORT_START( "IN2" )
+	PORT_BIT( 0xffff0000, IP_ACTIVE_HIGH, IPT_UNKNOWN )
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_8WAY PORT_PLAYER( 1 )
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_8WAY PORT_PLAYER( 1 )
+	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_8WAY PORT_PLAYER( 1 )
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_8WAY PORT_PLAYER( 1 )
+	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 1 ) /* skip init? */
+	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 1 )
+	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 1 )
 	PORT_BIT( 0x00008000, IP_ACTIVE_LOW, IPT_START1 ) /* skip init? */
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_8WAY PORT_PLAYER(2)
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_8WAY PORT_PLAYER(2)
-	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_8WAY PORT_PLAYER(2)
-	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_8WAY PORT_PLAYER(2)
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2) /* skip init? */
-	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(2)
-	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(2)
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_8WAY PORT_PLAYER( 2 )
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_8WAY PORT_PLAYER( 2 )
+	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_8WAY PORT_PLAYER( 2 )
+	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_8WAY PORT_PLAYER( 2 )
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 2 ) /* skip init? */
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 2 )
+	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 2 )
 	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_START2 ) /* skip init? */
 
-	PORT_START("IN3")
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(1)
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(1)
+	PORT_START( "IN3" )
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 1 )
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 1 )
 	PORT_SERVICE_NO_TOGGLE( 0x00000400, IP_ACTIVE_LOW )
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(1)
-	PORT_BIT( 0x01000000, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(2)
-	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(2)
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 1 )
+	PORT_BIT( 0x01000000, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 2 )
+	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 2 )
 	PORT_BIT( 0x04000000, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(2)
+	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 2 )
 //  PORT_BIT( 0xf0fff0ff, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
-	PORT_START("LAMPS")
+	PORT_START( "LAMPS" )
 	PORT_BIT( 0x000000ff, IP_ACTIVE_LOW, IPT_OUTPUT )
 
 	PORT_START( "analog0" )
@@ -3056,7 +2511,7 @@ static INPUT_PORTS_START( konami573 )
 	PORT_START( "analog3" )
 	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
 
-	PORT_START("CD")
+	PORT_START( "CD" )
 	PORT_CONFNAME( 1, 0, "CD" )
 	PORT_CONFSETTING( 0, "1" )
 	PORT_CONFSETTING( 1, "2" )
@@ -3069,92 +2524,92 @@ static INPUT_PORTS_START( fbaitbc )
 	PORT_BIT( 0x0fff, 0, IPT_MOUSE_Y ) PORT_MINMAX( 0, 0xfff ) PORT_SENSITIVITY( 15 ) PORT_KEYDELTA( 8 ) PORT_RESET
 
 	PORT_START( "uPD4701_switches" )
-	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_UNUSED ) PORT_PLAYER(1)
-	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER(1)
-	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_UNUSED ) PORT_PLAYER(1)
+	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_UNUSED ) PORT_PLAYER( 1 )
+	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER( 1 )
+	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_UNUSED ) PORT_PLAYER( 1 )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( fbaitmc )
 	PORT_INCLUDE( fbaitbc )
 
 	PORT_MODIFY( "analog0" )
-	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0x20,0xdf) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(1) PORT_REVERSE
+	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX( 0x20,0xdf ) PORT_SENSITIVITY( 30 ) PORT_KEYDELTA( 30 ) PORT_PLAYER( 1 ) PORT_REVERSE
 
 	PORT_MODIFY( "analog1" )
-	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_X ) PORT_MINMAX(0x20,0xdf) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(1)
+	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_X ) PORT_MINMAX( 0x20,0xdf ) PORT_SENSITIVITY( 30 ) PORT_KEYDELTA( 30 ) PORT_PLAYER( 1 )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( ddr )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN2")
-	PORT_BIT( 0x00000f0f, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER(DEVICE_SELF, ksys573_state,gn845pwbb_read, NULL)
+	PORT_MODIFY( "IN2" )
+	PORT_BIT( 0x00000f0f, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER( DEVICE_SELF, ksys573_state,gn845pwbb_read, NULL )
 
 	PORT_START( "STAGE" )
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER(1)
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER(1) /* multiplexor */
-	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_16WAY PORT_PLAYER(1)    /* multiplexor */
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_16WAY PORT_PLAYER(1)
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER(2)
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER(2) /* multiplexor */
-	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_16WAY PORT_PLAYER(2)    /* multiplexor */
-	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_16WAY PORT_PLAYER(2)
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER( 1 )
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER( 1 ) /* multiplexor */
+	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_16WAY PORT_PLAYER( 1 )    /* multiplexor */
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_16WAY PORT_PLAYER( 1 )
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER( 2 )
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER( 2 ) /* multiplexor */
+	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_16WAY PORT_PLAYER( 2 )    /* multiplexor */
+	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_16WAY PORT_PLAYER( 2 )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( ddrsolo )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN2")
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Left 1" )
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Right 1" )
-	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Up 1" )
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Down 1" )
-	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(1) PORT_NAME( "P1 Up-Left 2" ) /* P1 BUTTON 1 */
-	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Left 2" ) /* P1 BUTTON 2 */
-	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Down 2" ) /* P1 BUTTON 3 */
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Up-Left 1" ) /* P2 LEFT */
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Up-Right 1" ) /* P2 RIGHT */
+	PORT_MODIFY( "IN2" )
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Left 1" )
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Right 1" )
+	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Up 1" )
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Down 1" )
+	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Up-Left 2" ) /* P1 BUTTON 1 */
+	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Left 2" ) /* P1 BUTTON 2 */
+	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Down 2" ) /* P1 BUTTON 3 */
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Up-Left 1" ) /* P2 LEFT */
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Up-Right 1" ) /* P2 RIGHT */
 	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 UP */
 	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 DOWN */
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_PLAYER(1) PORT_NAME( "P1 Up 2" ) /* P2 BUTTON1 */
-	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Right 2" ) /* P2 BUTTON2 */
-	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(1) PORT_NAME( "P1 Up-Right 2" ) /* P2 BUTTON3 */
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Up 2" ) /* P2 BUTTON1 */
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Right 2" ) /* P2 BUTTON2 */
+	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Up-Right 2" ) /* P2 BUTTON3 */
 	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_SPECIAL ) /* P2 START */
 
-	PORT_MODIFY("IN3")
+	PORT_MODIFY( "IN3" )
 	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON4 */
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1) PORT_NAME( "P1 Select L" ) /* P1 BUTTON5 */
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Select L" ) /* P1 BUTTON5 */
 	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON6 */
 	PORT_BIT( 0x01000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON4 */
-	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1) PORT_NAME( "P1 Select R" ) /* P2 BUTTON5 */
+	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Select R" ) /* P2 BUTTON5 */
 	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON6 */
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( gtrfrks )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN1")
+	PORT_MODIFY( "IN1" )
 	PORT_BIT( 0x10000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* SERVICE1 */
 
-	PORT_MODIFY("IN2")
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(1) PORT_NAME("P1 Effect 1")
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(1) PORT_NAME("P1 Effect 2")
-	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(1) PORT_NAME("P1 Pick")
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER(1) PORT_NAME("P1 Wailing")
-	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1) PORT_NAME("P1 Button R")
-	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1) PORT_NAME("P1 Button G")
-	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(1) PORT_NAME("P1 Button B")
+	PORT_MODIFY( "IN2" )
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Effect 1" )
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Effect 2" )
+	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Pick" )
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Wailing" )
+	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Button R" )
+	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Button G" )
+	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 1 ) PORT_NAME( "P1 Button B" )
 	PORT_BIT( 0x00008000, IP_ACTIVE_LOW, IPT_START1 )
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(2) PORT_NAME("P2 Effect 1")
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(2) PORT_NAME("P2 Effect 2")
-	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(2) PORT_NAME("P2 Pick")
-	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER(2) PORT_NAME("P2 Wailing")
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2) PORT_NAME("P2 Button R")
-	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(2) PORT_NAME("P2 Button G")
-	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(2) PORT_NAME("P2 Button B")
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 2 ) PORT_NAME( "P2 Effect 1" )
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 2 ) PORT_NAME( "P2 Effect 2" )
+	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 2 ) PORT_NAME( "P2 Pick" )
+	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER( 2 ) PORT_NAME( "P2 Wailing" )
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 2 ) PORT_NAME( "P2 Button R" )
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 2 ) PORT_NAME( "P2 Button G" )
+	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 2 ) PORT_NAME( "P2 Button B" )
 	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_START2 )
 
-	PORT_MODIFY("IN3")
+	PORT_MODIFY( "IN3" )
 	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_SERVICE1 ) /* P1 BUTTON4 */
 	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON5 */
 	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON6 */
@@ -3162,65 +2617,65 @@ static INPUT_PORTS_START( gtrfrks )
 	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON5 */
 	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON6 */
 
-	PORT_MODIFY("LAMPS")
-	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, gtrfrks_lamps_b7)
-	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, gtrfrks_lamps_b6)
-	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, gtrfrks_lamps_b5)
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, gtrfrks_lamps_b4)
+	PORT_MODIFY( "LAMPS" )
+	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, gtrfrks_lamps_b7 )
+	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, gtrfrks_lamps_b6 )
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, gtrfrks_lamps_b5 )
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, gtrfrks_lamps_b4 )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( dmx )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN2")
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1) PORT_NAME( "D-Sensor D1 L" ) /* P1 LEFT */
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1) PORT_NAME( "D-Sensor D1 R" ) /* P1 RIGHT */
-	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Select L" ) /* P1 UP */
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "P1 Select R" ) /* P1 DOWN */
-	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(1) PORT_NAME( "D-Sensor U L" ) /* P1 BUTTON1 */
-	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(1) PORT_NAME( "D-Sensor U R" ) /* P1 BUTTON2 */
+	PORT_MODIFY( "IN2" )
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 1 ) PORT_NAME( "D-Sensor D1 L" ) /* P1 LEFT */
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 1 ) PORT_NAME( "D-Sensor D1 R" ) /* P1 RIGHT */
+	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Select L" ) /* P1 UP */
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "P1 Select R" ) /* P1 DOWN */
+	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 1 ) PORT_NAME( "D-Sensor U L" ) /* P1 BUTTON1 */
+	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 1 ) PORT_NAME( "D-Sensor U R" ) /* P1 BUTTON2 */
 	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON3 */
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2) PORT_NAME( "D-Sensor D1 L" ) /* P2 LEFT */
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(2) PORT_NAME( "D-Sensor D1 R" ) /* P2 RIGHT */
-	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER(2) PORT_NAME( "P2 Select L" ) /* P2 UP */
-	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER(2) PORT_NAME( "P2 Select R" ) /* P2 DOWN */
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(2) PORT_NAME( "D-Sensor U L" ) /* P2 BUTTON1 */
-	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(2) PORT_NAME( "D-Sensor U R" ) /* P2 BUTTON2 */
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 2 ) PORT_NAME( "D-Sensor D1 L" ) /* P2 LEFT */
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 2 ) PORT_NAME( "D-Sensor D1 R" ) /* P2 RIGHT */
+	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER( 2 ) PORT_NAME( "P2 Select L" ) /* P2 UP */
+	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER( 2 ) PORT_NAME( "P2 Select R" ) /* P2 DOWN */
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 2 ) PORT_NAME( "D-Sensor U L" ) /* P2 BUTTON1 */
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 2 ) PORT_NAME( "D-Sensor U R" ) /* P2 BUTTON2 */
 	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON3 */
 
-	PORT_MODIFY("IN3")
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(1) PORT_NAME( "D-Sensor D0 L" ) /* P1 BUTTON4 */
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(1) PORT_NAME( "D-Sensor D0 R" ) /* P1 BUTTON5 */
+	PORT_MODIFY( "IN3" )
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 1 ) PORT_NAME( "D-Sensor D0 L" ) /* P1 BUTTON4 */
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 1 ) PORT_NAME( "D-Sensor D0 R" ) /* P1 BUTTON5 */
 	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON6 */
-	PORT_BIT( 0x01000000, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(2) PORT_NAME( "D-Sensor D0 L" ) /* P2 BUTTON4 */
-	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(2) PORT_NAME( "D-Sensor D0 R" ) /* P2 BUTTON5 */
+	PORT_BIT( 0x01000000, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 2 ) PORT_NAME( "D-Sensor D0 L" ) /* P2 BUTTON4 */
+	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 2 ) PORT_NAME( "D-Sensor D0 R" ) /* P2 BUTTON5 */
 	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON6 */
 
-	PORT_MODIFY("LAMPS")
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, dmx_lamps_b0)
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, dmx_lamps_b1)
-	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, dmx_lamps_b2)
-	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, dmx_lamps_b3)
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, dmx_lamps_b4)
-	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, dmx_lamps_b5)
+	PORT_MODIFY( "LAMPS" )
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, dmx_lamps_b0 )
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, dmx_lamps_b1 )
+	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, dmx_lamps_b2 )
+	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, dmx_lamps_b3 )
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, dmx_lamps_b4 )
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, dmx_lamps_b5 )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( drmn )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN1")
+	PORT_MODIFY( "IN1" )
 	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* COIN2 */
 
-	PORT_MODIFY("IN2")
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1) PORT_NAME( "High Tom" ) /* P1 LEFT */
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1) PORT_NAME( "Low Tom" ) /* P1 RIGHT */
-	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(1) PORT_NAME( "Hi-Hat" ) /* P1 UP */
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(1) PORT_NAME( "Snare" ) /* P1 DOWN */
-	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(1) PORT_NAME( "Cymbal" ) /* P1 BUTTON 1 */
+	PORT_MODIFY( "IN2" )
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 1 ) PORT_NAME( "High Tom" ) /* P1 LEFT */
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 1 ) PORT_NAME( "Low Tom" ) /* P1 RIGHT */
+	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 1 ) PORT_NAME( "Hi-Hat" ) /* P1 UP */
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 1 ) PORT_NAME( "Snare" ) /* P1 DOWN */
+	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 1 ) PORT_NAME( "Cymbal" ) /* P1 BUTTON 1 */
 	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON 2 */
-	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(1) PORT_NAME( "Bass Drum" ) /* P1 BUTTON 3 */
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "Select L" ) /* P2 LEFT */
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "Select R" ) /* P2 RIGHT */
+	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 1 ) PORT_NAME( "Bass Drum" ) /* P1 BUTTON 3 */
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "Select L" ) /* P2 LEFT */
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "Select R" ) /* P2 RIGHT */
 	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 UP */
 	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 DOWN */
 	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON1 */
@@ -3228,7 +2683,7 @@ static INPUT_PORTS_START( drmn )
 	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON3 */
 	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 START */
 
-	PORT_MODIFY("IN3")
+	PORT_MODIFY( "IN3" )
 	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON4 */
 	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON5 */
 	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON6 */
@@ -3240,39 +2695,39 @@ INPUT_PORTS_END
 static INPUT_PORTS_START( gunmania )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN1")
+	PORT_MODIFY( "IN1" )
 	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_MODIFY("IN2")
+	PORT_MODIFY( "IN2" )
 	PORT_BIT( 0x000000ff, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER(1) PORT_NAME( "Bullet Tube-1 Sensor" )
-	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(1) PORT_NAME( "Bullet Tube-2 Sensor" )
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(1) PORT_NAME( "Safety Sensor Under" )
-	PORT_BIT( 0x00000100, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER(DEVICE_SELF,ksys573_state,gunmania_tank_shutter_sensor, NULL )
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER( 1 ) PORT_NAME( "Bullet Tube-1 Sensor" )
+	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 1 ) PORT_NAME( "Bullet Tube-2 Sensor" )
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 1 ) PORT_NAME( "Safety Sensor Under" )
+	PORT_BIT( 0x00000100, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER( DEVICE_SELF,ksys573_state,gunmania_tank_shutter_sensor, NULL )
 
-	PORT_MODIFY("IN3")
+	PORT_MODIFY( "IN3" )
 	PORT_BIT( 0x0d000b00, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_BIT( 0x02000000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER(DEVICE_SELF,ksys573_state,gunmania_cable_holder_sensor, NULL )
+	PORT_BIT( 0x02000000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER( DEVICE_SELF,ksys573_state,gunmania_cable_holder_sensor, NULL )
 
-	PORT_START("GUNX")
-	PORT_BIT( 0x7f, 0x2f, IPT_LIGHTGUN_X ) PORT_CROSSHAIR(X, 1.0, 0.0, 0) PORT_MINMAX(0x00,0x5f) PORT_SENSITIVITY(100) PORT_KEYDELTA(15) PORT_PLAYER(1)
-	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("gunmania_id", ds2401_device, read)
+	PORT_START( "GUNX" )
+	PORT_BIT( 0x7f, 0x2f, IPT_LIGHTGUN_X ) PORT_CROSSHAIR( X, 1.0, 0.0, 0 ) PORT_MINMAX( 0x00,0x5f ) PORT_SENSITIVITY( 100 ) PORT_KEYDELTA( 15 ) PORT_PLAYER( 1 )
+	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER( "gunmania_id", ds2401_device, read )
 
-	PORT_START("GUNY")
-	PORT_BIT( 0x7f, 0x1f, IPT_LIGHTGUN_Y ) PORT_CROSSHAIR(Y, 1.0, 0.0, 0) PORT_MINMAX(0x00,0x3f) PORT_SENSITIVITY(100) PORT_KEYDELTA(15) PORT_PLAYER(1)
+	PORT_START( "GUNY" )
+	PORT_BIT( 0x7f, 0x1f, IPT_LIGHTGUN_Y ) PORT_CROSSHAIR( Y, 1.0, 0.0, 0 ) PORT_MINMAX( 0x00,0x3f ) PORT_SENSITIVITY( 100 ) PORT_KEYDELTA( 15 ) PORT_PLAYER( 1 )
 
 	PORT_START( "SENSOR" )
-	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_BUTTON9 ) PORT_PLAYER(1) PORT_NAME( "Safety Sensor Front" )
+	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_BUTTON9 ) PORT_PLAYER( 1 ) PORT_NAME( "Safety Sensor Front" )
 
 	PORT_START( "ENCODER" )
-	PORT_BIT( 0x00000001, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(4) PORT_CODE(KEYCODE_Q)
-	PORT_BIT( 0x00000002, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER(4) PORT_CODE(KEYCODE_W)
-	PORT_BIT( 0x00000004, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_PLAYER(4) PORT_CODE(KEYCODE_E)
-	PORT_BIT( 0x00000008, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_PLAYER(4) PORT_CODE(KEYCODE_R)
-	PORT_BIT( 0x00000010, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_PLAYER(4) PORT_CODE(KEYCODE_T)
-	PORT_BIT( 0x00000020, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_PLAYER(4) PORT_CODE(KEYCODE_Y)
-	PORT_BIT( 0x00000040, IP_ACTIVE_HIGH, IPT_BUTTON7 ) PORT_PLAYER(4) PORT_CODE(KEYCODE_U)
-	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_BUTTON8 ) PORT_PLAYER(4) PORT_CODE(KEYCODE_I)
+	PORT_BIT( 0x00000001, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER( 4 ) PORT_CODE( KEYCODE_Q )
+	PORT_BIT( 0x00000002, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER( 4 ) PORT_CODE( KEYCODE_W )
+	PORT_BIT( 0x00000004, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_PLAYER( 4 ) PORT_CODE( KEYCODE_E )
+	PORT_BIT( 0x00000008, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_PLAYER( 4 ) PORT_CODE( KEYCODE_R )
+	PORT_BIT( 0x00000010, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_PLAYER( 4 ) PORT_CODE( KEYCODE_T )
+	PORT_BIT( 0x00000020, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_PLAYER( 4 ) PORT_CODE( KEYCODE_Y )
+	PORT_BIT( 0x00000040, IP_ACTIVE_HIGH, IPT_BUTTON7 ) PORT_PLAYER( 4 ) PORT_CODE( KEYCODE_U )
+	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_BUTTON8 ) PORT_PLAYER( 4 ) PORT_CODE( KEYCODE_I )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( hndlchmp )
@@ -3294,18 +2749,18 @@ INPUT_PORTS_END
 static INPUT_PORTS_START( hyperbbc )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN2")
+	PORT_MODIFY( "IN2" )
 
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(3) /* P1 LEFT */
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(3) /* P1 RIGHT */
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 3 ) /* P1 LEFT */
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 3 ) /* P1 RIGHT */
 	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_START3 ) /* P1 UP */
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(3) /* P1 DOWN */
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 3 ) /* P1 DOWN */
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( hypbbc2p )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN2")
+	PORT_MODIFY( "IN2" )
 	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_START2 ) /* P1 UP */
 	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 START */
 INPUT_PORTS_END
@@ -3313,51 +2768,51 @@ INPUT_PORTS_END
 static INPUT_PORTS_START( mamboagg )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN1")
-	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(1) PORT_NAME( "Right Pad 1 (Top Right)" ) /* COIN2 */
+	PORT_MODIFY( "IN1" )
+	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 1 ) PORT_NAME( "Right Pad 1 (Top Right)" ) /* COIN2 */
 
-	PORT_MODIFY("IN2")
-	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_BUTTON8 ) PORT_PLAYER(1) PORT_NAME( "Centre Pad 3 (Middle Right)" ) /* P1 UP */
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1) PORT_NAME( "Centre Pad 1 (Top Right)" ) /* P1 DOWN */
-	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(1) PORT_NAME( "Left Pad 2 (Bottom Left)" ) /* P1 BUTTON 1 */
-	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1) PORT_NAME( "Left Pad 1 (Top Left)" ) /* P1 BUTTON 2 */
-	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER(1) PORT_NAME( "Left Pad 3 (Bottom Right)" ) /* P1 BUTTON 3 */
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(1) PORT_NAME( "Centre Pad 2 (Bottom Left)" ) /* P2 LEFT */
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_BUTTON8 ) PORT_PLAYER(1) PORT_NAME( "Centre Pad 3 (Bottom Right)" ) /* P2 RIGHT */
-	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1) PORT_NAME( "Centre Pad 1 (Top Left)" ) /* P2 UP */
-	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(1) PORT_NAME( "Centre Pad 2 (Middle Left)" ) /* P2 DOWN */
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(1) PORT_NAME( "Right Pad 2 (Bottom Left)" ) /* P2 BUTTON1 */
-	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(1) PORT_NAME( "Right Pad 1 (Top Left)" ) /* P2 BUTTON2 */
-	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_BUTTON9 ) PORT_PLAYER(1) PORT_NAME( "Right Pad 3 (Bottom Right)" ) /* P2 BUTTON3 */
-	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1) PORT_NAME( "Left Pad 1 (Top Right)" ) /* P2 START */
+	PORT_MODIFY( "IN2" )
+	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_BUTTON8 ) PORT_PLAYER( 1 ) PORT_NAME( "Centre Pad 3 (Middle Right)" ) /* P1 UP */
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 1 ) PORT_NAME( "Centre Pad 1 (Top Right)" ) /* P1 DOWN */
+	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 1 ) PORT_NAME( "Left Pad 2 (Bottom Left)" ) /* P1 BUTTON 1 */
+	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 1 ) PORT_NAME( "Left Pad 1 (Top Left)" ) /* P1 BUTTON 2 */
+	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER( 1 ) PORT_NAME( "Left Pad 3 (Bottom Right)" ) /* P1 BUTTON 3 */
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 1 ) PORT_NAME( "Centre Pad 2 (Bottom Left)" ) /* P2 LEFT */
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_BUTTON8 ) PORT_PLAYER( 1 ) PORT_NAME( "Centre Pad 3 (Bottom Right)" ) /* P2 RIGHT */
+	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER( 1 ) PORT_NAME( "Centre Pad 1 (Top Left)" ) /* P2 UP */
+	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER( 1 ) PORT_NAME( "Centre Pad 2 (Middle Left)" ) /* P2 DOWN */
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 1 ) PORT_NAME( "Right Pad 2 (Bottom Left)" ) /* P2 BUTTON1 */
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER( 1 ) PORT_NAME( "Right Pad 1 (Top Left)" ) /* P2 BUTTON2 */
+	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_BUTTON9 ) PORT_PLAYER( 1 ) PORT_NAME( "Right Pad 3 (Bottom Right)" ) /* P2 BUTTON3 */
+	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER( 1 ) PORT_NAME( "Left Pad 1 (Top Right)" ) /* P2 START */
 
-	PORT_MODIFY("IN3")
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER(1) PORT_NAME( "Left Pad 3 (Middle Right)" ) /* P1 BUTTON4 */
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(1) PORT_NAME( "Left Pad 2 (Middle Left)" ) /* P1 BUTTON5 */
+	PORT_MODIFY( "IN3" )
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER( 1 ) PORT_NAME( "Left Pad 3 (Middle Right)" ) /* P1 BUTTON4 */
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER( 1 ) PORT_NAME( "Left Pad 2 (Middle Left)" ) /* P1 BUTTON5 */
 	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON6 */
-	PORT_BIT( 0x01000000, IP_ACTIVE_LOW, IPT_BUTTON9 ) PORT_PLAYER(1) PORT_NAME( "Right Pad 3 (Middle Right)" ) /* P2 BUTTON4 */
-	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(1) PORT_NAME( "Right Pad 2 (Middle Left)" ) /* P2 BUTTON5 */
+	PORT_BIT( 0x01000000, IP_ACTIVE_LOW, IPT_BUTTON9 ) PORT_PLAYER( 1 ) PORT_NAME( "Right Pad 3 (Middle Right)" ) /* P2 BUTTON4 */
+	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER( 1 ) PORT_NAME( "Right Pad 2 (Middle Left)" ) /* P2 BUTTON5 */
 	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON6 */
 
-	PORT_MODIFY("LAMPS")
-	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, mamboagg_lamps_b3)
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, mamboagg_lamps_b4)
-	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, ksys573_state, mamboagg_lamps_b5)
+	PORT_MODIFY( "LAMPS" )
+	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, mamboagg_lamps_b3 )
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, mamboagg_lamps_b4 )
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER( DEVICE_SELF, ksys573_state, mamboagg_lamps_b5 )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( pnchmn )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN1")
+	PORT_MODIFY( "IN1" )
 	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_MODIFY("IN2")
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "Select L" ) /* P2 LEFT */
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER(1) PORT_NAME( "Select R" ) /* P2 RIGHT */
-	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER(1) PORT_NAME( "Skip Check" )
+	PORT_MODIFY( "IN2" )
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "Select L" ) /* P2 LEFT */
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_16WAY PORT_PLAYER( 1 ) PORT_NAME( "Select R" ) /* P2 RIGHT */
+	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_BUTTON7 ) PORT_PLAYER( 1 ) PORT_NAME( "Skip Check" )
 	PORT_BIT( 0x00005ffc, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_MODIFY("IN3")
+	PORT_MODIFY( "IN3" )
 	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON4 */
 	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON5 */
 	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON6 */
@@ -3366,39 +2821,39 @@ static INPUT_PORTS_START( pnchmn )
 	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON6 */
 
 	PORT_START( "PADS" )
-	PORT_BIT( 0x00000001, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(1) PORT_NAME( "Top Left" )
-	PORT_BIT( 0x00000002, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER(1) PORT_NAME( "Middle Left" )
-	PORT_BIT( 0x00000004, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_PLAYER(1) PORT_NAME( "Bottom Left" )
-	PORT_BIT( 0x00000008, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_PLAYER(1) PORT_NAME( "Top Right" )
-	PORT_BIT( 0x00000010, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_PLAYER(1) PORT_NAME( "Middle Right" )
-	PORT_BIT( 0x00000020, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_PLAYER(1) PORT_NAME( "Bottom Right" )
+	PORT_BIT( 0x00000001, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER( 1 ) PORT_NAME( "Top Left" )
+	PORT_BIT( 0x00000002, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER( 1 ) PORT_NAME( "Middle Left" )
+	PORT_BIT( 0x00000004, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_PLAYER( 1 ) PORT_NAME( "Bottom Left" )
+	PORT_BIT( 0x00000008, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_PLAYER( 1 ) PORT_NAME( "Top Right" )
+	PORT_BIT( 0x00000010, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_PLAYER( 1 ) PORT_NAME( "Middle Right" )
+	PORT_BIT( 0x00000020, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_PLAYER( 1 ) PORT_NAME( "Bottom Right" )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( gchgchmp )
 	PORT_INCLUDE( konami573 )
 
-	PORT_MODIFY("IN2")
-	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_LEFT ) PORT_8WAY PORT_PLAYER(1) /* P1 LEFT */
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_RIGHT ) PORT_8WAY PORT_PLAYER(1) /* P1 RIGHT */
-	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_UP ) PORT_8WAY PORT_PLAYER(1) /* P1 UP */
-	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_DOWN ) PORT_8WAY PORT_PLAYER(1) /* P1 DOWN */
-	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_LEFT ) PORT_8WAY PORT_PLAYER(2) /* P1 BUTTON 1 */
-	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_RIGHT ) PORT_8WAY PORT_PLAYER(2) /* P1 BUTTON 2 */
-	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_UP ) PORT_8WAY PORT_PLAYER(2) /* P1 BUTTON 3 */
-	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_LEFT ) PORT_8WAY PORT_PLAYER(1) /* P2 LEFT */
-	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_RIGHT ) PORT_8WAY PORT_PLAYER(1) /* P2 RIGHT */
-	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_UP ) PORT_8WAY PORT_PLAYER(1) /* P2 UP */
-	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_DOWN ) PORT_8WAY PORT_PLAYER(1)/* P2 DOWN */
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_LEFT ) PORT_8WAY PORT_PLAYER(2) /* P2 BUTTON 1 */
-	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_RIGHT ) PORT_8WAY PORT_PLAYER(2) /* P2 BUTTON 2 */
-	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_UP ) PORT_8WAY PORT_PLAYER(2) /* P2 BUTTON 3 */
+	PORT_MODIFY( "IN2" )
+	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_LEFT ) PORT_8WAY PORT_PLAYER( 1 ) /* P1 LEFT */
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_RIGHT ) PORT_8WAY PORT_PLAYER( 1 ) /* P1 RIGHT */
+	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_UP ) PORT_8WAY PORT_PLAYER( 1 ) /* P1 UP */
+	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_DOWN ) PORT_8WAY PORT_PLAYER( 1 ) /* P1 DOWN */
+	PORT_BIT( 0x00001000, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_LEFT ) PORT_8WAY PORT_PLAYER( 2 ) /* P1 BUTTON 1 */
+	PORT_BIT( 0x00002000, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_RIGHT ) PORT_8WAY PORT_PLAYER( 2 ) /* P1 BUTTON 2 */
+	PORT_BIT( 0x00004000, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_UP ) PORT_8WAY PORT_PLAYER( 2 ) /* P1 BUTTON 3 */
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_LEFT ) PORT_8WAY PORT_PLAYER( 1 ) /* P2 LEFT */
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_RIGHT ) PORT_8WAY PORT_PLAYER( 1 ) /* P2 RIGHT */
+	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_UP ) PORT_8WAY PORT_PLAYER( 1 ) /* P2 UP */
+	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_DOWN ) PORT_8WAY PORT_PLAYER( 1 )/* P2 DOWN */
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_LEFT ) PORT_8WAY PORT_PLAYER( 2 ) /* P2 BUTTON 1 */
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_RIGHT ) PORT_8WAY PORT_PLAYER( 2 ) /* P2 BUTTON 2 */
+	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_UP ) PORT_8WAY PORT_PLAYER( 2 ) /* P2 BUTTON 3 */
 
-	PORT_MODIFY("IN3")
+	PORT_MODIFY( "IN3" )
 	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON4 */
-	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_DOWN ) PORT_8WAY PORT_PLAYER(2) /* P1 BUTTON5 */
+	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_JOYSTICKLEFT_DOWN ) PORT_8WAY PORT_PLAYER( 2 ) /* P1 BUTTON5 */
 	PORT_BIT( 0x00000800, IP_ACTIVE_LOW, IPT_UNUSED ) /* P1 BUTTON6 */
 	PORT_BIT( 0x01000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON4 */
-	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_DOWN ) PORT_8WAY PORT_PLAYER(2) /* P2 BUTTON5 */
+	PORT_BIT( 0x02000000, IP_ACTIVE_LOW, IPT_JOYSTICKRIGHT_DOWN ) PORT_8WAY PORT_PLAYER( 2 ) /* P2 BUTTON5 */
 	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_UNUSED ) /* P2 BUTTON6 */
 INPUT_PORTS_END
 
@@ -3407,9 +2862,13 @@ INPUT_PORTS_END
 	ROM_SYSTEM_BIOS( 0, "std",        "Standard" ) \
 	ROMX_LOAD( "700a01.22g",   0x0000000, 0x080000, CRC(11812ef8) SHA1(e1284add4aaddd5337bd7f4e27614460d52b5b48), ROM_BIOS(1) ) \
 	ROM_SYSTEM_BIOS( 1, "gchgchmp",   "Found on Gachagachamp" ) \
-	ROMX_LOAD( "700_a01.22g",  0x000000,  0x080000, CRC(39ebb0ca) SHA1(9aab8c637dd2be84d79007e52f108abe92bf29dd), ROM_BIOS(2) ) \
+	ROMX_LOAD( "700a01(gchgchmp).22g",  0x000000,  0x080000, CRC(39ebb0ca) SHA1(9aab8c637dd2be84d79007e52f108abe92bf29dd), ROM_BIOS(2) ) \
 	ROM_SYSTEM_BIOS( 2, "dsem2",      "Found on Dancing Stage Euro Mix 2" ) \
-	ROMX_LOAD( "700b01.22g",   0x0000000, 0x080000, CRC(6cf852af) NO_DUMP, ROM_BIOS(3) )
+	ROMX_LOAD( "700b01.22g",   0x0000000, 0x080000, CRC(6cf852af) SHA1(a2421d0a494892c0e71003c96995ce8f945064dd), ROM_BIOS(3) ) \
+	ROM_REGION( 0x40, "h8_response", 0 ) \
+	ROMX_LOAD( "h8a01.bin",    0x000000, 0x000040, CRC(131e0359) SHA1(967f66578ebc0cf6b044d71af09b59bce1f4a1d0), ROM_BIOS(1) ) \
+	ROMX_LOAD( "h8a01.bin",    0x000000, 0x000040, CRC(131e0359) SHA1(967f66578ebc0cf6b044d71af09b59bce1f4a1d0), ROM_BIOS(2) ) \
+	ROMX_LOAD( "h8b01.bin",    0x000000, 0x000040, CRC(508b057d) SHA1(779177e6312ef272483eeb64a5e84bbae6e301f2), ROM_BIOS(3) )
 
 // BIOS
 ROM_START( sys573 )
@@ -3424,7 +2883,7 @@ ROM_START( bassangl )
 	ROM_LOAD( "ge765ja.u1", 0x000000, 0x000224, BAD_DUMP CRC(ee1b32a7) SHA1(c0f6b14b054f5a95ce474e794a3e0ca78faac681) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "765jaa02", 0, BAD_DUMP SHA1(4291711b1025733cb97f6da5dc3b03c189fcc37c) )
+	DISK_IMAGE_READONLY( "765jaa02", 0, SHA1(dfcf62581e0d0e994945cc2c37ef86827d511628) )
 ROM_END
 
 ROM_START( bassang2 )
@@ -3458,7 +2917,7 @@ ROM_START( darkhleg )
 	ROM_LOAD( "gx706ja.u1", 0x000000, 0x000224, BAD_DUMP CRC(72b42574) SHA1(79dc959f0ce95ccb9ac0dbf0a72aec973e91bc56) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "706jaa02", 0, BAD_DUMP SHA1(58bd06855988250028086cba6b3670372b9d96a0) )
+	DISK_IMAGE_READONLY( "706jaa02", 0, SHA1(10101952fad80b7a10b1299158081bf86ce8cbe6) )
 ROM_END
 
 ROM_START( ddrextrm )
@@ -3481,7 +2940,7 @@ ROM_START( ddru )
 	ROM_LOAD( "gn845ua.u1",   0x000000, 0x000224, BAD_DUMP CRC(c9e7fced) SHA1(aac4dde100091bc64d397f53484a0ffbf68b8101) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "845uaa02", 0, SHA1(d3f9290d4dadb5e9b82ebe77abf7b99d1a89f716) )
+	DISK_IMAGE_READONLY( "845uaa02", 0, BAD_DUMP SHA1(d3f9290d4dadb5e9b82ebe77abf7b99d1a89f716) )
 ROM_END
 
 ROM_START( ddrj )
@@ -3491,7 +2950,7 @@ ROM_START( ddrj )
 	ROM_LOAD( "gc845jb.u1",   0x000000, 0x000224, BAD_DUMP CRC(a16f42b8) SHA1(da4f1eb3eb2b28cb3a0bc74bb9b9945970f56ac2) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "845jba02", 0, BAD_DUMP SHA1(2d10378c89fe85682f262f0987f8366b9ea72f11) )
+	DISK_IMAGE_READONLY( "845jba02", 0, SHA1(e4be989f6a655857af8e7336c9a7acf82e51f123) )
 ROM_END
 
 ROM_START( ddrja )
@@ -3548,7 +3007,7 @@ ROM_START( ddrjb )
 	ROM_LOAD( "gc845jab.27h",  0x000000, 0x200000, NO_DUMP )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "845jab02", 0, BAD_DUMP SHA1(7bdcef37bf376c23153dfd1580de5666cc681335) )
+	DISK_IMAGE_READONLY( "845jab02", 0, SHA1(bac74acaffd9d00e4105e13f32492f5d0fc5a2e1) )
 
 	DISK_REGION( "cdrom1" )
 	DISK_IMAGE_READONLY( "845jab01", 0, NO_DUMP ) // if this even exists
@@ -3561,7 +3020,7 @@ ROM_START( ddra )
 	ROM_LOAD( "gn845aa.u1",   0x000000, 0x000224, BAD_DUMP CRC(327c4851) SHA1(f0939224af706fd103a67aae9c96518c1db90ac9) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "845aaa02", 0, BAD_DUMP SHA1(839e2f8698a1561ac364998b8b3158ef0dee6998) )
+	DISK_IMAGE_READONLY( "845aaa02", 0, SHA1(9b786de9b1085009c088de0d40425976c1f8df7b) )
 ROM_END
 
 ROM_START( ddr2m )
@@ -3594,7 +3053,7 @@ ROM_START( ddr2mc2 )
 	ROM_LOAD( "ge984ja.u1",  0x000000, 0x000224, BAD_DUMP CRC(cbc984c5) SHA1(6c0cd78a41000999b4ffbd9fb3707738b50a9b50) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "984jaa01", 0, BAD_DUMP SHA1(5505c28be27bfa9648060fd799bcf0c2c5f608ed) )
+	DISK_IMAGE_READONLY( "ge984a01(ddr)", 0, SHA1(badd15656f2316f81b0a45026b5ef10287d1480b) )
 
 	DISK_REGION( "cdrom1" )
 	DISK_IMAGE_READONLY( "895jaa02", 0, BAD_DUMP SHA1(cfe3a6f3ed62ba388b07045e29e22472d17dcfe4) )
@@ -3603,9 +3062,6 @@ ROM_END
 ROM_START( ddr2ml )
 	SYS573_BIOS_A
 
-	ROM_REGION( 0x080000, "cpu2", 0 ) /* memory card reader */
-	ROM_LOAD( "885a01.bin",   0x000000, 0x080000, CRC(e22d093f) SHA1(927f62f63b5caa7899392decacd12fea0e6fdbea) )
-
 	ROM_REGION( 0x0000224, "cassette:game:eeprom", 0 )
 	ROM_LOAD( "ge885jaa.u1",  0x000000, 0x000224, BAD_DUMP CRC(cbc984c5) SHA1(6c0cd78a41000999b4ffbd9fb3707738b50a9b50) )
 
@@ -3613,20 +3069,17 @@ ROM_START( ddr2ml )
 	DISK_IMAGE_READONLY( "885jab01", 0, SHA1(c2bbb9e2e6f34e07f57e7076726af81df39f55c9) )
 
 	DISK_REGION( "cdrom1" )
-	DISK_IMAGE_READONLY( "885jaa02", 0, BAD_DUMP SHA1(5d187aea247eefc5c065566ab277acd8c942ba27) )
+	DISK_IMAGE_READONLY( "885jaa02", 0, SHA1(f02bb09f41533c6ec496a662d815e85b304fcc72) )
 ROM_END
 
 ROM_START( ddr2mla )
 	SYS573_BIOS_A
 
-	ROM_REGION( 0x080000, "cpu2", 0 ) /* memory card reader */
-	ROM_LOAD( "885a01.bin",   0x000000, 0x080000, CRC(e22d093f) SHA1(927f62f63b5caa7899392decacd12fea0e6fdbea) )
-
 	ROM_REGION( 0x0000224, "cassette:game:eeprom", 0 )
 	ROM_LOAD( "ge885jaa.u1",  0x000000, 0x000224, BAD_DUMP CRC(cbc984c5) SHA1(6c0cd78a41000999b4ffbd9fb3707738b50a9b50) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "885jaa02", 0, BAD_DUMP SHA1(5d187aea247eefc5c065566ab277acd8c942ba27) )
+	DISK_IMAGE_READONLY( "885jaa02", 0, SHA1(f02bb09f41533c6ec496a662d815e85b304fcc72) )
 ROM_END
 
 ROM_START( ddr3ma )
@@ -3645,7 +3098,7 @@ ROM_START( ddr3ma )
 	ROM_LOAD( "gn887aa.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "887aaa02", 0, BAD_DUMP SHA1(c4136305b97123f5dfe3ecd34a10ddda0180da3d) )
+	DISK_IMAGE_READONLY( "887aaa02", 0, SHA1(6f9a0e9dd046a1fc0c81be9eeb45c136574a4472) )
 ROM_END
 
 ROM_START( ddr3mj )
@@ -3664,7 +3117,7 @@ ROM_START( ddr3mj )
 	ROM_LOAD( "gn887ja.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "887jaa02", 0, BAD_DUMP SHA1(2d1bf2a1566292dc869afaa6486f5ecd3973ff62) )
+	DISK_IMAGE_READONLY( "887jaa02", 0, SHA1(8736818f42822f77e3484ea46a9e63faa7f8517a) )
 ROM_END
 
 ROM_START( ddr3mk )
@@ -3683,7 +3136,7 @@ ROM_START( ddr3mk )
 	ROM_LOAD( "gn887kb.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "887kba02", 0, BAD_DUMP SHA1(92a3844fab24f46c16dd96f9474d95fd001df603) )
+	DISK_IMAGE_READONLY( "887kba02", 0, SHA1(9f2c6a4e7ad0de44295dc09b9b054afb044238a9) )
 ROM_END
 
 ROM_START( ddr3mka )
@@ -3702,7 +3155,7 @@ ROM_START( ddr3mka )
 	ROM_LOAD( "gn887ka.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "887kaa02", 0, BAD_DUMP SHA1(a80930dd66c2e2326e8792f2e7cf9116d9cd752c) )
+	DISK_IMAGE_READONLY( "887kaa02", 0, SHA1(d002f2c98c012d67ad0587553e1d0f45c0ae470e) )
 ROM_END
 
 ROM_START( ddr3mp )
@@ -3721,7 +3174,7 @@ ROM_START( ddr3mp )
 	ROM_LOAD( "gca22ja.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "a22jaa02", 0, BAD_DUMP SHA1(2bf07d08f6acee562024b418b453d654fc40f8dd) )
+	DISK_IMAGE_READONLY( "a22jaa02", 0, SHA1(dc3c1223882716d47b4f4db45b5dd2e988cba64c) )
 ROM_END
 
 ROM_START( ddr4m )
@@ -3819,7 +3272,7 @@ ROM_START( ddr4mp )
 	ROM_LOAD( "gca34ja.22h",  0x000000, 0x002000, CRC(80575c1f) SHA1(a0594ca0f75bc7d49b645e835e9fa48a73c3c9c7) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "a34jaa02", 0, BAD_DUMP SHA1(1d5f9eb633f054ddbf9fba55d53e4ee263ba91dd) )
+	DISK_IMAGE_READONLY( "a34jaa02", 0, SHA1(c33e43192ce49845f8901c505f1c7867bc643a0b) )
 ROM_END
 
 ROM_START( ddr4mps )
@@ -3841,7 +3294,7 @@ ROM_START( ddr4mps )
 	ROM_LOAD( "gca34jb.22h",  0x000000, 0x002000, CRC(bc6c8bd7) SHA1(10ceec5c7bc5ca9fca88f3c083a7d97012982079) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "a34jba02", 0, BAD_DUMP SHA1(1d5f9eb633f054ddbf9fba55d53e4ee263ba91dd) )
+	DISK_IMAGE_READONLY( "a34jba02", 0, BAD_DUMP SHA1(c33e43192ce49845f8901c505f1c7867bc643a0b) ) // Check if there was a separate CD created for solo cabinets.
 ROM_END
 
 ROM_START( ddr5m )
@@ -3854,7 +3307,7 @@ ROM_START( ddr5m )
 	ROM_LOAD( "gca27ja.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "a27jaa02", 0, BAD_DUMP SHA1(0324973c98b82b72b22d2f0cd43e1924b83be667) )
+	DISK_IMAGE_READONLY( "a27jaa02", 0, SHA1(70465669dfd48abf806cb58b2410ff4f1781f5f1) )
 ROM_END
 
 ROM_START( ddrbocd )
@@ -3889,6 +3342,32 @@ ROM_START( ddrs2k )
 	DISK_IMAGE_READONLY( "905aaa02", 0, BAD_DUMP SHA1(1fc0f3fcc7d5d23711967023ff02c1fc76479024) )
 ROM_END
 
+ROM_START( ddrmax )
+	SYS573_BIOS_A
+
+	ROM_REGION( 0x0001014, "cassette:game:eeprom", 0 )
+	ROM_LOAD( "gcb19ja.u1",   0x000000, 0x001014, BAD_DUMP CRC(2255626a) SHA1(cb70c4b551265ffc6cc41f7bd2678696e8067060) )
+
+	ROM_REGION( 0x000008, "cassette:game:id", 0 )
+	ROM_LOAD( "gcb19ja.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
+
+	DISK_REGION( "cdrom0" )
+	DISK_IMAGE_READONLY( "b19jaa02", 0, SHA1(fe8a6731a2163fe7864cd3c4457034768eb98caa) )
+ROM_END
+
+ROM_START( ddrmax2 )
+	SYS573_BIOS_A
+
+	ROM_REGION( 0x0001014, "cassette:game:eeprom", 0 )
+	ROM_LOAD( "gcb20ja.u1",   0x000000, 0x001014, BAD_DUMP CRC(fb7e0f58) SHA1(e6da23257a2a2ba7c69e817a91a0a8864f009386) )
+
+	ROM_REGION( 0x000008, "cassette:game:id", 0 )
+	ROM_LOAD( "gcb20ja.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
+
+	DISK_REGION( "cdrom0" )
+	DISK_IMAGE_READONLY( "b20jaa02", 0, SHA1(ef6579192b86cfea08debe82f54fc4aae5985c92) )
+ROM_END
+
 ROM_START( ddrs2kj )
 	SYS573_BIOS_A
 
@@ -3905,33 +3384,7 @@ ROM_START( ddrs2kj )
 	ROM_LOAD( "gc905aa.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "905jaa02", 0, BAD_DUMP SHA1(84931345611574afd53976a0807f4163348e3c15) )
-ROM_END
-
-ROM_START( ddrmax )
-	SYS573_BIOS_A
-
-	ROM_REGION( 0x0001014, "cassette:game:eeprom", 0 )
-	ROM_LOAD( "gcb19ja.u1",   0x000000, 0x001014, BAD_DUMP CRC(2255626a) SHA1(cb70c4b551265ffc6cc41f7bd2678696e8067060) )
-
-	ROM_REGION( 0x000008, "cassette:game:id", 0 )
-	ROM_LOAD( "gcb19ja.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
-
-	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "b19jaa02", 0, BAD_DUMP SHA1(a156ebdef395747c64e1829237e4e7932ae251a8) )
-ROM_END
-
-ROM_START( ddrmax2 )
-	SYS573_BIOS_A
-
-	ROM_REGION( 0x0001014, "cassette:game:eeprom", 0 )
-	ROM_LOAD( "gcb20ja.u1",   0x000000, 0x001014, BAD_DUMP CRC(fb7e0f58) SHA1(e6da23257a2a2ba7c69e817a91a0a8864f009386) )
-
-	ROM_REGION( 0x000008, "cassette:game:id", 0 )
-	ROM_LOAD( "gcb20ja.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
-
-	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "b20jaa02", 0, BAD_DUMP SHA1(3f378e922e3182f980d07d6b2b524e33c5a00549) )
+	DISK_IMAGE_READONLY( "905jaa02", 0, SHA1(a78cf628fb2ba823e1ca35cbd611938273ab82ac) )
 ROM_END
 
 ROM_START( ddrsbm )
@@ -3944,7 +3397,7 @@ ROM_START( ddrsbm )
 	ROM_LOAD( "gq894ja.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "894jaa02", 0, BAD_DUMP SHA1(3b2e061996d12f0e7367a579208eb746d849e070) )
+	DISK_IMAGE_READONLY( "894jaa02", 0, SHA1(d6872078a87ee00280a627675540676fb8b10f60) )
 ROM_END
 
 ROM_START( ddrusa )
@@ -4114,7 +3567,7 @@ ROM_START( drmn7m )
 	ROM_LOAD( "gcc07jba.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "c07jca02", 0, BAD_DUMP SHA1(1f27e0a22c7f4f37ec3a09984ce197e390340d27) )
+	DISK_IMAGE_READONLY( "c07jca02", 0, SHA1(a81a35360933ab8a7630cf5e8a8c6988714cfa0d) )
 
 	DISK_REGION( "multisession" )
 	DISK_IMAGE_READONLY( "c07jda02", 0, BAD_DUMP SHA1(7c22ebbda11bdaf85c3441d7a6f3497994cd957f) )
@@ -4230,7 +3683,7 @@ ROM_START( dmx2majp )
 	ROM_LOAD( "gca38ja.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "a38jaa02", 0, BAD_DUMP SHA1(d26c481ef8a70bba75bcdf41f9ceb3a49c245986) )
+	DISK_IMAGE_READONLY( "a38jaa02", 0, SHA1(27fbecefb634ce282ca3bf09500c0c9e8155a7ef) )
 ROM_END
 
 ROM_START( dncfrks )
@@ -4345,11 +3798,24 @@ ROM_END
 ROM_START( dstage )
 	SYS573_BIOS_A
 
+	ROM_REGION( 0x0000084, "cassette:game:eeprom", 0 )
+	ROM_LOAD( "gn845eb.u1",  0x000000, 0x000084, BAD_DUMP CRC(82b52af5) SHA1(3fb9efe76439fa17a9a759aaebc3dc066b432947) )
+
+	ROM_REGION( 0x000008, "cassette:game:id", 0 )
+	ROM_LOAD( "gn884eb.u6",  0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
+
+	DISK_REGION( "cdrom0" )
+	DISK_IMAGE_READONLY( "gc845eba", 0, BAD_DUMP SHA1(0b7b100ceb37ac30cc1d309e5fe11fde5e1192d0) )
+ROM_END
+
+ROM_START( dstagea )
+	SYS573_BIOS_A
+
 	ROM_REGION( 0x0000224, "cassette:game:eeprom", 0 )
 	ROM_LOAD( "gn845ea.u1",   0x000000, 0x000224, BAD_DUMP CRC(db643af7) SHA1(881221da640b883302e657b906ea0a4e74555679) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "845ea", 0, BAD_DUMP SHA1(d3f9290d4dadb5e9b82ebe77abf7b99d1a89f716) )
+	DISK_IMAGE_READONLY( "845uaa02", 0, BAD_DUMP SHA1(d3f9290d4dadb5e9b82ebe77abf7b99d1a89f716) )
 ROM_END
 
 ROM_START( fbait2bc )
@@ -4736,7 +4202,7 @@ ROM_START( gtrfrk7m )
 	ROM_LOAD( "gcb17jaa.u6",   0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "b17jaa02", 0, BAD_DUMP SHA1(d38dc22011b71b0e4167f1728a8794ea4b9c5396) )
+	DISK_IMAGE_READONLY( "b17jaa02", 0, SHA1(daf23982abbab882882f89b3a9d985df36252cae) )
 ROM_END
 
 ROM_START( gtrfrk8m )
@@ -5059,7 +4525,20 @@ ROM_START( mamboagg )
 	ROM_LOAD( "gqa40jab.u6",  0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "a40jab02", 0, SHA1(a914842442b2f63465e16f979f06da0b78a5f13e) )
+	DISK_IMAGE_READONLY( "a40jab02", 0, SHA1(2e4ed217a7e9f7c79abc9a1798556cc3649db30e) )
+ROM_END
+
+ROM_START( mamboagga )
+	SYS573_BIOS_A
+
+	ROM_REGION( 0x0001014, "cassette:game:eeprom", 0 )
+	ROM_LOAD( "gqa40jrb.u1",  0x000000, 0x001014, BAD_DUMP CRC(367e4c0c) SHA1(bad21aa8818749282dd97cf00c34b7b049096ceb) )
+
+	ROM_REGION( 0x000008, "cassette:game:id", 0 )
+	ROM_LOAD( "gqa40jrb.u6",  0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
+
+	DISK_REGION( "cdrom0" )
+	DISK_IMAGE_READONLY( "a40jab02", 0, SHA1(2e4ed217a7e9f7c79abc9a1798556cc3649db30e) )
 ROM_END
 
 ROM_START( mrtlbeat )
@@ -5082,7 +4561,7 @@ ROM_START( powyakex )
 	ROM_LOAD( "gx802ja.u1", 0x000000, 0x000224, BAD_DUMP CRC(ea8bdda3) SHA1(780034ab08871631ef0e3e9b779ca89e016c26a8) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "802jab02", 0, BAD_DUMP SHA1(bcc2b6c3515e2420eef9fdf8b28115368a428a92) )
+	DISK_IMAGE_READONLY( "802jab02", 0, SHA1(460cc9f0b2514ec1da06b0a1d7b52fe43220d181) )
 ROM_END
 
 ROM_START( pcnfrk3m )
@@ -5137,7 +4616,7 @@ ROM_START( pnchmna )
 	ROM_LOAD( "gq918jab.u6",  0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "918jab02", 0, BAD_DUMP SHA1(8e59b07f6f4b67afb1109200da01d177a537d1be) )
+	DISK_IMAGE_READONLY( "918jab02", 0, SHA1(8b8cb806a4e15b4687456a5a4482ea7e1373bbf6) )
 ROM_END
 
 ROM_START( pnchmn2 )
@@ -5168,7 +4647,34 @@ ROM_START( salarymc )
 	ROM_LOAD( "gca18jaa.u6",  0x000000, 0x000008, CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
 
 	DISK_REGION( "cdrom0" )
-	DISK_IMAGE_READONLY( "gca18jaa", 0, SHA1(8adcc8ef76cbfb9f47fec5702b0b200565b5c561) )
+	DISK_IMAGE_READONLY( "a18jaa02", 0, SHA1(740cc93ec65433098153684fdfc418a098a43736) )
+ROM_END
+
+ROM_START( stepchmp )
+	SYS573_BIOS_A
+
+	ROM_REGION( 0x0000084, "cassette:game:eeprom", 0 )
+	ROM_LOAD( "gq930ja.u1",  0x000000, 0x000084, BAD_DUMP CRC(de141979) SHA1(fc91a8384852cb940ec1461c8a561118e9850c85) )
+
+	ROM_REGION( 0x000008, "cassette:game:id", 0 )
+	ROM_LOAD( "gq930ja.u6",  0x000000, 0x000008, BAD_DUMP CRC(ce84419e) SHA1(839e8ee080ecfc79021a06417d930e8b32dfc6a1) )
+
+	ROM_REGION( 0x200000, "29f016a.31m", 0 ) /* onboard flash */
+	ROM_LOAD( "gq930ja.31m", 0x000000, 0x200000, CRC(274f1813) SHA1(ff6053c0889e9b10bf5eeebda68a051bcf8d7430) )
+	ROM_REGION( 0x200000, "29f016a.27m", 0 ) /* onboard flash */
+	ROM_LOAD( "gq930ja.27m", 0x000000, 0x200000, CRC(257f9f8a) SHA1(65f51b1b26809a96798b015c1625f52f7280d9d1) )
+	ROM_REGION( 0x200000, "29f016a.31l", 0 ) /* onboard flash */
+	ROM_LOAD( "gq930ja.31l",  0x000000, 0x200000, CRC(dd3a1821) SHA1(b00ce3e88737f9aa935d0f9e5dc587c28d509483) )
+	ROM_REGION( 0x200000, "29f016a.27l", 0 ) /* onboard flash */
+	ROM_LOAD( "gq930ja.27l",  0x000000, 0x200000, CRC(fff93684) SHA1(a5653bef9ff58bbbb77b6e18c1bbb017ae171426) )
+	ROM_REGION( 0x200000, "29f016a.31j", 0 ) /* onboard flash */
+	ROM_LOAD( "gq930ja.31j",  0x000000, 0x200000, CRC(40cfee5b) SHA1(4dd0bbe9a49b7220d670b2387a7468124cf05938) )
+	ROM_REGION( 0x200000, "29f016a.27j", 0 ) /* onboard flash */
+	ROM_LOAD( "gq930ja.27j",  0x000000, 0x200000, CRC(96ea2ee4) SHA1(ad0c1da7441fb0cc08c917e99b9df48faddd2487) )
+	ROM_REGION( 0x200000, "29f016a.31h", 0 ) /* onboard flash */
+	ROM_LOAD( "gq930ja.31h",  0x000000, 0x200000, CRC(3ddffadd) SHA1(fa2c1289f4813e987bcadf83853627b2e7578978) )
+	ROM_REGION( 0x200000, "29f016a.27h", 0 ) /* onboard flash */
+	ROM_LOAD( "gq930ja.27h",  0x000000, 0x200000, CRC(256f0794) SHA1(f95d5a8a53dea4d1f4d766124e94ee103cc1e3b2) )
 ROM_END
 
 GAME( 1997, sys573,    0,        konami573,  konami573, driver_device, 0,        ROT0, "Konami", "System 573 BIOS", GAME_IS_BIOS_ROOT )
@@ -5183,7 +4689,8 @@ GAME( 1998, konam80u,  konam80s, konami573x, konami573, driver_device, 0,       
 GAME( 1998, konam80j,  konam80s, konami573x, konami573, driver_device, 0,        ROT90, "Konami", "Konami 80's Gallery (GC826 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 GAME( 1998, konam80a,  konam80s, konami573x, konami573, driver_device, 0,        ROT90, "Konami", "Konami 80's AC Special (GC826 VER. AAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 GAME( 1998, konam80k,  konam80s, konami573x, konami573, driver_device, 0,        ROT90, "Konami", "Konami 80's AC Special (GC826 VER. KAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1999, dstage,    sys573,   ddr,        ddr,       ksys573_state, ddr,      ROT0, "Konami", "Dancing Stage (GN845 VER. EAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1999, dstage,    sys573,   dsftkd,     ddr,       ksys573_state, ddr,      ROT0, "Konami", "Dancing Stage - Internet Ranking Ver (GC845 VER. EBA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1999, dstagea,   dstage,   ddr,        ddr,       ksys573_state, ddr,      ROT0, "Konami", "Dancing Stage (GN845 VER. EAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 GAME( 1999, ddru,      dstage,   ddr,        ddr,       ksys573_state, ddr,      ROT0, "Konami", "Dance Dance Revolution (GN845 VER. UAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 GAME( 1998, ddrj,      dstage,   ddr,        ddr,       ksys573_state, ddr,      ROT0, "Konami", "Dance Dance Revolution - Internet Ranking Ver (GC845 VER. JBA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 GAME( 1998, ddrja,     dstage,   ddr,        ddr,       ksys573_state, ddr,      ROT0, "Konami", "Dance Dance Revolution (GC845 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING )
@@ -5226,6 +4733,7 @@ GAME( 1999, dsfdct,    sys573,   ddr3m,      ddr,       driver_device, 0,       
 GAME( 1999, dsfdcta,   dsfdct,   dsfdcta,    ddr,       ksys573_state, ddr,      ROT0, "Konami", "Dancing Stage featuring Dreams Come True (GC910 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 GAME( 1999, drmn2m,    sys573,   drmn2m,     drmn,      driver_device, 0,        ROT0, "Konami", "DrumMania 2nd Mix (GE912 VER. JAB)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.5 */
 GAME( 1999, drmn2mpu,  drmn2m,   drmn2m,     drmn,      driver_device, 0,        ROT0, "Konami", "DrumMania 2nd Mix Session Power Up Kit (GE912 VER. JAB)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.5 */
+GAME( 1999, stepchmp,  sys573,   salarymc,   hyperbbc,  ksys573_state, salarymc, ROT0, "Konami", "Step Champ (GQ930 VER. JA)", GAME_IMPERFECT_GRAPHICS | GAME_NO_SOUND )
 GAME( 2000, dncfrks,   sys573,   dmx,        dmx,       driver_device, 0,        ROT0, "Konami", "Dance Freaks (G*874 VER. KAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.6 */
 GAME( 2000, dmx,       dncfrks,  dmx,        dmx,       driver_device, 0,        ROT0, "Konami", "Dance Maniax (G*874 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.6 */
 GAME( 2000, gunmania,  sys573,   gunmania,   gunmania,  driver_device, 0,        ROT0, "Konami", "GunMania (GL906 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING )
@@ -5259,24 +4767,25 @@ GAME( 2001, gtrfrk5m,  sys573,   gtrfrk5m,   gtrfrks,   driver_device, 0,       
 GAME( 2001, ddr5m,     sys573,   ddr5m,      ddr,       driver_device, 0,        ROT0, "Konami", "Dance Dance Revolution 5th Mix (G*A27 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.9 */
 GAME( 2001, dmx2majp,  sys573,   dmx,        dmx,       driver_device, 0,        ROT0, "Konami", "Dance Maniax 2nd Mix Append J-Paradise (G*A38 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.9 */
 GAME( 2001, mamboagg,  sys573,   mamboagg,   mamboagg,  driver_device, 0,        ROT0, "Konami", "Mambo A Go-Go (GQA40 VER. JAB)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
+GAME( 2001, mamboagga, mamboagg, mamboagga,  mamboagg,  driver_device, 0,        ROT0, "Konami", "Mambo A Go-Go e-Amusement (GQA40 VER. JRB)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
 GAME( 2001, drmn5m,    sys573,   drmn4m,     drmn,      driver_device, 0,        ROT0, "Konami", "DrumMania 5th Mix (G*B05 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.9 */
 GAME( 2001, gtrfrk6m,  sys573,   gtrfrk5m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 6th Mix (G*B06 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.9 */
 GAME( 2001, drmn6m,    sys573,   drmn4m,     drmn,      driver_device, 0,        ROT0, "Konami", "DrumMania 6th Mix (G*B16 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
-GAME( 2001, gtrfrk7m,  sys573,   gtrfrk5m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 7th Mix (G*B17 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
+GAME( 2001, gtrfrk7m,  sys573,   gtrfrk7m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 7th Mix (G*B17 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
 GAME( 2001, ddrmax,    sys573,   ddr5m,      ddr,       driver_device, 0,        ROT0, "Konami", "DDR Max - Dance Dance Revolution 6th Mix (G*B19 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.9 */
 GAME( 2002, ddrmax2,   sys573,   ddr5m,      ddr,       driver_device, 0,        ROT0, "Konami", "DDR Max 2 - Dance Dance Revolution 7th Mix (G*B20 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
 GAME( 2002, mrtlbeat,  sys573,   ddr5m,      ddr,       driver_device, 0,        ROT0, "Konami", "Martial Beat (G*B47 VER. JBA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.9 */
 GAME( 2002, drmn7m,    sys573,   drmn4m,     drmn,      driver_device, 0,        ROT0, "Konami", "DrumMania 7th Mix power-up ver. (G*C07 VER. JBA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
 GAME( 2002, drmn7ma,   drmn7m,   drmn4m,     drmn,      driver_device, 0,        ROT0, "Konami", "DrumMania 7th Mix (G*C07 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
-GAME( 2002, gtrfrk8m,  sys573,   gtrfrk5m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 8th Mix power-up ver. (G*C08 VER. JBA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
-GAME( 2002, gtrfrk8ma, gtrfrk8m, gtrfrk5m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 8th Mix (G*C08 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
+GAME( 2002, gtrfrk8m,  sys573,   gtrfrk7m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 8th Mix power-up ver. (G*C08 VER. JBA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
+GAME( 2002, gtrfrk8ma, gtrfrk8m, gtrfrk7m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 8th Mix (G*C08 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
 GAME( 2002, dsem2,     sys573,   ddr5m,      ddr,       driver_device, 0,        ROT0, "Konami", "Dancing Stage Euro Mix 2 (G*C23 VER. EAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
 GAME( 2002, ddrextrm,  sys573,   ddr5m,      ddr,       driver_device, 0,        ROT0, "Konami", "Dance Dance Revolution Extreme (G*C36 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
 GAME( 2003, drmn8m,    sys573,   drmn4m,     drmn,      driver_device, 0,        ROT0, "Konami", "DrumMania 8th Mix (G*C07 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
-GAME( 2003, gtrfrk9m,  sys573,   gtrfrk5m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 9th Mix (G*C39 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
+GAME( 2003, gtrfrk9m,  sys573,   gtrfrk7m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 9th Mix (G*C39 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
 GAME( 2003, drmn9m,    sys573,   drmn4m,     drmn,      driver_device, 0,        ROT0, "Konami", "DrumMania 9th Mix (G*D09 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
-GAME( 2003, gtfrk10m,  sys573,   gtrfrk5m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 10th Mix (G*D10 VER. JAB)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
-GAME( 2003, gtfrk10ma, gtfrk10m, gtrfrk5m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 10th Mix (G*D10 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
-GAME( 2003, gtfrk10mb, gtfrk10m, gtrfrk5m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 10th Mix eAmusement (G*D10 VER. JBA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
-GAME( 2004, gtfrk11m,  sys573,   gtrfrk5m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 11th Mix (G*D39 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
+GAME( 2003, gtfrk10m,  sys573,   gtrfrk7m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 10th Mix (G*D10 VER. JAB)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
+GAME( 2003, gtfrk10ma, gtfrk10m, gtrfrk7m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 10th Mix (G*D10 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
+GAME( 2003, gtfrk10mb, gtfrk10m, gtfrk10mb,  gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 10th Mix eAmusement (G*D10 VER. JBA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
+GAME( 2004, gtfrk11m,  sys573,   gtrfrk7m,   gtrfrks,   driver_device, 0,        ROT0, "Konami", "Guitar Freaks 11th Mix (G*D39 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */
 GAME( 2004, drmn10m,   sys573,   drmn4m,     drmn,      driver_device, 0,        ROT0, "Konami", "DrumMania 10th Mix (G*D40 VER. JAA)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND | GAME_NOT_WORKING ) /* BOOT VER 1.95 */

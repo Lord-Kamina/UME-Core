@@ -1,5 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Bryan McPhail
 #include "emu.h"
-#include "video/deco16ic.h"
 #include "includes/pktgaldx.h"
 
 /* Video on the orginal */
@@ -7,17 +8,17 @@
 UINT32 pktgaldx_state::screen_update_pktgaldx(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	address_space &space = machine().driver_data()->generic_space();
-	UINT16 flip = deco16ic_pf_control_r(m_deco_tilegen1, space, 0, 0xffff);
+	UINT16 flip = m_deco_tilegen1->pf_control_r(space, 0, 0xffff);
 
 	flip_screen_set(BIT(flip, 7));
-	deco16ic_pf_update(m_deco_tilegen1, m_pf1_rowscroll, m_pf2_rowscroll);
+	m_deco_tilegen1->pf_update(m_pf1_rowscroll, m_pf2_rowscroll);
 
 	bitmap.fill(0, cliprect); /* not Confirmed */
-	machine().priority_bitmap.fill(0);
+	screen.priority().fill(0);
 
-	deco16ic_tilemap_2_draw(m_deco_tilegen1, bitmap, cliprect, 0, 0);
+	m_deco_tilegen1->tilemap_2_draw(screen, bitmap, cliprect, 0, 0);
 	m_sprgen->draw_sprites(bitmap, cliprect, m_spriteram, 0x400, true);
-	deco16ic_tilemap_1_draw(m_deco_tilegen1, bitmap, cliprect, 0, 0);
+	m_deco_tilegen1->tilemap_1_draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -30,7 +31,7 @@ UINT32 pktgaldx_state::screen_update_pktgaldb(screen_device &screen, bitmap_ind1
 	int tileno;
 	int colour;
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	/* the bootleg seems to treat the tilemaps as sprites */
 	for (offset = 0; offset < 0x1600 / 2; offset += 8)
@@ -44,7 +45,7 @@ UINT32 pktgaldx_state::screen_update_pktgaldb(screen_device &screen, bitmap_ind1
 		y &= 0x1ff;
 		y -= 8;
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[0], tileno ^ 0x1000, colour, 0, 0, x, y, 0);
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect, tileno ^ 0x1000, colour, 0, 0, x, y, 0);
 	}
 
 	for (offset = 0x1600/2; offset < 0x2000 / 2; offset += 8)
@@ -58,7 +59,7 @@ UINT32 pktgaldx_state::screen_update_pktgaldb(screen_device &screen, bitmap_ind1
 		y &= 0x1ff;
 		y -= 8;
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[0], tileno ^ 0x4000, colour, 0, 0, x, y, 0);
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect, tileno ^ 0x4000, colour, 0, 0, x, y, 0);
 	}
 
 	for (offset = 0x2000/2; offset < 0x4000 / 2; offset += 8)
@@ -72,7 +73,7 @@ UINT32 pktgaldx_state::screen_update_pktgaldb(screen_device &screen, bitmap_ind1
 		y &= 0x1ff;
 		y -= 8;
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[0], tileno ^ 0x3000, colour, 0, 0, x, y, 0);
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect, tileno ^ 0x3000, colour, 0, 0, x, y, 0);
 	}
 
 	return 0;

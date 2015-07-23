@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ryan Holtz
 #ifndef _INCLUDES_CDI_H_
 #define _INCLUDES_CDI_H_
 
@@ -34,8 +36,8 @@ public:
 	required_device<cpu_device> m_maincpu;
 	required_shared_ptr<UINT16> m_planea;
 	required_shared_ptr<UINT16> m_planeb;
-	optional_device<ioport_port> m_input1;
-	optional_device<ioport_port> m_input2;
+	optional_ioport m_input1;
+	optional_ioport m_input2;
 	required_ioport m_mousex;
 	required_ioport m_mousey;
 	required_ioport m_mousebtn;
@@ -56,16 +58,16 @@ public:
 	virtual void machine_start();
 	virtual void video_start();
 	DECLARE_MACHINE_RESET(cdi);
-	DECLARE_MACHINE_RESET(quizrd12);
-	DECLARE_MACHINE_RESET(quizrd17);
-	DECLARE_MACHINE_RESET(quizrd18);
-	DECLARE_MACHINE_RESET(quizrd22);
-	DECLARE_MACHINE_RESET(quizrd23);
-	DECLARE_MACHINE_RESET(quizrd32);
-	DECLARE_MACHINE_RESET(quizrd34);
-	DECLARE_MACHINE_RESET(quizrr40);
-	DECLARE_MACHINE_RESET(quizrr41);
-	DECLARE_MACHINE_RESET(quizrr42);
+	DECLARE_MACHINE_RESET(quizard12);
+	DECLARE_MACHINE_RESET(quizard17);
+	DECLARE_MACHINE_RESET(quizard18);
+	DECLARE_MACHINE_RESET(quizard22);
+	DECLARE_MACHINE_RESET(quizard23);
+	DECLARE_MACHINE_RESET(quizard32);
+	DECLARE_MACHINE_RESET(quizard34);
+	DECLARE_MACHINE_RESET(quizard4r40);
+	DECLARE_MACHINE_RESET(quizard4r41);
+	DECLARE_MACHINE_RESET(quizard4r42);
 	UINT32 screen_update_cdimono1(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_cdimono1_lcd(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 };

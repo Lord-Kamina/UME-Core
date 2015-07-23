@@ -1,10 +1,14 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     Driver for Midway V-Unit games
 
 **************************************************************************/
 
-#include "video/polynew.h"
+#include "video/poly.h"
+#include "audio/dcs.h"
+#include "machine/midwayic.h"
 
 #define MIDVUNIT_VIDEO_CLOCK    33000000
 
@@ -52,7 +56,14 @@ public:
 			m_midvplus_misc(*this, "midvplus_misc"),
 			m_videoram(*this, "videoram", 32),
 			m_textureram(*this, "textureram") ,
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette"),
+		m_midway_serial_pic(*this, "serial_pic"),
+		m_midway_serial_pic2(*this, "serial_pic2"),
+		m_midway_ioasic(*this, "ioasic"),
+		m_dcs(*this, "dcs"),
+		m_generic_paletteram_32(*this, "paletteram") { }
 
 	optional_shared_ptr<UINT32> m_nvram;
 	required_shared_ptr<UINT32> m_ram_base;
@@ -113,6 +124,7 @@ public:
 	DECLARE_WRITE32_MEMBER(offroadc_serial_data_w);
 	DECLARE_READ32_MEMBER(midvplus_misc_r);
 	DECLARE_WRITE32_MEMBER(midvplus_misc_w);
+	DECLARE_WRITE8_MEMBER(midvplus_xf1_w);
 	DECLARE_READ32_MEMBER(generic_speedup_r);
 	DECLARE_DRIVER_INIT(crusnu40);
 	DECLARE_DRIVER_INIT(crusnu21);
@@ -129,6 +141,14 @@ public:
 	UINT32 screen_update_midvunit(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	TIMER_CALLBACK_MEMBER(scanline_timer_cb);
 	required_device<cpu_device> m_maincpu;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
+	optional_device<midway_serial_pic_device> m_midway_serial_pic;
+	optional_device<midway_serial_pic2_device> m_midway_serial_pic2;
+	optional_device<midway_ioasic_device> m_midway_ioasic;
+	required_device<dcs_audio_device> m_dcs;
+	required_shared_ptr<UINT32> m_generic_paletteram_32;
+	void postload();
 
 protected:
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);

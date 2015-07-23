@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Coates
 #include "emu.h"
 #include "sound/samples.h"
 #include "includes/circus.h"
 
-static const char *const circus_sample_names[] =
+const char *const circus_sample_names[] =
 {
 	"*circus",
 	"pop",
@@ -11,26 +13,14 @@ static const char *const circus_sample_names[] =
 	0
 };
 
-const samples_interface circus_samples_interface =
-{
-	3,  /* 3 channels */
-	circus_sample_names
-};
-
-static const char *const crash_sample_names[] =
+const char *const crash_sample_names[] =
 {
 	"*crash",
 	"crash",
 	0
 };
 
-const samples_interface crash_samples_interface =
-{
-	1,  /* 1 channel */
-	crash_sample_names
-};
-
-static const char *const ripcord_sample_names[] =
+const char *const ripcord_sample_names[] =
 {
 	"*ripcord",
 	"splash",
@@ -40,13 +30,7 @@ static const char *const ripcord_sample_names[] =
 	0
 };
 
-const samples_interface ripcord_samples_interface =
-{
-	4,  /* 4 channels */
-	ripcord_sample_names
-};
-
-static const char *const robotbwl_sample_names[] =
+const char *const robotbwl_sample_names[] =
 {
 	"*robotbwl",
 	"hit",
@@ -57,11 +41,6 @@ static const char *const robotbwl_sample_names[] =
 	0
 };
 
-const samples_interface robotbwl_samples_interface =
-{
-	5,  /* 5 channels */
-	robotbwl_sample_names
-};
 
 /* Nodes - Inputs */
 #define CIRCUS_MUSIC_BIT    NODE_01
@@ -183,11 +162,11 @@ WRITE8_MEMBER(circus_state::circus_clown_z_w)
 			switch ((data & 0x70) >> 4)
 			{
 				case 0 : /* All Off */
-					discrete_sound_w(m_discrete, space, CIRCUS_MUSIC_BIT, 0);
+					m_discrete->write(space, CIRCUS_MUSIC_BIT, 0);
 					break;
 
 				case 1 : /* Music */
-					discrete_sound_w(m_discrete, space, CIRCUS_MUSIC_BIT, 1);
+					m_discrete->write(space, CIRCUS_MUSIC_BIT, 1);
 					break;
 
 				case 2 : /* Circus = Pop; Rip Cord = Splash */
@@ -216,7 +195,7 @@ WRITE8_MEMBER(circus_state::circus_clown_z_w)
 			break;
 
 		case 2: /* robotbwl */
-			discrete_sound_w(m_discrete, space, ROBOTBWL_MUSIC_BIT, data & 0x08);   /* Footsteps */
+			m_discrete->write(space, ROBOTBWL_MUSIC_BIT, data & 0x08);   /* Footsteps */
 
 			if (data & 0x40)    /* Hit */
 				m_samples->start(0, 0);
@@ -241,11 +220,11 @@ WRITE8_MEMBER(circus_state::circus_clown_z_w)
 			switch ((data & 0x70) >> 4)
 			{
 				case 0 : /* All Off */
-					discrete_sound_w(m_discrete, space, CRASH_MUSIC_BIT, 0);
+					m_discrete->write(space, CRASH_MUSIC_BIT, 0);
 					break;
 
 				case 1 : /* Music */
-					discrete_sound_w(m_discrete, space, CRASH_MUSIC_BIT, 1);
+					m_discrete->write(space, CRASH_MUSIC_BIT, 1);
 					break;
 
 				case 2 : /* Crash */
@@ -253,14 +232,14 @@ WRITE8_MEMBER(circus_state::circus_clown_z_w)
 					break;
 
 				case 3 : /* Normal Video and Beep */
-					discrete_sound_w(m_discrete, space, CRASH_BEEPER_EN, 0);
+					m_discrete->write(space, CRASH_BEEPER_EN, 0);
 					break;
 
 				case 4 : /* Skid */
 					break;
 
 				case 5 : /* Invert Video and Beep */
-					discrete_sound_w(m_discrete, space, CRASH_BEEPER_EN, 0);
+					m_discrete->write(space, CRASH_BEEPER_EN, 0);
 					break;
 
 				case 6 : /* Hi Motor */

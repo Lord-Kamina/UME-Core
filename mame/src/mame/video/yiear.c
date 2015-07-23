@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Enrique Sanchez
 /***************************************************************************
 
   video.c
@@ -28,12 +30,12 @@
 
 ***************************************************************************/
 
-void yiear_state::palette_init()
+PALETTE_INIT_MEMBER(yiear_state, yiear)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int bit0, bit1, bit2, r, g, b;
 
@@ -55,7 +57,7 @@ void yiear_state::palette_init()
 		bit2 = (*color_prom >> 7) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		palette_set_color(machine(), i, MAKE_RGB(r,g,b));
+		palette.set_pen_color(i, rgb_t(r,g,b));
 		color_prom++;
 	}
 }
@@ -99,7 +101,7 @@ TILE_GET_INFO_MEMBER(yiear_state::get_bg_tile_info)
 
 void yiear_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(yiear_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(yiear_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 }
 
 void yiear_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
@@ -129,8 +131,8 @@ void yiear_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect 
 			sy++;   /* fix title screen & garbage at the bottom of the screen */
 		}
 
-		drawgfx_transpen(bitmap, cliprect,
-			machine().gfx[1],
+
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 			code, color,
 			flipx, flipy,
 			sx, sy, 0);
@@ -139,7 +141,7 @@ void yiear_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect 
 
 UINT32 yiear_state::screen_update_yiear(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }

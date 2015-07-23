@@ -1,41 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 //============================================================
 //
 //  winfile.c - Win32 OSD core file access functions
-//
-//============================================================
-//
-//  Copyright Aaron Giles
-//  All rights reserved.
-//
-//  Redistribution and use in source and binary forms, with or
-//  without modification, are permitted provided that the
-//  following conditions are met:
-//
-//    * Redistributions of source code must retain the above
-//      copyright notice, this list of conditions and the
-//      following disclaimer.
-//    * Redistributions in binary form must reproduce the
-//      above copyright notice, this list of conditions and
-//      the following disclaimer in the documentation and/or
-//      other materials provided with the distribution.
-//    * Neither the name 'MAME' nor the names of its
-//      contributors may be used to endorse or promote
-//      products derived from this software without specific
-//      prior written permission.
-//
-//  THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND
-//  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-//  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
-//  FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
-//  EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-//  INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-//  DAMAGE (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-//  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-//  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-//  ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-//  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-//  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-//  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 //============================================================
 
@@ -81,15 +48,10 @@ extern const char *winfile_ptty_identifier;
 
 file_error osd_open(const char *path, UINT32 openflags, osd_file **file, UINT64 *filesize)
 {
-	DWORD disposition, access, sharemode;
 	file_error filerr = FILERR_NONE;
-	const TCHAR *src;
-	DWORD upper;
-	TCHAR *t_path;
-	TCHAR *dst;
 
 	// convert path to TCHAR
-	t_path = tstring_from_utf8(path);
+	TCHAR *t_path = tstring_from_utf8(path);
 	if (t_path == NULL)
 	{
 		filerr = FILERR_OUT_OF_MEMORY;
@@ -97,7 +59,7 @@ file_error osd_open(const char *path, UINT32 openflags, osd_file **file, UINT64 
 	}
 
 	// allocate a file object, plus space for the converted filename
-	*file = (osd_file *)malloc(sizeof(**file) + sizeof(TCHAR) * _tcslen(t_path));
+	*file = (osd_file *)osd_malloc_array(sizeof(**file) + sizeof(TCHAR) * _tcslen(t_path));
 	if (*file == NULL)
 	{
 		filerr = FILERR_OUT_OF_MEMORY;
@@ -122,17 +84,20 @@ file_error osd_open(const char *path, UINT32 openflags, osd_file **file, UINT64 
 	(*file)->type = WINFILE_FILE;
 
 	// convert the path into something Windows compatible
-	dst = (*file)->filename;
-	for (src = t_path; *src != 0; src++)
-		*dst++ = *src;//(*src == '/') ? '\\' : *src;
-	*dst++ = 0;
+	{
+		TCHAR *dst = (*file)->filename;
+		for (TCHAR const *src = t_path; *src != 0; src++)
+			*dst++ = *src;//(*src == '/') ? '\\' : *src;
+		*dst++ = 0;
+	}
 
 	// select the file open modes
+	DWORD disposition, access, sharemode;
 	if (openflags & OPEN_FLAG_WRITE)
 	{
 		disposition = (!is_path_to_physical_drive(path) && (openflags & OPEN_FLAG_CREATE)) ? CREATE_ALWAYS : OPEN_EXISTING;
 		access = (openflags & OPEN_FLAG_READ) ? (GENERIC_READ | GENERIC_WRITE) : GENERIC_WRITE;
-		sharemode = 0;
+		sharemode = FILE_SHARE_READ;
 	}
 	else if (openflags & OPEN_FLAG_READ)
 	{
@@ -151,7 +116,6 @@ file_error osd_open(const char *path, UINT32 openflags, osd_file **file, UINT64 
 	if ((*file)->handle == INVALID_HANDLE_VALUE)
 	{
 		DWORD error = GetLastError();
-
 		// create the path if necessary
 		if (error == ERROR_PATH_NOT_FOUND && (openflags & OPEN_FLAG_CREATE) && (openflags & OPEN_FLAG_CREATE_PATHS))
 		{
@@ -178,6 +142,7 @@ file_error osd_open(const char *path, UINT32 openflags, osd_file **file, UINT64 
 	}
 
 	// get the file size
+	DWORD upper;
 	*filesize = GetFileSize((*file)->handle, &upper);
 	*filesize |= (UINT64)upper << 32;
 
@@ -185,7 +150,7 @@ error:
 	// cleanup
 	if (filerr != FILERR_NONE && *file != NULL)
 	{
-		free(*file);
+		osd_free(*file);
 		*file = NULL;
 	}
 	osd_free(t_path);
@@ -272,25 +237,68 @@ file_error osd_write(osd_file *file, const void *buffer, UINT64 offset, UINT32 l
 
 
 //============================================================
+//  osd_truncate
+//============================================================
+
+file_error osd_truncate(osd_file *file, UINT64 offset)
+{
+	if (!file || !file->handle)
+		return FILERR_FAILURE;
+
+	DWORD result;
+	LONG upper = offset >> 32;
+
+	switch (file->type)
+	{
+		case WINFILE_FILE:
+			// attempt to set the file pointer
+			result = SetFilePointer(file->handle, (UINT32)offset, &upper, FILE_BEGIN);
+			if (result == INVALID_SET_FILE_POINTER)
+			{
+				DWORD error = GetLastError();
+				if (error != NO_ERROR)
+					return win_error_to_mame_file_error(error);
+			}
+
+			// then perform the truncation
+			if (!SetEndOfFile(file->handle))
+				return win_error_to_mame_file_error(GetLastError());
+			break;
+		case WINFILE_SOCKET:
+			return FILERR_FAILURE;
+			break;
+		case WINFILE_PTTY:
+			return FILERR_FAILURE;
+			break;
+
+	}
+	return FILERR_NONE;
+}
+
+
+//============================================================
 //  osd_close
 //============================================================
 
 file_error osd_close(osd_file *file)
 {
+	file_error result = FILERR_NONE;
+
 	switch (file->type)
 	{
 		case WINFILE_FILE:
-			// close the file handle and free the file structure
 			CloseHandle(file->handle);
-			free(file);
 			break;
 		case WINFILE_SOCKET:
-			return win_close_socket(file);
+			result = win_close_socket(file);
 			break;
 		case WINFILE_PTTY:
-			return win_close_ptty(file);
+			result = win_close_ptty(file);
+			break;
 	}
-	return FILERR_NONE;
+
+	osd_free(file);
+	return result;
 }
 
 
@@ -368,23 +376,6 @@ int osd_get_physical_drive_geometry(const char *filename, UINT32 *cylinders, UIN
 		*cylinders *= 2;
 	}
 	return TRUE;
-}
-
-
-//============================================================
-//  osd_uchar_from_osdchar
-//============================================================
-
-int osd_uchar_from_osdchar(UINT32 *uchar, const char *osdchar, size_t count)
-{
-	WCHAR wch;
-
-	count = MIN(count, IsDBCSLeadByte(*osdchar) ? 2 : 1);
-	if (MultiByteToWideChar(CP_ACP, 0, osdchar, (DWORD)count, &wch, 1) != 0)
-		*uchar = wch;
-	else
-		*uchar = 0;
-	return (int) count;
 }
 
 
@@ -486,7 +477,7 @@ osd_directory_entry *osd_stat(const char *path)
 
 	// create an osd_directory_entry; be sure to make sure that the caller can
 	// free all resources by just freeing the resulting osd_directory_entry
-	result = (osd_directory_entry *)malloc(sizeof(*result) + strlen(path) + 1);
+	result = (osd_directory_entry *)osd_malloc_array(sizeof(*result) + strlen(path) + 1);
 	if (!result)
 		goto done;
 	strcpy(((char *) result) + sizeof(*result), path);

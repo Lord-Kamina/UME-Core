@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert, R. Belmont
 /*********************************************************************
 
     ap2_dsk.h
@@ -51,6 +53,8 @@ private:
 
 		UINT8 gb(const UINT8 *buf, int ts, int &pos, int &wrap);
 		void update_chk(const UINT8 *data, int size, UINT32 &chk);
+
+		bool m_prodos_order;
 };
 
 extern const floppy_format_type FLOPPY_A216S_FORMAT;
@@ -77,5 +81,25 @@ private:
 };
 
 extern const floppy_format_type FLOPPY_RWTS18_FORMAT;
+
+
+class a2_edd_format : public floppy_image_format_t
+{
+public:
+		a2_edd_format();
+
+		virtual int identify(io_generic *io, UINT32 form_factor);
+		virtual bool load(io_generic *io, UINT32 form_factor, floppy_image *image);
+		virtual bool supports_save() const;
+
+		virtual const char *name() const;
+		virtual const char *description() const;
+		virtual const char *extensions() const;
+
+private:
+		static UINT8 pick(const UINT8 *data, int pos);
+};
+
+extern const floppy_format_type FLOPPY_EDD_FORMAT;
 
 #endif /* AP2_DISK_H */

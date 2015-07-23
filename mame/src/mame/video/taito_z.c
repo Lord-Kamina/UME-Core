@@ -1,5 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:David Graves
 #include "emu.h"
-#include "video/taitoic.h"
 #include "includes/taito_z.h"
 
 /**********************************************************/
@@ -143,7 +144,7 @@ confirmed
 ********************************************************/
 
 
-void taitoz_state::contcirc_draw_sprites_16x8( bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
+void taitoz_state::contcirc_draw_sprites_16x8( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
 {
 	UINT16 *spritemap = (UINT16 *)memregion("user1")->base();
 	UINT16 *spriteram = m_spriteram;
@@ -222,12 +223,12 @@ void taitoz_state::contcirc_draw_sprites_16x8( bitmap_ind16 &bitmap, const recta
 				flipy = !flipy;
 			}
 
-			pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 					code,
 					color,
 					flipx,flipy,
 					curx,cury,
-					zx<<12,zy<<13,machine().priority_bitmap,primasks[priority],0);
+					zx<<12,zy<<13,screen.priority(),primasks[priority],0);
 		}
 
 		if (bad_chunks)
@@ -237,7 +238,7 @@ void taitoz_state::contcirc_draw_sprites_16x8( bitmap_ind16 &bitmap, const recta
 
 
 
-void taitoz_state::chasehq_draw_sprites_16x16( bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
+void taitoz_state::chasehq_draw_sprites_16x16( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
 {
 	UINT16 *spritemap = (UINT16 *)memregion("user1")->base();
 	UINT16 *spriteram = m_spriteram;
@@ -319,13 +320,13 @@ void taitoz_state::chasehq_draw_sprites_16x16( bitmap_ind16 &bitmap, const recta
 					flipy = !flipy;
 				}
 
-				pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+				m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 						code,
 						color,
 						flipx,flipy,
 						curx,cury,
 						zx<<12,zy<<12,
-						machine().priority_bitmap,primasks[priority],0);
+						screen.priority(),primasks[priority],0);
 			}
 		}
 		else if ((zoomx - 1) & 0x20)    /* 64x128 sprites, $40000-$5ffff in spritemap rom, OBJB */
@@ -362,13 +363,13 @@ void taitoz_state::chasehq_draw_sprites_16x16( bitmap_ind16 &bitmap, const recta
 					flipy = !flipy;
 				}
 
-				pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[2],
+				m_gfxdecode->gfx(2)->prio_zoom_transpen(bitmap,cliprect,
 						code,
 						color,
 						flipx,flipy,
 						curx,cury,
 						zx<<12,zy<<12,
-						machine().priority_bitmap,primasks[priority],0);
+						screen.priority(),primasks[priority],0);
 			}
 		}
 		else if (!((zoomx - 1) & 0x60)) /* 32x128 sprites, $60000-$7ffff in spritemap rom, OBJB */
@@ -405,13 +406,13 @@ void taitoz_state::chasehq_draw_sprites_16x16( bitmap_ind16 &bitmap, const recta
 					flipy = !flipy;
 				}
 
-				pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[2],
+				m_gfxdecode->gfx(2)->prio_zoom_transpen(bitmap,cliprect,
 						code,
 						color,
 						flipx,flipy,
 						curx,cury,
 						zx<<12,zy<<12,
-						machine().priority_bitmap,primasks[priority],0);
+						screen.priority(),primasks[priority],0);
 			}
 		}
 
@@ -422,7 +423,7 @@ void taitoz_state::chasehq_draw_sprites_16x16( bitmap_ind16 &bitmap, const recta
 
 
 
-void taitoz_state::bshark_draw_sprites_16x8( bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
+void taitoz_state::bshark_draw_sprites_16x8( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
 {
 	UINT16 *spritemap = (UINT16 *)memregion("user1")->base();
 	UINT16 *spriteram = m_spriteram;
@@ -501,13 +502,13 @@ void taitoz_state::bshark_draw_sprites_16x8( bitmap_ind16 &bitmap, const rectang
 				flipy = !flipy;
 			}
 
-			pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 					code,
 					color,
 					flipx,flipy,
 					curx,cury,
 					zx<<12,zy<<13,
-					machine().priority_bitmap,primasks[priority],0);
+					screen.priority(),primasks[priority],0);
 		}
 
 		if (bad_chunks)
@@ -517,7 +518,7 @@ void taitoz_state::bshark_draw_sprites_16x8( bitmap_ind16 &bitmap, const rectang
 
 
 
-void taitoz_state::sci_draw_sprites_16x8( bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
+void taitoz_state::sci_draw_sprites_16x8( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
 {
 	UINT16 *spritemap = (UINT16 *)memregion("user1")->base();
 	UINT16 *spriteram = m_spriteram;
@@ -605,13 +606,13 @@ void taitoz_state::sci_draw_sprites_16x8( bitmap_ind16 &bitmap, const rectangle 
 				flipy = !flipy;
 			}
 
-			pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 					code,
 					color,
 					flipx,flipy,
 					curx,cury,
 					zx<<12,zy<<13,
-					machine().priority_bitmap,primasks[priority],0);
+					screen.priority(),primasks[priority],0);
 		}
 
 		if (bad_chunks)
@@ -621,7 +622,7 @@ void taitoz_state::sci_draw_sprites_16x8( bitmap_ind16 &bitmap, const rectangle 
 
 
 
-void taitoz_state::aquajack_draw_sprites_16x8(bitmap_ind16 &bitmap,const rectangle &cliprect,int y_offs)
+void taitoz_state::aquajack_draw_sprites_16x8(screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect,int y_offs)
 {
 	UINT16 *spritemap = (UINT16 *)memregion("user1")->base();
 	UINT16 *spriteram = m_spriteram;
@@ -699,13 +700,13 @@ void taitoz_state::aquajack_draw_sprites_16x8(bitmap_ind16 &bitmap,const rectang
 				flipy = !flipy;
 			}
 
-			pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 					code,
 					color,
 					flipx,flipy,
 					curx,cury,
 					zx<<12,zy<<13,
-					machine().priority_bitmap,primasks[priority],0);
+					screen.priority(),primasks[priority],0);
 		}
 
 		if (bad_chunks)
@@ -715,7 +716,7 @@ void taitoz_state::aquajack_draw_sprites_16x8(bitmap_ind16 &bitmap,const rectang
 
 
 
-void taitoz_state::spacegun_draw_sprites_16x8(bitmap_ind16 &bitmap,const rectangle &cliprect,int y_offs)
+void taitoz_state::spacegun_draw_sprites_16x8(screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect,int y_offs)
 {
 	UINT16 *spritemap = (UINT16 *)memregion("user1")->base();
 	UINT16 *spriteram = m_spriteram;
@@ -793,13 +794,13 @@ void taitoz_state::spacegun_draw_sprites_16x8(bitmap_ind16 &bitmap,const rectang
 				flipy = !flipy;
 			}
 
-			pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 					code,
 					color,
 					flipx,flipy,
 					curx,cury,
 					zx<<12,zy<<13,
-					machine().priority_bitmap,primasks[priority],0);
+					screen.priority(),primasks[priority],0);
 		}
 
 		if (bad_chunks)
@@ -835,22 +836,22 @@ UINT32 taitoz_state::screen_update_contcirc(screen_device &screen, bitmap_ind16 
 {
 	UINT8 layer[3];
 
-	tc0100scn_tilemap_update(m_tc0100scn);
+	m_tc0100scn->tilemap_update();
 
-	layer[0] = tc0100scn_bottomlayer(m_tc0100scn);
+	layer[0] = m_tc0100scn->bottomlayer();
 	layer[1] = layer[0] ^ 1;
 	layer[2] = 2;
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	bitmap.fill(0, cliprect);
 
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[0], 0, 0);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[1], 0, 1);
-	tc0150rod_draw(m_tc0150rod, bitmap, cliprect, -3, m_road_palbank << 6, 1, 0, 1, 2); // -6
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[2], 0, 4);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[0], 0, 0);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 1);
+	m_tc0150rod->draw(bitmap, cliprect, -3, m_road_palbank << 6, 1, 0, screen.priority(), 1, 2); // -6
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 4);
 
-	contcirc_draw_sprites_16x8(bitmap, cliprect, 5); // 7
+	contcirc_draw_sprites_16x8(screen, bitmap, cliprect, 5); // 7
 	return 0;
 }
 
@@ -861,23 +862,23 @@ UINT32 taitoz_state::screen_update_chasehq(screen_device &screen, bitmap_ind16 &
 {
 	UINT8 layer[3];
 
-	tc0100scn_tilemap_update(m_tc0100scn);
+	m_tc0100scn->tilemap_update();
 
-	layer[0] = tc0100scn_bottomlayer(m_tc0100scn);
+	layer[0] = m_tc0100scn->bottomlayer();
 	layer[1] = layer[0] ^ 1;
 	layer[2] = 2;
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Ensure screen blanked even when bottom layer not drawn due to disable bit */
 	bitmap.fill(0, cliprect);
 
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[1], 0, 1);
-	tc0150rod_draw(m_tc0150rod, bitmap, cliprect, -1, 0xc0, 0, 0, 1, 2);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[2], 0, 4);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 1);
+	m_tc0150rod->draw(bitmap, cliprect, -1, 0xc0, 0, 0, screen.priority(), 1, 2);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 4);
 
-	chasehq_draw_sprites_16x16(bitmap, cliprect, 7);
+	chasehq_draw_sprites_16x16(screen, bitmap, cliprect, 7);
 	return 0;
 }
 
@@ -886,23 +887,23 @@ UINT32 taitoz_state::screen_update_bshark(screen_device &screen, bitmap_ind16 &b
 {
 	UINT8 layer[3];
 
-	tc0100scn_tilemap_update(m_tc0100scn);
+	m_tc0100scn->tilemap_update();
 
-	layer[0] = tc0100scn_bottomlayer(m_tc0100scn);
+	layer[0] = m_tc0100scn->bottomlayer();
 	layer[1] = layer[0] ^ 1;
 	layer[2] = 2;
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Ensure screen blanked even when bottom layer not drawn due to disable bit */
 	bitmap.fill(0, cliprect);
 
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[1], 0, 1);
-	tc0150rod_draw(m_tc0150rod, bitmap, cliprect, -1, 0xc0, 0, 1, 1, 2);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[2], 0, 4);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 1);
+	m_tc0150rod->draw(bitmap, cliprect, -1, 0xc0, 0, 1, screen.priority(), 1, 2);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 4);
 
-	bshark_draw_sprites_16x8(bitmap, cliprect, 8);
+	bshark_draw_sprites_16x8(screen, bitmap, cliprect, 8);
 	return 0;
 }
 
@@ -911,23 +912,23 @@ UINT32 taitoz_state::screen_update_sci(screen_device &screen, bitmap_ind16 &bitm
 {
 	UINT8 layer[3];
 
-	tc0100scn_tilemap_update(m_tc0100scn);
+	m_tc0100scn->tilemap_update();
 
-	layer[0] = tc0100scn_bottomlayer(m_tc0100scn);
+	layer[0] = m_tc0100scn->bottomlayer();
 	layer[1] = layer[0] ^ 1;
 	layer[2] = 2;
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Ensure screen blanked even when bottom layer not drawn due to disable bit */
 	bitmap.fill(0, cliprect);
 
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[1], 0, 1);
-	tc0150rod_draw(m_tc0150rod, bitmap, cliprect, -1, 0xc0, 0, 0, 1, 2);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[2], 0, 4);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 1);
+	m_tc0150rod->draw(bitmap, cliprect, -1, 0xc0, 0, 0, screen.priority(), 1, 2);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 4);
 
-	sci_draw_sprites_16x8(bitmap, cliprect, 6);
+	sci_draw_sprites_16x8(screen, bitmap, cliprect, 6);
 	return 0;
 }
 
@@ -936,23 +937,23 @@ UINT32 taitoz_state::screen_update_aquajack(screen_device &screen, bitmap_ind16 
 {
 	UINT8 layer[3];
 
-	tc0100scn_tilemap_update(m_tc0100scn);
+	m_tc0100scn->tilemap_update();
 
-	layer[0] = tc0100scn_bottomlayer(m_tc0100scn);
+	layer[0] = m_tc0100scn->bottomlayer();
 	layer[1] = layer[0] ^ 1;
 	layer[2] = 2;
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Ensure screen blanked even when bottom layer not drawn due to disable bit */
 	bitmap.fill(0, cliprect);
 
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[1], 0, 1);
-	tc0150rod_draw(m_tc0150rod, bitmap, cliprect, -1, 0, 2, 1, 1, 2);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[2], 0, 4);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 1);
+	m_tc0150rod->draw(bitmap, cliprect, -1, 0, 2, 1, screen.priority(), 1, 2);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 4);
 
-	aquajack_draw_sprites_16x8(bitmap, cliprect, 3);
+	aquajack_draw_sprites_16x8(screen, bitmap, cliprect, 3);
 	return 0;
 }
 
@@ -961,22 +962,22 @@ UINT32 taitoz_state::screen_update_spacegun(screen_device &screen, bitmap_ind16 
 {
 	UINT8 layer[3];
 
-	tc0100scn_tilemap_update(m_tc0100scn);
+	m_tc0100scn->tilemap_update();
 
-	layer[0] = tc0100scn_bottomlayer(m_tc0100scn);
+	layer[0] = m_tc0100scn->bottomlayer();
 	layer[1] = layer[0] ^ 1;
 	layer[2] = 2;
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Ensure screen blanked even when bottom layer not drawn due to disable bit */
 	bitmap.fill(0, cliprect);
 
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 1);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[1], 0, 2);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[2], 0, 4);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 1);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 2);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 4);
 
-	spacegun_draw_sprites_16x8(bitmap, cliprect, 4);
+	spacegun_draw_sprites_16x8(screen, bitmap, cliprect, 4);
 
 	return 0;
 }
@@ -987,9 +988,9 @@ UINT32 taitoz_state::screen_update_dblaxle(screen_device &screen, bitmap_ind16 &
 	UINT8 layer[5];
 	UINT16 priority;
 
-	tc0480scp_tilemap_update(m_tc0480scp);
+	m_tc0480scp->tilemap_update();
 
-	priority = tc0480scp_get_bg_priority(m_tc0480scp);
+	priority = m_tc0480scp->get_bg_priority();
 
 	layer[0] = (priority & 0xf000) >> 12;   /* tells us which bg layer is bottom */
 	layer[1] = (priority & 0x0f00) >>  8;
@@ -997,22 +998,22 @@ UINT32 taitoz_state::screen_update_dblaxle(screen_device &screen, bitmap_ind16 &
 	layer[3] = (priority & 0x000f) >>  0;   /* tells us which is top */
 	layer[4] = 4;   /* text layer always over bg layers */
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Ensure screen blanked - this shouldn't be necessary! */
 	bitmap.fill(0, cliprect);
 
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[1], 0, 0);
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[2], 0, 1);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 0);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 1);
 
-	tc0150rod_draw(m_tc0150rod, bitmap, cliprect, -1, 0xc0, 0, 0, 1, 2);
-	bshark_draw_sprites_16x8(bitmap, cliprect, 7);
+	m_tc0150rod->draw(bitmap, cliprect, -1, 0xc0, 0, 0, screen.priority(), 1, 2);
+	bshark_draw_sprites_16x8(screen, bitmap, cliprect, 7);
 
 	/* This layer used for the big numeric displays */
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[3], 0, 4);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[3], 0, 4);
 
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[4], 0, 0);  /* Text layer */
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[4], 0, 0);  /* Text layer */
 	return 0;
 }
 
@@ -1022,9 +1023,9 @@ UINT32 taitoz_state::screen_update_racingb(screen_device &screen, bitmap_ind16 &
 	UINT8 layer[5];
 	UINT16 priority;
 
-	tc0480scp_tilemap_update(m_tc0480scp);
+	m_tc0480scp->tilemap_update();
 
-	priority = tc0480scp_get_bg_priority(m_tc0480scp);
+	priority = m_tc0480scp->get_bg_priority();
 
 	layer[0] = (priority & 0xf000) >> 12;   /* tells us which bg layer is bottom */
 	layer[1] = (priority & 0x0f00) >>  8;
@@ -1032,19 +1033,19 @@ UINT32 taitoz_state::screen_update_racingb(screen_device &screen, bitmap_ind16 &
 	layer[3] = (priority & 0x000f) >>  0;   /* tells us which is top */
 	layer[4] = 4;   /* text layer always over bg layers */
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Ensure screen blanked - this shouldn't be necessary! */
 	bitmap.fill(0, cliprect);
 
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[1], 0, 0);
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[2], 0, 2);
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[3], 0, 2);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 0);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 2);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[3], 0, 2);
 
-	tc0150rod_draw(m_tc0150rod, bitmap, cliprect, -1, 0xc0, 0, 0, 1, 2);
-	sci_draw_sprites_16x8(bitmap, cliprect, 7);
+	m_tc0150rod->draw(bitmap, cliprect, -1, 0xc0, 0, 0, screen.priority(), 1, 2);
+	sci_draw_sprites_16x8(screen, bitmap, cliprect, 7);
 
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[4], 0, 4);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[4], 0, 4);
 	return 0;
 }

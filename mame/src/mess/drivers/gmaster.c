@@ -1,11 +1,14 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner
 /******************************************************************************
  PeT mess@utanet.at march 2002
 ******************************************************************************/
 
 #include "emu.h"
 #include "cpu/upd7810/upd7810.h"
-#include "imagedev/cartslot.h"
 #include "sound/speaker.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 #include "rendlay.h"
 
 
@@ -16,24 +19,20 @@ public:
 		: driver_device(mconfig, type, tag)
 		, m_maincpu(*this, "maincpu")
 		, m_speaker(*this, "speaker")
+		, m_cart(*this, "cartslot")
 		, m_io_joy(*this, "JOY")
 	{ }
 
-	virtual void machine_start();
-	virtual void palette_init();
-
+	DECLARE_PALETTE_INIT(gmaster);
 	DECLARE_READ8_MEMBER(gmaster_io_r);
 	DECLARE_WRITE8_MEMBER(gmaster_io_w);
 	DECLARE_READ8_MEMBER(gmaster_port_r);
 	DECLARE_WRITE8_MEMBER(gmaster_port_w);
 	DECLARE_DRIVER_INIT(gmaster) { memset(&m_video, 0, sizeof(m_video)); memset(m_ram, 0, sizeof(m_ram)); }
 	UINT32 screen_update_gmaster(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	INTERRUPT_GEN_MEMBER(gmaster_interrupt);
 
-protected:
-	required_device<cpu_device> m_maincpu;
-	required_device<speaker_sound_device> m_speaker;
-	required_ioport m_io_joy;
+private:
+	virtual void machine_start();
 
 	struct
 	{
@@ -44,8 +43,13 @@ protected:
 		bool delayed;
 		UINT8 pixels[8][64];
 	} m_video;
+
 	UINT8 m_ports[5];
 	UINT8 m_ram[0x4000];
+	required_device<cpu_device> m_maincpu;
+	required_device<speaker_sound_device> m_speaker;
+	required_device<generic_slot_device> m_cart;
+	required_ioport m_io_joy;
 };
 
 
@@ -179,7 +183,7 @@ WRITE8_MEMBER(gmaster_state::gmaster_port_w)
 static ADDRESS_MAP_START( gmaster_mem, AS_PROGRAM, 8, gmaster_state )
 	AM_RANGE(0x0000, 0x3fff) AM_ROM
 	AM_RANGE(0x4000, 0x7fff) AM_READWRITE(gmaster_io_r, gmaster_io_w)
-	AM_RANGE(0x8000, 0xfeff) AM_ROM
+	//AM_RANGE(0x8000, 0xfeff)      // mapped by the cartslot
 	AM_RANGE(0xff00, 0xffff) AM_RAM
 ADDRESS_MAP_END
 
@@ -215,13 +219,13 @@ static const unsigned char gmaster_palette[2][3] =
 };
 
 
-void gmaster_state::palette_init()
+PALETTE_INIT_MEMBER(gmaster_state, gmaster)
 {
 	int i;
 
 	for (i = 0; i < 2; i++)
 	{
-		palette_set_color_rgb(machine(), i, gmaster_palette[i][0], gmaster_palette[i][1], gmaster_palette[i][2]);
+		palette.set_pen_color(i, gmaster_palette[i][0], gmaster_palette[i][1], gmaster_palette[i][2]);
 	}
 }
 
@@ -260,6 +264,9 @@ UINT32 gmaster_state::screen_update_gmaster(screen_device &screen, bitmap_ind16 
 
 void gmaster_state::machine_start()
 {
+	if (m_cart->exists())
+		m_maincpu->space(AS_PROGRAM).install_read_handler(0x8000, 0xfeff, read8_delegate(FUNC(generic_slot_device::read_rom),(generic_slot_device*)m_cart));
+
 	save_item(NAME(m_video.data));
 	save_item(NAME(m_video.index));
 	save_item(NAME(m_video.x));
@@ -272,43 +279,28 @@ void gmaster_state::machine_start()
 }
 
 
-INTERRUPT_GEN_MEMBER(gmaster_state::gmaster_interrupt)
-{
-	m_maincpu->set_input_line(UPD7810_INTFE1, ASSERT_LINE);
-}
-
-
-static const UPD7810_CONFIG config = {
-//  TYPE_78C10, // 78c11 in handheld
-	TYPE_7810, // temporarily until 7810 core fixes synchronized
-	NULL
-};
-
-
 static MACHINE_CONFIG_START( gmaster, gmaster_state )
 	MCFG_CPU_ADD("maincpu", UPD7810, XTAL_12MHz/2/*?*/)  // upd78c11 in the unit
 	MCFG_CPU_PROGRAM_MAP(gmaster_mem)
 	MCFG_CPU_IO_MAP( gmaster_io)
-	MCFG_CPU_CONFIG( config )
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", gmaster_state,  gmaster_interrupt)
 
 	MCFG_SCREEN_ADD("screen", LCD)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_SIZE(64, 64)
 	MCFG_SCREEN_VISIBLE_AREA(0, 64-1-3, 0, 64-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gmaster_state, screen_update_gmaster)
-
-	MCFG_PALETTE_LENGTH(sizeof(gmaster_palette)/sizeof(gmaster_palette[0]))
+	MCFG_SCREEN_PALETTE("palette")
+	MCFG_PALETTE_ADD("palette", ARRAY_LENGTH(gmaster_palette))
+	MCFG_PALETTE_INIT_OWNER(gmaster_state, gmaster)
 	MCFG_DEFAULT_LAYOUT(layout_lcd)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("speaker", SPEAKER_SOUND, 0)
 	MCFG_SOUND_ROUTE(0, "mono", 0.50)
 
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin")
-	MCFG_CARTSLOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("gmaster_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_linear_slot, "gmaster_cart")
+	MCFG_GENERIC_MANDATORY
+
 	MCFG_SOFTWARE_LIST_ADD("cart_list","gmaster")
 MACHINE_CONFIG_END
 
@@ -316,9 +308,8 @@ MACHINE_CONFIG_END
 ROM_START(gmaster)
 	ROM_REGION(0x10000,"maincpu", 0)
 	ROM_LOAD("d78c11agf_e19.u1", 0x0000, 0x1000, CRC(05cc45e5) SHA1(05d73638dea9657ccc2791c0202d9074a4782c1e) )
-	ROM_CART_LOAD("cart", 0x8000, 0x8000, 0)
 ROM_END
 
 
-/*    YEAR      NAME            PARENT  MACHINE   INPUT     INIT  COMPANY                 FULLNAME */
-CONS( 1990, gmaster,       0,          0, gmaster,  gmaster, gmaster_state,    gmaster,    "Hartung", "Game Master", GAME_IMPERFECT_SOUND)
+/*    YEAR  NAME      PARENT  COMPAT    MACHINE   INPUT    CLASS          INIT      COMPANY    FULLNAME */
+CONS( 1990, gmaster,  0,      0,        gmaster,  gmaster, gmaster_state, gmaster, "Hartung", "Game Master", GAME_NOT_WORKING | GAME_IMPERFECT_SOUND)

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Kevin Horton,Jonathan Gevaryahu,Sandro Ronco
 /******************************************************************************
 *
 *  Fidelity Electronics Z80 based board driver
@@ -8,7 +10,7 @@
 *  TODO:
 *  * Figure out why it says the first speech line twice; it shouldn't. (It sometimes does this on the sensory chess challenger real hardware)
 *  * Get rom locations from pcb (done for UVC, VCC is probably similar)
-*  * correctly hook up VBC/ABC speech so that the z80 is halted while words are being spoken
+*  * correctly hook up 7002/VBRC and 7014/bridgec3 speech so that the z80 is halted while words are being spoken
 *
 ***********************************************************************
 
@@ -72,9 +74,9 @@ PB.6 - enable language switches (W, see below)
 PB.7 - TSI DONE line (R)
 
 (button rows pulled up to 5V through 2.2K resistors)
-PC.0 - button row 0, german language jumper (R)
-PC.1 - button row 1, french language jumper (R)
-PC.2 - button row 2, spanish language jumper (R)
+PC.0 - button row 0, German language jumper (R)
+PC.1 - button row 1, French language jumper (R)
+PC.2 - button row 2, Spanish language jumper (R)
 PC.3 - button row 3, special language jumper (R)
 PC.4 - button column A (W)
 PC.5 - button column B (W)
@@ -88,20 +90,20 @@ language switches:
 When PB.6 is pulled low, the language switches can be read.  There are four.
 They connect to the button rows.  When enabled, the row(s) will read low if
 the jumper is present.  English only VCC's do not have the 367 or any pads stuffed.
-The jumpers are labelled: french, german, spanish, and special.
+The jumpers are labelled: French, German, Spanish, and special.
 
 
 language latch:
 ---------------
 
 There's an unstuffed 7474 on the board that connects to PA.6 and PA.7.  It allows
-one to latch the state of A12 to the speech ROM.  The english version has the chip
+one to latch the state of A12 to the speech ROM.  The English version has the chip
 missing, and a jumper pulling "A12" to ground.  This line is really a negative
 enable.
 
 To make the VCC multi-language, one would install the 74367 (note: it must be a 74367
 or possibly a 74LS367.  A 74HC367 would not work since they rely on the input current
-to keep the inputs pulled up), solder a piggybacked ROM to the existing english
+to keep the inputs pulled up), solder a piggybacked ROM to the existing English
 speech ROM, and finally install a 7474 dual flipflop.
 
 This way, the game can then detect which secondary language is present, and then it can
@@ -150,9 +152,14 @@ PC.6 - button column C (W)
 PC.7 - button column D (W)
 
 ******************************************************************************
-Voice Bridge Challenger (VBC)
-and Advanced Bridge Challenger (ABC)
+Voice Bridge Challenger (Model VBRC, later reissued as Model 7002)
+and Bridge Challenger 3 (Model 7014)
+(which both share the same* hardware)
 --------------------------------
+* The Bridge Challenger 3 does not actually have the 8 LEDs nor the
+latches which operate them populated and the plastic indicator cap locations
+are instead are covered by a piece of plastic, but they do work if manually
+added.
 
 This unit is similar in construction kinda to the chess challengers, however it
 has an 8041 which does ALL of the system I/O.  The Z80 has NO IO AT ALL other than
@@ -562,7 +569,7 @@ selection jumpers:
 
 These act like another row of buttons.  It is composed of two diode locations,
 so there's up to 4 possible configurations.  My board does not have either diode
-stuffed, so this most likely is "english".  I suspect it selects which language to use
+stuffed, so this most likely is "English".  I suspect it selects which language to use
 for the speech synth.  Of course you need the other speech ROMs for this to function
 properly.
 
@@ -585,7 +592,7 @@ expect that the software reads these once on startup only.
 #include "includes/fidelz80.h"
 #include "fidelz80.lh"
 #include "vsc.lh"
-#include "abc.lh"
+#include "bridgec3.lh"
 
 //#include "debugger.h"
 
@@ -595,7 +602,7 @@ expect that the software reads these once on startup only.
     I8255 Device, for VCC/UVC
 ******************************************************************************/
 
-void fidelz80_state::update_display(running_machine &machine)
+void fidelz80_state::update_display()
 {
 	// data for the 4x 7seg leds, bits are 0bxABCDEFG
 	UINT8 out_digit = BITSWAP8( m_digit_data,7,0,1,2,3,4,5,6 ) & 0x7f;
@@ -654,16 +661,16 @@ WRITE8_MEMBER( fidelz80_state::fidelz80_portb_w )
 
 		m_led_selected = data;
 
-		update_display(machine());
+		update_display();
 	}
 
 	// ignoring the language switch enable for now, is bit 0x40
-};
+}
 
 WRITE8_MEMBER( fidelz80_state::fidelz80_portc_w )
 {
 	m_kp_matrix = data;
-};
+}
 
 WRITE8_MEMBER( fidelz80_state::cc10_porta_w )
 {
@@ -671,44 +678,24 @@ WRITE8_MEMBER( fidelz80_state::cc10_porta_w )
 
 	m_digit_data = data;
 
-	update_display(machine());
+	update_display();
 }
 
 READ8_MEMBER( fidelz80_state::vcc_portb_r )
 {
-	return (s14001a_bsy_r(m_speech) != 0) ? 0x80 : 0x00;
+	return (m_speech->bsy_r() != 0) ? 0x80 : 0x00;
 }
 
 WRITE8_MEMBER( fidelz80_state::vcc_porta_w )
 {
-	s14001a_set_volume(m_speech, 15); // hack, s14001a core should assume a volume of 15 unless otherwise stated...
-	s14001a_reg_w(m_speech, data & 0x3f);
-	s14001a_rst_w(m_speech, BIT(data, 7));
+	m_speech->set_volume(15); // hack, s14001a core should assume a volume of 15 unless otherwise stated...
+	m_speech->reg_w(data & 0x3f);
+	m_speech->rst_w(BIT(data, 7));
 
 	m_digit_data = data;
 
-	update_display(machine());
+	update_display();
 }
-
-static I8255_INTERFACE( cc10_ppi8255_intf )
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(fidelz80_state, cc10_porta_w),
-	DEVCB_INPUT_PORT("LEVEL"),
-	DEVCB_DRIVER_MEMBER(fidelz80_state, fidelz80_portb_w),
-	DEVCB_DRIVER_MEMBER(fidelz80_state, fidelz80_portc_r),
-	DEVCB_DRIVER_MEMBER(fidelz80_state, fidelz80_portc_w)
-};
-
-static I8255_INTERFACE( vcc_ppi8255_intf )
-{
-	DEVCB_NULL, // only bit 6 is readable (and only sometimes) and I'm not emulating the language latch unless needed
-	DEVCB_DRIVER_MEMBER(fidelz80_state, vcc_porta_w), // display segments and s14001a lines
-	DEVCB_DRIVER_MEMBER(fidelz80_state, vcc_portb_r), // bit 7 is readable and is the done line from the s14001a
-	DEVCB_DRIVER_MEMBER(fidelz80_state, fidelz80_portb_w), // display digits and led dots
-	DEVCB_DRIVER_MEMBER(fidelz80_state, fidelz80_portc_r), // bits 0,1,2,3 are readable, have to do with input
-	DEVCB_DRIVER_MEMBER(fidelz80_state, fidelz80_portc_w), // bits 4,5,6,7 are writable, have to do with input
-};
 
 /******************************************************************************
     I8255 Device, for VSC
@@ -738,7 +725,7 @@ WRITE8_MEMBER( fidelz80_state::vsc_porta_w )
 		output_set_value("low_dot", BIT(out_digit, 7));
 	}
 
-	s14001a_reg_w(m_speech, data & 0x3f);
+	m_speech->reg_w(data & 0x3f);
 }
 
 WRITE8_MEMBER( fidelz80_state::vsc_portb_w )
@@ -768,16 +755,6 @@ WRITE8_MEMBER( fidelz80_state::vsc_portc_w )
 {
 	m_kp_matrix = (m_kp_matrix & 0x300) | data;
 }
-
-static I8255_INTERFACE( vsc_ppi8255_intf )
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(fidelz80_state, vsc_porta_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(fidelz80_state, vsc_portb_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(fidelz80_state, vsc_portc_w)
-};
 
 /******************************************************************************
     PIO Device, for VSC
@@ -815,7 +792,7 @@ READ8_MEMBER( fidelz80_state::vsc_pio_portb_r )
 {
 	UINT8 data = 0x00;
 
-	if (s14001a_bsy_r(m_speech) == 0)
+	if (m_speech->bsy_r() == 0)
 		data |= 0x10;
 
 	return data;
@@ -825,23 +802,12 @@ WRITE8_MEMBER( fidelz80_state::vsc_pio_portb_w )
 {
 	m_kp_matrix = (m_kp_matrix & 0xff) | ((data & 0x03)<<8);
 
-	s14001a_set_volume(m_speech, 15); // hack, s14001a core should assume a volume of 15 unless otherwise stated...
-	s14001a_rst_w(m_speech, BIT(data, 6));
+	m_speech->set_volume(15); // hack, s14001a core should assume a volume of 15 unless otherwise stated...
+	m_speech->rst_w(BIT(data, 6));
 }
 
-static Z80PIO_INTERFACE( vsc_z80pio_intf )
-{
-	DEVCB_NULL,                                             /* callback when change interrupt status */
-	DEVCB_DRIVER_MEMBER(fidelz80_state, vsc_pio_porta_r),   /* port A read callback */
-	DEVCB_NULL,                                             /* port A write callback */
-	DEVCB_NULL,                                             /* portA ready active callback */
-	DEVCB_DRIVER_MEMBER(fidelz80_state, vsc_pio_portb_r),   /* port B read callback */
-	DEVCB_DRIVER_MEMBER(fidelz80_state, vsc_pio_portb_w),   /* port B write callback */
-	DEVCB_NULL                                              /* portB ready active callback */
-};
-
 /******************************************************************************
-    I8041 MCU, for VBC and ABC
+    I8041 MCU, for VBRC/7002 and bridgec3/7014
 ******************************************************************************/
 
 WRITE8_MEMBER(fidelz80_state::kp_matrix_w)
@@ -932,7 +898,7 @@ READ8_MEMBER(fidelz80_state::unknown_r)
 	return 0;
 }
 
-READ8_MEMBER(fidelz80_state::rand_r)
+READ8_MEMBER(fidelz80_state::unknown2_r)
 {
 	return machine().rand();
 }
@@ -971,30 +937,30 @@ WRITE8_MEMBER(fidelz80_state::digit_w)
 
 WRITE8_MEMBER(fidelz80_state::mcu_data_w)
 {
-	upi41_master_w(m_i8041, 0, data);
+	m_i8041->upi41_master_w(space, 0, data);
 }
 
 WRITE8_MEMBER(fidelz80_state::mcu_command_w)
 {
-	upi41_master_w(m_i8041, 1, data);
+	m_i8041->upi41_master_w(space, 1, data);
 }
 
 READ8_MEMBER(fidelz80_state::mcu_data_r)
 {
-	return upi41_master_r(m_i8041, 0);
+	return m_i8041->upi41_master_r(space, 0);
 }
 
 READ8_MEMBER(fidelz80_state::mcu_status_r)
 {
-	return upi41_master_r(m_i8041, 1);
+	return m_i8041->upi41_master_r(space, 1);
 }
 
-WRITE8_MEMBER( fidelz80_state::abc_speech_w )
+WRITE8_MEMBER( fidelz80_state::bridgec_speech_w )
 {
 	// todo: HALT THE z80 here, and set up a callback to poll the s14001a DONE line to resume z80
-	s14001a_set_volume(m_speech, 15); // hack, s14001a core should assume a volume of 15 unless otherwise stated...
-	s14001a_reg_w(m_speech, data & 0x3f);
-	s14001a_rst_w(m_speech, BIT(data, 7));
+	m_speech->set_volume(15); // hack, s14001a core should assume a volume of 15 unless otherwise stated...
+	m_speech->reg_w(data & 0x3f);
+	m_speech->rst_w(BIT(data, 7));
 }
 
 void fidelz80_state::machine_reset()
@@ -1037,13 +1003,13 @@ static ADDRESS_MAP_START(vsc_mem, AS_PROGRAM, 8, fidelz80_state)
 	AM_RANGE(0x6000, 0x7fff) AM_RAM AM_MIRROR(0x1c00) // 1k ram (2114*2) mirrored 8 times
 ADDRESS_MAP_END
 
-static ADDRESS_MAP_START(abc_z80_mem, AS_PROGRAM, 8, fidelz80_state)
+static ADDRESS_MAP_START(bridgec_z80_mem, AS_PROGRAM, 8, fidelz80_state)
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x0000, 0x1fff) AM_ROM // 8k rom
 	AM_RANGE(0x2000, 0x3fff) AM_ROM // 8k rom
 	AM_RANGE(0x4000, 0x5fff) AM_ROM // 8k rom
 	AM_RANGE(0x6000, 0x63ff) AM_RAM AM_MIRROR(0x1c00) // 1k ram (2114*2) mirrored 8 times
-	AM_RANGE(0xE000, 0xE000) AM_WRITE(abc_speech_w) AM_MIRROR(0x1FFF) // write to speech chip, halts cpu
+	AM_RANGE(0xE000, 0xE000) AM_WRITE(bridgec_speech_w) AM_MIRROR(0x1FFF) // write to speech chip, halts cpu
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START(fidel_z80_io, AS_IO, 8, fidelz80_state)
@@ -1059,14 +1025,14 @@ static ADDRESS_MAP_START(vsc_io, AS_IO, 8, fidelz80_state)
 	AM_RANGE(0x08, 0x0b) AM_MIRROR(0xf0) AM_DEVREADWRITE("ppi8255", i8255_device, read, write)
 ADDRESS_MAP_END
 
-static ADDRESS_MAP_START(abc_z80_io, AS_IO, 8, fidelz80_state)
+static ADDRESS_MAP_START(bridgec_z80_io, AS_IO, 8, fidelz80_state)
 	ADDRESS_MAP_UNMAP_HIGH
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x00) AM_READWRITE(mcu_data_r, mcu_data_w)
 	AM_RANGE(0x01, 0x01) AM_READWRITE(mcu_status_r, mcu_command_w)
 ADDRESS_MAP_END
 
-static ADDRESS_MAP_START(abc_mcu_io, AS_IO, 8, fidelz80_state)
+static ADDRESS_MAP_START(bridgec_mcu_io, AS_IO, 8, fidelz80_state)
 	ADDRESS_MAP_UNMAP_LOW
 	AM_RANGE(MCS48_PORT_P1, MCS48_PORT_P1) AM_WRITE(kp_matrix_w)
 	AM_RANGE(MCS48_PORT_P2, MCS48_PORT_P2) AM_READWRITE(exp_i8243_p2_r, exp_i8243_p2_w)
@@ -1074,7 +1040,7 @@ static ADDRESS_MAP_START(abc_mcu_io, AS_IO, 8, fidelz80_state)
 
 	// related to the card scanner, probably clock and data optical
 	AM_RANGE(MCS48_PORT_T0, MCS48_PORT_T0) AM_READ(unknown_r)
-	AM_RANGE(MCS48_PORT_T1, MCS48_PORT_T1) AM_READ(rand_r)
+	AM_RANGE(MCS48_PORT_T1, MCS48_PORT_T1) AM_READ(unknown2_r)
 ADDRESS_MAP_END
 
 /******************************************************************************
@@ -1086,7 +1052,7 @@ INPUT_CHANGED_MEMBER(fidelz80_state::fidelz80_trigger_reset)
 	m_maincpu->set_input_line(INPUT_LINE_RESET, newval ? CLEAR_LINE : ASSERT_LINE);
 }
 
-INPUT_CHANGED_MEMBER(fidelz80_state::abc_trigger_reset)
+INPUT_CHANGED_MEMBER(fidelz80_state::bridgec_trigger_reset)
 {
 	m_maincpu->set_input_line(INPUT_LINE_RESET, newval ? CLEAR_LINE : ASSERT_LINE);
 	m_i8041->set_input_line(INPUT_LINE_RESET, newval ? CLEAR_LINE : ASSERT_LINE);
@@ -1219,7 +1185,7 @@ static INPUT_PORTS_START( vsc )
 		PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYPAD) PORT_NAME("ST")      PORT_CODE(KEYCODE_S)
 INPUT_PORTS_END
 
-static INPUT_PORTS_START( abc )
+static INPUT_PORTS_START( bridgec )
 	PORT_START("LINE1")
 		PORT_BIT(0x0f, IP_ACTIVE_LOW, IPT_UNUSED) PORT_UNUSED
 		PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_KEYPAD) PORT_NAME("A") PORT_CODE(KEYCODE_A)
@@ -1271,7 +1237,7 @@ static INPUT_PORTS_START( abc )
 
 	PORT_START("LINE8")
 		PORT_BIT(0x0f, IP_ACTIVE_LOW, IPT_UNUSED) PORT_UNUSED
-		PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_KEYPAD) PORT_NAME("RE") PORT_CODE(KEYCODE_R) PORT_CHANGED_MEMBER(DEVICE_SELF, fidelz80_state, abc_trigger_reset, 0)
+		PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_KEYPAD) PORT_NAME("RE") PORT_CODE(KEYCODE_R) PORT_CHANGED_MEMBER(DEVICE_SELF, fidelz80_state, bridgec_trigger_reset, 0)
 		PORT_BIT(0x20, IP_ACTIVE_LOW, IPT_KEYPAD) PORT_NAME("BR") PORT_CODE(KEYCODE_T)
 		PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYPAD) PORT_NAME("DL") PORT_CODE(KEYCODE_L)
 		PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYPAD) PORT_NAME("Clubs") PORT_CODE(KEYCODE_4_PAD)
@@ -1292,7 +1258,12 @@ static MACHINE_CONFIG_START( cc10, fidelz80_state )
 	MCFG_DEFAULT_LAYOUT(layout_fidelz80)
 
 	/* other hardware */
-	MCFG_I8255_ADD("ppi8255", cc10_ppi8255_intf)
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(fidelz80_state, cc10_porta_w))
+	MCFG_I8255_IN_PORTB_CB(IOPORT("LEVEL"))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(fidelz80_state, fidelz80_portb_w))
+	MCFG_I8255_IN_PORTC_CB(READ8(fidelz80_state, fidelz80_portc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(fidelz80_state, fidelz80_portc_w))
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO( "mono" )
@@ -1311,7 +1282,13 @@ static MACHINE_CONFIG_START( vcc, fidelz80_state )
 	MCFG_DEFAULT_LAYOUT(layout_fidelz80)
 
 	/* other hardware */
-	MCFG_I8255_ADD("ppi8255", vcc_ppi8255_intf)
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
+	// Port A Read - NULL : only bit 6 is readable (and only sometimes) and I'm not emulating the language latch unless needed
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(fidelz80_state, vcc_porta_w))       // display segments and s14001a lines
+	MCFG_I8255_IN_PORTB_CB(READ8(fidelz80_state, vcc_portb_r))         // bit 7 is readable and is the done line from the s14001a
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(fidelz80_state, fidelz80_portb_w))  // display digits and led dots
+	MCFG_I8255_IN_PORTC_CB(READ8(fidelz80_state, fidelz80_portc_r))    // bits 0,1,2,3 are readable, have to do with input
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(fidelz80_state, fidelz80_portc_w))  // bits 4,5,6,7 are writable, have to do with input
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -1328,8 +1305,15 @@ static MACHINE_CONFIG_START( vsc, fidelz80_state )
 	MCFG_DEFAULT_LAYOUT(layout_vsc)
 
 	/* other hardware */
-	MCFG_I8255_ADD("ppi8255", vsc_ppi8255_intf)
-	MCFG_Z80PIO_ADD("z80pio", XTAL_4MHz, vsc_z80pio_intf)
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(fidelz80_state, vsc_porta_w))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(fidelz80_state, vsc_portb_w))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(fidelz80_state, vsc_portb_w))
+
+	MCFG_DEVICE_ADD("z80pio", Z80PIO, XTAL_4MHz)
+	MCFG_Z80PIO_IN_PA_CB(READ8(fidelz80_state, vsc_pio_porta_r))
+	MCFG_Z80PIO_IN_PB_CB(READ8(fidelz80_state, vsc_pio_portb_r))
+	MCFG_Z80PIO_OUT_PB_CB(WRITE8(fidelz80_state, vsc_pio_portb_w))
 
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("nmi_timer", fidelz80_state, nmi_timer, attotime::from_hz(600))
 	MCFG_TIMER_START_DELAY(attotime::from_hz(600))
@@ -1340,19 +1324,19 @@ static MACHINE_CONFIG_START( vsc, fidelz80_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_START( abc, fidelz80_state )
+static MACHINE_CONFIG_START( bridgec, fidelz80_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_5MHz/2) // 2.5MHz
-	MCFG_CPU_PROGRAM_MAP(abc_z80_mem)
-	MCFG_CPU_IO_MAP(abc_z80_io)
+	MCFG_CPU_PROGRAM_MAP(bridgec_z80_mem)
+	MCFG_CPU_IO_MAP(bridgec_z80_io)
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
 
 	/* video hardware */
-	MCFG_DEFAULT_LAYOUT(layout_abc)
+	MCFG_DEFAULT_LAYOUT(layout_bridgec3)
 
 	/* other hardware */
 	MCFG_CPU_ADD("mcu", I8041, XTAL_5MHz) // 5MHz
-	MCFG_CPU_IO_MAP(abc_mcu_io)
+	MCFG_CPU_IO_MAP(bridgec_mcu_io)
 
 	MCFG_I8243_ADD("i8243", NOOP, WRITE8(fidelz80_state,digit_w))
 
@@ -1374,21 +1358,21 @@ ROM_END
 
 ROM_START(vcc)
 	ROM_REGION(0x10000, "maincpu", 0)
-	ROM_LOAD("101-32103.bin", 0x0000, 0x1000, CRC(257BB5AB) SHA1(F7589225BB8E5F3EAC55F23E2BD526BE780B38B5)) // 32014.VCC??? at location b3?
-	ROM_LOAD("vcc2.bin", 0x1000, 0x1000, CRC(F33095E7) SHA1(692FCAB1B88C910B74D04FE4D0660367AEE3F4F0)) // at location a2?
-	ROM_LOAD("vcc3.bin", 0x2000, 0x1000, CRC(624F0CD5) SHA1(7C1A4F4497FE5882904DE1D6FECF510C07EE6FC6)) // at location a1?
+	ROM_LOAD("101-32103.bin", 0x0000, 0x1000, CRC(257bb5ab) SHA1(f7589225bb8e5f3eac55f23e2bd526be780b38b5)) // 32014.VCC??? at location b3?
+	ROM_LOAD("vcc2.bin", 0x1000, 0x1000, CRC(f33095e7) SHA1(692fcab1b88c910b74d04fe4d0660367aee3f4f0)) // at location a2?
+	ROM_LOAD("vcc3.bin", 0x2000, 0x1000, CRC(624f0cd5) SHA1(7c1a4f4497fe5882904de1d6fecf510c07ee6fc6)) // at location a1?
 
 	ROM_REGION(0x2000, "speech", 0)
-	ROM_LOAD("vcc-engl.bin", 0x0000, 0x1000, CRC(F35784F9) SHA1(348E54A7FA1E8091F89AC656B4DA22F28CA2E44D)) // at location c4?
+	ROM_LOAD("vcc-engl.bin", 0x0000, 0x1000, CRC(f35784f9) SHA1(348e54a7fa1e8091f89ac656b4da22f28ca2e44d)) // at location c4?
 ROM_END
 
 ROM_START(uvc)
 	ROM_REGION(0x10000, "maincpu", 0)
-	ROM_LOAD("101-64017.b3", 0x0000, 0x2000, CRC(F1133ABF) SHA1(09DD85051C4E7D364D43507C1CFEA5C2D08D37F4)) // "MOS // 101-64017 // 3880"
-	ROM_LOAD("101-32010.a1", 0x2000, 0x1000, CRC(624F0CD5) SHA1(7C1A4F4497FE5882904DE1D6FECF510C07EE6FC6)) // "NEC P9Z021 // D2332C 228 // 101-32010", == vcc3.bin on vcc
+	ROM_LOAD("101-64017.b3", 0x0000, 0x2000, CRC(f1133abf) SHA1(09dd85051c4e7d364d43507c1cfea5c2d08d37f4)) // "MOS // 101-64017 // 3880"
+	ROM_LOAD("101-32010.a1", 0x2000, 0x1000, CRC(624f0cd5) SHA1(7c1a4f4497fe5882904de1d6fecf510c07ee6fc6)) // "NEC P9Z021 // D2332C 228 // 101-32010", == vcc3.bin on vcc
 
 	ROM_REGION(0x2000, "speech", 0)
-	ROM_LOAD("101-32107.c4", 0x0000, 0x1000, CRC(F35784F9) SHA1(348E54A7FA1E8091F89AC656B4DA22F28CA2E44D)) // "NEC P9Y019 // D2332C 229 // 101-32107", == vcc-engl.bin on vcc
+	ROM_LOAD("101-32107.c4", 0x0000, 0x1000, CRC(f35784f9) SHA1(348e54a7fa1e8091f89ac656b4da22f28ca2e44d)) // "NEC P9Y019 // D2332C 229 // 101-32107", == vcc-engl.bin on vcc
 ROM_END
 
 ROM_START(vsc)
@@ -1401,30 +1385,32 @@ ROM_START(vsc)
 	ROM_LOAD("101-32107.bin", 0x0000, 0x1000, CRC(f35784f9) SHA1(348e54a7fa1e8091f89ac656b4da22f28ca2e44d))
 ROM_END
 
-ROM_START(vbc)
+ROM_START(vbrc) // AKA model 7002
 	ROM_REGION(0x10000, "maincpu", 0)
-	ROM_LOAD("101-64108.bin", 0x0000, 0x2000, CRC(08472223) SHA1(859865B13C908DBB474333263DC60F6A32461141))
-	ROM_LOAD("101-64109.bin", 0x2000, 0x2000, CRC(320AFA0F) SHA1(90EDFE0AC19B108D232CDA376B03A3A24BEFAD4C))
-	ROM_LOAD("101-64110.bin", 0x4000, 0x2000, CRC(3040D0BD) SHA1(CAA55FC8D9196E408FB41E7171A68E5099519813))
+	// nec 2364 mask roms; pin 27 (PGM, probably NC here due to mask roms) goes to the pcb
+	ROM_LOAD("101-64108.g3", 0x0000, 0x2000, CRC(08472223) SHA1(859865b13c908dbb474333263dc60f6a32461141))
+	ROM_LOAD("101-64109.f3", 0x2000, 0x2000, CRC(320afa0f) SHA1(90edfe0ac19b108d232cda376b03a3a24befad4c))
+	ROM_LOAD("101-64110.e3", 0x4000, 0x2000, CRC(3040d0bd) SHA1(caa55fc8d9196e408fb41e7171a68e5099519813))
 
 	ROM_REGION(0x1000, "mcu", 0)
-	ROM_LOAD("100-1009.bin", 0x0000, 0x0400, CRC(60eb343f) SHA1(8a63e95ebd62e123bdecc330c0484a47c354bd1a))
+	ROM_LOAD("100-1009.a3", 0x0000, 0x0400, CRC(60eb343f) SHA1(8a63e95ebd62e123bdecc330c0484a47c354bd1a))
 
 	ROM_REGION(0x2000, "speech", 0)
-	ROM_LOAD("101-32118.bin", 0x0000, 0x1000, CRC(A0B8BB8F) SHA1(F56852108928D5C6CACCFC8166FA347D6760A740))
+	ROM_LOAD("101-32118.i2", 0x0000, 0x1000, CRC(a0b8bb8f) SHA1(f56852108928d5c6caccfc8166fa347d6760a740))
 ROM_END
 
-ROM_START(abc)
+ROM_START(bridgec3) // 510-1016 Rev.1 PCB has neither locations nor ic labels, so I declare the big heatsink is at C1, numbers count on the shorter length of pcb
 	ROM_REGION(0x10000, "maincpu", 0)
-	ROM_LOAD("bridge_w.bin", 0x0000, 0x2000, CRC(eb1620ef) SHA1(987a9abc8c685f1a68678ea4ee65ec4a99419179))
-	ROM_LOAD("bridge_r.bin", 0x2000, 0x2000, CRC(74af0019) SHA1(8dc05950c254ca050b95b93e5d0cf48f913a6d49))
-	ROM_LOAD("bridge_b.bin", 0x4000, 0x2000, CRC(341d9ca6) SHA1(370876573bb9408e75f4fc797304b6c64af0590a))
+	// TMM2764AD-20 EPROMS with tiny hole-punch sized colored stickers (mostly) covering the quartz windows. pin 27 (PGM) is tied to vcc with small rework wires and does not connect to pcb.
+	ROM_LOAD("7014_white.g3", 0x0000, 0x2000, CRC(eb1620ef) SHA1(987a9abc8c685f1a68678ea4ee65ec4a99419179)) // white sticker
+	ROM_LOAD("7014_red.f3", 0x2000, 0x2000, CRC(74af0019) SHA1(8dc05950c254ca050b95b93e5d0cf48f913a6d49)) // red sticker
+	ROM_LOAD("7014_blue.e3", 0x4000, 0x2000, CRC(341d9ca6) SHA1(370876573bb9408e75f4fc797304b6c64af0590a)) // blue sticker
 
 	ROM_REGION(0x1000, "mcu", 0)
-	ROM_LOAD("100-1009.bin", 0x0000, 0x0400, CRC(60eb343f) SHA1(8a63e95ebd62e123bdecc330c0484a47c354bd1a))
+	ROM_LOAD("100-1009.a3", 0x0000, 0x0400, CRC(60eb343f) SHA1(8a63e95ebd62e123bdecc330c0484a47c354bd1a)) // "NEC P07021-027 || D8041C 563 100-1009"
 
 	ROM_REGION(0x2000, "speech", 0)
-	ROM_LOAD("101-32118.bin", 0x0000, 0x1000, CRC(A0B8BB8F) SHA1(F56852108928D5C6CACCFC8166FA347D6760A740))
+	ROM_LOAD("101-32118.i2", 0x0000, 0x1000, CRC(a0b8bb8f) SHA1(f56852108928d5c6caccfc8166fa347d6760a740)) // "ea 101-32118 || (C) 1980 || EA 8332A247-4 || 8034"
 ROM_END
 
 /******************************************************************************
@@ -1434,7 +1420,7 @@ ROM_END
 /*    YEAR  NAME        PARENT      COMPAT  MACHINE     INPUT   INIT      COMPANY                     FULLNAME                                                    FLAGS */
 COMP( 1978, cc10,       0,          0,      cc10,  fidelz80, driver_device, 0,      "Fidelity Electronics",   "Chess Challenger 10 (Model CC10/BCC)", GAME_NOT_WORKING )
 COMP( 1979, vcc,        0,          0,      vcc,   fidelz80, driver_device, 0,      "Fidelity Electronics",   "Talking Chess Challenger (model VCC)", GAME_NOT_WORKING )
-COMP( 1979, vbc,        0,          0,      abc,   abc, driver_device,      0,      "Fidelity Electronics",   "Bridge Challenger (model VBC)",  GAME_NOT_WORKING )
+COMP( 1979, vbrc,       0,          0,      bridgec,   bridgec, driver_device,      0,      "Fidelity Electronics",   "Bridge Challenger (model VBRC/7002)",  GAME_NOT_WORKING )
 COMP( 1980, uvc,        vcc,        0,      vcc,   fidelz80, driver_device, 0,      "Fidelity Electronics",   "Advanced Talking Chess Challenger (model UVC)", GAME_NOT_WORKING )
-COMP( 1980, abc,        vbc,        0,      abc,   abc, driver_device,      0,      "Fidelity Electronics",   "Advanced Bridge Challenger (model ABC)", GAME_NOT_WORKING )
-COMP( 1980, vsc,        0,          0,      vsc,   vsc, driver_device,      0,      "Fidelity Electronics",   "Sensory Chess Challenger (model VSC)", GAME_NOT_WORKING | GAME_CLICKABLE_ARTWORK )
+COMP( 1980, bridgec3,   vbrc,       0,      bridgec,   bridgec, driver_device,      0,      "Fidelity Electronics",   "Bridge Challenger 3 (model 7014)", GAME_NOT_WORKING )
+COMP( 1980, vsc,        0,          0,      vsc,   vsc, driver_device,      0,      "Fidelity Electronics",   "Voice Sensory Chess Challenger (model VSC)", GAME_NOT_WORKING | GAME_CLICKABLE_ARTWORK )

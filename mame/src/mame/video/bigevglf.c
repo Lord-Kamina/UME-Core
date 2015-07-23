@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Jarek Burczynski, Tomasz Slanina
 /***************************************************************************
 
   video.c
@@ -15,7 +17,7 @@ WRITE8_MEMBER(bigevglf_state::bigevglf_palette_w)
 
 	m_paletteram[offset] = data;
 	color = m_paletteram[offset & 0x3ff] | (m_paletteram[0x400 + (offset & 0x3ff)] << 8);
-	palette_set_color_rgb(machine(), offset & 0x3ff, pal4bit(color >> 4), pal4bit(color >> 0), pal4bit(color >> 8));
+	m_palette->set_pen_color(offset & 0x3ff, pal4bit(color >> 4), pal4bit(color >> 0), pal4bit(color >> 8));
 }
 
 WRITE8_MEMBER(bigevglf_state::bigevglf_gfxcontrol_w)
@@ -50,10 +52,10 @@ READ8_MEMBER(bigevglf_state::bigevglf_vidram_r)
 
 void bigevglf_state::video_start()
 {
-	machine().primary_screen->register_screen_bitmap(m_tmp_bitmap[0]);
-	machine().primary_screen->register_screen_bitmap(m_tmp_bitmap[1]);
-	machine().primary_screen->register_screen_bitmap(m_tmp_bitmap[2]);
-	machine().primary_screen->register_screen_bitmap(m_tmp_bitmap[3]);
+	m_screen->register_screen_bitmap(m_tmp_bitmap[0]);
+	m_screen->register_screen_bitmap(m_tmp_bitmap[1]);
+	m_screen->register_screen_bitmap(m_tmp_bitmap[2]);
+	m_screen->register_screen_bitmap(m_tmp_bitmap[3]);
 	save_item(NAME(m_tmp_bitmap[0]));
 	save_item(NAME(m_tmp_bitmap[1]));
 	save_item(NAME(m_tmp_bitmap[2]));
@@ -74,7 +76,7 @@ void bigevglf_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 		sx = m_spriteram2[i + 3];
 		sy = 200 - m_spriteram2[i];
 		for (j = 0; j < 16; j++)
-			drawgfx_transpen(bitmap, cliprect, machine().gfx[0],
+			m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				m_spriteram1[(code << 4) + j] + ((m_spriteram1[0x400 + (code << 4) + j] & 0xf) << 8),
 				m_spriteram2[i + 2] & 0xf,
 				0,0,

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     BattleToads
@@ -186,7 +188,7 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 16, btoads_state )
 	AM_RANGE(0xa8800000, 0xa8ffffff) AM_WRITENOP
 	AM_RANGE(0xb0000000, 0xb03fffff) AM_READWRITE(vram_bg0_r, vram_bg0_w) AM_SHARE("vram_bg0")
 	AM_RANGE(0xb4000000, 0xb43fffff) AM_READWRITE(vram_bg1_r, vram_bg1_w) AM_SHARE("vram_bg1")
-	AM_RANGE(0xc0000000, 0xc00003ff) AM_READWRITE_LEGACY(tms34020_io_register_r, tms34020_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00003ff) AM_DEVREADWRITE("maincpu", tms34020_device, io_register_r, io_register_w)
 	AM_RANGE(0xfc000000, 0xffffffff) AM_ROM AM_REGION("user1", 0)
 ADDRESS_MAP_END
 
@@ -290,28 +292,6 @@ static INPUT_PORTS_START( btoads )
 INPUT_PORTS_END
 
 
-
-/*************************************
- *
- *  34010 configuration
- *
- *************************************/
-
-static const tms34010_config tms_config =
-{
-	FALSE,                          /* halt on reset */
-	"screen",                       /* the screen operated on */
-	VIDEO_CLOCK/2,                  /* pixel clock */
-	1,                              /* pixels per clock */
-	NULL,                           /* scanline callback (indexed16) */
-	btoads_state::static_scanline_update, /* scanline callback (rgb32) */
-	NULL,                           /* generate interrupt */
-	btoads_state::static_to_shiftreg,               /* write to shiftreg function */
-	btoads_state::static_from_shiftreg          /* read from shiftreg function */
-};
-
-
-
 /*************************************
  *
  *  Machine drivers
@@ -321,8 +301,13 @@ static const tms34010_config tms_config =
 static MACHINE_CONFIG_START( btoads, btoads_state )
 
 	MCFG_CPU_ADD("maincpu", TMS34020, CPU_CLOCK/2)
-	MCFG_CPU_CONFIG(tms_config)
 	MCFG_CPU_PROGRAM_MAP(main_map)
+	MCFG_TMS340X0_HALT_ON_RESET(FALSE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(VIDEO_CLOCK/2) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(1) /* pixels per clock */
+	MCFG_TMS340X0_SCANLINE_RGB32_CB(btoads_state, scanline_update)     /* scanline updater (RGB32) */
+	MCFG_TMS340X0_TO_SHIFTREG_CB(btoads_state, to_shiftreg)  /* write to shiftreg function */
+	MCFG_TMS340X0_FROM_SHIFTREG_CB(btoads_state, from_shiftreg) /* read from shiftreg function */
 
 	MCFG_CPU_ADD("audiocpu", Z80, SOUND_CLOCK/4)
 	MCFG_CPU_PROGRAM_MAP(sound_map)
@@ -336,7 +321,7 @@ static MACHINE_CONFIG_START( btoads, btoads_state )
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(VIDEO_CLOCK/2, 640, 0, 512, 257, 0, 224)
-	MCFG_SCREEN_UPDATE_STATIC(tms340x0_rgb32)
+	MCFG_SCREEN_UPDATE_DEVICE("maincpu", tms34020_device, tms340x0_rgb32)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")

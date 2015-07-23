@@ -1,31 +1,27 @@
+// license:???
+// copyright-holders:David Graves, Jarek Burczynski
 #include "emu.h"
-#include "video/taitoic.h"
 #include "includes/darius.h"
 
 /***************************************************************************/
 
-inline void darius_state::actual_get_fg_tile_info( tile_data &tileinfo, int tile_index, UINT16 *ram, int gfxnum )
-{
-	UINT16 code = (ram[tile_index + 0x2000] & 0x7ff);
-	UINT16 attr = ram[tile_index];
-
-	SET_TILE_INFO_MEMBER(
-			gfxnum,
-			code,
-			((attr & 0xff) << 2),
-			TILE_FLIPYX((attr & 0xc000) >> 14));
-}
-
 TILE_GET_INFO_MEMBER(darius_state::get_fg_tile_info)
 {
-	actual_get_fg_tile_info(tileinfo, tile_index, m_fg_ram, 2);
+	UINT16 code = (m_fg_ram[tile_index + 0x2000] & 0x7ff);
+	UINT16 attr = m_fg_ram[tile_index];
+
+	SET_TILE_INFO_MEMBER(2,
+			code,
+			(attr & 0x7f),
+			TILE_FLIPYX((attr & 0xc000) >> 14));
 }
 
 /***************************************************************************/
 
 void darius_state::video_start()
 {
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(darius_state::get_fg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
+	m_gfxdecode->gfx(2)->set_granularity(16);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(darius_state::get_fg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
 
 	m_fg_tilemap->set_transparent_pen(0);
 }
@@ -76,7 +72,7 @@ void darius_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect
 			if (curx > 900) curx -= 1024;
 			if (cury > 400) cury -= 512;
 
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 					code, color,
 					flipx, flipy,
 					curx, cury, 0);
@@ -88,23 +84,23 @@ void darius_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect
 
 UINT32 darius_state::update_screen(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int xoffs)
 {
-	pc080sn_tilemap_update(m_pc080sn);
+	m_pc080sn->tilemap_update();
 
 	// draw bottom layer(always active)
-	pc080sn_tilemap_draw_offset(m_pc080sn, bitmap, cliprect, 0, TILEMAP_DRAW_OPAQUE, 0, -xoffs, 0);
+	m_pc080sn->tilemap_draw_offset(screen, bitmap, cliprect, 0, TILEMAP_DRAW_OPAQUE, 0, -xoffs, 0);
 
 	/* Sprites can be under/over the layer below text layer */
 	draw_sprites(bitmap, cliprect, 0, xoffs, -8); // draw sprites with priority 0 which are under the mid layer
 
 	// draw middle layer
-	pc080sn_tilemap_draw_offset(m_pc080sn, bitmap, cliprect, 1, 0, 0, -xoffs, 0);
+	m_pc080sn->tilemap_draw_offset(screen, bitmap, cliprect, 1, 0, 0, -xoffs, 0);
 
 	draw_sprites(bitmap, cliprect, 1, xoffs, -8); // draw sprites with priority 1 which are over the mid layer
 
 	/* top(text) layer is in fixed position */
 	m_fg_tilemap->set_scrollx(0, 0 + xoffs);
 	m_fg_tilemap->set_scrolly(0, -8);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 

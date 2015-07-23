@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 /***************************************************************************
     ATMEL AT28C16
 
@@ -38,7 +40,7 @@ const device_type AT28C16 = &device_creator<at28c16_device>;
 //-------------------------------------------------
 
 at28c16_device::at28c16_device( const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock )
-	: device_t(mconfig, AT28C16, "AT28C16", tag, owner, clock),
+	: device_t(mconfig, AT28C16, "AT28C16", tag, owner, clock, "at28c16", __FILE__),
 		device_memory_interface(mconfig, *this),
 		device_nvram_interface(mconfig, *this),
 		m_a9_12v( 0 ),
@@ -125,15 +127,15 @@ void at28c16_device::nvram_default()
 			fatalerror( "at28c16 region '%s' wrong size (expected size = 0x%X)\n", tag(), AT28C16_DATA_BYTES );
 		}
 
-		if( m_region->width() != 1 )
+		if( m_region->bytewidth() != 1 )
 		{
 			fatalerror( "at28c16 region '%s' needs to be an 8-bit region\n", tag() );
 		}
 
+		UINT8 *default_data = m_region->base();
+
 		for( offs_t offs = 0; offs < AT28C16_DATA_BYTES; offs++ )
-		{
-			m_addrspace[ 0 ]->write_byte( offs, m_region->u8( offs ) );
-		}
+			m_addrspace[ 0 ]->write_byte( offs, default_data[offs] );
 	}
 }
 
@@ -145,16 +147,14 @@ void at28c16_device::nvram_default()
 
 void at28c16_device::nvram_read( emu_file &file )
 {
-	UINT8 *buffer = auto_alloc_array( machine(), UINT8, AT28C16_TOTAL_BYTES );
+	dynamic_buffer buffer( AT28C16_TOTAL_BYTES );
 
-	file.read( buffer, AT28C16_TOTAL_BYTES );
+	file.read( &buffer[0], AT28C16_TOTAL_BYTES );
 
 	for( offs_t offs = 0; offs < AT28C16_TOTAL_BYTES; offs++ )
 	{
 		m_addrspace[ 0 ]->write_byte( offs, buffer[ offs ] );
 	}
-
-	auto_free( machine(), buffer );
 }
 
 //-------------------------------------------------
@@ -164,16 +164,14 @@ void at28c16_device::nvram_read( emu_file &file )
 
 void at28c16_device::nvram_write( emu_file &file )
 {
-	UINT8 *buffer = auto_alloc_array( machine(), UINT8, AT28C16_TOTAL_BYTES );
+	dynamic_buffer buffer ( AT28C16_TOTAL_BYTES );
 
 	for( offs_t offs = 0; offs < AT28C16_TOTAL_BYTES; offs++ )
 	{
 		buffer[ offs ] = m_addrspace[ 0 ]->read_byte( offs );
 	}
 
-	file.write( buffer, AT28C16_TOTAL_BYTES );
-
-	auto_free( machine(), buffer );
+	file.write( &buffer[0], AT28C16_TOTAL_BYTES );
 }
 
 

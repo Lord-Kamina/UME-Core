@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /*
 Dorachan (Dora-Chan ?) (c) 1980 Craul Denshi
 Driver by Tomasz Slanina
@@ -21,7 +23,8 @@ public:
 	dorachan_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_videoram(*this, "videoram"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_screen(*this, "screen") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
@@ -37,6 +40,7 @@ public:
 	virtual void machine_reset();
 	UINT32 screen_update_dorachan(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	required_device<cpu_device> m_maincpu;
+	required_device<screen_device> m_screen;
 };
 
 
@@ -57,7 +61,7 @@ CUSTOM_INPUT_MEMBER(dorachan_state::dorachan_protection_r)
 	case 0x72b5: ret = 0xcb; break;
 
 	default:
-		mame_printf_debug("unhandled $2400 read @ %x\n", m_maincpu->pcbase());
+		osd_printf_debug("unhandled $2400 read @ %x\n", m_maincpu->pcbase());
 		break;
 	}
 
@@ -78,7 +82,7 @@ static void get_pens(pen_t *pens)
 
 	for (i = 0; i < NUM_PENS; i++)
 	{
-		pens[i] = MAKE_RGB(pal1bit(i >> 2), pal1bit(i >> 1), pal1bit(i >> 0));
+		pens[i] = rgb_t(pal1bit(i >> 2), pal1bit(i >> 1), pal1bit(i >> 0));
 	}
 }
 
@@ -113,7 +117,7 @@ UINT32 dorachan_state::screen_update_dorachan(screen_device &screen, bitmap_rgb3
 
 		for (i = 0; i < 8; i++)
 		{
-			UINT8 color = (data & 0x01) ? fore_color : RGB_BLACK;
+			UINT8 color = (data & 0x01) ? fore_color : 0;
 			bitmap.pix32(y, x) = pens[color];
 
 			data = data >> 1;
@@ -134,7 +138,7 @@ WRITE8_MEMBER(dorachan_state::dorachan_ctrl_w)
 CUSTOM_INPUT_MEMBER(dorachan_state::dorachan_v128_r)
 {
 	/* to avoid resetting (when player 2 starts) bit 0 need to be inverted when screen is flipped */
-	return ((machine().primary_screen->vpos() >> 7) & 0x01) ^ m_flip_screen;
+	return ((m_screen->vpos() >> 7) & 0x01) ^ m_flip_screen;
 }
 
 

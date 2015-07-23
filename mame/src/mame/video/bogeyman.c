@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 #include "emu.h"
 #include "includes/bogeyman.h"
 
 
-void bogeyman_state::palette_init()
+PALETTE_INIT_MEMBER(bogeyman_state, bogeyman)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
@@ -31,39 +33,39 @@ void bogeyman_state::palette_init()
 		bit2 = (color_prom[256] >> 3) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		palette_set_color(machine(), i + 16, MAKE_RGB(r,g,b));
+		palette.set_pen_color(i + 16, rgb_t(r,g,b));
 		color_prom++;
 	}
 }
 
-WRITE8_MEMBER(bogeyman_state::bogeyman_videoram_w)
+WRITE8_MEMBER(bogeyman_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(bogeyman_state::bogeyman_colorram_w)
+WRITE8_MEMBER(bogeyman_state::colorram_w)
 {
 	m_colorram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(bogeyman_state::bogeyman_videoram2_w)
+WRITE8_MEMBER(bogeyman_state::videoram2_w)
 {
 	m_videoram2[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(bogeyman_state::bogeyman_colorram2_w)
+WRITE8_MEMBER(bogeyman_state::colorram2_w)
 {
 	m_colorram2[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(bogeyman_state::bogeyman_paletteram_w)
+WRITE8_MEMBER(bogeyman_state::paletteram_w)
 {
 	/* RGB output is inverted */
-	paletteram_BBGGGRRR_byte_w(space, offset, ~data);
+	m_palette->write(space, offset, UINT8(~data));
 }
 
 TILE_GET_INFO_MEMBER(bogeyman_state::get_bg_tile_info)
@@ -88,17 +90,15 @@ TILE_GET_INFO_MEMBER(bogeyman_state::get_fg_tile_info)
 
 void bogeyman_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(bogeyman_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 16, 16);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(bogeyman_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(bogeyman_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 16, 16);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(bogeyman_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 }
 
-void bogeyman_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
+void bogeyman_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	int offs;
-
-	for (offs = 0; offs < m_spriteram.bytes(); offs += 4)
+	for (int offs = 0; offs < m_spriteram.bytes(); offs += 4)
 	{
 		int attr = m_spriteram[offs];
 
@@ -122,16 +122,15 @@ void bogeyman_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 				flipy = !flipy;
 			}
 
-			drawgfx_transpen(bitmap, cliprect,
-				machine().gfx[2],
+
+				m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 				code, color,
 				flipx, flipy,
 				sx, sy, 0);
 
 			if (multi)
 			{
-				drawgfx_transpen(bitmap,cliprect,
-					machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 					code + 1, color,
 					flipx, flipy,
 					sx, sy + (flip_screen() ? -16 : 16), 0);
@@ -140,10 +139,10 @@ void bogeyman_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 	}
 }
 
-UINT32 bogeyman_state::screen_update_bogeyman(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 bogeyman_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

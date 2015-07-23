@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Alex Pasadyn, Howie Cohen, Frank Palazzolo, Ernesto Corvi, Aaron Giles
 /*************************************************************************
 
     Sega Z80-3D system
@@ -25,11 +27,17 @@ public:
 		m_i8255_1(*this, "i8255_1"),
 		m_i8255_2(*this, "i8255_2"),
 		m_i8255_3(*this, "i8255_3"),
-		m_gfx1(*this, "gfx1"),
+		m_spriteroms(*this, "sprites"),
+		m_proms(*this, "proms"),
+		m_roadroms(*this, "road"),
+		m_bgcolorrom(*this, "bgcolor"),
 		m_videoram(*this, "videoram"),
 		m_spriteram(*this, "spriteram"),
 		m_sprite_position(*this, "spritepos"),
-		m_samples(*this, "samples")
+		m_decrypted_opcodes(*this, "decrypted_opcodes"),
+		m_samples(*this, "samples"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen")
 	{ }
 
 	/* device/memory pointers */
@@ -39,13 +47,21 @@ public:
 	required_device<i8255_device> m_i8255_1;
 	optional_device<i8255_device> m_i8255_2;
 	optional_device<i8255_device> m_i8255_3;
-	required_memory_region m_gfx1;
+
+	required_region_ptr<UINT8> m_spriteroms;
+	required_region_ptr<UINT8> m_proms;
+	optional_region_ptr<UINT8> m_roadroms;
+	optional_region_ptr<UINT8> m_bgcolorrom;
 
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_spriteram;
 	required_shared_ptr<UINT8> m_sprite_position;
+	optional_shared_ptr<UINT8> m_decrypted_opcodes;
 
 	required_device<samples_device> m_samples;
+
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
 
 	UINT8 *     m_buckrog_bitmap_ram;
 
@@ -146,6 +162,7 @@ public:
 	UINT32 screen_update_subroc3d(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_buckrog(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	TIMER_CALLBACK_MEMBER(delayed_i8255_w);
+	TIMER_CALLBACK_MEMBER(update_sound_a);
 	DECLARE_WRITE8_MEMBER(turbo_sound_a_w);
 	DECLARE_WRITE8_MEMBER(turbo_sound_b_w);
 	DECLARE_WRITE8_MEMBER(turbo_sound_c_w);
@@ -156,12 +173,15 @@ public:
 	DECLARE_WRITE8_MEMBER(buckrog_sound_b_w);
 	inline UINT32 sprite_xscale(UINT8 dacinput, double vr1, double vr2, double cext);
 	void turbo_prepare_sprites(UINT8 y, sprite_info *info);
-	UINT32 turbo_get_sprite_bits(const UINT8 *sprite_gfxdata, UINT8 road, sprite_info *sprinfo);
+	UINT32 turbo_get_sprite_bits(UINT8 road, sprite_info *sprinfo);
 	void subroc3d_prepare_sprites(UINT8 y, sprite_info *info);
-	UINT32 subroc3d_get_sprite_bits(const UINT8 *sprite_gfxdata, sprite_info *sprinfo, UINT8 *plb);
+	UINT32 subroc3d_get_sprite_bits(sprite_info *sprinfo, UINT8 *plb);
 	void buckrog_prepare_sprites(UINT8 y, sprite_info *info);
-	UINT32 buckrog_get_sprite_bits(const UINT8 *sprite_gfxdata, sprite_info *sprinfo, UINT8 *plb);
+	UINT32 buckrog_get_sprite_bits(sprite_info *sprinfo, UINT8 *plb);
 	void turbo_rom_decode();
+	void turbo_update_samples();
+	inline void subroc3d_update_volume(int leftchan, UINT8 dis, UINT8 dir);
+	void buckrog_update_samples();
 };
 
 

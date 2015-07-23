@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia
 /***************************************************************************
 
 Pandora's Palace(GX328) (c) 1984 Konami/Interlogic
 
-Driver by Manuel Abadia <manu@teleline.es>
+Driver by Manuel Abadia <emumanu+mame@gmail.com>
 
 Notes:
 - Press 1P and 2P together to enter test mode.
@@ -315,16 +317,6 @@ READ8_MEMBER(pandoras_state::pandoras_portB_r)
 	return (m_audiocpu->total_cycles() / 512) & 0x0f;
 }
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(pandoras_state,pandoras_portA_r),   // not used
-	DEVCB_DRIVER_MEMBER(pandoras_state,pandoras_portB_r),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 static MACHINE_CONFIG_START( pandoras, pandoras_state )
 
 	/* basic machine hardware */
@@ -353,16 +345,19 @@ static MACHINE_CONFIG_START( pandoras, pandoras_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pandoras_state, screen_update_pandoras)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(pandoras)
-	MCFG_PALETTE_LENGTH(16*16+16*16)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pandoras)
+	MCFG_PALETTE_ADD("palette", 16*16+16*16)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(pandoras_state, pandoras)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, SOUND_CLOCK/8)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(pandoras_state, pandoras_portA_r))   // not used
+	MCFG_AY8910_PORT_B_READ_CB(READ8(pandoras_state, pandoras_portB_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.40)
 
 	MCFG_DAC_ADD("dac")

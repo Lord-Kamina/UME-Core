@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     laserdsc.c
 
     Core laserdisc player implementation.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 *************************************************************************/
 
@@ -67,8 +38,8 @@ const UINT32 LEAD_OUT_MIN_SIZE_IN_UM = 2000;        // 2 mm
 
 // the track pitch is defined as a range; we pick a nominal pitch
 // that ensures we can fit 54,000 tracks
-const UINT32 MIN_TRACK_PITCH_IN_NM = 1400;          // 1.4 um
-const UINT32 MAX_TRACK_PITCH_IN_NM = 2000;          // 2 um
+//const UINT32 MIN_TRACK_PITCH_IN_NM = 1400;          // 1.4 um
+//const UINT32 MAX_TRACK_PITCH_IN_NM = 2000;          // 2 um
 const UINT32 NOMINAL_TRACK_PITCH_IN_NM = (PROGRAM_MAX_RADIUS_IN_UM - PROGRAM_MIN_RADIUS_IN_UM) * 1000 / 54000;
 
 // we simulate extra lead-in and lead-out tracks
@@ -89,7 +60,7 @@ const UINT32 VIRTUAL_LEAD_OUT_TRACKS = LEAD_OUT_MIN_SIZE_IN_UM * 1000 / NOMINAL_
 laserdisc_device::laserdisc_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source)
 	: device_t(mconfig, type, name, tag, owner, clock, shortname, source),
 		device_sound_interface(mconfig, *this),
-		m_screen_name(NULL),
+		device_video_interface(mconfig, *this),
 		m_overwidth(0),
 		m_overheight(0),
 		m_overclip(0, -1, 0, -1),
@@ -120,7 +91,8 @@ laserdisc_device::laserdisc_device(const machine_config &mconfig, device_type ty
 		m_videopalette(NULL),
 		m_overenable(false),
 		m_overindex(0),
-		m_overtex(NULL)
+		m_overtex(NULL),
+		m_overlay_palette(*this)
 {
 	// initialize overlay_config
 	m_orig_config.m_overposx = m_orig_config.m_overposy = 0.0f;
@@ -216,7 +188,7 @@ UINT32 laserdisc_device::screen_update(screen_device &screen, bitmap_rgb32 &bitm
 
 		// add the video texture
 		if (m_videoenable)
-			screen.container().add_quad(0.0f, 0.0f, 1.0f, 1.0f, MAKE_ARGB(0xff,0xff,0xff,0xff), m_videotex, PRIMFLAG_BLENDMODE(BLENDMODE_NONE) | PRIMFLAG_SCREENTEX(1));
+			screen.container().add_quad(0.0f, 0.0f, 1.0f, 1.0f, rgb_t(0xff,0xff,0xff,0xff), m_videotex, PRIMFLAG_BLENDMODE(BLENDMODE_NONE) | PRIMFLAG_SCREENTEX(1));
 
 		// add the overlay
 		if (m_overenable && overbitmap.valid())
@@ -225,23 +197,13 @@ UINT32 laserdisc_device::screen_update(screen_device &screen, bitmap_rgb32 &bitm
 			float y0 = 0.5f - 0.5f * m_overscaley + m_overposy;
 			float x1 = x0 + m_overscalex;
 			float y1 = y0 + m_overscaley;
-			screen.container().add_quad(x0, y0, x1, y1, MAKE_ARGB(0xff,0xff,0xff,0xff), m_overtex, PRIMFLAG_BLENDMODE(BLENDMODE_ALPHA) | PRIMFLAG_SCREENTEX(1));
+			screen.container().add_quad(x0, y0, x1, y1, rgb_t(0xff,0xff,0xff,0xff), m_overtex, PRIMFLAG_BLENDMODE(BLENDMODE_ALPHA) | PRIMFLAG_SCREENTEX(1));
 		}
 
 		// swap to the next bitmap
 		m_overindex = (m_overindex + 1) % ARRAY_LENGTH(m_overbitmap);
 	}
 	return 0;
-}
-
-
-//-------------------------------------------------
-//  static_set_screen - set the screen name
-//-------------------------------------------------
-
-void laserdisc_device::static_set_screen(device_t &device, const char *screen)
-{
-	downcast<laserdisc_device &>(device).m_screen_name = screen;
 }
 
 
@@ -329,6 +291,15 @@ void laserdisc_device::static_set_overlay_scale(device_t &device, float scalex, 
 
 }
 
+//-------------------------------------------------
+//  static_set_overlay_palette - set the screen palette
+//  configuration
+//-------------------------------------------------
+
+void laserdisc_device::static_set_overlay_palette(device_t &device, const char *tag)
+{
+	downcast<laserdisc_device &>(device).m_overlay_palette.set_tag(tag);
+}
 
 //**************************************************************************
 //  DEVICE INTERFACE
@@ -340,10 +311,8 @@ void laserdisc_device::static_set_overlay_scale(device_t &device, float scalex, 
 
 void laserdisc_device::device_start()
 {
-	// ensure that our screen is started first
-	m_screen = machine().device<screen_device>(m_screen_name);
-	assert(m_screen != NULL);
-	if (!m_screen->started())
+	// if we have a palette and it's not started, wait for it
+	if (m_overlay_palette != NULL && !m_overlay_palette->started())
 		throw device_missing_dependencies();
 
 	// initialize the various pieces
@@ -370,7 +339,7 @@ void laserdisc_device::device_stop()
 	if (m_videotex != NULL)
 		machine().render().texture_free(m_videotex);
 	if (m_videopalette != NULL)
-		palette_deref(m_videopalette);
+		m_videopalette->deref();
 	if (m_overtex != NULL)
 		machine().render().texture_free(m_overtex);
 }
@@ -394,6 +363,18 @@ void laserdisc_device::device_reset()
 	m_sliderupdate = machine().time();
 }
 
+
+//-------------------------------------------------
+//  device_validity_check - verify device
+//  configuration
+//-------------------------------------------------
+
+void laserdisc_device::device_validity_check(validity_checker &valid) const
+{
+	texture_format texformat = !m_overupdate_ind16.isnull() ? TEXFORMAT_PALETTE16 : TEXFORMAT_RGB32;
+	if (m_overlay_palette == NULL && texformat == TEXFORMAT_PALETTE16)
+		osd_printf_error("Overlay screen does not have palette defined\n");
+}
 
 //-------------------------------------------------
 //  device_timer - handle timers set by this
@@ -455,8 +436,8 @@ void laserdisc_device::sound_stream_update(sound_stream &stream, stream_sample_t
 	// otherwise, stream from our buffer
 	else
 	{
-		INT16 *buffer0 = m_audiobuffer[0];
-		INT16 *buffer1 = m_audiobuffer[1];
+		INT16 *buffer0 = &m_audiobuffer[0][0];
+		INT16 *buffer1 = &m_audiobuffer[1][0];
 		int sampout = m_audiobufout;
 
 		// copy samples, clearing behind us as we go
@@ -569,7 +550,7 @@ laserdisc_device::slider_position laserdisc_device::get_slider_position()
 //  that works for most situations
 //-------------------------------------------------
 
-INT32 laserdisc_device::generic_update(const vbi_metadata &vbi, int fieldnum, attotime curtime, player_state_info &newstate)
+INT32 laserdisc_device::generic_update(const vbi_metadata &vbi, int fieldnum, const attotime &curtime, player_state_info &newstate)
 {
 	INT32 advanceby = 0;
 	int frame;
@@ -774,14 +755,14 @@ void laserdisc_device::init_disc()
 			throw emu_fatalerror("Laserdisc video must be compressed with the A/V codec!");
 
 		// read the metadata
-		astring metadata;
+		std::string metadata;
 		chd_error err = m_disc->read_metadata(AV_METADATA_TAG, 0, metadata);
 		if (err != CHDERR_NONE)
 			throw emu_fatalerror("Non-A/V CHD file specified");
 
 		// extract the metadata
 		int fps, fpsfrac, interlaced, channels;
-		if (sscanf(metadata, AV_METADATA_FORMAT, &fps, &fpsfrac, &m_width, &m_height, &interlaced, &channels, &m_samplerate) != 7)
+		if (sscanf(metadata.c_str(), AV_METADATA_FORMAT, &fps, &fpsfrac, &m_width, &m_height, &interlaced, &channels, &m_samplerate) != 7)
 			throw emu_fatalerror("Invalid metadata in CHD file");
 		else
 			m_fps_times_1million = fps * 1000000 + fpsfrac;
@@ -796,7 +777,7 @@ void laserdisc_device::init_disc()
 
 		// allocate memory for the precomputed per-frame metadata
 		err = m_disc->read_metadata(AV_LD_METADATA_TAG, 0, m_vbidata);
-		if (err != CHDERR_NONE || m_vbidata.count() != totalhunks * VBI_PACKED_BYTES)
+		if (err != CHDERR_NONE || m_vbidata.size() != totalhunks * VBI_PACKED_BYTES)
 			throw emu_fatalerror("Precomputed VBI metadata missing or incorrect size");
 	}
 	m_maxtrack = MAX(m_maxtrack, VIRTUAL_LEAD_IN_TRACKS + VIRTUAL_LEAD_OUT_TRACKS + m_chdtracks);
@@ -814,11 +795,11 @@ void laserdisc_device::init_video()
 	m_screen->register_vblank_callback(vblank_state_delegate(FUNC(laserdisc_device::vblank_state_changed), this));
 
 	// allocate palette for applying brightness/contrast/gamma
-	m_videopalette = palette_alloc(256, 1);
+	m_videopalette = palette_t::alloc(256);
 	if (m_videopalette == NULL)
 		throw emu_fatalerror("Out of memory allocating video palette");
 	for (int index = 0; index < 256; index++)
-		palette_entry_set_color(m_videopalette, index, MAKE_RGB(index, index, index));
+		m_videopalette->entry_set_color(index, rgb_t(index, index, index));
 
 	// allocate video frames
 	for (int index = 0; index < ARRAY_LENGTH(m_frame); index++)
@@ -864,7 +845,8 @@ void laserdisc_device::init_video()
 		for (int index = 0; index < ARRAY_LENGTH(m_overbitmap); index++)
 		{
 			m_overbitmap[index].set_format(format, texformat);
-			m_overbitmap[index].set_palette(machine().palette);
+			if (format==BITMAP_FORMAT_IND16)
+				m_overbitmap[index].set_palette(m_overlay_palette->palette());
 			m_overbitmap[index].resize(m_overwidth, m_overheight);
 		}
 
@@ -889,8 +871,8 @@ void laserdisc_device::init_audio()
 	// allocate audio buffers
 	m_audiomaxsamples = ((UINT64)m_samplerate * 1000000 + m_fps_times_1million - 1) / m_fps_times_1million;
 	m_audiobufsize = m_audiomaxsamples * 4;
-	m_audiobuffer[0] = auto_alloc_array(machine(), INT16, m_audiobufsize);
-	m_audiobuffer[1] = auto_alloc_array(machine(), INT16, m_audiobufsize);
+	m_audiobuffer[0].resize(m_audiobufsize);
+	m_audiobuffer[1].resize(m_audiobufsize);
 }
 
 
@@ -1011,7 +993,7 @@ void laserdisc_device::read_track_data()
 
 	// cheat and look up the metadata we are about to retrieve
 	vbi_metadata vbidata = { 0 };
-	if (m_vbidata.count() != 0)
+	if (!m_vbidata.empty())
 		vbi_metadata_unpack(&vbidata, NULL, &m_vbidata[readhunk * VBI_PACKED_BYTES]);
 
 	// if we're in the lead-in area, force the VBI data to be standard lead-in
@@ -1062,7 +1044,7 @@ void laserdisc_device::read_track_data()
 	m_audiocursamples = 0;
 
 	// set the VBI data for the new field from our precomputed data
-	if (m_vbidata.count() != 0)
+	if (!m_vbidata.empty())
 	{
 		UINT32 vbiframe;
 		vbi_metadata_unpack(&m_metadata[m_fieldnum], &vbiframe, &m_vbidata[readhunk * VBI_PACKED_BYTES]);

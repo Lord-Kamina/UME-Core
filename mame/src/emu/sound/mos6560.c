@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Peter Trauner
 /***************************************************************************
 
     MOS 6560 / 6561 Video Interface Chip
@@ -124,27 +126,27 @@
 
 
 // VICE palette
-static const rgb_t PALETTE[] =
+static const rgb_t PALETTE_MOS[] =
 {
-	MAKE_RGB(0x00, 0x00, 0x00),
-	MAKE_RGB(0xff, 0xff, 0xff),
-	MAKE_RGB(0xf0, 0x00, 0x00),
-	MAKE_RGB(0x00, 0xf0, 0xf0),
+	rgb_t(0x00, 0x00, 0x00),
+	rgb_t(0xff, 0xff, 0xff),
+	rgb_t(0xf0, 0x00, 0x00),
+	rgb_t(0x00, 0xf0, 0xf0),
 
-	MAKE_RGB(0x60, 0x00, 0x60),
-	MAKE_RGB(0x00, 0xa0, 0x00),
-	MAKE_RGB(0x00, 0x00, 0xf0),
-	MAKE_RGB(0xd0, 0xd0, 0x00),
+	rgb_t(0x60, 0x00, 0x60),
+	rgb_t(0x00, 0xa0, 0x00),
+	rgb_t(0x00, 0x00, 0xf0),
+	rgb_t(0xd0, 0xd0, 0x00),
 
-	MAKE_RGB(0xc0, 0xa0, 0x00),
-	MAKE_RGB(0xff, 0xa0, 0x00),
-	MAKE_RGB(0xf0, 0x80, 0x80),
-	MAKE_RGB(0x00, 0xff, 0xff),
+	rgb_t(0xc0, 0xa0, 0x00),
+	rgb_t(0xff, 0xa0, 0x00),
+	rgb_t(0xf0, 0x80, 0x80),
+	rgb_t(0x00, 0xff, 0xff),
 
-	MAKE_RGB(0xff, 0x00, 0xff),
-	MAKE_RGB(0x00, 0xff, 0x00),
-	MAKE_RGB(0x00, 0xa0, 0xff),
-	MAKE_RGB(0xff, 0xff, 0x00)
+	rgb_t(0xff, 0x00, 0xff),
+	rgb_t(0x00, 0xff, 0x00),
+	rgb_t(0x00, 0xa0, 0xff),
+	rgb_t(0xff, 0xff, 0x00)
 };
 
 
@@ -177,14 +179,14 @@ void mos6560_device::draw_character( int ybegin, int yend, int ch, int yoff, int
 	{
 		code = read_videoram((m_chargenaddr + ch * m_charheight + y) & 0x3fff);
 
-		m_bitmap.pix32(y + yoff, xoff + 0) = PALETTE[color[code >> 7]];
-		m_bitmap.pix32(y + yoff, xoff + 1) = PALETTE[color[(code >> 6) & 1]];
-		m_bitmap.pix32(y + yoff, xoff + 2) = PALETTE[color[(code >> 5) & 1]];
-		m_bitmap.pix32(y + yoff, xoff + 3) = PALETTE[color[(code >> 4) & 1]];
-		m_bitmap.pix32(y + yoff, xoff + 4) = PALETTE[color[(code >> 3) & 1]];
-		m_bitmap.pix32(y + yoff, xoff + 5) = PALETTE[color[(code >> 2) & 1]];
-		m_bitmap.pix32(y + yoff, xoff + 6) = PALETTE[color[(code >> 1) & 1]];
-		m_bitmap.pix32(y + yoff, xoff + 7) = PALETTE[color[code & 1]];
+		m_bitmap.pix32(y + yoff, xoff + 0) = PALETTE_MOS[color[code >> 7]];
+		m_bitmap.pix32(y + yoff, xoff + 1) = PALETTE_MOS[color[(code >> 6) & 1]];
+		m_bitmap.pix32(y + yoff, xoff + 2) = PALETTE_MOS[color[(code >> 5) & 1]];
+		m_bitmap.pix32(y + yoff, xoff + 3) = PALETTE_MOS[color[(code >> 4) & 1]];
+		m_bitmap.pix32(y + yoff, xoff + 4) = PALETTE_MOS[color[(code >> 3) & 1]];
+		m_bitmap.pix32(y + yoff, xoff + 5) = PALETTE_MOS[color[(code >> 2) & 1]];
+		m_bitmap.pix32(y + yoff, xoff + 6) = PALETTE_MOS[color[(code >> 1) & 1]];
+		m_bitmap.pix32(y + yoff, xoff + 7) = PALETTE_MOS[color[code & 1]];
 	}
 }
 
@@ -202,13 +204,13 @@ void mos6560_device::draw_character_multi( int ybegin, int yend, int ch, int yof
 		code = read_videoram((m_chargenaddr + ch * m_charheight + y) & 0x3fff);
 
 		m_bitmap.pix32(y + yoff, xoff + 0) =
-			m_bitmap.pix32(y + yoff, xoff + 1) = PALETTE[color[code >> 6]];
+			m_bitmap.pix32(y + yoff, xoff + 1) = PALETTE_MOS[color[code >> 6]];
 		m_bitmap.pix32(y + yoff, xoff + 2) =
-			m_bitmap.pix32(y + yoff, xoff + 3) = PALETTE[color[(code >> 4) & 3]];
+			m_bitmap.pix32(y + yoff, xoff + 3) = PALETTE_MOS[color[(code >> 4) & 3]];
 		m_bitmap.pix32(y + yoff, xoff + 4) =
-			m_bitmap.pix32(y + yoff, xoff + 5) = PALETTE[color[(code >> 2) & 3]];
+			m_bitmap.pix32(y + yoff, xoff + 5) = PALETTE_MOS[color[(code >> 2) & 3]];
 		m_bitmap.pix32(y + yoff, xoff + 6) =
-			m_bitmap.pix32(y + yoff, xoff + 7) = PALETTE[color[code & 3]];
+			m_bitmap.pix32(y + yoff, xoff + 7) = PALETTE_MOS[color[code & 3]];
 	}
 }
 
@@ -230,7 +232,7 @@ void mos6560_device::drawlines( int first, int last )
 	for (line = first; (line < m_ypos) && (line < last); line++)
 	{
 		for (j = 0; j < m_total_xsize; j++)
-			m_bitmap.pix32(line, j) = PALETTE[m_framecolor];
+			m_bitmap.pix32(line, j) = PALETTE_MOS[m_framecolor];
 	}
 
 	for (vline = line - m_ypos; (line < last) && (line < m_ypos + m_ysize);)
@@ -254,7 +256,7 @@ void mos6560_device::drawlines( int first, int last )
 		{
 			for (i = ybegin; i <= yend; i++)
 				for (j = 0; j < m_xpos; j++)
-					m_bitmap.pix32(yoff + i, j) = PALETTE[m_framecolor];
+					m_bitmap.pix32(yoff + i, j) = PALETTE_MOS[m_framecolor];
 		}
 
 		for (xoff = m_xpos; (xoff < m_xpos + m_xsize) && (xoff < m_total_xsize); xoff += 8, offs++)
@@ -301,7 +303,7 @@ void mos6560_device::drawlines( int first, int last )
 		{
 			for (i = ybegin; i <= yend; i++)
 				for (j = xoff; j < m_total_xsize; j++)
-					m_bitmap.pix32(yoff + i, j) = PALETTE[m_framecolor];
+					m_bitmap.pix32(yoff + i, j) = PALETTE_MOS[m_framecolor];
 		}
 
 		if (m_matrix8x16)
@@ -318,7 +320,7 @@ void mos6560_device::drawlines( int first, int last )
 
 	for (; line < last; line++)
 		for (j = 0; j < m_total_xsize; j++)
-			m_bitmap.pix32(line, j) = PALETTE[m_framecolor];
+			m_bitmap.pix32(line, j) = PALETTE_MOS[m_framecolor];
 }
 
 
@@ -554,7 +556,7 @@ void mos6560_device::soundport_w( int offset, int data )
 		{
 			m_tone1pos = 0;
 			m_tone1samples = machine().sample_rate() / TONE1_FREQUENCY;
-			if (!m_tone1samples == 0)
+			if (m_tone1samples == 0)
 				m_tone1samples = 1;
 		}
 		DBG_LOG(1, "mos6560", ("tone1 %.2x %d\n", data, TONE1_FREQUENCY));
@@ -686,10 +688,11 @@ static ADDRESS_MAP_START( mos6560_colorram_map, AS_1, 8, mos6560_device )
 	AM_RANGE(0x000, 0x3ff) AM_RAM
 ADDRESS_MAP_END
 
-mos6560_device::mos6560_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant)
-	: device_t(mconfig, type, name, tag, owner, clock),
+mos6560_device::mos6560_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant, const char *shortname, const char *source)
+	: device_t(mconfig, type, name, tag, owner, clock, shortname, source),
 		device_memory_interface(mconfig, *this),
 		device_sound_interface(mconfig, *this),
+		device_video_interface(mconfig, *this),
 		m_variant(variant),
 		m_videoram_space_config("videoram", ENDIANNESS_LITTLE, 8, 14, 0, NULL, *ADDRESS_MAP_NAME(mos6560_videoram_map)),
 		m_colorram_space_config("colorram", ENDIANNESS_LITTLE, 8, 10, 0, NULL, *ADDRESS_MAP_NAME(mos6560_colorram_map)),
@@ -699,9 +702,10 @@ mos6560_device::mos6560_device(const machine_config &mconfig, device_type type, 
 }
 
 mos6560_device::mos6560_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MOS6560, "MOS6560", tag, owner, clock),
+	: device_t(mconfig, MOS6560, "MOS6560", tag, owner, clock, "mos6560", __FILE__),
 		device_memory_interface(mconfig, *this),
 		device_sound_interface(mconfig, *this),
+		device_video_interface(mconfig, *this),
 		m_variant(TYPE_6560),
 		m_videoram_space_config("videoram", ENDIANNESS_LITTLE, 8, 14, 0, NULL, *ADDRESS_MAP_NAME(mos6560_videoram_map)),
 		m_colorram_space_config("colorram", ENDIANNESS_LITTLE, 8, 10, 0, NULL, *ADDRESS_MAP_NAME(mos6560_colorram_map)),
@@ -711,10 +715,10 @@ mos6560_device::mos6560_device(const machine_config &mconfig, const char *tag, d
 }
 
 mos6561_device::mos6561_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	:mos6560_device(mconfig, MOS6561, "MOS6561", tag, owner, clock, TYPE_6561) { }
+	:mos6560_device(mconfig, MOS6561, "MOS6561", tag, owner, clock, TYPE_6561, "mos6561", __FILE__) { }
 
 mos656x_attack_ufo_device::mos656x_attack_ufo_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	:mos6560_device(mconfig, MOS656X_ATTACK_UFO, "MOS656X", tag, owner, clock, TYPE_ATTACK_UFO) { }
+	:mos6560_device(mconfig, MOS656X_ATTACK_UFO, "MOS656X", tag, owner, clock, TYPE_ATTACK_UFO, "mos656x_attack_ufo", __FILE__) { }
 
 
 //-------------------------------------------------
@@ -739,9 +743,7 @@ const address_space_config *mos6560_device::memory_space_config(address_spacenum
 
 void mos6560_device::device_start()
 {
-	m_screen = machine().device<screen_device>(m_screen_tag);
 	m_screen->register_screen_bitmap(m_bitmap);
-	assert(m_screen);
 
 	// resolve callbacks
 	m_read_potx.resolve_safe(0xff);

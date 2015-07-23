@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli
 /***************************************************************************
 
   Nintendo 8080 video emulation
@@ -12,7 +14,7 @@ WRITE8_MEMBER(n8080_state::n8080_video_control_w)
 {
 	m_sheriff_color_mode = (data >> 3) & 3;
 	m_sheriff_color_data = (data >> 0) & 7;
-	flip_screen_set_no_update(data & 0x20);
+	flip_screen_set(data & 0x20);
 }
 
 
@@ -21,7 +23,7 @@ PALETTE_INIT_MEMBER(n8080_state,n8080)
 	int i;
 
 	for (i = 0; i < 8; i++)
-		palette_set_color_rgb(machine(), i, pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
+		palette.set_pen_color(i, pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
 }
 
 
@@ -29,17 +31,17 @@ PALETTE_INIT_MEMBER(n8080_state,helifire)
 {
 	int i;
 
-	PALETTE_INIT_CALL_MEMBER(n8080);
+	PALETTE_INIT_NAME(n8080)(palette);
 
 	for (i = 0; i < 0x100; i++)
 	{
 		int level = 0xff * exp(-3 * i / 255.); /* capacitor discharge */
 
-		palette_set_color(machine(), 0x000 + 8 + i, MAKE_RGB(0x00, 0x00, level));   /* shades of blue */
-		palette_set_color(machine(), 0x100 + 8 + i, MAKE_RGB(0x00, 0xC0, level));   /* shades of blue w/ green star */
+		palette.set_pen_color(0x000 + 8 + i, rgb_t(0x00, 0x00, level));   /* shades of blue */
+		palette.set_pen_color(0x100 + 8 + i, rgb_t(0x00, 0xC0, level));   /* shades of blue w/ green star */
 
-		palette_set_color(machine(), 0x200 + 8 + i, MAKE_RGB(level, 0x00, 0x00));   /* shades of red */
-		palette_set_color(machine(), 0x300 + 8 + i, MAKE_RGB(level, 0xC0, 0x00));   /* shades of red w/ green star */
+		palette.set_pen_color(0x200 + 8 + i, rgb_t(level, 0x00, 0x00));   /* shades of red */
+		palette.set_pen_color(0x300 + 8 + i, rgb_t(level, 0xC0, 0x00));   /* shades of red w/ green star */
 	}
 }
 
@@ -85,7 +87,7 @@ VIDEO_START_MEMBER(n8080_state,spacefev)
 {
 	m_cannon_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(n8080_state::spacefev_stop_red_cannon),this));
 
-	flip_screen_set_no_update(0);
+	flip_screen_set(0);
 
 	save_item(NAME(m_spacefev_red_screen));
 	save_item(NAME(m_spacefev_red_cannon));
@@ -94,7 +96,7 @@ VIDEO_START_MEMBER(n8080_state,spacefev)
 
 VIDEO_START_MEMBER(n8080_state,sheriff)
 {
-	flip_screen_set_no_update(0);
+	flip_screen_set(0);
 
 	save_item(NAME(m_sheriff_color_mode));
 	save_item(NAME(m_sheriff_color_data));
@@ -122,7 +124,7 @@ VIDEO_START_MEMBER(n8080_state,helifire)
 		m_helifire_LSFR[i] = data;
 	}
 
-	flip_screen_set_no_update(0);
+	flip_screen_set(0);
 }
 
 
@@ -341,7 +343,7 @@ void n8080_state::screen_eof_helifire(screen_device &screen, bool state)
 	// falling edge
 	if (!state)
 	{
-		int n = (machine().primary_screen->frame_number() >> 1) % sizeof m_helifire_LSFR;
+		int n = (m_screen->frame_number() >> 1) % sizeof m_helifire_LSFR;
 
 		int i;
 
@@ -358,13 +360,13 @@ void n8080_state::screen_eof_helifire(screen_device &screen, bool state)
 					G |= B;
 				}
 
-				if (machine().primary_screen->frame_number() & 0x04)
+				if (m_screen->frame_number() & 0x04)
 				{
 					R |= G;
 				}
 			}
 
-			palette_set_color_rgb(machine(),i,
+			m_palette->set_pen_color(i,
 				R ? 255 : 0,
 				G ? 255 : 0,
 				B ? 255 : 0);

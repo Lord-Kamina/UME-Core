@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
   machine.c
@@ -18,9 +20,7 @@ MACHINE_RESET_MEMBER(scramble_state,scramble)
 	MACHINE_RESET_CALL_MEMBER(galaxold);
 
 	if (m_audiocpu != NULL)
-		scramble_sh_init(machine());
-
-	m_security_2B_counter = 0;
+		sh_init();
 }
 
 MACHINE_RESET_MEMBER(scramble_state,explorer)
@@ -48,29 +48,6 @@ CUSTOM_INPUT_MEMBER(scramble_state::darkplnt_custom_r)
 }
 
 /* state of the security PAL (6J) */
-
-WRITE8_MEMBER(scramble_state::scramble_protection_w)
-{
-	m_xb = data;
-}
-
-READ8_MEMBER(scramble_state::scramble_protection_r)
-{
-	switch (m_maincpu->pc())
-	{
-	case 0x00a8: return 0xf0;
-	case 0x00be: return 0xb0;
-	case 0x0c1d: return 0xf0;
-	case 0x0c6a: return 0xb0;
-	case 0x0ceb: return 0x40;
-	case 0x0d37: return 0x60;
-	case 0x1ca2: return 0x00;  /* I don't think it's checked */
-	case 0x1d7e: return 0xb0;
-	default:
-		logerror("%s: read protection\n",machine().describe_context());
-		return 0;
-	}
-}
 
 
 READ8_MEMBER(scramble_state::mariner_protection_1_r )
@@ -387,7 +364,6 @@ DRIVER_INIT_MEMBER(scramble_state,rescue)
 {
 	offs_t i, len;
 	UINT8 *RAM;
-	UINT8 *scratch;
 
 
 	DRIVER_INIT_CALL(scobra);
@@ -400,9 +376,9 @@ DRIVER_INIT_MEMBER(scramble_state,rescue)
 	RAM = memregion("gfx1")->base();
 	len = memregion("gfx1")->bytes();
 
-	scratch = auto_alloc_array(machine(), UINT8, len);
+	dynamic_buffer scratch(len);
 
-	memcpy(scratch, RAM, len);
+	memcpy(&scratch[0], RAM, len);
 
 	for (i = 0; i < len; i++)
 	{
@@ -416,15 +392,12 @@ DRIVER_INIT_MEMBER(scramble_state,rescue)
 
 		RAM[i] = scratch[j];
 	}
-
-	auto_free(machine(), scratch);
 }
 
 DRIVER_INIT_MEMBER(scramble_state,minefld)
 {
 	offs_t i, len;
 	UINT8 *RAM;
-	UINT8 *scratch;
 
 
 	DRIVER_INIT_CALL(scobra);
@@ -436,9 +409,9 @@ DRIVER_INIT_MEMBER(scramble_state,minefld)
 	RAM = memregion("gfx1")->base();
 	len = memregion("gfx1")->bytes();
 
-	scratch = auto_alloc_array(machine(), UINT8, len);
+	dynamic_buffer scratch(len);
 
-	memcpy(scratch, RAM, len);
+	memcpy(&scratch[0], RAM, len);
 
 	for (i = 0; i < len; i++)
 	{
@@ -453,8 +426,6 @@ DRIVER_INIT_MEMBER(scramble_state,minefld)
 
 		RAM[i] = scratch[j];
 	}
-
-	auto_free(machine(), scratch);
 }
 
 #ifdef UNUSED_FUNCTION
@@ -653,7 +624,7 @@ WRITE8_MEMBER(scramble_state::harem_decrypt_clk_w)
 		}
 
 		membank("rombank")->set_base            (m_harem_decrypted_data     + 0x2000 * bank);
-		membank("rombank")->set_base_decrypted  (m_harem_decrypted_opcodes  + 0x2000 * bank);
+		membank("rombank_decrypted")->set_base  (m_harem_decrypted_opcodes  + 0x2000 * bank);
 
 //      logerror("%s: decrypt mode = %02x (bank %x) active\n", machine().describe_context(), m_harem_decrypt_mode, bank);
 
@@ -703,5 +674,10 @@ DRIVER_INIT_MEMBER(scramble_state,harem)
 	}
 
 	membank("rombank")->set_base            (m_harem_decrypted_data);
-	membank("rombank")->set_base_decrypted  (m_harem_decrypted_opcodes);
+	membank("rombank_decrypted")->set_base  (m_harem_decrypted_opcodes);
+
+	save_item(NAME(m_harem_decrypt_mode));
+	save_item(NAME(m_harem_decrypt_bit));
+	save_item(NAME(m_harem_decrypt_clk));
+	save_item(NAME(m_harem_decrypt_count));
 }

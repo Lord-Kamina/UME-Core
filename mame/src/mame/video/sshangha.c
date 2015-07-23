@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, Charles MacDonald, David Haywood
 /***************************************************************************
 
     Uses Data East custom chip 55 for backgrounds, with a special 8bpp mode
@@ -36,21 +38,24 @@ UINT32 sshangha_state::screen_update_sshangha(screen_device &screen, bitmap_rgb3
 	if (m_spriteram2 != NULL)
 		m_sprgen2->draw_sprites(bitmap, cliprect, m_spriteram2, 0x800, true);
 
-	machine().tilemap().set_flip_all(flip_screen_x() ? (TILEMAP_FLIPY | TILEMAP_FLIPX) : 0);
+	// flip screen
+	address_space &space = machine().driver_data()->generic_space();
+	UINT16 flip = m_deco_tilegen1->pf_control_r(space, 0, 0xffff);
+	flip_screen_set(BIT(flip, 7));
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
-	deco16ic_pf_update(m_deco_tilegen1, m_pf1_rowscroll, m_pf2_rowscroll);
+	m_deco_tilegen1->pf_update(m_pf1_rowscroll, m_pf2_rowscroll);
 
 	/* the tilemap 4bpp + 4bpp = 8bpp mixing actually seems external to the tilemap, note video_control is not part of the tilemap chip */
 	if ((m_video_control&4)==0) {
-		deco16ic_tilemap_12_combine_draw(m_deco_tilegen1, bitmap, cliprect, 0, 0, 1);
+		m_deco_tilegen1->tilemap_12_combine_draw(screen, bitmap, cliprect, 0, 0, 1);
 		m_sprgen1->inefficient_copy_sprite_bitmap(bitmap, cliprect, 0x0200, 0x0200, 0x100, 0x1ff);
 	}
 	else {
-		deco16ic_tilemap_2_draw(m_deco_tilegen1, bitmap, cliprect, 0, 0);
+		m_deco_tilegen1->tilemap_2_draw(screen, bitmap, cliprect, 0, 0);
 		m_sprgen1->inefficient_copy_sprite_bitmap(bitmap, cliprect, 0x0200, 0x0200, 0x100, 0x1ff);
-		deco16ic_tilemap_1_draw(m_deco_tilegen1, bitmap, cliprect, 0, 0);
+		m_deco_tilegen1->tilemap_1_draw(screen, bitmap, cliprect, 0, 0);
 	}
 
 	if (m_spriteram2 != NULL)

@@ -1,41 +1,14 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     hardisk.c
 
     Generic MAME hard disk implementation, with differencing files
 
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
-
 ***************************************************************************/
+
+#include <assert.h>
 
 #include "harddisk.h"
 
@@ -67,7 +40,7 @@ hard_disk_file *hard_disk_open(chd_file *chd)
 {
 	int cylinders, heads, sectors, sectorbytes;
 	hard_disk_file *file;
-	astring metadata;
+	std::string metadata;
 	chd_error err;
 
 	/* punt if no CHD */
@@ -80,7 +53,7 @@ hard_disk_file *hard_disk_open(chd_file *chd)
 		return NULL;
 
 	/* parse the metadata */
-	if (sscanf(metadata, HARD_DISK_METADATA_FORMAT, &cylinders, &heads, &sectors, &sectorbytes) != 4)
+	if (sscanf(metadata.c_str(), HARD_DISK_METADATA_FORMAT, &cylinders, &heads, &sectors, &sectorbytes) != 4)
 		return NULL;
 
 	/* allocate memory for the hard disk file */
@@ -124,6 +97,16 @@ chd_file *hard_disk_get_chd(hard_disk_file *file)
     a hard disk
 -------------------------------------------------*/
 
+/**
+ * @fn  hard_disk_info *hard_disk_get_info(hard_disk_file *file)
+ *
+ * @brief   Hard disk get information.
+ *
+ * @param [in,out]  file    If non-null, the file.
+ *
+ * @return  null if it fails, else a hard_disk_info*.
+ */
+
 hard_disk_info *hard_disk_get_info(hard_disk_file *file)
 {
 	return &file->info;
@@ -134,6 +117,18 @@ hard_disk_info *hard_disk_get_info(hard_disk_file *file)
     hard_disk_read - read sectors from a hard
     disk
 -------------------------------------------------*/
+
+/**
+ * @fn  UINT32 hard_disk_read(hard_disk_file *file, UINT32 lbasector, void *buffer)
+ *
+ * @brief   Hard disk read.
+ *
+ * @param [in,out]  file    If non-null, the file.
+ * @param   lbasector       The lbasector.
+ * @param [in,out]  buffer  If non-null, the buffer.
+ *
+ * @return  An UINT32.
+ */
 
 UINT32 hard_disk_read(hard_disk_file *file, UINT32 lbasector, void *buffer)
 {
@@ -146,6 +141,18 @@ UINT32 hard_disk_read(hard_disk_file *file, UINT32 lbasector, void *buffer)
     hard_disk_write - write  sectors to a hard
     disk
 -------------------------------------------------*/
+
+/**
+ * @fn  UINT32 hard_disk_write(hard_disk_file *file, UINT32 lbasector, const void *buffer)
+ *
+ * @brief   Hard disk write.
+ *
+ * @param [in,out]  file    If non-null, the file.
+ * @param   lbasector       The lbasector.
+ * @param   buffer          The buffer.
+ *
+ * @return  An UINT32.
+ */
 
 UINT32 hard_disk_write(hard_disk_file *file, UINT32 lbasector, const void *buffer)
 {

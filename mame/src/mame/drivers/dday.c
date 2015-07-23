@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
 D-Day
@@ -8,7 +10,7 @@ driver by Zsolt Vasvari
 Convention: "sl" stands for "searchlight"
 
 Note: This game doesn't seem to support cocktail mode, which is not too
-      suprising for a gun game.
+      surprising for a gun game.
 
 0000-3fff ROM
 5000-53ff Text layer videoram
@@ -266,11 +268,13 @@ static MACHINE_CONFIG_START( dday, dday_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(dday_state, screen_update_dday)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(dday)
-	MCFG_PALETTE_LENGTH(256)
-
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_HAS_SHADOWS)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", dday)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256) /* HACK!!! */
+	MCFG_PALETTE_ENABLE_SHADOWS()
+	MCFG_PALETTE_INIT_OWNER(dday_state, dday)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")

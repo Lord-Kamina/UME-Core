@@ -1,12 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Aaron Giles
 /***************************************************************************
 
     emucore.h
 
     General core utilities and macros used throughout the emulator.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
-
 ***************************************************************************/
 
 #pragma once
@@ -15,6 +13,7 @@
 #define __EMUCORE_H__
 
 // standard C includes
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -22,7 +21,7 @@
 #include <stdarg.h>
 
 // some cleanups for Solaris for things defined in stdlib.h
-#ifdef SDLMAME_SOLARIS
+#if defined(__sun__) && defined(__svr4__)
 #undef si_status
 #undef WWORD
 #endif
@@ -33,7 +32,6 @@
 
 // core system includes
 #include "osdcomm.h"
-#include "astring.h"
 #include "emualloc.h"
 #include "corestr.h"
 #include "bitmap.h"
@@ -60,13 +58,6 @@
 // genf is a generic function pointer; cast function pointers to this instead of void *
 typedef void genf(void);
 
-// FPTR is used to cast a pointer to a scalar
-#ifdef PTR64
-typedef UINT64 FPTR;
-#else
-typedef UINT32 FPTR;
-#endif
-
 // pen_t is used to represent pixel values in bitmaps
 typedef UINT32 pen_t;
 
@@ -85,6 +76,7 @@ class running_machine;
 // generic_ptr is a union of pointers to various sizes
 union generic_ptr
 {
+	generic_ptr(void *value) { v = value; }
 	void *      v;
 	INT8 *      i8;
 	UINT8 *     u8;
@@ -224,20 +216,16 @@ inline void operator--(_Type &value, int) { value = (_Type)((int)value - 1); }
 #undef assert
 #undef assert_always
 
-#ifdef MAME_DEBUG
+#if defined(MAME_DEBUG_FAST)
+#define assert(x)               do { } while (0)
+#define assert_always(x, msg)   do { if (!(x)) throw emu_fatalerror("Fatal error: %s\nCaused by assert: %s:%d: %s", msg, __FILE__, __LINE__, #x); } while (0)
+#elif defined(MAME_DEBUG)
 #define assert(x)               do { if (!(x)) throw emu_fatalerror("assert: %s:%d: %s", __FILE__, __LINE__, #x); } while (0)
 #define assert_always(x, msg)   do { if (!(x)) throw emu_fatalerror("Fatal error: %s\nCaused by assert: %s:%d: %s", msg, __FILE__, __LINE__, #x); } while (0)
 #else
 #define assert(x)               do { } while (0)
 #define assert_always(x, msg)   do { if (!(x)) throw emu_fatalerror("Fatal error: %s (%s:%d)", msg, __FILE__, __LINE__); } while (0)
 #endif
-
-
-// map mame_* helpers to core_* helpers */
-#define mame_stricmp        core_stricmp
-#define mame_strnicmp       core_strnicmp
-#define mame_strdup         core_strdup
-#define mame_strwildcmp     core_strwildcmp
 
 
 // macros to convert radians to degrees and degrees to radians
@@ -252,7 +240,7 @@ inline void operator--(_Type &value, int) { value = (_Type)((int)value - 1); }
 #define NATIVE_ENDIAN_VALUE_LE_BE(leval,beval)  ENDIAN_VALUE_LE_BE(ENDIANNESS_NATIVE, leval, beval)
 
 // endian-based value: first value is if 'endian' matches native, second is if 'endian' doesn't match native
-#define ENDIAN_VALUE_NE_NNE(endian,leval,beval) (((endian) == ENDIANNESS_NATIVE) ? (neval) : (nneval))
+#define ENDIAN_VALUE_NE_NNE(endian,neval,nneval) (((endian) == ENDIANNESS_NATIVE) ? (neval) : (nneval))
 
 
 // useful macros to deal with bit shuffling encryptions
@@ -300,37 +288,10 @@ class emu_exception : public std::exception { };
 class emu_fatalerror : public emu_exception
 {
 public:
-	emu_fatalerror(const char *format, ...)
-		: code(0)
-	{
-		va_list ap;
-		va_start(ap, format);
-		vsprintf(text, format, ap);
-		va_end(ap);
-		osd_break_into_debugger(text);
-	}
-
-	emu_fatalerror(const char *format, va_list ap)
-		: code(0)
-	{
-		vsprintf(text, format, ap);
-		osd_break_into_debugger(text);
-	}
-
-	emu_fatalerror(int _exitcode, const char *format, ...)
-		: code(_exitcode)
-	{
-		va_list ap;
-		va_start(ap, format);
-		vsprintf(text, format, ap);
-		va_end(ap);
-	}
-
-	emu_fatalerror(int _exitcode, const char *format, va_list ap)
-		: code(_exitcode)
-	{
-		vsprintf(text, format, ap);
-	}
+	emu_fatalerror(const char *format, ...) ATTR_PRINTF(2,3);
+	emu_fatalerror(const char *format, va_list ap);
+	emu_fatalerror(int _exitcode, const char *format, ...) ATTR_PRINTF(3,4);
+	emu_fatalerror(int _exitcode, const char *format, va_list ap);
 
 	const char *string() const { return text; }
 	int exitcode() const { return code; }
@@ -356,7 +317,7 @@ void report_bad_device_cast(const device_t *dev, const std::type_info &src_type,
 template<class _Dest, class _Source>
 inline _Dest downcast(_Source *src)
 {
-#ifdef MAME_DEBUG
+#if defined(MAME_DEBUG) && !defined(MAME_DEBUG_FAST)
 	try {
 		if (dynamic_cast<_Dest>(src) != src)
 		{
@@ -377,7 +338,7 @@ inline _Dest downcast(_Source *src)
 template<class _Dest, class _Source>
 inline _Dest downcast(_Source &src)
 {
-#ifdef MAME_DEBUG
+#if defined(MAME_DEBUG) && !defined(MAME_DEBUG_FAST)
 	try {
 		if (&dynamic_cast<_Dest>(src) != &src)
 		{
@@ -401,35 +362,15 @@ inline _Dest downcast(_Source &src)
 //  FUNCTION PROTOTYPES
 //**************************************************************************
 
-DECL_NORETURN void fatalerror(const char *format, ...) ATTR_PRINTF(1,2) ATTR_NORETURN;
-DECL_NORETURN void fatalerror_exitcode(running_machine &machine, int exitcode, const char *format, ...) ATTR_PRINTF(3,4) ATTR_NORETURN;
-
-inline void fatalerror(const char *format, ...)
-{
-	va_list ap;
-	va_start(ap, format);
-	emu_fatalerror error(format, ap);
-	va_end(ap);
-	throw error;
-}
-
-inline void fatalerror_exitcode(running_machine &machine, int exitcode, const char *format, ...)
-{
-	va_list ap;
-	va_start(ap, format);
-	emu_fatalerror error(exitcode, format, ap);
-	va_end(ap);
-	throw error;
-}
-
-
+ATTR_NORETURN void fatalerror(const char *format, ...) ATTR_PRINTF(1,2);
+ATTR_NORETURN void fatalerror_exitcode(running_machine &machine, int exitcode, const char *format, ...) ATTR_PRINTF(3,4);
 
 //**************************************************************************
 //  INLINE FUNCTIONS
 //**************************************************************************
 
 // population count
-#ifndef SDLMAME_NETBSD
+#if !defined(__NetBSD__)
 inline int popcount(UINT32 val)
 {
 	int count;

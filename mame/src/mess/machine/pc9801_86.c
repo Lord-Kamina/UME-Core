@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese
 /***************************************************************************
 
     NEC PC-9801-86 sound card
@@ -41,21 +43,14 @@ WRITE_LINE_MEMBER(pc9801_86_device::pc9801_sound_irq)
 	machine().device<pic8259_device>(":pic8259_slave")->ir4_w(state);
 }
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, pc9801_86_device,opn_porta_r),
-	DEVCB_NULL,//(pc9801_state,opn_portb_r),
-	DEVCB_NULL,//(pc9801_state,opn_porta_w),
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, pc9801_86_device,opn_portb_w),
-};
-
 static MACHINE_CONFIG_FRAGMENT( pc9801_86_config )
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("opna", YM2608, MAIN_CLOCK_X1*4) // unknown clock / divider
-	MCFG_YM2608_IRQ_HANDLER(DEVWRITELINE(DEVICE_SELF_OWNER, pc9801_86_device, pc9801_sound_irq))
-	MCFG_YM2608_AY8910_INTF(&ay8910_config)
+	MCFG_YM2608_IRQ_HANDLER(WRITELINE(pc9801_86_device, pc9801_sound_irq))
+	MCFG_AY8910_PORT_A_READ_CB(READ8(pc9801_86_device, opn_porta_r))
+	//MCFG_AY8910_PORT_B_READ_CB(READ8(pc9801_state, opn_portb_r))
+	//MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(pc9801_state, opn_porta_w))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(pc9801_86_device, opn_portb_w))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 MACHINE_CONFIG_END
 
@@ -104,7 +99,7 @@ static INPUT_PORTS_START( pc9801_86 )
 	PORT_BIT( 0xc0, IP_ACTIVE_LOW, IPT_UNUSED )
 
 	PORT_START("OPNA_DSW")
-	PORT_CONFNAME( 0x01, 0x00, "PC-9801-86: Port Base" )
+	PORT_CONFNAME( 0x01, 0x01, "PC-9801-86: Port Base" )
 	PORT_CONFSETTING(    0x00, "0x088" )
 	PORT_CONFSETTING(    0x01, "0x188" )
 INPUT_PORTS_END
@@ -159,7 +154,6 @@ void pc9801_86_device::install_device(offs_t start, offs_t end, offs_t mask, off
 			break;
 		default:
 			fatalerror("PC-9801-86: Bus width %d not supported\n", buswidth);
-			break;
 	}
 }
 

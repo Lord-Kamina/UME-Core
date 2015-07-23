@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:smf, David Haywood
 /****************************************************************************
 
 Irem "M62" system
@@ -69,7 +71,6 @@ other supported games as well.
 
 #include "emu.h"
 #include "cpu/z80/z80.h"
-#include "audio/irem.h"
 #include "includes/iremipt.h"
 #include "includes/m62.h"
 
@@ -183,7 +184,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( kungfum_io_map, AS_IO, 8, m62_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0x01, 0x01) AM_READ_PORT("P1") AM_WRITE(m62_flipscreen_w)  /* + coin counters */
 	AM_RANGE(0x02, 0x02) AM_READ_PORT("P2")
 	AM_RANGE(0x03, 0x03) AM_READ_PORT("DSW1")
@@ -201,7 +202,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( battroad_io_map, AS_IO, 8, m62_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0x01, 0x01) AM_READ_PORT("P1") AM_WRITE(m62_flipscreen_w)  /* + coin counters */
 	AM_RANGE(0x02, 0x02) AM_READ_PORT("P2")
 	AM_RANGE(0x03, 0x03) AM_READ_PORT("DSW1")
@@ -229,7 +230,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( ldrun2_io_map, AS_IO, 8, m62_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0x01, 0x01) AM_READ_PORT("P1") AM_WRITE(m62_flipscreen_w)  /* + coin counters */
 	AM_RANGE(0x02, 0x02) AM_READ_PORT("P2")
 	AM_RANGE(0x03, 0x03) AM_READ_PORT("DSW1")
@@ -250,7 +251,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( ldrun3_io_map, AS_IO, 8, m62_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0x01, 0x01) AM_READ_PORT("P1") AM_WRITE(m62_flipscreen_w)  /* + coin counters */
 	AM_RANGE(0x02, 0x02) AM_READ_PORT("P2")
 	AM_RANGE(0x03, 0x03) AM_READ_PORT("DSW1")
@@ -270,7 +271,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( ldrun4_io_map, AS_IO, 8, m62_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0x01, 0x01) AM_READ_PORT("P1") AM_WRITE(m62_flipscreen_w)  /* + coin counters */
 	AM_RANGE(0x02, 0x02) AM_READ_PORT("P2")
 	AM_RANGE(0x03, 0x03) AM_READ_PORT("DSW1")
@@ -298,7 +299,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( kidniki_io_map, AS_IO, 8, m62_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0x01, 0x01) AM_READ_PORT("P1") AM_WRITE(m62_flipscreen_w)  /* + coin counters */
 	AM_RANGE(0x02, 0x02) AM_READ_PORT("P2")
 	AM_RANGE(0x03, 0x03) AM_READ_PORT("DSW1")
@@ -351,7 +352,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( youjyudn_io_map, AS_IO, 8, m62_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0x00, 0x00) AM_READ_PORT("SYSTEM") AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0x01, 0x01) AM_READ_PORT("P1") AM_WRITE(m62_flipscreen_w)  /* + coin counters */
 	AM_RANGE(0x02, 0x02) AM_READ_PORT("P2")
 	AM_RANGE(0x03, 0x03) AM_READ_PORT("DSW1")
@@ -422,26 +423,6 @@ INPUT_PORTS_END
 
 static INPUT_PORTS_START( kungfum )
 	PORT_INCLUDE( common )
-
-	PORT_MODIFY("P1")
-	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_4WAY
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_4WAY
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_4WAY
-	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_4WAY
-	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNKNOWN ) /* probably unused */
-	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_BUTTON2 )
-	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN ) /* probably unused */
-	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON1 )
-
-	PORT_MODIFY("P2")
-	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_4WAY PORT_COCKTAIL
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_4WAY PORT_COCKTAIL
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_4WAY PORT_COCKTAIL
-	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_4WAY PORT_COCKTAIL
-	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_COIN2 )
-	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_COCKTAIL
-	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN ) /* probably unused */
-	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_COCKTAIL
 
 	PORT_MODIFY("DSW2")
 	/* In slowmo mode, press 2 to slow game speed */
@@ -965,10 +946,11 @@ static MACHINE_CONFIG_START( ldrun, m62_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA((64*8-384)/2, 64*8-(64*8-384)/2-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(m62_state, screen_update_ldrun)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(ldrun)
-	MCFG_PALETTE_LENGTH(512)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", ldrun)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INIT_OWNER(m62_state,m62)
 
 	/* sound hardware */
 	MCFG_FRAGMENT_ADD(m62_audio)
@@ -1004,10 +986,11 @@ static MACHINE_CONFIG_DERIVED( battroad, ldrun )
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_VISIBLE_AREA((64*8-256)/2, 64*8-(64*8-256)/2-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(m62_state, screen_update_battroad)
-	MCFG_GFXDECODE(battroad)
-	MCFG_PALETTE_LENGTH(544)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", battroad)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(544)
 
-	MCFG_PALETTE_INIT_OVERRIDE(m62_state,battroad)
+	MCFG_PALETTE_INIT_OWNER(m62_state,battroad)
 	MCFG_VIDEO_START_OVERRIDE(m62_state,battroad)
 MACHINE_CONFIG_END
 
@@ -1033,7 +1016,7 @@ static MACHINE_CONFIG_DERIVED( ldrun3, ldrun )
 	MCFG_CPU_IO_MAP(ldrun3_io_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(ldrun3)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", ldrun3)
 	MCFG_VIDEO_START_OVERRIDE(m62_state,ldrun2)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(m62_state, screen_update_ldrun3)
@@ -1048,7 +1031,7 @@ static MACHINE_CONFIG_DERIVED( ldrun4, ldrun )
 	MCFG_CPU_IO_MAP(ldrun4_io_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(ldrun3)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", ldrun3)
 	MCFG_VIDEO_START_OVERRIDE(m62_state,ldrun4)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(m62_state, screen_update_ldrun4)
@@ -1062,10 +1045,12 @@ static MACHINE_CONFIG_DERIVED( lotlot, ldrun )
 	MCFG_CPU_PROGRAM_MAP(lotlot_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(lotlot)
-	MCFG_PALETTE_LENGTH(768)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", lotlot)
 
-	MCFG_PALETTE_INIT_OVERRIDE(m62_state,lotlot)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(768)
+
+	MCFG_PALETTE_INIT_OWNER(m62_state,lotlot)
 	MCFG_VIDEO_START_OVERRIDE(m62_state,lotlot)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(m62_state, screen_update_lotlot)
@@ -1080,7 +1065,7 @@ static MACHINE_CONFIG_DERIVED( kidniki, ldrun )
 	MCFG_CPU_IO_MAP(kidniki_io_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(kidniki)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", kidniki)
 
 	MCFG_VIDEO_START_OVERRIDE(m62_state,kidniki)
 	MCFG_SCREEN_MODIFY("screen")
@@ -1095,7 +1080,7 @@ static MACHINE_CONFIG_DERIVED( spelunkr, ldrun )
 	MCFG_CPU_PROGRAM_MAP(spelunkr_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(spelunkr)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", spelunkr)
 
 	MCFG_VIDEO_START_OVERRIDE(m62_state,spelunkr)
 	MCFG_SCREEN_MODIFY("screen")
@@ -1110,10 +1095,11 @@ static MACHINE_CONFIG_DERIVED( spelunk2, ldrun )
 	MCFG_CPU_PROGRAM_MAP(spelunk2_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(spelunk2)
-	MCFG_PALETTE_LENGTH(768)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", spelunk2)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(768)
 
-	MCFG_PALETTE_INIT_OVERRIDE(m62_state,spelunk2)
+	MCFG_PALETTE_INIT_OWNER(m62_state,spelunk2)
 	MCFG_VIDEO_START_OVERRIDE(m62_state,spelunk2)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(m62_state, screen_update_spelunk2)
@@ -1132,7 +1118,7 @@ static MACHINE_CONFIG_DERIVED( youjyudn, ldrun )
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_VISIBLE_AREA((64*8-256)/2, 64*8-(64*8-256)/2-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(m62_state, screen_update_youjyudn)
-	MCFG_GFXDECODE(youjyudn)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", youjyudn)
 
 	MCFG_VIDEO_START_OVERRIDE(m62_state,youjyudn)
 MACHINE_CONFIG_END
@@ -2167,12 +2153,6 @@ DRIVER_INIT_MEMBER(m62_state,ldrun4)
 
 DRIVER_INIT_MEMBER(m62_state,kidniki)
 {
-	UINT8 *ROM = memregion("maincpu")->base();
-
-	/* in Kid Niki, bank 0 has code falling from 7fff to 8000, */
-	/* so I have to copy it there because bank switching wouldn't catch it */
-	memcpy(ROM + 0x08000, ROM + 0x10000, 0x2000);
-
 	/* configure memory banks */
 	membank("bank1")->configure_entries(0, 16, memregion("maincpu")->base() + 0x10000, 0x2000);
 }
@@ -2196,25 +2176,25 @@ DRIVER_INIT_MEMBER(m62_state,youjyudn)
 	membank("bank1")->configure_entries(0, 2, memregion("maincpu")->base() + 0x10000, 0x4000);
 }
 
-GAME( 1984, kungfum,  0,        kungfum,  kungfum, driver_device,  0,        ROT0,   "Irem", "Kung-Fu Master", GAME_SUPPORTS_SAVE )
-GAME( 1984, kungfumd, kungfum,  kungfum,  kungfum, driver_device,  0,        ROT0,   "Irem (Data East license)", "Kung-Fu Master (Data East)", GAME_SUPPORTS_SAVE )
-GAME( 1984, spartanx, kungfum,  kungfum,  kungfum, driver_device,  0,        ROT0,   "Irem", "Spartan X (Japan)", GAME_SUPPORTS_SAVE )
-GAME( 1984, kungfub,  kungfum,  kungfum,  kungfum, driver_device,  0,        ROT0,   "bootleg", "Kung-Fu Master (bootleg set 1)", GAME_SUPPORTS_SAVE )
-GAME( 1984, kungfub2, kungfum,  kungfum,  kungfum, driver_device,  0,        ROT0,   "bootleg", "Kung-Fu Master (bootleg set 2)", GAME_SUPPORTS_SAVE )
-GAME( 1984, battroad, 0,        battroad, battroad, m62_state, battroad, ROT90,  "Irem", "The Battle-Road", GAME_IMPERFECT_COLORS | GAME_SUPPORTS_SAVE )
-GAME( 1984, ldrun,    0,        ldrun,    ldrun, driver_device,    0,        ROT0,   "Irem (licensed from Broderbund)", "Lode Runner (set 1)", GAME_SUPPORTS_SAVE )
-GAME( 1984, ldruna,   ldrun,    ldrun,    ldrun, driver_device,    0,        ROT0,   "Irem (licensed from Broderbund)", "Lode Runner (set 2)", GAME_SUPPORTS_SAVE )
-GAME( 1984, ldrun2,   0,        ldrun2,   ldrun2, m62_state,   ldrun2,   ROT0,   "Irem (licensed from Broderbund)", "Lode Runner II - The Bungeling Strikes Back", GAME_SUPPORTS_SAVE ) /* Japanese version is called Bangeringu Teikoku No Gyakushuu */
-GAME( 1985, ldrun3,   0,        ldrun3,   ldrun3, driver_device,   0,        ROT0,   "Irem (licensed from Broderbund)", "Lode Runner III - The Golden Labyrinth", GAME_SUPPORTS_SAVE )
-GAME( 1985, ldrun3j,  ldrun3,   ldrun3,   ldrun3, driver_device,   0,        ROT0,   "Irem (licensed from Broderbund)", "Lode Runner III - Majin No Fukkatsu", GAME_SUPPORTS_SAVE )
-GAME( 1986, ldrun4,   0,        ldrun4,   ldrun4, m62_state,   ldrun4,   ROT0,   "Irem (licensed from Broderbund)", "Lode Runner IV - Teikoku Karano Dasshutsu", GAME_SUPPORTS_SAVE )
-GAME( 1985, lotlot,   0,        lotlot,   lotlot, driver_device,   0,        ROT0,   "Irem (licensed from Tokuma Shoten)", "Lot Lot", GAME_SUPPORTS_SAVE )
-GAME( 1986, kidniki,  0,        kidniki,  kidniki, m62_state,  kidniki,  ROT0,   "Irem", "Kid Niki - Radical Ninja (World)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
-GAME( 1986, kidnikiu, kidniki,  kidniki,  kidniki, m62_state,  kidniki,  ROT0,   "Irem (Data East USA license)", "Kid Niki - Radical Ninja (US)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
-GAME( 1986, yanchamr, kidniki,  kidniki,  kidniki, m62_state,  kidniki,  ROT0,   "Irem", "Kaiketsu Yanchamaru (Japan)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
-GAME( 1987, lithero,  kidniki,  kidniki,  kidniki, m62_state,  kidniki,  ROT0,   "bootleg", "Little Hero", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
-GAME( 1985, spelunkr, 0,        spelunkr, spelunkr, m62_state, spelunkr, ROT0,   "Irem (licensed from Broderbund)", "Spelunker", GAME_SUPPORTS_SAVE )
-GAME( 1985, spelunkrj,spelunkr, spelunkr, spelunkr, m62_state, spelunkr, ROT0,   "Irem (licensed from Broderbund)", "Spelunker (Japan)", GAME_SUPPORTS_SAVE )
-GAME( 1986, spelunk2, 0,        spelunk2, spelunk2, m62_state, spelunk2, ROT0,   "Irem (licensed from Broderbund)", "Spelunker II", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
-GAME( 1986, youjyudn, 0,        youjyudn, youjyudn, m62_state, youjyudn, ROT270, "Irem", "Youjyuden (Japan)", GAME_SUPPORTS_SAVE )
-GAME( 1985, horizon,  0,        horizon,  horizon, driver_device,  0,        ROT0,   "Irem", "Horizon (Irem)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1984, kungfum,  0,        kungfum,  kungfum,  driver_device, 0,        ROT0,   "Irem", "Kung-Fu Master (World)", GAME_SUPPORTS_SAVE )
+GAME( 1984, kungfumd, kungfum,  kungfum,  kungfum,  driver_device, 0,        ROT0,   "Irem (Data East USA license)", "Kung-Fu Master (US)", GAME_SUPPORTS_SAVE )
+GAME( 1984, spartanx, kungfum,  kungfum,  kungfum,  driver_device, 0,        ROT0,   "Irem", "Spartan X (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1984, kungfub,  kungfum,  kungfum,  kungfum,  driver_device, 0,        ROT0,   "bootleg", "Kung-Fu Master (bootleg set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1984, kungfub2, kungfum,  kungfum,  kungfum,  driver_device, 0,        ROT0,   "bootleg", "Kung-Fu Master (bootleg set 2)", GAME_SUPPORTS_SAVE )
+GAME( 1984, battroad, 0,        battroad, battroad, m62_state,     battroad, ROT90,  "Irem", "The Battle-Road", GAME_SUPPORTS_SAVE )
+GAME( 1984, ldrun,    0,        ldrun,    ldrun,    driver_device, 0,        ROT0,   "Irem (licensed from Broderbund)", "Lode Runner (set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1984, ldruna,   ldrun,    ldrun,    ldrun,    driver_device, 0,        ROT0,   "Irem (licensed from Broderbund, Digital Controls Inc. license)", "Lode Runner (set 2)", GAME_SUPPORTS_SAVE )
+GAME( 1984, ldrun2,   0,        ldrun2,   ldrun2,   m62_state,     ldrun2,   ROT0,   "Irem (licensed from Broderbund)", "Lode Runner II - The Bungeling Strikes Back", GAME_SUPPORTS_SAVE ) /* Japanese version is called Bangeringu Teikoku No Gyakushuu */
+GAME( 1985, ldrun3,   0,        ldrun3,   ldrun3,   driver_device, 0,        ROT0,   "Irem (licensed from Broderbund)", "Lode Runner III - The Golden Labyrinth", GAME_SUPPORTS_SAVE )
+GAME( 1985, ldrun3j,  ldrun3,   ldrun3,   ldrun3,   driver_device, 0,        ROT0,   "Irem (licensed from Broderbund)", "Lode Runner III - Majin No Fukkatsu (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1986, ldrun4,   0,        ldrun4,   ldrun4,   m62_state,     ldrun4,   ROT0,   "Irem (licensed from Broderbund)", "Lode Runner IV - Teikoku Karano Dasshutsu (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1985, lotlot,   0,        lotlot,   lotlot,   driver_device, 0,        ROT0,   "Irem (licensed from Tokuma Shoten)", "Lot Lot", GAME_SUPPORTS_SAVE )
+GAME( 1986, kidniki,  0,        kidniki,  kidniki,  m62_state,     kidniki,  ROT0,   "Irem", "Kid Niki - Radical Ninja (World)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1986, kidnikiu, kidniki,  kidniki,  kidniki,  m62_state,     kidniki,  ROT0,   "Irem (Data East USA license)", "Kid Niki - Radical Ninja (US)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1986, yanchamr, kidniki,  kidniki,  kidniki,  m62_state,     kidniki,  ROT0,   "Irem", "Kaiketsu Yanchamaru (Japan)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1987, lithero,  kidniki,  kidniki,  kidniki,  m62_state,     kidniki,  ROT0,   "bootleg", "Little Hero", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1985, spelunkr, 0,        spelunkr, spelunkr, m62_state,     spelunkr, ROT0,   "Irem (licensed from Broderbund)", "Spelunker", GAME_SUPPORTS_SAVE )
+GAME( 1985, spelunkrj,spelunkr, spelunkr, spelunkr, m62_state,     spelunkr, ROT0,   "Irem (licensed from Broderbund)", "Spelunker (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1986, spelunk2, 0,        spelunk2, spelunk2, m62_state,     spelunk2, ROT0,   "Irem (licensed from Broderbund)", "Spelunker II", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1986, youjyudn, 0,        youjyudn, youjyudn, m62_state,     youjyudn, ROT270, "Irem", "Youjyuden (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1985, horizon,  0,        horizon,  horizon,  driver_device, 0,        ROT0,   "Irem", "Horizon (Irem)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia, Mirko Buffoni, Takahiro Nogi
 /***************************************************************************
 
   machine.c
@@ -16,38 +18,13 @@
 #include "cpu/mcs48/mcs48.h"
 #include "includes/tnzs.h"
 
-READ8_MEMBER(tnzs_state::tnzs_ramrom_bank_r)
-{
-	// the first 2 banks would correspond to the fixed section of ROM, since this is
-	// a waste of time the hardware maps 2 banks of RAM there instead.
-	if (m_bank1<2)
-	{
-		return m_bankedram[m_bank1 * 0x4000 + offset];
-	}
-	else
-	{
-		return m_ROM[m_bank1 * 0x4000 + offset];
-	}
-}
-
-WRITE8_MEMBER(tnzs_state::tnzs_ramrom_bank_w)
-{
-	if (m_bank1<2)
-	{
-		m_bankedram[m_bank1 * 0x4000 + offset] = data;
-	}
-	else
-	{
-		// illegal write to ROM
-	}
-}
 
 
 READ8_MEMBER(tnzs_state::mcu_tnzs_r)
 {
 	UINT8 data;
 
-	data = upi41_master_r(m_mcu, offset & 1);
+	data = m_mcu->upi41_master_r(space, offset & 1);
 	space.device().execute().yield();
 
 //  logerror("PC %04x: read %02x from mcu $c00%01x\n", space.device().safe_pcbase(), data, offset);
@@ -59,7 +36,7 @@ WRITE8_MEMBER(tnzs_state::mcu_tnzs_w)
 {
 //  logerror("PC %04x: write %02x to mcu $c00%01x\n", space.device().safe_pcbase(), data, offset);
 
-	upi41_master_w(m_mcu, offset & 1, data);
+	m_mcu->upi41_master_w(space, offset & 1, data);
 }
 
 
@@ -536,7 +513,7 @@ DRIVER_INIT_MEMBER(tnzs_state,tnzs)
 {
 	m_mcu_type = MCU_TNZS;
 	/* we need to install a kludge to avoid problems with a bug in the original code */
-//  m_maincpu->space(AS_PROGRAM).install_legacy_write_handler(0xef10, 0xef10, FUNC(tnzs_sync_kludge_w));
+//  m_maincpu->space(AS_PROGRAM).install_write_handler(0xef10, 0xef10, write8_delegate(FUNC(tnzs_state::tnzs_sync_kludge_w), this));
 }
 
 DRIVER_INIT_MEMBER(tnzs_state,tnzsb)
@@ -544,7 +521,7 @@ DRIVER_INIT_MEMBER(tnzs_state,tnzsb)
 	m_mcu_type = MCU_NONE_TNZSB;
 
 	/* we need to install a kludge to avoid problems with a bug in the original code */
-//  m_maincpu->space(AS_PROGRAM).install_legacy_write_handler(0xef10, 0xef10, FUNC(tnzs_sync_kludge_w));
+//  m_maincpu->space(AS_PROGRAM).install_write_handler(0xef10, 0xef10, write8_delegate(FUNC(tnzs_state::tnzs_sync_kludge_w), this));
 }
 
 DRIVER_INIT_MEMBER(tnzs_state,kabukiz)
@@ -649,7 +626,6 @@ MACHINE_RESET_MEMBER(tnzs_state,tnzs)
 			break;
 	}
 
-	m_screenflip = 0;
 	m_kageki_csport_sel = 0;
 	m_input_select = 0;
 	m_mcu_readcredits = 0;  // this might belong to mcu_reset
@@ -658,39 +634,26 @@ MACHINE_RESET_MEMBER(tnzs_state,tnzs)
 
 MACHINE_RESET_MEMBER(tnzs_state,jpopnics)
 {
-	m_screenflip = 0;
 	m_mcu_type = -1;
 }
 
-void tnzs_state::tnzs_postload()
-{
-	membank("subbank")->set_entry(m_bank2);
-}
 
-
-MACHINE_START_MEMBER(tnzs_state,jpopnics)
+MACHINE_START_MEMBER(tnzs_state,tnzs_common)
 {
 	UINT8 *SUB = memregion("sub")->base();
-	m_ROM = memregion("maincpu")->base();
-	m_bankedram = auto_alloc_array(machine(), UINT8, 0x8000); // 2 banks of 0x4000
 
 	membank("subbank")->configure_entries(0, 4, &SUB[0x08000], 0x2000);
 	membank("subbank")->set_entry(m_bank2);
 
-	m_bank1 = 2;
 	m_bank2 = 0;
+	m_mainbank->set_bank(2);
 
-	save_pointer(NAME(m_bankedram), 0x8000);
-	save_item(NAME(m_screenflip));
-	save_item(NAME(m_bank1));
 	save_item(NAME(m_bank2));
-
-	machine().save().register_postload(save_prepost_delegate(FUNC(tnzs_state::tnzs_postload), this));
 }
 
 MACHINE_START_MEMBER(tnzs_state,tnzs)
 {
-	MACHINE_START_CALL_MEMBER( jpopnics );
+	MACHINE_START_CALL_MEMBER( tnzs_common );
 
 	save_item(NAME(m_kageki_csport_sel));
 	save_item(NAME(m_input_select));
@@ -719,7 +682,7 @@ WRITE8_MEMBER(tnzs_state::tnzs_ramrom_bankswitch_w)
 		m_subcpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 
 	/* bits 0-2 select RAM/ROM bank */
-	m_bank1 = data & 0x07;
+	m_mainbank->set_bank(data & 0x07);
 }
 
 WRITE8_MEMBER(tnzs_state::tnzs_bankswitch1_w)

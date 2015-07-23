@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Acho A. Tang,R. Belmont
 /*********************************************************
 
 Irem GA20 PCM Sound Chip
@@ -45,7 +47,7 @@ const device_type IREMGA20 = &device_creator<iremga20_device>;
 //-------------------------------------------------
 
 iremga20_device::iremga20_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, IREMGA20, "Irem GA20", tag, owner, clock),
+	: device_t(mconfig, IREMGA20, "Irem GA20", tag, owner, clock, "iremga20", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_rom(NULL),
 		m_rom_size(0),
@@ -80,6 +82,7 @@ void iremga20_device::device_start()
 		save_item(NAME(m_channel[i].size), i);
 		save_item(NAME(m_channel[i].start), i);
 		save_item(NAME(m_channel[i].pos), i);
+		save_item(NAME(m_channel[i].frac), i);
 		save_item(NAME(m_channel[i].end), i);
 		save_item(NAME(m_channel[i].volume), i);
 		save_item(NAME(m_channel[i].pan), i);

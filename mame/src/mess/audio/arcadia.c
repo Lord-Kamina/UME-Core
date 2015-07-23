@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:David Viens, Peter Trauner
 /***************************************************************************
 
   PeT mess@utanet.at
@@ -46,7 +48,7 @@ const device_type ARCADIA_SOUND = &device_creator<arcadia_sound_device>;
 //-------------------------------------------------
 
 arcadia_sound_device::arcadia_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, ARCADIA_SOUND, "Arcadia Custom Sound", tag, owner, clock),
+	: device_t(mconfig, ARCADIA_SOUND, "Arcadia Audio Custom", tag, owner, clock, "arcadia_sound", __FILE__),
 		device_sound_interface(mconfig, *this)
 {
 }
@@ -56,7 +58,7 @@ arcadia_sound_device::arcadia_sound_device(const machine_config &mconfig, const 
 //-------------------------------------------------
 void arcadia_sound_device::device_start()
 {
-	m_channel = machine().sound().stream_alloc(*this, 0, 1, UVI_PAL*OSAMP, this);
+	m_channel = machine().sound().stream_alloc(*this, 0, 1, UVI_PAL*OSAMP);
 	m_lfsr    = LFSR_INIT;
 	m_tval    = 1;
 	logerror("arcadia_sound start\n");

@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner, Dan Boris, Dirk Best, Robbbert
 /******************************************************************************
  PeT mess@utanet.at Nov 2000pia6821_device
 Updated by Dan Boris, 3/4/2007
@@ -34,8 +36,8 @@ Bugs
 static ADDRESS_MAP_START( aim65_mem, AS_PROGRAM, 8, aim65_state )
 	AM_RANGE( 0x1000, 0x9fff ) AM_NOP /* User available expansions */
 	AM_RANGE( 0xa000, 0xa00f ) AM_MIRROR(0x3f0) AM_DEVREADWRITE("via6522_1", via6522_device, read, write) // user via
-	AM_RANGE( 0xa400, 0xa47f ) AM_RAM /* RIOT RAM */
-	AM_RANGE( 0xa480, 0xa497 ) AM_DEVREADWRITE("riot", riot6532_device, read, write)
+	AM_RANGE( 0xa400, 0xa47f ) AM_DEVICE("riot", mos6532_t, ram_map)
+	AM_RANGE( 0xa480, 0xa497 ) AM_DEVICE("riot", mos6532_t, io_map)
 	AM_RANGE( 0xa498, 0xa7ff ) AM_NOP /* Not available */
 	AM_RANGE( 0xa800, 0xa80f ) AM_MIRROR(0x3f0) AM_DEVREADWRITE("via6522_0", via6522_device, read, write) // system via
 	AM_RANGE( 0xac00, 0xac03 ) AM_DEVREADWRITE("pia6821", pia6821_device, read, write)
@@ -139,202 +141,34 @@ INPUT_PORTS_END
 
 
 /***************************************************************************
-    DEVICE INTERFACES
-***************************************************************************/
-
-
-/* Riot interface Z33 */
-static const riot6532_interface aim65_riot_interface =
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(aim65_state, aim65_riot_b_r),
-	DEVCB_DRIVER_MEMBER(aim65_state, aim65_riot_a_w),
-	DEVCB_NULL,
-	DEVCB_CPU_INPUT_LINE("maincpu", M6502_IRQ_LINE)
-};
-
-/* system via interface Z32 */
-static const via6522_interface aim65_system_via =
-{
-	DEVCB_NULL, // in port A
-	DEVCB_DRIVER_MEMBER(aim65_state, aim65_pb_r), // in port B
-	DEVCB_NULL, // in CA1 printer ready?
-	DEVCB_NULL, // in CB1
-	DEVCB_NULL, // in CA2
-	DEVCB_NULL, // in CB2
-	DEVCB_NULL, // out Port A
-	DEVCB_DRIVER_MEMBER(aim65_state, aim65_pb_w), // out port B
-	DEVCB_NULL, // out CA1
-	DEVCB_NULL, // out CB1 printer start
-	DEVCB_NULL, // out CA2 cass control (H=in)
-	DEVCB_NULL, // out CB2 turn printer on
-	DEVCB_CPU_INPUT_LINE("maincpu", M6502_IRQ_LINE) //IRQ
-};
-
-/* user via interface Z1 */
-static const via6522_interface aim65_user_via =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_CPU_INPUT_LINE("maincpu", M6502_IRQ_LINE)
-};
-
-/* R6520 interface U1 */
-static const pia6821_interface aim65_pia_config =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(aim65_state, aim65_pia_a_w),
-	DEVCB_DRIVER_MEMBER(aim65_state, aim65_pia_b_w),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-// Deck 1 can play and record
-static const cassette_interface aim65_1_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_PLAY | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	NULL,
-	NULL
-};
-
-// Deck 2 can only record
-static const cassette_interface aim65_2_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_RECORD | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_MUTED),
-	NULL,
-	NULL
-};
-
-const dl1416_interface aim65_ds1_intf =
-{
-	DEVCB_DRIVER_MEMBER16(aim65_state, aim65_update_ds1)
-};
-
-const dl1416_interface aim65_ds2_intf =
-{
-	DEVCB_DRIVER_MEMBER16(aim65_state, aim65_update_ds2)
-};
-
-const dl1416_interface aim65_ds3_intf =
-{
-	DEVCB_DRIVER_MEMBER16(aim65_state, aim65_update_ds3)
-};
-
-const dl1416_interface aim65_ds4_intf =
-{
-	DEVCB_DRIVER_MEMBER16(aim65_state, aim65_update_ds4)
-};
-
-const dl1416_interface aim65_ds5_intf =
-{
-	DEVCB_DRIVER_MEMBER16(aim65_state, aim65_update_ds5)
-};
-
-/***************************************************************************
     MACHINE DRIVERS
 ***************************************************************************/
 
-struct aim_cart_range
+int aim65_state::load_cart(device_image_interface &image, generic_slot_device *slot, const char *slot_tag)
 {
-	const char *tag;
-	int offset;
-};
+	UINT32 size = slot->common_get_size(slot_tag);
 
-static const struct aim_cart_range aim_cart_table[] =
-{
-	{ ":z24",   0xd000 },
-	{ ":z25",   0xc000 },
-	{ ":z26",   0xb000 },
-	{ 0 }
-};
-
-DEVICE_IMAGE_LOAD_MEMBER( aim65_state, aim65_cart )
-{
-	UINT32 size;
-	UINT8 *temp_copy;
-	const struct aim_cart_range *aim_cart = &aim_cart_table[0], *this_cart;
-
-	/* First, determine where this cart has to be loaded */
-	while (aim_cart->tag)
+	if (size > 0x1000)
 	{
-		if (strcmp(aim_cart->tag, image.device().tag()) == 0)
-			break;
-
-		aim_cart++;
-	}
-
-	this_cart = aim_cart;
-
-	if (!this_cart->tag)
-	{
-		astring errmsg;
-		errmsg.printf("Tag '%s' could not be found", image.device().tag());
-		image.seterror(IMAGE_ERROR_UNSPECIFIED, errmsg.cstr());
+		image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unsupported cartridge size");
 		return IMAGE_INIT_FAIL;
 	}
 
-	if (image.software_entry() == NULL)
+	if (image.software_entry() != NULL && image.get_software_region(slot_tag) == NULL)
 	{
-		size = image.length();
-		temp_copy = auto_alloc_array(machine(), UINT8, size);
-
-		if (size > 0x1000)
-		{
-			image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unsupported cartridge size");
-			auto_free(machine(), temp_copy);
-			return IMAGE_INIT_FAIL;
-		}
-
-		if (image.fread(temp_copy, size) != size)
-		{
-			image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unable to fully read from file");
-			auto_free(machine(), temp_copy);
-			return IMAGE_INIT_FAIL;
-		}
-	}
-	else
-	{
-		if (image.get_software_region(this_cart->tag + 1) == NULL)
-		{
-			astring errmsg;
-			errmsg.printf("Attempted to load file with wrong extension\nCartslot '%s' only accepts files with '.%s' extension",
-							this_cart->tag, this_cart->tag + 1);
-			image.seterror(IMAGE_ERROR_UNSPECIFIED, errmsg.cstr());
-			return IMAGE_INIT_FAIL;
-		}
-
-		size = image.get_software_region_length(this_cart->tag + 1);
-		temp_copy = auto_alloc_array(machine(), UINT8, size);
-		memcpy(temp_copy, image.get_software_region(this_cart->tag + 1), size);
+		std::string errmsg;
+		strprintf(errmsg,"Attempted to load file with wrong extension\nSocket '%s' only accepts files with '.%s' extension",
+						slot_tag, slot_tag);
+		image.seterror(IMAGE_ERROR_UNSPECIFIED, errmsg.c_str());
+		return IMAGE_INIT_FAIL;
 	}
 
-	memcpy(memregion("maincpu")->base() + this_cart->offset, temp_copy, size);
-
-	auto_free(machine(), temp_copy);
+	slot->rom_alloc(size, GENERIC_ROM8_WIDTH, ENDIANNESS_LITTLE);
+	slot->common_load_rom(slot->get_rom_base(), size, slot_tag);
 
 	return IMAGE_INIT_PASS;
 }
+
 
 static MACHINE_CONFIG_START( aim65, aim65_state )
 	/* basic machine hardware */
@@ -345,11 +179,16 @@ static MACHINE_CONFIG_START( aim65, aim65_state )
 	MCFG_DEFAULT_LAYOUT(layout_aim65)
 
 	/* alpha-numeric display */
-	MCFG_DL1416T_ADD("ds1", aim65_ds1_intf)
-	MCFG_DL1416T_ADD("ds2", aim65_ds2_intf)
-	MCFG_DL1416T_ADD("ds3", aim65_ds3_intf)
-	MCFG_DL1416T_ADD("ds4", aim65_ds4_intf)
-	MCFG_DL1416T_ADD("ds5", aim65_ds5_intf)
+	MCFG_DEVICE_ADD("ds1", DL1416T, 0)
+	MCFG_DL1416_UPDATE_HANDLER(WRITE16(aim65_state, aim65_update_ds1))
+	MCFG_DEVICE_ADD("ds2", DL1416T, 0)
+	MCFG_DL1416_UPDATE_HANDLER(WRITE16(aim65_state, aim65_update_ds2))
+	MCFG_DEVICE_ADD("ds3", DL1416T, 0)
+	MCFG_DL1416_UPDATE_HANDLER(WRITE16(aim65_state, aim65_update_ds3))
+	MCFG_DEVICE_ADD("ds4", DL1416T, 0)
+	MCFG_DL1416_UPDATE_HANDLER(WRITE16(aim65_state, aim65_update_ds4))
+	MCFG_DEVICE_ADD("ds5", DL1416T, 0)
+	MCFG_DL1416_UPDATE_HANDLER(WRITE16(aim65_state, aim65_update_ds5))
 
 	/* Sound - wave sound only */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -357,31 +196,46 @@ static MACHINE_CONFIG_START( aim65, aim65_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* other devices */
-	MCFG_RIOT6532_ADD("riot", AIM65_CLOCK, aim65_riot_interface)
-	MCFG_VIA6522_ADD("via6522_0", 0, aim65_system_via)
-	MCFG_VIA6522_ADD("via6522_1", 0, aim65_user_via)
-	MCFG_PIA6821_ADD("pia6821", aim65_pia_config)
+	MCFG_DEVICE_ADD("riot", MOS6532n, AIM65_CLOCK)
+	MCFG_MOS6530n_OUT_PA_CB(WRITE8(aim65_state, aim65_riot_a_w))
+	MCFG_MOS6530n_IN_PB_CB(READ8(aim65_state, aim65_riot_b_r))
+	MCFG_MOS6530n_IRQ_CB(INPUTLINE("maincpu", M6502_IRQ_LINE))
 
-	MCFG_CASSETTE_ADD( "cassette", aim65_1_cassette_interface )
-	MCFG_CASSETTE_ADD( "cassette2", aim65_2_cassette_interface )
+	MCFG_DEVICE_ADD("via6522_0", VIA6522, 0)
+	MCFG_VIA6522_READPB_HANDLER(READ8(aim65_state, aim65_pb_r))
+	// in CA1 printer ready?
+	MCFG_VIA6522_WRITEPB_HANDLER(WRITE8(aim65_state, aim65_pb_w))
+	// out CB1 printer start
+	// out CA2 cass control (H=in)
+	// out CB2 turn printer on
+	MCFG_VIA6522_IRQ_HANDLER(DEVWRITELINE("maincpu", m6502_device, irq_line))
 
-	MCFG_CARTSLOT_ADD("z26")
-	MCFG_CARTSLOT_EXTENSION_LIST("z26")
-	MCFG_CARTSLOT_INTERFACE("aim65_cart")
-	MCFG_CARTSLOT_LOAD(aim65_state, aim65_cart)
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_DEVICE_ADD("via6522_1", VIA6522, 0)
+	MCFG_VIA6522_IRQ_HANDLER(DEVWRITELINE("maincpu", m6502_device, irq_line))
 
-	MCFG_CARTSLOT_ADD("z25")
-	MCFG_CARTSLOT_EXTENSION_LIST("z25")
-	MCFG_CARTSLOT_INTERFACE("aim65_cart")
-	MCFG_CARTSLOT_LOAD(aim65_state, aim65_cart)
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_DEVICE_ADD("pia6821", PIA6821, 0)
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(aim65_state, aim65_pia_a_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(aim65_state, aim65_pia_b_w))
 
-	MCFG_CARTSLOT_ADD("z24")
-	MCFG_CARTSLOT_EXTENSION_LIST("z24")
-	MCFG_CARTSLOT_INTERFACE("aim65_cart")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_LOAD(aim65_state, aim65_cart)
+	// Deck 1 can play and record
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_PLAY | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+
+	// Deck 2 can only record
+	MCFG_CASSETTE_ADD( "cassette2" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_RECORD | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_MUTED)
+
+	MCFG_GENERIC_SOCKET_ADD("z26", generic_plain_slot, "aim65_cart")
+	MCFG_GENERIC_EXTENSIONS("z26")
+	MCFG_GENERIC_LOAD(aim65_state, z26_load)
+
+	MCFG_GENERIC_SOCKET_ADD("z25", generic_plain_slot, "aim65_cart")
+	MCFG_GENERIC_EXTENSIONS("z25")
+	MCFG_GENERIC_LOAD(aim65_state, z25_load)
+
+	MCFG_GENERIC_SOCKET_ADD("z24", generic_plain_slot, "aim65_cart")
+	MCFG_GENERIC_EXTENSIONS("z24")
+	MCFG_GENERIC_LOAD(aim65_state, z24_load)
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)

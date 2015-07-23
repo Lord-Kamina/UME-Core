@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     32031ops.c
 
     TMS32031/2 emulator
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -84,8 +55,8 @@
 #define OR_V_ADD(a,b,r)     do { UINT32 temp = ((((a) ^ (r)) & ((b) ^ (r))) >> 30) & VFLAG; IREG(TMR_ST) |= temp | (temp << 4); } while (0)
 #define OR_C_SUB(a,b,r)     do { IREG(TMR_ST) |= ((UINT32)(b) > (UINT32)(a)); } while (0)
 #define OR_C_ADD(a,b,r)     do { IREG(TMR_ST) |= ((UINT32)(a) > (UINT32)(r)); } while (0)
-#define OR_C_SBB(a,b,c)     do { INT64 temp = (UINT32)(a) - (UINT32)(b) - (UINT32)(c); IREG(TMR_ST) |= (temp < 0); } while (0)
-#define OR_C_ADC(a,b,c)     do { UINT64 temp = (UINT32)(a) + (UINT32)(b) + (UINT32)(c); IREG(TMR_ST) |= (temp > 0xffffffffUL); } while (0)
+#define OR_C_SBB(a,b,c)     do { INT64 temp = (INT64)(a) - (UINT32)(b) - (UINT32)(c); IREG(TMR_ST) |= (temp < 0); } while (0)
+#define OR_C_ADC(a,b,c)     do { UINT64 temp = (UINT64)(a) + (UINT32)(b) + (UINT32)(c); IREG(TMR_ST) |= (temp > 0xffffffff); } while (0)
 
 #define OVM()               (IREG(TMR_ST) & OVMFLAG)
 
@@ -120,8 +91,7 @@ inline void tms3203x_device::execute_one()
 	m_icount -= 2;  // 2 clocks per cycle
 	m_pc++;
 #if (TMS_3203X_LOG_OPCODE_USAGE)
-	if (machine.primary_screen->frame_number() == 2003)
-		m_hits[op >> 21]++;
+	m_hits[op >> 21]++;
 #endif
 	(this->*s_tms32031ops[op >> 21])(op);
 }
@@ -138,10 +108,10 @@ void tms3203x_device::update_special(int dreg)
 	}
 	else if (dreg == TMR_IOF)
 	{
-		if (m_xf0_w != NULL && IREG(TMR_IOF) & 0x002)
-			(*m_xf0_w)(*this, (IREG(TMR_IOF) >> 2) & 1);
-		if (m_xf1_w != NULL && IREG(TMR_IOF) & 0x020)
-			(*m_xf1_w)(*this, (IREG(TMR_IOF) >> 6) & 1);
+		if (IREG(TMR_IOF) & 0x002)
+			m_xf0_cb((offs_t)0, (IREG(TMR_IOF) >> 2) & 1);
+		if (IREG(TMR_IOF) & 0x020)
+			m_xf1_cb((offs_t)0, (IREG(TMR_IOF) >> 6) & 1);
 	}
 	else if (dreg == TMR_ST || dreg == TMR_IF || dreg == TMR_IE)
 		check_irqs();
@@ -3162,21 +3132,17 @@ void tms3203x_device::xor_imm(UINT32 op)
 void tms3203x_device::iack_dir(UINT32 op)
 {
 	offs_t addr = DIRECT(op);
-	if (m_iack_w)
-		(*m_iack_w)(*this, ASSERT_LINE, addr);
+	m_iack_cb(addr, ASSERT_LINE);
 	RMEM(addr);
-	if (m_iack_w)
-		(*m_iack_w)(*this, CLEAR_LINE, addr);
+	m_iack_cb(addr, CLEAR_LINE);
 }
 
 void tms3203x_device::iack_ind(UINT32 op)
 {
 	offs_t addr = INDIRECT_D(op, op >> 8);
-	if (m_iack_w)
-		(*m_iack_w)(*this, ASSERT_LINE, addr);
+	m_iack_cb(addr, ASSERT_LINE);
 	RMEM(addr);
-	if (m_iack_w)
-		(*m_iack_w)(*this, CLEAR_LINE, addr);
+	m_iack_cb(addr, CLEAR_LINE);
 }
 
 /*-----------------------------------------------------*/

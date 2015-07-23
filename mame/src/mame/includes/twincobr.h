@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Quench
 /***************************************************************************
         Twincobr/Flying Shark/Wardner  game hardware from 1986-1987
         -----------------------------------------------------------
@@ -5,7 +7,7 @@
 
 #include "video/mc6845.h"
 #include "video/bufsprite.h"
-
+#include "video/toaplan_scu.h"
 
 class twincobr_state : public driver_device
 {
@@ -16,18 +18,20 @@ public:
 		m_spriteram8(*this, "spriteram8"),
 		m_spriteram16(*this, "spriteram16"),
 		m_maincpu(*this, "maincpu"),
-		m_audiocpu(*this, "audiocpu"),
-		m_dsp(*this, "dsp") { }
+		m_dsp(*this, "dsp"),
+		m_spritegen(*this, "scu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette")
+	{ }
 
 	optional_shared_ptr<UINT8> m_sharedram;
 	optional_device<buffered_spriteram8_device> m_spriteram8;
 	optional_device<buffered_spriteram16_device> m_spriteram16;
 
 	int m_toaplan_main_cpu;
-	int m_wardner_membank;
 	INT32 m_fg_rom_bank;
 	INT32 m_bg_ram_bank;
-	INT32 m_wardner_sprite_hack;
 	int m_intenable;
 	int m_dsp_on;
 	int m_dsp_BIO;
@@ -50,10 +54,7 @@ public:
 	INT32 m_txoffs;
 	INT32 m_fgoffs;
 	INT32 m_bgoffs;
-	INT32 m_scroll_x;
-	INT32 m_scroll_y;
 	INT32 m_display_on;
-	INT32 m_flip_screen;
 	tilemap_t *m_bg_tilemap;
 	tilemap_t *m_fg_tilemap;
 	tilemap_t *m_tx_tilemap;
@@ -105,34 +106,24 @@ public:
 	TILE_GET_INFO_MEMBER(get_tx_tile_info);
 	DECLARE_MACHINE_RESET(twincobr);
 	DECLARE_VIDEO_START(toaplan0);
-	DECLARE_MACHINE_RESET(wardner);
+	void copy_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, int priority);
 	UINT32 screen_update_toaplan0(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(twincobr_interrupt);
 	INTERRUPT_GEN_MEMBER(wardner_interrupt);
-	void twincobr_restore_screen();
 	void twincobr_restore_dsp();
 	void twincobr_create_tilemaps();
 	void twincobr_display(int enable);
 	void twincobr_flipscreen(int flip);
-	void wardner_sprite_priority_hack();
 	void twincobr_log_vram();
-	void draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, int priority );
+	void draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void twincobr_dsp(int enable);
 	void toaplan0_control_w(int offset, int data);
 	void toaplan0_coin_dsp_w(address_space &space, int offset, int data);
 	void twincobr_driver_savestate();
-	DECLARE_WRITE_LINE_MEMBER(irqhandler);
 	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_audiocpu;
 	required_device<cpu_device> m_dsp;
+	required_device<toaplan_scu_device> m_spritegen;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 };
-
-
-/*----------- defined in machine/twincobr.c -----------*/
-extern void twincobr_driver_savestate(running_machine &machine);
-
-/*----------- defined in video/twincobr.c -----------*/
-
-extern const mc6845_interface twincobr_mc6845_intf;
-extern void twincobr_flipscreen(running_machine &machine, int flip);
-extern void twincobr_display(running_machine &machine, int enable);

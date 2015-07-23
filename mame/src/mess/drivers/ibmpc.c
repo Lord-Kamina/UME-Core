@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol, Miodrag Milanovic
 /***************************************************************************
 
     drivers/pc.c
@@ -256,25 +258,10 @@ XT U44 IBM.bin: IBM 5160 PC/XT Bank-selection decoding ROM (256x4 bit). Not mapp
 #include "emu.h"
 #include "cpu/i86/i86.h"
 #include "machine/ram.h"
-#include "machine/isa.h"
-#include "machine/isa_adlib.h"
-#include "machine/isa_com.h"
-#include "machine/isa_fdc.h"
-#include "machine/isa_finalchs.h"
-#include "machine/isa_gblaster.h"
-#include "machine/isa_hdc.h"
-#include "machine/isa_sblaster.h"
-#include "machine/isa_ide8.h"
-#include "machine/3c503.h"
-#include "video/isa_cga.h"
-#include "video/isa_ega.h"
-#include "video/isa_mda.h"
-#include "video/isa_svga_tseng.h"
-#include "machine/ne1000.h"
-#include "machine/isa_mpu401.h"
-#include "machine/isa_ibm_mfc.h"
+#include "bus/isa/isa.h"
+#include "bus/isa/isa_cards.h"
 #include "machine/pc_lpt.h"
-#include "machine/pc_keyboards.h"
+#include "bus/pc_kbd/keyboards.h"
 #include "includes/genpc.h"
 
 class ibmpc_state : public driver_device
@@ -304,8 +291,6 @@ ADDRESS_MAP_END
 static INPUT_PORTS_START( ibm5150 )
 INPUT_PORTS_END
 
-static const unsigned i86_address_mask = 0x000fffff;
-
 static DEVICE_INPUT_DEFAULTS_START(cga)
 	DEVICE_INPUT_DEFAULTS("DSW0",0x30, 0x20)
 DEVICE_INPUT_DEFAULTS_END
@@ -314,43 +299,22 @@ DEVICE_INPUT_DEFAULTS_END
 //  DEVICE_INPUT_DEFAULTS("DSW0",0x30, 0x00)
 //DEVICE_INPUT_DEFAULTS_END
 
-static SLOT_INTERFACE_START(ibm_isa8_cards)
-	SLOT_INTERFACE("cga", ISA8_CGA)
-	SLOT_INTERFACE("ega", ISA8_EGA)
-	SLOT_INTERFACE("mda", ISA8_MDA)
-	SLOT_INTERFACE("hercules", ISA8_HERCULES)
-	SLOT_INTERFACE("svga_et4k", ISA8_SVGA_ET4K)
-	SLOT_INTERFACE("com", ISA8_COM)
-	SLOT_INTERFACE("fdc", ISA8_FDC_XT)
-	SLOT_INTERFACE("finalchs", ISA8_FINALCHS)
-	SLOT_INTERFACE("hdc", ISA8_HDC)
-	SLOT_INTERFACE("adlib", ISA8_ADLIB)
-	SLOT_INTERFACE("gblaster", ISA8_GAME_BLASTER)
-	SLOT_INTERFACE("sblaster1_0", ISA8_SOUND_BLASTER_1_0)
-	SLOT_INTERFACE("sblaster1_5", ISA8_SOUND_BLASTER_1_5)
-	SLOT_INTERFACE("ne1000", NE1000)
-	SLOT_INTERFACE("3c503", EL2_3C503)
-	SLOT_INTERFACE("mpu401", ISA8_MPU401)
-	SLOT_INTERFACE("lpt", ISA8_LPT)
-	SLOT_INTERFACE("ibm_mfc", ISA8_IBM_MFC)
-	SLOT_INTERFACE("isa_ide8", ISA8_IDE)
-SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_START( ibm5150, ibmpc_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", I8088, XTAL_14_31818MHz/3)
 	MCFG_CPU_PROGRAM_MAP(pc8_map)
 	MCFG_CPU_IO_MAP(pc8_io)
-	MCFG_CPU_CONFIG(i86_address_mask)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("mb:pic8259", pic8259_device, inta_cb)
 
 	MCFG_IBM5150_MOTHERBOARD_ADD("mb","maincpu")
 	MCFG_DEVICE_INPUT_DEFAULTS(cga)
 
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa1", ibm_isa8_cards, "cga", false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa2", ibm_isa8_cards, "com", false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa3", ibm_isa8_cards, "fdc", false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa4", ibm_isa8_cards, "hdc", false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa5", ibm_isa8_cards, NULL, false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa1", pc_isa8_cards, "cga", false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa2", pc_isa8_cards, "com", false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa3", pc_isa8_cards, "fdc_xt", false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa4", pc_isa8_cards, "hdc", false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa5", pc_isa8_cards, NULL, false)
 
 	/* keyboard */
 	MCFG_PC_KBDC_SLOT_ADD("mb:pc_kbdc", "kbd", pc_xt_keyboards, STR_KBD_KEYTRONIC_PC3270)
@@ -361,6 +325,7 @@ static MACHINE_CONFIG_START( ibm5150, ibmpc_state )
 
 	/* software lists */
 	MCFG_SOFTWARE_LIST_ADD("disk_list","ibm5150")
+	MCFG_SOFTWARE_LIST_ADD("cass_list","ibm5150_cass")
 MACHINE_CONFIG_END
 
 
@@ -376,26 +341,30 @@ static MACHINE_CONFIG_START( ibm5160, ibmpc_state )
 	MCFG_CPU_ADD("maincpu", I8088, XTAL_14_31818MHz/3)
 	MCFG_CPU_PROGRAM_MAP(pc8_map)
 	MCFG_CPU_IO_MAP(pc8_io)
-	MCFG_CPU_CONFIG(i86_address_mask)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("mb:pic8259", pic8259_device, inta_cb)
 
 	MCFG_IBM5160_MOTHERBOARD_ADD("mb","maincpu")
 	MCFG_DEVICE_INPUT_DEFAULTS(cga)
 
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa1", ibm_isa8_cards, "cga", false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa2", ibm_isa8_cards, "com", false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa3", ibm_isa8_cards, "fdc", false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa4", ibm_isa8_cards, "hdc", false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa5", ibm_isa8_cards, NULL, false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa6", ibm_isa8_cards, NULL, false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa7", ibm_isa8_cards, NULL, false)
-	MCFG_ISA8_SLOT_ADD("mb:isa", "isa8", ibm_isa8_cards, NULL, false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa1", pc_isa8_cards, "cga", false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa2", pc_isa8_cards, "com", false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa3", pc_isa8_cards, "fdc_xt", false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa4", pc_isa8_cards, "hdc", false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa5", pc_isa8_cards, NULL, false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa6", pc_isa8_cards, NULL, false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa7", pc_isa8_cards, NULL, false)
+	MCFG_ISA8_SLOT_ADD("mb:isa", "isa8", pc_isa8_cards, NULL, false)
 
 	/* keyboard */
-	MCFG_PC_KBDC_SLOT_ADD("mb:pc_kbdc", "kbd", pc_xt_keyboards, STR_KBD_KEYTRONIC_PC3270)
+	MCFG_PC_KBDC_SLOT_ADD("mb:pc_kbdc", "kbd", pc_xt_keyboards, STR_KBD_IBM_PC_XT_83)
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("640K")
+
+	/* software lists */
+	MCFG_SOFTWARE_LIST_ADD("pc_disk_list","ibm5150")
+	MCFG_SOFTWARE_LIST_ADD("xt_disk_list","ibm5160_flop")
 MACHINE_CONFIG_END
 
 
@@ -600,9 +569,9 @@ ROM_END
 ***************************************************************************/
 
 /*     YEAR     NAME        PARENT      COMPAT  MACHINE     INPUT       INIT        COMPANY     FULLNAME */
-COMP(  1981,    ibm5150,    0,          0,      ibm5150,    ibm5150, driver_device, 0,    "International Business Machines",  "IBM PC 5150" , GAME_NO_SOUND)
-COMP(  1982,    ibm5155,    ibm5150,    0,      ibm5150,    ibm5150, driver_device, 0,    "International Business Machines",  "IBM PC 5155" , GAME_NO_SOUND)
-COMP(  1985,    ibm5140,    ibm5150,    0,      ibm5140,    ibm5150, driver_device, 0,    "International Business Machines",  "IBM PC 5140 Convertible" , GAME_NOT_WORKING | GAME_NO_SOUND)
+COMP(  1981,    ibm5150,    0,          0,      ibm5150,    ibm5150, driver_device, 0,    "International Business Machines",  "IBM PC 5150" , 0)
+COMP(  1982,    ibm5155,    ibm5150,    0,      ibm5150,    ibm5150, driver_device, 0,    "International Business Machines",  "IBM PC 5155" , 0)
+COMP(  1985,    ibm5140,    ibm5150,    0,      ibm5140,    ibm5150, driver_device, 0,    "International Business Machines",  "IBM PC 5140 Convertible" , GAME_NOT_WORKING)
 
 // xt class (pc but 8086)
-COMP(  1982,    ibm5160,    ibm5150,    0,      ibm5160,    ibm5150, driver_device, 0,    "International Business Machines",  "IBM XT 5160" , GAME_NO_SOUND)
+COMP(  1982,    ibm5160,    ibm5150,    0,      ibm5160,    ibm5150, driver_device, 0,    "International Business Machines",  "IBM XT 5160" , 0)

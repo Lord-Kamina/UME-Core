@@ -1,11 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, Miodrag Milanovic
 /***************************************************************************
 
     image.h
 
     Core image interface functions and definitions.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 ***************************************************************************/
 
@@ -20,11 +19,12 @@
 
 void image_init(running_machine &machine);
 void image_postdevice_init(running_machine &machine);
+std::string &image_mandatory_scan(running_machine &machine, std::string &mandatory);
 
 extern struct io_procs image_ioprocs;
 
 void image_battery_load_by_name(emu_options &options, const char *filename, void *buffer, int length, int fill);
+void image_battery_load_by_name(emu_options &options, const char *filename, void *buffer, int length, void *def_buffer);
 void image_battery_save_by_name(emu_options &options, const char *filename, const void *buffer, int length);
 
-astring &image_info_astring(running_machine &machine, astring &string);
 #endif /* __IMAGE_H__ */

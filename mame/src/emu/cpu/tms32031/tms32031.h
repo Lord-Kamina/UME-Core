@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     tms32031.h
 
     TMS32031/2 emulator
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -119,37 +90,26 @@ enum
 //  INTERFACE CONFIGURATION MACROS
 //**************************************************************************
 
-#define MCFG_TMS3203X_CONFIG(_config) \
-	tms3203x_device::static_set_config(*device, _config);
+#define MCFG_TMS3203X_MCBL(_mode) \
+	tms3203x_device::set_mcbl_mode(*device, _mode);
+
+#define MCFG_TMS3203X_XF0_CB(_devcb) \
+	devcb = &tms3203x_device::set_xf0_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_TMS3203X_XF1_CB(_devcb) \
+	devcb = &tms3203x_device::set_xf1_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_TMS3203X_IACK_CB(_devcb) \
+	devcb = &tms3203x_device::set_iack_callback(*device, DEVCB_##_devcb);
 
 
 //**************************************************************************
 //  TYPE DEFINITIONS
 //**************************************************************************
 
-class tms3203x_device;
-
-// I/O callback types
-typedef void (*tms3203x_xf_func)(tms3203x_device &device, UINT8 val);
-typedef void (*tms3203x_iack_func)(tms3203x_device &device, UINT8 val, offs_t address);
-
-
-// ======================> tms3203x_config
-
-struct tms3203x_config
-{
-	bool                m_mcbl_mode;
-	tms3203x_xf_func    m_xf0_w;
-	tms3203x_xf_func    m_xf1_w;
-	tms3203x_iack_func  m_iack_w;
-};
-
-
-
 // ======================> tms3203x_device
 
-class tms3203x_device : public cpu_device,
-						public tms3203x_config
+class tms3203x_device : public cpu_device
 {
 	struct tmsreg
 	{
@@ -179,7 +139,7 @@ protected:
 	enum
 	{
 		CHIP_TYPE_TMS32031,
-		CHIP_TYPE_TMS32032,
+		CHIP_TYPE_TMS32032
 	};
 
 	// construction/destruction
@@ -188,7 +148,10 @@ protected:
 
 public:
 	// inline configuration helpers
-	static void static_set_config(device_t &device, const tms3203x_config &config);
+	static void set_mcbl_mode(device_t &device, bool mode) { downcast<tms3203x_device &>(device).m_mcbl_mode = mode; }
+	template<class _Object> static devcb_base &set_xf0_callback(device_t &device, _Object object) { return downcast<tms3203x_device &>(device).m_xf0_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_xf1_callback(device_t &device, _Object object) { return downcast<tms3203x_device &>(device).m_xf1_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_iack_callback(device_t &device, _Object object) { return downcast<tms3203x_device &>(device).m_iack_cb.set_callback(object); }
 
 	// public interfaces
 	static float fp_to_float(UINT32 floatdata);
@@ -216,7 +179,7 @@ protected:
 	// device_state_interface overrides
 	virtual void state_import(const device_state_entry &entry);
 	virtual void state_export(const device_state_entry &entry);
-	virtual void state_string_export(const device_state_entry &entry, astring &string);
+	virtual void state_string_export(const device_state_entry &entry, std::string &str);
 
 	// device_disasm_interface overrides
 	virtual UINT32 disasm_min_opcode_bytes() const;
@@ -804,10 +767,14 @@ protected:
 	int                 m_icount;
 
 	UINT32              m_iotemp;
-	device_irq_acknowledge_callback m_irq_callback;
 	address_space *     m_program;
 	direct_read_data *  m_direct;
 	UINT32 *            m_bootrom;
+
+	bool                m_mcbl_mode;
+	devcb_write8        m_xf0_cb;
+	devcb_write8        m_xf1_cb;
+	devcb_write8        m_iack_cb;
 
 	// tables
 	static void (tms3203x_device::*const s_tms32031ops[])(UINT32 op);

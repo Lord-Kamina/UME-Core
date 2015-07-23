@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
     main.c
@@ -13,8 +15,8 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <time.h>
-#include <assert.h>
 #include <stdarg.h>
+#include <assert.h>
 
 #include "corestr.h"
 
@@ -31,10 +33,18 @@
 #include "formats/dsk_dsk.h"
 
 #include "formats/d88_dsk.h"
+#include "formats/imd_dsk.h"
+#include "formats/td0_dsk.h"
+#include "formats/cqm_dsk.h"
 #include "formats/pc_dsk.h"
+#include "formats/naslite_dsk.h"
 
 #include "formats/ap_dsk35.h"
 #include "formats/ap2_dsk.h"
+
+#include "formats/oric_dsk.h"
+
+#include "formats/applix_dsk.h"
 
 static floppy_format_type floppy_formats[] = {
 	FLOPPY_MFI_FORMAT,
@@ -51,22 +61,31 @@ static floppy_format_type floppy_formats[] = {
 	FLOPPY_DSK_FORMAT,
 
 	FLOPPY_D88_FORMAT,
+	FLOPPY_IMD_FORMAT,
+	FLOPPY_TD0_FORMAT,
+	FLOPPY_CQM_FORMAT,
 	FLOPPY_PC_FORMAT,
+	FLOPPY_NASLITE_FORMAT,
 
 	FLOPPY_DC42_FORMAT,
 	FLOPPY_A216S_FORMAT,
 	FLOPPY_RWTS18_FORMAT,
+	FLOPPY_EDD_FORMAT,
+
+	FLOPPY_ORIC_DSK_FORMAT,
+
+	FLOPPY_APPLIX_FORMAT,
 };
 
-void CLIB_DECL logerror(const char *format, ...)
+void CLIB_DECL ATTR_PRINTF(1,2) logerror(const char *format, ...)
 {
 	va_list arg;
 	va_start(arg, format);
-	printf(format, arg);
+	vprintf(format, arg);
 	va_end(arg);
 }
 
-enum { FORMAT_COUNT = sizeof(floppy_formats)/sizeof(floppy_formats[0]) };
+enum { FORMAT_COUNT = ARRAY_LENGTH(floppy_formats) };
 
 static floppy_image_format_t *formats[FORMAT_COUNT];
 

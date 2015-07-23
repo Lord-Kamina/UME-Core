@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Balfour
 /***************************************************************************
 
     Irem Red Alert hardware
@@ -14,7 +16,6 @@
 #include "cpu/i8085/i8085.h"
 #include "machine/6821pia.h"
 #include "sound/ay8910.h"
-#include "sound/hc55516.h"
 #include "includes/redalert.h"
 
 
@@ -111,18 +112,6 @@ WRITE8_MEMBER(redalert_state::redalert_ay8910_latch_2_w)
 	m_ay8910_latch_2 = data;
 }
 
-
-static const ay8910_interface redalert_ay8910_interface =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(driver_device, soundlatch_byte_r),
-	DEVCB_NULL,     /* port A/B read */
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(redalert_state,redalert_analog_w)   /* port A/B write */
-};
-
-
 static ADDRESS_MAP_START( redalert_audio_map, AS_PROGRAM, 8, redalert_state )
 	ADDRESS_MAP_GLOBAL_MASK(0x7fff)
 	AM_RANGE(0x0000, 0x03ff) AM_MIRROR(0x0c00) AM_RAM
@@ -138,11 +127,10 @@ ADDRESS_MAP_END
  *
  *************************************/
 
-static SOUND_START( redalert_audio )
+SOUND_START_MEMBER(redalert_state,redalert)
 {
-	redalert_state *state = machine.driver_data<redalert_state>();
-	state->save_item(NAME(state->m_ay8910_latch_1));
-	state->save_item(NAME(state->m_ay8910_latch_2));
+	save_item(NAME(m_ay8910_latch_1));
+	save_item(NAME(m_ay8910_latch_2));
 }
 
 
@@ -161,23 +149,14 @@ WRITE8_MEMBER(redalert_state::redalert_voice_command_w)
 
 WRITE_LINE_MEMBER(redalert_state::sod_callback)
 {
-	hc55516_digit_w(machine().device("cvsd"), state);
+	m_cvsd->digit_w(state);
 }
 
 
 READ_LINE_MEMBER(redalert_state::sid_callback)
 {
-	return hc55516_clock_state_r(machine().device("cvsd"));
+	return m_cvsd->clock_state_r();
 }
-
-
-static I8085_CONFIG( redalert_voice_i8085_config )
-{
-	DEVCB_NULL,                 /* STATUS changed callback */
-	DEVCB_NULL,                 /* INTE changed callback */
-	DEVCB_DRIVER_LINE_MEMBER(redalert_state,sid_callback),  /* SID changed callback (8085A only) */
-	DEVCB_DRIVER_LINE_MEMBER(redalert_state,sod_callback)   /* SOD changed callback (8085A only) */
-};
 
 
 static ADDRESS_MAP_START( redalert_voice_map, AS_PROGRAM, 8, redalert_state )
@@ -186,19 +165,6 @@ static ADDRESS_MAP_START( redalert_voice_map, AS_PROGRAM, 8, redalert_state )
 	AM_RANGE(0x8000, 0x83ff) AM_MIRROR(0x3c00) AM_RAM
 	AM_RANGE(0xc000, 0xc000) AM_MIRROR(0x3fff) AM_READ(soundlatch2_byte_r) AM_WRITENOP
 ADDRESS_MAP_END
-
-
-
-/*************************************
- *
- *  Red Alert audio start
- *
- *************************************/
-
-static SOUND_START( redalert )
-{
-	SOUND_START_CALL(redalert_audio);
-}
 
 
 
@@ -215,7 +181,8 @@ static MACHINE_CONFIG_FRAGMENT( redalert_audio_m37b )
 	MCFG_CPU_PERIODIC_INT_DRIVER(redalert_state, irq0_line_hold,  REDALERT_AUDIO_CPU_IRQ_FREQ)
 
 	MCFG_SOUND_ADD("aysnd", AY8910, REDALERT_AY8910_CLOCK)
-	MCFG_SOUND_CONFIG(redalert_ay8910_interface)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(driver_device, soundlatch_byte_r))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(redalert_state, redalert_analog_w))
 	MCFG_SOUND_ROUTE(0, "mono", 0.50)
 	MCFG_SOUND_ROUTE(1, "mono", 0.50)
 	/* channel C is used a noise source and is not connected to a speaker */
@@ -231,8 +198,9 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_FRAGMENT( redalert_audio_voice )
 
 	MCFG_CPU_ADD("voice", I8085A, REDALERT_VOICE_CPU_CLOCK)
-	MCFG_CPU_CONFIG(redalert_voice_i8085_config)
 	MCFG_CPU_PROGRAM_MAP(redalert_voice_map)
+	MCFG_I8085A_SID(READLINE(redalert_state,sid_callback))
+	MCFG_I8085A_SOD(WRITELINE(redalert_state,sod_callback))
 
 	MCFG_SOUND_ADD("cvsd", HC55516, REDALERT_HC55516_CLOCK)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
@@ -251,7 +219,7 @@ MACHINE_CONFIG_FRAGMENT( redalert_audio )
 	MCFG_FRAGMENT_ADD( redalert_audio_m37b )
 	MCFG_FRAGMENT_ADD( redalert_audio_voice )
 
-	MCFG_SOUND_START( redalert )
+	MCFG_SOUND_START_OVERRIDE( redalert_state, redalert )
 
 MACHINE_CONFIG_END
 
@@ -267,7 +235,7 @@ MACHINE_CONFIG_FRAGMENT( ww3_audio )
 
 	MCFG_FRAGMENT_ADD( redalert_audio_m37b )
 
-	MCFG_SOUND_START( redalert_audio )
+	MCFG_SOUND_START_OVERRIDE( redalert_state, redalert )
 
 MACHINE_CONFIG_END
 
@@ -347,46 +315,16 @@ static ADDRESS_MAP_START( demoneye_audio_map, AS_PROGRAM, 8, redalert_state )
 ADDRESS_MAP_END
 
 
-static const ay8910_interface demoneye_ay8910_interface =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(driver_device, soundlatch_byte_r),
-	DEVCB_NULL, /* port A/B read */
-	DEVCB_NULL,
-	DEVCB_NULL              /* port A/B write */
-};
-
-
-static const pia6821_interface demoneye_pia_intf =
-{
-	DEVCB_DRIVER_MEMBER(redalert_state,demoneye_ay8910_latch_2_r),      /* port A in */
-	DEVCB_NULL,     /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(redalert_state,demoneye_ay8910_data_w),         /* port A out */
-	DEVCB_DRIVER_MEMBER(redalert_state,demoneye_ay8910_latch_1_w),      /* port B out */
-	DEVCB_NULL,     /* line CA2 out */
-	DEVCB_NULL,     /* port CB2 out */
-	DEVCB_NULL,     /* IRQA */
-	DEVCB_NULL      /* IRQB */
-};
-
-
-
 /*************************************
  *
  *  Demoneye-X audio start
  *
  *************************************/
 
-static SOUND_START( demoneye )
+SOUND_START_MEMBER( redalert_state, demoneye )
 {
-	redalert_state *state = machine.driver_data<redalert_state>();
-	state->save_item(NAME(state->m_ay8910_latch_1));
-	state->save_item(NAME(state->m_ay8910_latch_2));
+	save_item(NAME(m_ay8910_latch_1));
+	save_item(NAME(m_ay8910_latch_2));
 }
 
 
@@ -403,9 +341,12 @@ MACHINE_CONFIG_FRAGMENT( demoneye_audio )
 	MCFG_CPU_PROGRAM_MAP(demoneye_audio_map)
 	MCFG_CPU_PERIODIC_INT_DRIVER(redalert_state, irq0_line_hold,  REDALERT_AUDIO_CPU_IRQ_FREQ)  /* guess */
 
-	MCFG_PIA6821_ADD("sndpia", demoneye_pia_intf)
+	MCFG_DEVICE_ADD("sndpia", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(redalert_state, demoneye_ay8910_latch_2_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(redalert_state, demoneye_ay8910_data_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(redalert_state, demoneye_ay8910_latch_1_w))
 
-	MCFG_SOUND_START( demoneye )
+	MCFG_SOUND_START_OVERRIDE( redalert_state, demoneye )
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
@@ -413,6 +354,6 @@ MACHINE_CONFIG_FRAGMENT( demoneye_audio )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
 	MCFG_SOUND_ADD("ay2", AY8910, DEMONEYE_AY8910_CLOCK)
-	MCFG_SOUND_CONFIG(demoneye_ay8910_interface)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(driver_device, soundlatch_byte_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END

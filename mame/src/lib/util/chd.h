@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     chd.h
 
     MAME Compressed Hunks of Data file format
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -44,7 +15,8 @@
 
 #include "osdcore.h"
 #include "coretmpl.h"
-#include "astring.h"
+#include "corestr.h"
+#include <string>
 #include "bitmap.h"
 #include "corefile.h"
 #include "hashing.h"
@@ -254,7 +226,8 @@ const chd_metadata_tag CDROM_TRACK_METADATA_TAG = CHD_MAKE_TAG('C','H','T','R');
 extern const char *CDROM_TRACK_METADATA_FORMAT;
 const chd_metadata_tag CDROM_TRACK_METADATA2_TAG = CHD_MAKE_TAG('C','H','T','2');
 extern const char *CDROM_TRACK_METADATA2_FORMAT;
-const chd_metadata_tag GDROM_TRACK_METADATA_TAG = CHD_MAKE_TAG('C','H','G','T');
+const chd_metadata_tag GDROM_OLD_METADATA_TAG = CHD_MAKE_TAG('C','H','G','T');
+const chd_metadata_tag GDROM_TRACK_METADATA_TAG = CHD_MAKE_TAG('C', 'H', 'G', 'D');
 extern const char *GDROM_TRACK_METADATA_FORMAT;
 
 // standard A/V metadata
@@ -375,13 +348,13 @@ public:
 	chd_error write_bytes(UINT64 offset, const void *buffer, UINT32 bytes);
 
 	// metadata management
-	chd_error read_metadata(chd_metadata_tag searchtag, UINT32 searchindex, astring &output);
+	chd_error read_metadata(chd_metadata_tag searchtag, UINT32 searchindex, std::string &output);
 	chd_error read_metadata(chd_metadata_tag searchtag, UINT32 searchindex, dynamic_buffer &output);
 	chd_error read_metadata(chd_metadata_tag searchtag, UINT32 searchindex, void *output, UINT32 outputlen, UINT32 &resultlen);
 	chd_error read_metadata(chd_metadata_tag searchtag, UINT32 searchindex, dynamic_buffer &output, chd_metadata_tag &resulttag, UINT8 &resultflags);
 	chd_error write_metadata(chd_metadata_tag metatag, UINT32 metaindex, const void *inputbuf, UINT32 inputlen, UINT8 flags = CHD_MDFLAGS_CHECKSUM);
-	chd_error write_metadata(chd_metadata_tag metatag, UINT32 metaindex, const astring &input, UINT8 flags = CHD_MDFLAGS_CHECKSUM) { return write_metadata(metatag, metaindex, input.cstr(), input.len() + 1, flags); }
-	chd_error write_metadata(chd_metadata_tag metatag, UINT32 metaindex, const dynamic_buffer &input, UINT8 flags = CHD_MDFLAGS_CHECKSUM) { return write_metadata(metatag, metaindex, input, input.count(), flags); }
+	chd_error write_metadata(chd_metadata_tag metatag, UINT32 metaindex, const std::string &input, UINT8 flags = CHD_MDFLAGS_CHECKSUM) { return write_metadata(metatag, metaindex, input.c_str(), input.length() + 1, flags); }
+	chd_error write_metadata(chd_metadata_tag metatag, UINT32 metaindex, const dynamic_buffer &input, UINT8 flags = CHD_MDFLAGS_CHECKSUM) { return write_metadata(metatag, metaindex, &input[0], input.size(), flags); }
 	chd_error delete_metadata(chd_metadata_tag metatag, UINT32 metaindex);
 	chd_error clone_all_metadata(chd_file &source);
 
@@ -545,16 +518,29 @@ private:
 	// a single work item
 	struct work_item
 	{
+		work_item()
+			: m_osd(NULL)
+			, m_compressor(NULL)
+			, m_status(WS_READY)
+			, m_data(NULL)
+			, m_compressed(NULL)
+			, m_complen(0)
+			, m_compression(0)
+			, m_codecs(NULL)
+		{ }
+
 		osd_work_item *     m_osd;              // OSD work item running on this block
 		chd_file_compressor *m_compressor;      // pointer back to the compressor
-		volatile work_status m_status;          // current status of this item
+		// TODO: had to change this to be able to use atomic_* functions on this
+		//volatile work_status m_status;          // current status of this item
+		volatile INT32      m_status;           // current status of this item
 		UINT32              m_hunknum;          // number of the hunk we're working on
 		UINT8 *             m_data;             // pointer to the data we are working on
 		UINT8 *             m_compressed;       // pointer to the compressed data
 		UINT32              m_complen;          // compressed data length
 		INT8                m_compression;      // type of compression used
 		chd_compressor_group *m_codecs;         // codec instance
-		dynamic_array<hash_pair> m_hash;        // array of hashes
+		std::vector<hash_pair> m_hash;        // array of hashes
 	};
 
 	// internal helpers

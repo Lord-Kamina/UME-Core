@@ -1,35 +1,5 @@
-/***************************************************************************
-
-    Copyright Olivier Galibert
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
-
-****************************************************************************/
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 
 /* DONE:
  * Support auto-identification heuristics for determining disk image speed,
@@ -41,18 +11,18 @@
  * Correctly note exact index timing.
  */
 
-#include "emu.h"
+#include "emu.h" // fatalerror
 #include "dfi_dsk.h"
 #include <zlib.h>
 #define NUMBER_OF_MULTIREADS 3
 // threshholds for brickwall windowing
-//define MIN_CLOCKS 65
+//define DFI_MIN_CLOCKS 65
 // number_please apple2 wants 40 min
-#define MIN_CLOCKS 60
+#define DFI_MIN_CLOCKS 60
 //define MAX_CLOCKS 260
-#define MAX_CLOCKS 270
-#define MIN_THRESH (MIN_CLOCKS*(clock_rate/25000000))
-#define MAX_THRESH (MAX_CLOCKS*(clock_rate/25000000))
+#define DFI_MAX_CLOCKS 270
+#define MIN_THRESH (DFI_MIN_CLOCKS*(clock_rate/25000000))
+#define MAX_THRESH (DFI_MAX_CLOCKS*(clock_rate/25000000))
 // constants to help guess clockrate and rpm
 // constant is 25mhz / 6 revolutions per second (360rpm) = 4166667 +- 2.5%
 #define REV25_MIN 4062500
@@ -96,10 +66,9 @@ int dfi_format::identify(io_generic *io, UINT32 form_factor)
 
 bool dfi_format::load(io_generic *io, UINT32 form_factor, floppy_image *image)
 {
-	int size = io_generic_size(io);
-	int pos = 4;
-	UINT8 *data = 0;
-	int data_size = 0; // size of currently allocated array for a track
+	UINT64 size = io_generic_size(io);
+	UINT64 pos = 4;
+	dynamic_buffer data;
 	int onerev_time = 0; // time for one revolution, used to guess clock and rpm for DFE2 files
 	unsigned long clock_rate = 100000000; // sample clock rate in megahertz
 	int rpm=360; // drive rpm
@@ -114,21 +83,14 @@ bool dfi_format::load(io_generic *io, UINT32 form_factor, floppy_image *image)
 		// if the position-so-far-in-file plus 10 (for the header) plus track size
 		// is larger than the size of the file, free buffers and bail out
 		if(pos+tsize+10 > size) {
-			if(data)
-				global_free(data);
 			return false;
 		}
 
 		// reallocate the data array if it gets too small
-		if(tsize > data_size) {
-			if(data)
-				global_free(data);
-			data_size = tsize;
-			data = global_alloc_array(UINT8, data_size);
-		}
+		data.resize(tsize);
 
 		pos += 10; // skip the header, we already read it
-		io_generic_read(io, data, pos, tsize);
+		io_generic_read(io, &data[0], pos, tsize);
 		pos += tsize; // for next time we read, increment to the beginning of next header
 
 		int index_time = 0; // what point the last index happened
@@ -187,7 +149,8 @@ bool dfi_format::load(io_generic *io, UINT32 form_factor, floppy_image *image)
 		if(!index_time)
 			index_time = total_time;
 
-		image->set_track_size(track, head, tsize);
+		std::vector<UINT32> &buf = image->get_buffer(track, head);
+		buf.resize(tsize);
 
 		int cur_time = 0;
 		int prev_time = 0;
@@ -200,7 +163,6 @@ bool dfi_format::load(io_generic *io, UINT32 form_factor, floppy_image *image)
 		index_count = 0;
 		//index_polarity = 0;
 		UINT32 mg = floppy_image::MG_A;
-		UINT32 *buf = image->get_buffer(track, head);
 		int tpos = 0;
 		buf[tpos++] = mg;
 		for(int i=0; i<tsize; i++) {
@@ -256,11 +218,8 @@ bool dfi_format::load(io_generic *io, UINT32 form_factor, floppy_image *image)
 		fprintf(stderr,"\n");
 #endif
 		index_count = 0;
-		image->set_track_size(track, head, tpos);
+		buf.resize(tpos);
 	}
-
-	if(data)
-		global_free(data);
 
 	return true;
 }

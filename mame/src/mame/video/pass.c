@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* video/pass.c - see drivers/pass.c for more info */
 
 #include "emu.h"
@@ -44,16 +46,16 @@ WRITE16_MEMBER(pass_state::pass_fg_videoram_w)
 
 void pass_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(pass_state::get_pass_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8,  64, 32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(pass_state::get_pass_fg_tile_info),this), TILEMAP_SCAN_ROWS, 4, 4, 128, 64);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(pass_state::get_pass_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8,  64, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(pass_state::get_pass_fg_tile_info),this), TILEMAP_SCAN_ROWS, 4, 4, 128, 64);
 
 	m_fg_tilemap->set_transparent_pen(255);
 }
 
 UINT32 pass_state::screen_update_pass(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }

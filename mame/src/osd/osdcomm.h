@@ -1,40 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     osdcomm.h
 
     Common definitions shared by the OSD layer. This includes the most
     fundamental integral types as well as compiler-specific tweaks.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -45,7 +16,6 @@
 
 #include <stdio.h>
 #include <string.h>
-//#include <stdlib.h>
 
 
 /***************************************************************************
@@ -68,6 +38,7 @@
 #define ATTR_CONST              __attribute__((const))
 #define ATTR_FORCE_INLINE       __attribute__((always_inline))
 #define ATTR_NONNULL(...)       __attribute__((nonnull(__VA_ARGS__)))
+#define ATTR_DEPRECATED         __attribute__((deprecated))
 /* not supported in GCC prior to 4.4.x */
 #if ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 4)) || (__GNUC__ > 4)
 #define ATTR_HOT                __attribute__((hot))
@@ -82,27 +53,24 @@
 #define SETJMP_GNUC_PROTECT()   (void)__builtin_return_address(1)
 #else
 #define ATTR_UNUSED
+#if defined(_MSC_VER) && (_MSC_VER >= 1200)
+#define ATTR_NORETURN           __declspec(noreturn)
+#else
 #define ATTR_NORETURN
+#endif
 #define ATTR_PRINTF(x,y)
 #define ATTR_MALLOC
 #define ATTR_PURE
 #define ATTR_CONST
-#define ATTR_FORCE_INLINE
+#define ATTR_FORCE_INLINE       __forceinline
 #define ATTR_NONNULL(...)
+#define ATTR_DEPRECATED         __declspec(deprecated)
 #define ATTR_HOT
 #define ATTR_COLD
 #define UNEXPECTED(exp)         (exp)
 #define EXPECTED(exp)           (exp)
 #define RESTRICT
 #define SETJMP_GNUC_PROTECT()   do {} while (0)
-#endif
-
-
-/* And some MSVC optimizations/warnings */
-#if defined(_MSC_VER) && (_MSC_VER >= 1200)
-#define DECL_NORETURN           __declspec(noreturn)
-#else
-#define DECL_NORETURN
 #endif
 
 
@@ -143,6 +111,13 @@ __extension__ typedef signed long long      INT64;
 
 #endif
 
+/* pointer-sized values */
+#ifdef PTR64
+typedef UINT64                              FPTR;
+#else
+typedef UINT32                              FPTR;
+#endif
+
 
 
 /***************************************************************************
@@ -174,7 +149,7 @@ __extension__ typedef signed long long      INT64;
 
 
 /* U64 and S64 are used to wrap long integer constants. */
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(_MSC_VER)
 #define U64(val) val##ULL
 #define S64(val) val##LL
 #else
@@ -190,10 +165,20 @@ __extension__ typedef signed long long      INT64;
 
 
 /* MINGW has adopted the MSVC formatting for 64-bit ints as of gcc 4.4 */
-#if (defined(__MINGW32__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4))) || defined(_MSVC_VER)
+#if (defined(__MINGW32__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4))) || defined(_MSC_VER)
 #define I64FMT   "I64"
 #else
 #define I64FMT   "ll"
+#endif
+
+#if defined(_MSC_VER) || defined(__MINGW32__)
+#ifdef PTR64
+#define SIZETFMT   "I64u"
+#else
+#define SIZETFMT   "u"
+#endif
+#else
+#define SIZETFMT   "zu"
 #endif
 
 
@@ -233,5 +218,37 @@ __extension__ typedef signed long long      INT64;
 #define LITTLE_ENDIANIZE_INT64(x)   (FLIPENDIAN_INT64(x))
 #endif /* LSB_FIRST */
 
+// compatibility with non-clang compilers
+#ifndef __has_feature
+	#define __has_feature(x) 0
+#endif
+
+#ifdef _MSC_VER
+#include <malloc.h>
+#if _MSC_VER == 1900 // < VS2015
+#define __LINE__Var 0
+#endif
+#if _MSC_VER < 1900 // < VS2015
+#define snprintf _snprintf
+#if _MSC_VER < 1800 // VS2013 or earlier
+#define alloca _alloca
+#define round(x) floor((x) + 0.5)
+#define strtoll _strtoi64
+#define _USE_MATH_DEFINES
+#include <math.h>
+static __inline double fmin(double x, double y){ return (x < y) ? x : y; }
+static __inline double fmax(double x, double y){ return (x > y) ? x : y; }
+static __inline double log2(double x) { return log(x) * M_LOG2E; }
+#endif // VS2013
+#else // VS2015
+#define _CRT_STDIO_LEGACY_WIDE_SPECIFIERS
+#endif
+#endif
+
+#ifdef __GNUC__
+#ifndef alloca
+#define alloca(size)  __builtin_alloca(size)
+#endif
+#endif
 
 #endif  /* __OSDCOMM_H__ */

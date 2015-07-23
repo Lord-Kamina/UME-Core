@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mirko Buffoni, Nicola Salmoria, Tomasz Slanina
 #include "sound/samples.h"
 
 class superqix_state : public driver_device
@@ -11,7 +13,9 @@ public:
 		m_videoram(*this, "videoram"),
 		m_bitmapram(*this, "bitmapram"),
 		m_bitmapram2(*this, "bitmapram2"),
-		m_samples(*this, "samples"){ }
+		m_samples(*this, "samples"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	required_device<cpu_device> m_maincpu;
 	optional_device<cpu_device> m_mcu;
@@ -20,6 +24,8 @@ public:
 	optional_shared_ptr<UINT8> m_bitmapram;
 	optional_shared_ptr<UINT8> m_bitmapram2;
 	optional_device<samples_device> m_samples;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	INT16 *m_samplebuf;
 	UINT8 m_port1;
@@ -73,6 +79,7 @@ public:
 	DECLARE_READ8_MEMBER(bootleg_in0_r);
 	DECLARE_READ8_MEMBER(hotsmash_ay_port_a_r);
 	DECLARE_READ8_MEMBER(pbillian_ay_port_a_r);
+	SAMPLES_START_CB_MEMBER(pbillian_sh_start);
 	DECLARE_DRIVER_INIT(sqix);
 	DECLARE_DRIVER_INIT(perestro);
 	DECLARE_DRIVER_INIT(sqixa);

@@ -1,10 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #include "nscsi_bus.h"
 
 const device_type NSCSI_BUS = &device_creator<nscsi_bus_device>;
 const device_type NSCSI_CONNECTOR = &device_creator<nscsi_connector>;
 
 nscsi_bus_device::nscsi_bus_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
-	device_t(mconfig, NSCSI_BUS, "SCSI Bus", tag, owner, clock)
+	device_t(mconfig, NSCSI_BUS, "NSCSI Bus", tag, owner, clock, "nscsi_bus", __FILE__)
 {
 	devcnt = 0;
 	memset(dev, 0, sizeof(dev));
@@ -14,6 +16,13 @@ void nscsi_bus_device::device_start()
 {
 	data = 0;
 	ctrl = 0;
+	save_item(NAME(data));
+	save_item(NAME(ctrl));
+	for(int i=0; i<devcnt; i++) {
+		save_item(NAME(dev[i].data), i);
+		save_item(NAME(dev[i].ctrl), i);
+		save_item(NAME(dev[i].wait_ctrl), i);
+	}
 }
 
 void nscsi_bus_device::device_reset()
@@ -124,7 +133,7 @@ void nscsi_bus_device::device_config_complete()
 
 
 nscsi_connector::nscsi_connector(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
-	device_t(mconfig, NSCSI_CONNECTOR, "NSCSI device connector abstraction", tag, owner, clock),
+	device_t(mconfig, NSCSI_CONNECTOR, "NSCSI Connector Abstraction", tag, owner, clock, "nscsi_connector", __FILE__),
 	device_slot_interface(mconfig, *this)
 {
 }
@@ -161,14 +170,70 @@ void nscsi_device::scsi_ctrl_changed()
 {
 }
 
+void nscsi_device::device_start()
+{
+	save_item(NAME(scsi_id));
+}
+
 nscsi_full_device::nscsi_full_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source) :
 	nscsi_device(mconfig, type, name, tag, owner, clock, shortname, source)
 {
 }
 
+
+const char *const nscsi_full_device::command_names[256] = {
+	/* 00 */ "TEST_UNIT_READY", "REZERO", "?", "REQUEST_SENSE", "FORMAT_UNIT", "?", "?", "REASSIGN_BLOCKS",
+	/* 08 */ "READ_6/RECIEVE", "?", "WRITE_6/SEND", "SEEK", "?", "?", "?", "?",
+	/* 10 */ "?", "?", "INQUIRY", "?", "?", "MODE_SELECT_6", "RESERVE_6", "RELEASE_6",
+	/* 18 */ "?", "?", "MODE_SENSE_6", "START_STOP_UNIT", "RECIEVE_DIAG_RES", "SEND_DIAGNOSTICS", "PREVENT_ALLOW_MEDIUM_REMOVAL", "?",
+	/* 20 */ "?", "?", "?", "READ_FORMAT_CAPACITIES", "?", "READ_CAPACITY", "?", "?",
+
+	/* 28 */ "READ_10", "READ_GENERATION", "WRITE_10", "SEEK_10", "ERASE_10", "READ_UPDATED_BLOCK_10", "WRITE_VERIFY", "VERIFY",
+	/* 30 */ "SEARCH_DATA_HIGH_10", "SEARCH_DATA_EQUAL_10", "SEARCH_DATA_LOW_10", "SET_LIMITS_10", "PREFETCH", "SYNC_CACHE", "LOCK_UNLOCK_CACHE", "READ_DEFECT_DATA",
+	/* 38 */ "MEDIUM_SCAN", "COMPARE", "COPY_AND_VERIFY", "WRITE_BUFFER", "READ_DATA_BUFFER", "UPDATE_BLOCK", "READ_LONG", "WRITE_LONG",
+	/* 40 */ "CHANGE_DEFINITION", "WRITE_SAME", "READ_SUB_CHANNEL", "READ_TOC_PMA_ATIP", "READ_HEADER", "PLAY_AUDIO_10", "GET_CONFIGURATION", "PLAY_AUDIO_MSF",
+	/* 48 */ "PLAY_AUDIO_TRACK_INDEX", "PLAY_RELATIVE_10", "GET_EVENT_STATUS_NOTIFICATION", "PAUSE_RESUME", "LOG_SELECT", "LOG_SENSE", "STOP_PLAY_SCAN", "?",
+	/* 50 */ "XDWRITE", "READ_DISC_INFORMATION/XPWRITE", "READ_TRACK_INFORMATION/XDREAD", "RESERVE_TRACK", "SEND_OPC_INFORMATION", "MODE_SELECT_10", "RESERVE_10", "RELEASE_10",
+	/* 58 */ "REPAIR_TRACK", "READ_MASTER_CUE", "MODE_SENSE_10", "CLOSE_TRACK_SESSION", "READ_BUFFER_CAPACITY", "SEND_CUE_SHEET", "PERSISTENT_RESERVE_IN", "PERSISTENT_RESERVE_OUT",
+	/* 80 */ "XDWRITE_EXTENDED", "REBUILD", "REGENERATE", "EXTENDED_COPY", "RECEIVE_COPY_RESULTS", "?", "?", "?",
+	/* 88 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* 90 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* 98 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* a0 */ "REPORT_LUNS", "BLANK", "SEND_EVENT", "REPORT_DEVICE_IDENTIFIER/SEND_KEY", "SET_DEVICE_IDENTIFIER/REPORT_KEY", "PLAY_AUDIO_12", "LOAD_UNLOAD_MEDIUM", "MOVE_MEDIUM_ATTACHED/SET_READ_AHEAD",
+	/* a8 */ "READ_12", "PLAY_RELATIVE_12", "WRITE_12", "?", "ERASE_12/GET_PERFORMANCE", "READ_DVD_STRUCTURE", "WRITE_AND_VERIFY_12", "VERIFY_12",
+	/* b0 */ "SEARCH_DATA_HIGH_12", "SEARCH_DATA_EQUAL_12", "SEARCH_DATA_LOW_12", "SET_LIMITS_12", "READ_ELEMENT_STATUS_ATTACHED", "?", "SET_STREAMING", "READ_DEFECT_DATA_12",
+	/* b8 */ "?", "READ_CD_MSF", "SCAN_MMC", "SET_CD_SPEED", "PLAY_CD", "MECHANISM_STATUS", "READ_CD", "SEND_DVD_STRUCTURE",
+	/* c0 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* c8 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* d0 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* d8 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* e0 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* e8 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* f0 */ "?", "?", "?", "?", "?", "?", "?", "?",
+	/* f8 */ "?", "?", "?", "?", "?", "?", "?", "?",
+};
+
 void nscsi_full_device::device_start()
 {
+	nscsi_device::device_start();
 	scsi_timer = timer_alloc(SCSI_TIMER);
+	save_item(NAME(scsi_cmdbuf));
+	save_item(NAME(scsi_sense_buffer));
+	save_item(NAME(scsi_cmdsize));
+	save_item(NAME(scsi_identify));
+	save_item(NAME(scsi_state));
+	save_item(NAME(scsi_substate));
+	save_item(NAME(scsi_initiator_id));
+	save_item(NAME(data_buffer_id));
+	save_item(NAME(data_buffer_size));
+	save_item(NAME(data_buffer_pos));
+	save_item(NAME(buf_control_rpos));
+	save_item(NAME(buf_control_wpos));
+	for(int i=0; i<32; i++) {
+		save_item(NAME(buf_control[i].action), i);
+		save_item(NAME(buf_control[i].param1), i);
+		save_item(NAME(buf_control[i].param2), i);
+	}
 }
 
 void nscsi_full_device::device_reset()
@@ -404,7 +469,6 @@ UINT8 nscsi_full_device::scsi_get_data(int id, int pos)
 		return scsi_sense_buffer[pos];
 	default:
 		fatalerror("nscsi_full_device::scsi_get_data - unknown id\n");
-		return 0; // shut up compiler
 	}
 }
 
@@ -447,7 +511,7 @@ bool nscsi_full_device::command_done()
 
 nscsi_full_device::control *nscsi_full_device::buf_control_push()
 {
-	if(buf_control_wpos == int(sizeof(buf_control)/sizeof(buf_control[0])))
+	if(buf_control_wpos == int(ARRAY_LENGTH(buf_control)))
 		throw emu_fatalerror("%s: buf_control overflow\n", tag());
 
 	control *c = buf_control + buf_control_wpos;
@@ -507,7 +571,7 @@ void nscsi_full_device::sense(bool deferred, UINT8 key)
 
 void nscsi_full_device::scsi_unknown_command()
 {
-	logerror("%s: Unknown command", tag());
+	logerror("%s: Unhandled command %s", tag(), command_names[scsi_cmdbuf[0]]);
 	for(int i=0; i != scsi_cmdsize; i++)
 		logerror(" %02x", scsi_cmdbuf[i]);
 	logerror("\n");

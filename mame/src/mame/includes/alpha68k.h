@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli, Bryan McPhail
 /*************************************************************************
 
     SNK/Alpha 68000 based games
@@ -12,15 +14,15 @@ public:
 		m_shared_ram(*this, "shared_ram"),
 		m_spriteram(*this, "spriteram"),
 		m_videoram(*this, "videoram"),
-		m_paletteram(*this, "paletteram"),
 		m_audiocpu(*this, "audiocpu"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	optional_shared_ptr<UINT16> m_shared_ram;
 	required_shared_ptr<UINT16> m_spriteram;
 	optional_shared_ptr<UINT16> m_videoram;
-	optional_shared_ptr<UINT16> m_paletteram;
 
 	/* video-related */
 	tilemap_t     *m_fix_tilemap;
@@ -69,7 +71,6 @@ public:
 	DECLARE_READ16_MEMBER(sound_cpu_r);
 	DECLARE_WRITE8_MEMBER(sound_bank_w);
 	DECLARE_WRITE8_MEMBER(porta_w);
-	DECLARE_WRITE16_MEMBER(alpha68k_paletteram_w);
 	DECLARE_WRITE16_MEMBER(alpha68k_videoram_w);
 	DECLARE_WRITE16_MEMBER(alpha68k_II_video_bank_w);
 	DECLARE_WRITE16_MEMBER(alpha68k_V_video_control_w);
@@ -84,6 +85,7 @@ public:
 	DECLARE_DRIVER_INIT(tnextspc);
 	DECLARE_DRIVER_INIT(timesold1);
 	DECLARE_DRIVER_INIT(sbasebal);
+	DECLARE_DRIVER_INIT(sbasebalj);
 	DECLARE_DRIVER_INIT(skysoldr);
 	DECLARE_DRIVER_INIT(skyadvntu);
 	DECLARE_DRIVER_INIT(btlfieldb);
@@ -116,8 +118,9 @@ public:
 	void jongbou_video_banking(int *bank, int data);
 	void kyros_draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, int c, int d );
 	void sstingry_draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, int c, int d );
-	DECLARE_WRITE_LINE_MEMBER(ym3812_irq);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 /* game_id - used to deal with a few game specific situations */

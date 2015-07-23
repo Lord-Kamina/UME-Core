@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     hash.h
@@ -5,37 +7,6 @@
     Function to handle hash functions (checksums)
 
     Based on original idea by Farfetch'd
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -95,8 +66,8 @@ public:
 	bool operator!=(const hash_collection &rhs) const { return !(*this == rhs); }
 
 	// getters
-	bool flag(char flag) const { return (m_flags.chr(0, flag) != -1); }
-	const char *hash_types(astring &buffer) const;
+	bool flag(char flag) const { return (m_flags.find_first_of(flag) != -1); }
+	const char *hash_types(std::string &buffer) const;
 
 	// hash manipulators
 	void reset();
@@ -112,9 +83,9 @@ public:
 	void add_sha1(sha1_t sha1) { m_has_sha1 = true; m_sha1 = sha1; }
 
 	// string conversion
-	const char *internal_string(astring &buffer) const;
-	const char *macro_string(astring &buffer) const;
-	const char *attribute_string(astring &buffer) const;
+	const char *internal_string(std::string &buffer) const;
+	const char *macro_string(std::string &buffer) const;
+	const char *attribute_string(std::string &buffer) const;
 	bool from_internal_string(const char *string);
 
 	// creation
@@ -128,7 +99,7 @@ private:
 	void copyfrom(const hash_collection &src);
 
 	// internal state
-	astring                 m_flags;
+	std::string             m_flags;
 	bool                    m_has_crc32;
 	crc32_t                 m_crc32;
 	bool                    m_has_sha1;

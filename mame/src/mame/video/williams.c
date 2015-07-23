@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Michael Soderstrom, Marc LaFontaine, Aaron Giles
 /***************************************************************************
 
     Williams 6809 system
@@ -107,10 +109,6 @@ void williams_state::state_save_register()
 	save_item(NAME(m_cocktail));
 	save_item(NAME(m_blitterram));
 	save_item(NAME(m_blitter_remap_index));
-	save_item(NAME(m_blaster_color0));
-	save_item(NAME(m_blaster_video_control));
-	save_item(NAME(m_tilemap_xscroll));
-	save_item(NAME(m_williams2_fg_color));
 }
 
 
@@ -122,26 +120,27 @@ VIDEO_START_MEMBER(williams_state,williams)
 }
 
 
-VIDEO_START_MEMBER(williams_state,blaster)
+VIDEO_START_MEMBER(blaster_state,blaster)
 {
 	blitter_init(m_blitter_config, memregion("proms")->base());
 	create_palette_lookup();
 	state_save_register();
+	save_item(NAME(m_blaster_color0));
+	save_item(NAME(m_blaster_video_control));
 }
 
 
-VIDEO_START_MEMBER(williams_state,williams2)
+VIDEO_START_MEMBER(williams2_state,williams2)
 {
 	blitter_init(m_blitter_config, NULL);
 
-	/* allocate paletteram */
-	m_generic_paletteram_8.allocate(0x400 * 2);
-
 	/* create the tilemap */
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(williams_state::get_tile_info),this), TILEMAP_SCAN_COLS,  24,16, 128,16);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(williams2_state::get_tile_info),this), TILEMAP_SCAN_COLS,  24,16, 128,16);
 	m_bg_tilemap->set_scrolldx(2, 0);
 
 	state_save_register();
+	save_item(NAME(m_tilemap_xscroll));
+	save_item(NAME(m_williams2_fg_color));
 }
 
 
@@ -179,7 +178,7 @@ UINT32 williams_state::screen_update_williams(screen_device &screen, bitmap_rgb3
 }
 
 
-UINT32 williams_state::screen_update_blaster(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+UINT32 blaster_state::screen_update_blaster(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
 	rgb_t pens[16];
 	int x, y;
@@ -213,25 +212,25 @@ UINT32 williams_state::screen_update_blaster(screen_device &screen, bitmap_rgb32
 				source[(x/2) * 256] = 0;
 
 			/* now draw */
-			dest[x+0] = (pix & 0xf0) ? pens[pix >> 4] : m_blaster_color0 | pens[0];
-			dest[x+1] = (pix & 0x0f) ? pens[pix & 0x0f] : m_blaster_color0 | pens[0];
+			dest[x+0] = (pix & 0xf0) ? pens[pix >> 4] : rgb_t(m_blaster_color0 | pens[0]);
+			dest[x+1] = (pix & 0x0f) ? pens[pix & 0x0f] : rgb_t(m_blaster_color0 | pens[0]);
 		}
 	}
 	return 0;
 }
 
 
-UINT32 williams_state::screen_update_williams2(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+UINT32 williams2_state::screen_update_williams2(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
 	rgb_t pens[16];
 	int x, y;
 
 	/* draw the background */
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	/* fetch the relevant pens */
 	for (x = 1; x < 16; x++)
-		pens[x] = palette_get_color(machine(), m_williams2_fg_color * 16 + x);
+		pens[x] = m_palette->pen_color(m_williams2_fg_color * 16 + x);
 
 	/* loop over rows */
 	for (y = cliprect.min_y; y <= cliprect.max_y; y++)
@@ -284,12 +283,12 @@ void williams_state::create_palette_lookup()
 		int g = combine_3_weights(weights_g, BIT(i,3), BIT(i,4), BIT(i,5));
 		int b = combine_2_weights(weights_b, BIT(i,6), BIT(i,7));
 
-		m_palette_lookup[i] = MAKE_RGB(r, g, b);
+		m_palette_lookup[i] = rgb_t(r, g, b);
 	}
 }
 
 
-WRITE8_MEMBER(williams_state::williams2_paletteram_w)
+WRITE8_MEMBER(williams2_state::williams2_paletteram_w)
 {
 	static const UINT8 ztable[16] =
 	{
@@ -310,11 +309,11 @@ WRITE8_MEMBER(williams_state::williams2_paletteram_w)
 	b = ((entry_hi >> 0) & 15) * i;
 	g = ((entry_lo >> 4) & 15) * i;
 	r = ((entry_lo >> 0) & 15) * i;
-	palette_set_color(machine(), offset / 2, MAKE_RGB(r, g, b));
+	m_palette->set_pen_color(offset / 2, rgb_t(r, g, b));
 }
 
 
-WRITE8_MEMBER(williams_state::williams2_fg_select_w)
+WRITE8_MEMBER(williams2_state::williams2_fg_select_w)
 {
 	m_williams2_fg_color = data & 0x3f;
 }
@@ -329,17 +328,8 @@ WRITE8_MEMBER(williams_state::williams2_fg_select_w)
 
 READ8_MEMBER(williams_state::williams_video_counter_r)
 {
-	if (machine().primary_screen->vpos() < 0x100)
-		return machine().primary_screen->vpos() & 0xfc;
-	else
-		return 0xfc;
-}
-
-
-READ8_MEMBER(williams_state::williams2_video_counter_r)
-{
-	if (machine().primary_screen->vpos() < 0x100)
-		return machine().primary_screen->vpos() & 0xfc;
+	if (m_screen->vpos() < 0x100)
+		return m_screen->vpos() & 0xfc;
 	else
 		return 0xfc;
 }
@@ -352,9 +342,9 @@ READ8_MEMBER(williams_state::williams2_video_counter_r)
  *
  *************************************/
 
-TILE_GET_INFO_MEMBER(williams_state::get_tile_info)
+TILE_GET_INFO_MEMBER(williams2_state::get_tile_info)
 {
-	int mask = machine().gfx[0]->elements() - 1;
+	int mask = m_gfxdecode->gfx(0)->elements() - 1;
 	int data = m_williams2_tileram[tile_index];
 	int y = (tile_index >> 1) & 7;
 	int color = 0;
@@ -386,7 +376,7 @@ TILE_GET_INFO_MEMBER(williams_state::get_tile_info)
 }
 
 
-WRITE8_MEMBER(williams_state::williams2_bg_select_w)
+WRITE8_MEMBER(williams2_state::williams2_bg_select_w)
 {
 	/* based on the tilemap config, only certain bits are used */
 	/* the rest are determined by other factors */
@@ -411,21 +401,21 @@ WRITE8_MEMBER(williams_state::williams2_bg_select_w)
 }
 
 
-WRITE8_MEMBER(williams_state::williams2_tileram_w)
+WRITE8_MEMBER(williams2_state::williams2_tileram_w)
 {
 	m_williams2_tileram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
 
-WRITE8_MEMBER(williams_state::williams2_xscroll_low_w)
+WRITE8_MEMBER(williams2_state::williams2_xscroll_low_w)
 {
 	m_tilemap_xscroll = (m_tilemap_xscroll & ~0x00f) | ((data & 0x80) >> 4) | (data & 0x07);
 	m_bg_tilemap->set_scrollx(0, (m_tilemap_xscroll & 7) + ((m_tilemap_xscroll >> 3) * 6));
 }
 
 
-WRITE8_MEMBER(williams_state::williams2_xscroll_high_w)
+WRITE8_MEMBER(williams2_state::williams2_xscroll_high_w)
 {
 	m_tilemap_xscroll = (m_tilemap_xscroll & 0x00f) | (data << 4);
 	m_bg_tilemap->set_scrollx(0, (m_tilemap_xscroll & 7) + ((m_tilemap_xscroll >> 3) * 6));
@@ -439,14 +429,14 @@ WRITE8_MEMBER(williams_state::williams2_xscroll_high_w)
  *
  *************************************/
 
-WRITE8_MEMBER(williams_state::blaster_remap_select_w)
+WRITE8_MEMBER(blaster_state::blaster_remap_select_w)
 {
 	m_blitter_remap_index = data;
 	m_blitter_remap = m_blitter_remap_lookup + data * 256;
 }
 
 
-WRITE8_MEMBER(williams_state::blaster_video_control_w)
+WRITE8_MEMBER(blaster_state::blaster_video_control_w)
 {
 	m_blaster_video_control = data;
 }
@@ -506,20 +496,25 @@ WRITE8_MEMBER(williams_state::williams_blitter_w)
 	/* adjust the width and height */
 	if (w == 0) w = 1;
 	if (h == 0) h = 1;
-	if (w == 255) w = 256;
-	if (h == 255) h = 256;
 
 	/* do the actual blit */
 	accesses = blitter_core(space, sstart, dstart, w, h, data);
 
 	/* based on the number of memory accesses needed to do the blit, compute how long the blit will take */
-	/* this is just a guess */
-	estimated_clocks_at_4MHz = 20 + ((data & 4) ? 4 : 2) * accesses;
+	if(data & WMS_BLITTER_CONTROLBYTE_SLOW)
+	{
+		estimated_clocks_at_4MHz = 4 + 4 * (accesses + 2);
+	}
+	else
+	{
+		estimated_clocks_at_4MHz = 4 + 2 * (accesses + 3);
+	}
+
 	space.device().execute().adjust_icount(-((estimated_clocks_at_4MHz + 3) / 4));
 
 	/* Log blits */
 	logerror("%04X:Blit @ %3d : %02X%02X -> %02X%02X, %3dx%3d, mask=%02X, flags=%02X, icount=%d, win=%d\n",
-			space.device().safe_pc(), machine().primary_screen->vpos(),
+			space.device().safe_pc(), m_screen->vpos(),
 			m_blitterram[2], m_blitterram[3],
 			m_blitterram[4], m_blitterram[5],
 			m_blitterram[6], m_blitterram[7],
@@ -528,7 +523,7 @@ WRITE8_MEMBER(williams_state::williams_blitter_w)
 }
 
 
-WRITE8_MEMBER(williams_state::williams2_blit_window_enable_w)
+WRITE8_MEMBER(williams2_state::williams2_blit_window_enable_w)
 {
 	m_blitter_window_enable = data & 0x01;
 }
@@ -541,134 +536,102 @@ WRITE8_MEMBER(williams_state::williams2_blit_window_enable_w)
  *
  *************************************/
 
-inline void williams_state::blit_pixel(address_space &space, int offset, int srcdata, int data, int mask, int solid)
+inline void williams_state::blit_pixel(address_space &space, int dstaddr, int srcdata, int controlbyte)
 {
 	/* always read from video RAM regardless of the bank setting */
-	int pix = (offset < 0xc000) ? m_videoram[offset] : space.read_byte(offset);
+	int curpix = (dstaddr < 0xc000) ? m_videoram[dstaddr] : space.read_byte(dstaddr);   //current pixel values at dest
 
-	/* handle transparency */
-	if (data & 0x08)
+	int solid = m_blitterram[1];
+	unsigned char keepmask = 0xff;          //what part of original dst byte should be kept, based on NO_EVEN and NO_ODD flags
+
+	//even pixel (D7-D4)
+	if((controlbyte & WMS_BLITTER_CONTROLBYTE_FOREGROUND_ONLY) && !(srcdata & 0xf0))    //FG only and src even pixel=0
 	{
-		if (!(srcdata & 0xf0)) mask |= 0xf0;
-		if (!(srcdata & 0x0f)) mask |= 0x0f;
+		if(controlbyte & WMS_BLITTER_CONTROLBYTE_NO_EVEN)
+			keepmask &= 0x0f;
+	}
+	else
+	{
+		if(!(controlbyte & WMS_BLITTER_CONTROLBYTE_NO_EVEN))
+			keepmask &= 0x0f;
 	}
 
-	/* handle solid versus source data */
-	pix &= mask;
-	if (data & 0x10)
-		pix |= solid & ~mask;
+	//odd pixel (D3-D0)
+	if((controlbyte & WMS_BLITTER_CONTROLBYTE_FOREGROUND_ONLY) && !(srcdata & 0x0f))    //FG only and src odd pixel=0
+	{
+		if(controlbyte & WMS_BLITTER_CONTROLBYTE_NO_ODD)
+			keepmask &= 0xf0;
+	}
 	else
-		pix |= srcdata & ~mask;
+	{
+		if(!(controlbyte & WMS_BLITTER_CONTROLBYTE_NO_ODD))
+			keepmask &= 0xf0;
+	}
 
-	/* if the window is enabled, only blit to videoram below the clipping address */
-	/* note that we have to allow blits to non-video RAM (e.g. tileram) because those */
-	/* are not blocked by the window enable */
-	if (!m_blitter_window_enable || offset < m_blitter_clip_address || offset >= 0xc000)
-		space.write_byte(offset, pix);
+	curpix &= keepmask;
+	if(controlbyte & WMS_BLITTER_CONTROLBYTE_SOLID)
+		curpix |= (solid & ~keepmask);
+	else
+		curpix |= (srcdata & ~keepmask);
+
+/* if the window is enabled, only blit to videoram below the clipping address */
+/* note that we have to allow blits to non-video RAM (e.g. tileram, Sinistar $DXXX SRAM) because those */
+/* are not blocked by the window enable */
+	if (!m_blitter_window_enable || dstaddr < m_blitter_clip_address || dstaddr >= 0xc000)
+		space.write_byte(dstaddr, curpix);
 }
 
 
-int williams_state::blitter_core(address_space &space, int sstart, int dstart, int w, int h, int data)
+int williams_state::blitter_core(address_space &space, int sstart, int dstart, int w, int h, int controlbyte)
 {
 	int source, sxadv, syadv;
 	int dest, dxadv, dyadv;
-	int i, j, solid;
+	int x, y;
 	int accesses = 0;
-	int keepmask;
 
 	/* compute how much to advance in the x and y loops */
-	sxadv = (data & 0x01) ? 0x100 : 1;
-	syadv = (data & 0x01) ? 1 : w;
-	dxadv = (data & 0x02) ? 0x100 : 1;
-	dyadv = (data & 0x02) ? 1 : w;
+	sxadv = (controlbyte & WMS_BLITTER_CONTROLBYTE_SRC_STRIDE_256) ? 0x100 : 1;
+	syadv = (controlbyte & WMS_BLITTER_CONTROLBYTE_SRC_STRIDE_256) ? 1 : w;
+	dxadv = (controlbyte & WMS_BLITTER_CONTROLBYTE_DST_STRIDE_256) ? 0x100 : 1;
+	dyadv = (controlbyte & WMS_BLITTER_CONTROLBYTE_DST_STRIDE_256) ? 1 : w;
 
-	/* determine the common mask */
-	keepmask = 0x00;
-	if (data & 0x80) keepmask |= 0xf0;
-	if (data & 0x40) keepmask |= 0x0f;
-	if (keepmask == 0xff)
-		return accesses;
+	int pixdata=0;
 
-	/* set the solid pixel value to the mask value */
-	solid = m_blitterram[1];
-
-	/* first case: no shifting */
-	if (!(data & 0x20))
+	/* loop over the height */
+	for (y = 0; y < h; y++)
 	{
-		/* loop over the height */
-		for (i = 0; i < h; i++)
-		{
-			source = sstart & 0xffff;
-			dest = dstart & 0xffff;
+		source = sstart & 0xffff;
+		dest = dstart & 0xffff;
 
-			/* loop over the width */
-			for (j = w; j > 0; j--)
+		/* loop over the width */
+		for (x = 0; x < w; x++)
+		{
+			if (!(controlbyte & WMS_BLITTER_CONTROLBYTE_SHIFT)) //no shift
 			{
-				blit_pixel(space, dest, m_blitter_remap[space.read_byte(source)], data, keepmask, solid);
-				accesses += 2;
-
-				/* advance */
-				source = (source + sxadv) & 0xffff;
-				dest   = (dest + dxadv) & 0xffff;
+				blit_pixel(space, dest, m_blitter_remap[space.read_byte(source)], controlbyte);
 			}
-
-			sstart += syadv;
-
-			/* note that PlayBall! indicates the X coordinate doesn't wrap */
-			if (data & 0x02)
-				dstart = (dstart & 0xff00) | ((dstart + dyadv) & 0xff);
 			else
-				dstart += dyadv;
-		}
-	}
-
-	/* second case: shifted one pixel */
-	else
-	{
-		/* swap halves of the keep mask and the solid color */
-		keepmask = ((keepmask & 0xf0) >> 4) | ((keepmask & 0x0f) << 4);
-		solid = ((solid & 0xf0) >> 4) | ((solid & 0x0f) << 4);
-
-		/* loop over the height */
-		for (i = 0; i < h; i++)
-		{
-			int pixdata;
-
-			source = sstart & 0xffff;
-			dest = dstart & 0xffff;
-
-			/* left edge case */
-			pixdata = m_blitter_remap[space.read_byte(source)];
-			blit_pixel(space, dest, (pixdata >> 4) & 0x0f, data, keepmask | 0xf0, solid);
+			{   //shift one pixel right
+				pixdata = (pixdata << 8) | m_blitter_remap[space.read_byte(source)];
+				blit_pixel(space, dest, (pixdata >> 4) & 0xff, controlbyte);
+			}
 			accesses += 2;
 
+			/* advance src and dst pointers */
 			source = (source + sxadv) & 0xffff;
 			dest   = (dest + dxadv) & 0xffff;
-
-			/* loop over the width */
-			for (j = w - 1; j > 0; j--)
-			{
-				pixdata = (pixdata << 8) | m_blitter_remap[space.read_byte(source)];
-				blit_pixel(space, dest, (pixdata >> 4) & 0xff, data, keepmask, solid);
-				accesses += 2;
-
-				source = (source + sxadv) & 0xffff;
-				dest   = (dest + dxadv) & 0xffff;
-			}
-
-			/* right edge case */
-			blit_pixel(space, dest, (pixdata << 4) & 0xf0, data, keepmask | 0x0f, solid);
-			accesses++;
-
-			sstart += syadv;
-
-			/* note that PlayBall! indicates the X coordinate doesn't wrap */
-			if (data & 0x02)
-				dstart = (dstart & 0xff00) | ((dstart + dyadv) & 0xff);
-			else
-				dstart += dyadv;
 		}
-	}
 
+		/* note that PlayBall! indicates the X coordinate doesn't wrap */
+		if (controlbyte & WMS_BLITTER_CONTROLBYTE_DST_STRIDE_256)
+			dstart = (dstart & 0xff00) | ((dstart + dyadv) & 0xff);
+		else
+			dstart += dyadv;
+
+		if (controlbyte & WMS_BLITTER_CONTROLBYTE_SRC_STRIDE_256)
+			sstart = (sstart & 0xff00) | ((sstart + syadv) & 0xff);
+		else
+			sstart += syadv;
+	}
 	return accesses;
 }

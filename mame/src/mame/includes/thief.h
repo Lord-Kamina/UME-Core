@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Victor Trucco, Mike Balfour, Phil Stroffolino
 #include "sound/samples.h"
 #include "video/tms9927.h"
 
@@ -15,7 +17,8 @@ public:
 		: driver_device(mconfig, type, tag) ,
 		m_maincpu(*this, "maincpu"),
 		m_samples(*this, "samples"),
-		m_tms(*this, "tms") { }
+		m_tms(*this, "tms"),
+		m_palette(*this, "palette") { }
 
 	UINT8 *m_videoram;
 	UINT8 m_input_select;
@@ -42,9 +45,10 @@ public:
 	UINT32 screen_update_thief(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(thief_interrupt);
 	UINT16 fetch_image_addr( coprocessor_t &thief_coprocessor );
-	void tape_set_audio( samples_device *samples, int track, int bOn );
-	void tape_set_motor( samples_device *samples, int bOn );
+	void tape_set_audio( int track, int bOn );
+	void tape_set_motor( int bOn );
 	required_device<cpu_device> m_maincpu;
 	required_device<samples_device> m_samples;
 	required_device<tms9927_device> m_tms;
+	required_device<palette_device> m_palette;
 };

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /***************************************************************************
 
     i8244.c
@@ -16,6 +18,8 @@ const device_type I8244 = &device_creator<i8244_device>;
 const device_type I8245 = &device_creator<i8245_device>;
 
 
+// Kevtris verified that the data below matches a dump
+// taken from a real chip.
 static const UINT8 c_shape[0x40 * 8] =
 {
 	0x7C,0xC6,0xC6,0xC6,0xC6,0xC6,0x7C,0x00, // 0
@@ -98,12 +102,11 @@ static const UINT8 bgr2rgb[8] =
 //-------------------------------------------------
 
 i8244_device::i8244_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, I8244, "I8244", tag, owner, clock)
+	: device_t(mconfig, I8244, "I8244", tag, owner, clock, "i8244", __FILE__)
 	, device_sound_interface(mconfig, *this)
+	, device_video_interface(mconfig, *this)
 	, m_irq_func(*this)
 	, m_postprocess_func(*this)
-	, m_screen_tag(NULL)
-	, m_screen(NULL)
 	, m_start_vpos(START_Y)
 	, m_start_vblank(START_Y + SCREEN_HEIGHT)
 	, m_screen_lines(LINES)
@@ -111,13 +114,12 @@ i8244_device::i8244_device(const machine_config &mconfig, const char *tag, devic
 }
 
 
-i8244_device::i8244_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, int lines)
-	: device_t(mconfig, type, name, tag, owner, clock)
+i8244_device::i8244_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, int lines, const char *shortname, const char *source)
+	: device_t(mconfig, type, name, tag, owner, clock, shortname, source)
 	, device_sound_interface(mconfig, *this)
+	, device_video_interface(mconfig, *this)
 	, m_irq_func(*this)
 	, m_postprocess_func(*this)
-	, m_screen_tag(NULL)
-	, m_screen(NULL)
 	, m_start_vpos(START_Y)
 	, m_start_vblank(START_Y + SCREEN_HEIGHT)
 	, m_screen_lines(lines)
@@ -126,7 +128,7 @@ i8244_device::i8244_device(const machine_config &mconfig, device_type type, cons
 
 
 i8245_device::i8245_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: i8244_device(mconfig, I8245, "I8245", tag, owner, clock, i8245_device::LINES)
+	: i8244_device(mconfig, I8245, "I8245", tag, owner, clock, i8245_device::LINES, "i8245", __FILE__)
 {
 }
 
@@ -137,10 +139,6 @@ i8245_device::i8245_device(const machine_config &mconfig, const char *tag, devic
 
 void i8244_device::device_start()
 {
-	assert( m_screen_tag != NULL );
-	m_screen = machine().device<screen_device>(m_screen_tag);
-	assert( m_screen != NULL );
-
 	// Let the screen create our temporary bitmap with the screen's dimensions
 	m_screen->register_screen_bitmap(m_tmp_bitmap);
 
@@ -184,7 +182,7 @@ void i8244_device::device_reset()
 }
 
 
-void i8244_device::palette_init()
+PALETTE_INIT_MEMBER(i8244_device, i8244)
 {
 	static const UINT8 i8244_colors[3*16] =
 	{
@@ -208,7 +206,7 @@ void i8244_device::palette_init()
 
 	for ( int i = 0; i < 16; i++ )
 	{
-		palette_set_color_rgb( machine(), i, i8244_colors[i*3], i8244_colors[i*3+1], i8244_colors[i*3+2] );
+		palette.set_pen_color( i, i8244_colors[i*3], i8244_colors[i*3+1], i8244_colors[i*3+2] );
 	}
 }
 
@@ -411,7 +409,6 @@ void i8244_device::render_scanline(int vpos)
 
 	UINT8   collision_map[160];
 
-
 	if ( vpos == m_start_vpos )
 	{
 		m_control_status &= ~0x08;
@@ -453,9 +450,13 @@ void i8244_device::render_scanline(int vpos)
 							for ( int k = 0; k < width + 2; k++ )
 							{
 								int px = x_grid_offset + i * width + k;
-								collision_map[ px ] |= COLLISION_HORIZ_GRID_DOTS;
-								m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + 2 * px ) = color;
-								m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + 2 * px + 1 ) = color;
+
+								if ( px < 160 )
+								{
+									collision_map[ px ] |= COLLISION_HORIZ_GRID_DOTS;
+									m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + 2 * px ) = color;
+									m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + 2 * px + 1 ) = color;
+								}
 							}
 						}
 					}
@@ -475,19 +476,22 @@ void i8244_device::render_scanline(int vpos)
 							{
 								int px = x_grid_offset + i * width + k;
 
-								/* Check if we collide with an already drawn source object */
-								if ( collision_map[ px ] & m_vdc.s.collision )
+								if ( px < 160 )
 								{
-									m_collision_status |= COLLISION_VERTICAL_GRID;
+									/* Check if we collide with an already drawn source object */
+									if ( collision_map[ px ] & m_vdc.s.collision )
+									{
+										m_collision_status |= COLLISION_VERTICAL_GRID;
+									}
+									/* Check if an already drawn object would collide with us */
+									if ( COLLISION_VERTICAL_GRID & m_vdc.s.collision && collision_map[ px ] )
+									{
+										m_collision_status |= collision_map[ px ];
+									}
+									collision_map[ px ] |= COLLISION_VERTICAL_GRID;
+									m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + 2 * px ) = color;
+									m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + 2 * px + 1 ) = color;
 								}
-								/* Check if an already drawn object would collide with us */
-								if ( COLLISION_VERTICAL_GRID & m_vdc.s.collision && collision_map[ px ] )
-								{
-									m_collision_status |= collision_map[ px ];
-								}
-								collision_map[ px ] |= COLLISION_VERTICAL_GRID;
-								m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + 2 * px ) = color;
-								m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + 2 * px + 1 ) = color;
 							}
 						}
 					}
@@ -640,17 +644,20 @@ void i8244_device::render_scanline(int vpos)
 								}
 								if ( x >= -1 && x < 159 )
 								{
-									/* Check if we collide with an already drawn source object */
-									if ( collision_map[ x ] & m_vdc.s.collision )
+									if ( x >= 0 )
 									{
-										m_collision_status |= ( 1 << i );
+										/* Check if we collide with an already drawn source object */
+										if ( collision_map[ x ] & m_vdc.s.collision )
+										{
+											m_collision_status |= ( 1 << i );
+										}
+										/* Check if an already drawn object would collide with us */
+										if ( ( 1 << i ) & m_vdc.s.collision && collision_map[ x ] )
+										{
+											m_collision_status |= collision_map[ x ];
+										}
+										collision_map[ x ] |= ( 1 << i );
 									}
-									/* Check if an already drawn object would collide with us */
-									if ( ( 1 << i ) & m_vdc.s.collision && collision_map[ x ] )
-									{
-										m_collision_status |= collision_map[ x ];
-									}
-									collision_map[ x ] |= ( 1 << i );
 									m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + x_shift + 2 * x + 2 ) = color;
 									m_tmp_bitmap.pix16( vpos, START_ACTIVE_SCAN + 10 + x_shift + 2 * x + 3 ) = color;
 								}

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /***************************************************************************
 
     tlc34076.h
@@ -38,7 +40,7 @@ public:
 	static void static_set_bits(device_t &device, tlc34076_bits bits);
 
 	// public interface
-	const pen_t *get_pens();
+	const rgb_t *get_pens();
 	DECLARE_READ8_MEMBER(read);
 	DECLARE_WRITE8_MEMBER(write);
 

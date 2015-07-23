@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /*************************************************************************
 
     Jaleco Moero Pro Yakyuu Homerun hardware
@@ -13,7 +15,7 @@
 CUSTOM_INPUT_MEMBER(homerun_state::homerun_sprite0_r)
 {
 	// sprite-0 vs background collision status, similar to NES
-	return (machine().primary_screen->vpos() > (m_spriteram[0] - 15)) ? 1 : 0;
+	return (m_screen->vpos() > (m_spriteram[0] - 16 + 1)) ? 1 : 0;
 }
 
 WRITE8_MEMBER(homerun_state::homerun_scrollhi_w)
@@ -38,8 +40,8 @@ WRITE8_MEMBER(homerun_state::homerun_scrollx_w)
 WRITE8_MEMBER(homerun_state::homerun_banking_w)
 {
 	// games do mid-screen gfx bank switching
-	int vpos = machine().primary_screen->vpos();
-	machine().primary_screen->update_partial(vpos);
+	int vpos = m_screen->vpos();
+	m_screen->update_partial(vpos);
 
 	// d0-d1: gfx bank
 	// d2-d4: ?
@@ -87,7 +89,7 @@ WRITE8_MEMBER(homerun_state::homerun_color_w)
 	bit2 = (data >> 7) & 0x01;
 	b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-	palette_set_color(machine(), offset, MAKE_RGB(r,g,b));
+	m_palette->set_pen_color(offset, rgb_t(r,g,b));
 }
 
 
@@ -104,7 +106,7 @@ TILE_GET_INFO_MEMBER(homerun_state::get_homerun_tile_info)
 
 void homerun_state::video_start()
 {
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(homerun_state::get_homerun_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(homerun_state::get_homerun_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
 }
 
 
@@ -115,25 +117,23 @@ void homerun_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprec
 
 	for (offs = m_spriteram.bytes() - 4; offs >= 0; offs -= 4)
 	{
+		if (spriteram[offs + 0] == 0)
+			continue;
+
+		int sy = spriteram[offs + 0] - 16 + 1;
 		int sx = spriteram[offs + 3];
-		int sy = spriteram[offs + 0] - 15;
 		int code = (spriteram[offs + 1]) | ((spriteram[offs + 2] & 0x8) << 5) | ((m_gfx_ctrl & 3) << 9);
 		int color = (spriteram[offs + 2] & 0x07) | 8;
 		int flipx = (spriteram[offs + 2] & 0x40) >> 6;
 		int flipy = (spriteram[offs + 2] & 0x80) >> 7;
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[1],
-				code,
-				color,
-				flipx,flipy,
-				sx,sy,0);
+		if (sy >= 0)
+		{
+			m_gfxdecode->gfx(1)->transpen(bitmap, cliprect, code, color, flipx, flipy, sx, sy, 0);
 
-		// wraparound
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[1],
-				code,
-				color,
-				flipx,flipy,
-				sx-256,sy,0);
+			// wraparound x
+			m_gfxdecode->gfx(1)->transpen(bitmap, cliprect, code, color, flipx, flipy, sx - 256 , sy, 0);
+		}
 	}
 }
 
@@ -142,7 +142,7 @@ UINT32 homerun_state::screen_update_homerun(screen_device &screen, bitmap_ind16 
 	m_tilemap->set_scrolly(0, m_scrolly);
 	m_tilemap->set_scrollx(0, m_scrollx);
 
-	m_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 
 	return 0;

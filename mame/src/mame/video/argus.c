@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Yochizo
 /***************************************************************************
 
 Functions to emulate the video hardware of the machine.
@@ -89,7 +91,7 @@ Video effect RAM ( $C30C )
 -----------------------------------------------------------------------------
  +0
  ---- ---x  = BG enable bit
- ---- --x-  = gray scale effect or tile bank select.
+ ---- --x-  = grey scale effect or tile bank select.
 
 
 Flip screen controller
@@ -109,12 +111,11 @@ BG0 palette intensity ( $C47F, $C4FF )
 (*) Things which are not emulated.
  - Color $000 - 00f, $01e, $02e ... are half transparent color.
  - Sprite priority bit may be present in Butasan. But I don't know
-   what is happened when it is set.
+   what happens when it is set.
 
 ***************************************************************************/
 
 #include "emu.h"
-#include "video/jalblend.h"
 #include "includes/argus.h"
 
 
@@ -131,8 +132,7 @@ TILE_GET_INFO_MEMBER(argus_state::argus_get_tx_tile_info)
 	lo = m_txram[tile_index];
 	hi = m_txram[tile_index + 1];
 
-	SET_TILE_INFO_MEMBER(
-			3,
+	SET_TILE_INFO_MEMBER(3,
 			((hi & 0xc0) << 2) | lo,
 			hi & 0x0f,
 			TILE_FLIPYX((hi & 0x30) >> 4));
@@ -147,8 +147,7 @@ TILE_GET_INFO_MEMBER(argus_state::argus_get_bg0_tile_info)
 	lo = m_dummy_bg0ram[tile_index];
 	hi = m_dummy_bg0ram[tile_index + 1];
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			((hi & 0xc0) << 2) | lo,
 			hi & 0x0f,
 			TILE_FLIPYX((hi & 0x30) >> 4));
@@ -163,8 +162,7 @@ TILE_GET_INFO_MEMBER(argus_state::argus_get_bg1_tile_info)
 	lo = m_bg1ram[tile_index];
 	hi = m_bg1ram[tile_index + 1];
 
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			lo,
 			hi & 0x0f,
 			TILE_FLIPYX((hi & 0x30) >> 4));
@@ -179,8 +177,7 @@ TILE_GET_INFO_MEMBER(argus_state::valtric_get_tx_tile_info)
 	lo = m_txram[tile_index];
 	hi = m_txram[tile_index + 1];
 
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			((hi & 0xc0) << 2) | lo,
 			hi & 0x0f,
 			TILE_FLIPYX((hi & 0x30) >> 4));
@@ -195,8 +192,7 @@ TILE_GET_INFO_MEMBER(argus_state::valtric_get_bg_tile_info)
 	lo = m_bg1ram[tile_index];
 	hi = m_bg1ram[tile_index + 1];
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			((hi & 0xc0) << 2) | ((hi & 0x20) << 5) | lo,
 			hi & 0x0f,
 			0);
@@ -212,8 +208,7 @@ TILE_GET_INFO_MEMBER(argus_state::butasan_get_tx_tile_info)
 	lo = m_butasan_txram[tile_index];
 	hi = m_butasan_txram[tile_index + 1];
 
-	SET_TILE_INFO_MEMBER(
-			3,
+	SET_TILE_INFO_MEMBER(3,
 			((hi & 0xc0) << 2) | lo,
 			hi & 0x0f,
 			TILE_FLIPYX((hi & 0x30) >> 4));
@@ -231,8 +226,7 @@ TILE_GET_INFO_MEMBER(argus_state::butasan_get_bg0_tile_info)
 	lo = m_butasan_bg0ram[attrib];
 	hi = m_butasan_bg0ram[attrib + 1];
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			((hi & 0xc0) << 2) | lo,
 			hi & 0x0f,
 			TILE_FLIPYX((hi & 0x30) >> 4));
@@ -247,8 +241,7 @@ TILE_GET_INFO_MEMBER(argus_state::butasan_get_bg1_tile_info)
 
 	tile = m_butasan_bg1ram[attrib] | ((m_butasan_bg1_status & 2) << 7);
 
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			tile,
 			(tile & 0x80) >> 7,
 			0);
@@ -269,9 +262,9 @@ void argus_state::reset_common()
 VIDEO_START_MEMBER(argus_state,argus)
 {
 	/*                           info                     offset             w   h  col  row */
-	m_bg0_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(argus_state::argus_get_bg0_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_bg1_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(argus_state::argus_get_bg1_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_tx_tilemap  = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(argus_state::argus_get_tx_tile_info),this),  TILEMAP_SCAN_COLS,  8,  8, 32, 32);
+	m_bg0_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(argus_state::argus_get_bg0_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_bg1_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(argus_state::argus_get_bg1_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_tx_tilemap  = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(argus_state::argus_get_tx_tile_info),this),  TILEMAP_SCAN_COLS,  8,  8, 32, 32);
 
 	m_bg1_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_transparent_pen(15);
@@ -279,7 +272,12 @@ VIDEO_START_MEMBER(argus_state,argus)
 	/* dummy RAM for back ground */
 	m_dummy_bg0ram = auto_alloc_array(machine(), UINT8, 0x800);
 
-	jal_blend_init(machine(), 1);
+	save_item(NAME(m_bg_status));
+	save_item(NAME(m_flipscreen));
+	save_item(NAME(m_palette_intensity));
+	save_pointer(NAME(m_dummy_bg0ram), 0x800);
+	save_item(NAME(m_lowbitscroll));
+	save_item(NAME(m_prvscrollx));
 }
 
 VIDEO_RESET_MEMBER(argus_state,argus)
@@ -295,14 +293,19 @@ VIDEO_RESET_MEMBER(argus_state,argus)
 VIDEO_START_MEMBER(argus_state,valtric)
 {
 	/*                           info                      offset             w   h  col  row */
-	m_bg1_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(argus_state::valtric_get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_tx_tilemap  = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(argus_state::valtric_get_tx_tile_info),this), TILEMAP_SCAN_COLS,  8,  8, 32, 32);
+	m_bg1_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(argus_state::valtric_get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_tx_tilemap  = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(argus_state::valtric_get_tx_tile_info),this), TILEMAP_SCAN_COLS,  8,  8, 32, 32);
 
 	m_tx_tilemap->set_transparent_pen(15);
 
-	machine().primary_screen->register_screen_bitmap(m_mosaicbitmap);
+	m_screen->register_screen_bitmap(m_mosaicbitmap);
 
-	jal_blend_init(machine(), 1);
+	save_item(NAME(m_bg_status));
+	save_item(NAME(m_flipscreen));
+	save_item(NAME(m_palette_intensity));
+	save_item(NAME(m_valtric_mosaic));
+	save_item(NAME(m_valtric_unknown));
+	save_item(NAME(m_mosaic));
 }
 
 VIDEO_RESET_MEMBER(argus_state,valtric)
@@ -314,9 +317,9 @@ VIDEO_RESET_MEMBER(argus_state,valtric)
 VIDEO_START_MEMBER(argus_state,butasan)
 {
 	/*                           info                       offset             w   h  col  row */
-	m_bg0_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(argus_state::butasan_get_bg0_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 32);
-	m_bg1_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(argus_state::butasan_get_bg1_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 32);
-	m_tx_tilemap  = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(argus_state::butasan_get_tx_tile_info),this),  TILEMAP_SCAN_ROWS,  8,  8, 32, 32);
+	m_bg0_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(argus_state::butasan_get_bg0_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 32);
+	m_bg1_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(argus_state::butasan_get_bg1_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 32);
+	m_tx_tilemap  = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(argus_state::butasan_get_tx_tile_info),this),  TILEMAP_SCAN_ROWS,  8,  8, 32, 32);
 
 	m_bg1_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_transparent_pen(15);
@@ -329,7 +332,14 @@ VIDEO_START_MEMBER(argus_state,butasan)
 	m_butasan_txram      = &m_butasan_pagedram[1][0x000];
 	m_butasan_txbackram  = &m_butasan_pagedram[1][0x800];
 
-	jal_blend_init(machine(), 1);
+	save_item(NAME(m_bg_status));
+	save_item(NAME(m_flipscreen));
+	save_item(NAME(m_palette_intensity));
+	save_pointer(NAME(m_butasan_pagedram[0]), 0x1000);
+	save_pointer(NAME(m_butasan_pagedram[1]), 0x1000);
+	save_item(NAME(m_butasan_page_latch));
+	save_item(NAME(m_butasan_bg1_status));
+	save_item(NAME(m_butasan_unknown));
 }
 
 VIDEO_RESET_MEMBER(argus_state,butasan)
@@ -371,15 +381,15 @@ void argus_state::argus_write_dummy_rams(int dramoffs, int vromoffs)
 	}
 }
 
-void argus_state::argus_change_palette(int color, int lo_offs, int hi_offs)
+void argus_state::change_palette(int color, int lo_offs, int hi_offs)
 {
 	UINT8 lo = m_paletteram[lo_offs];
 	UINT8 hi = m_paletteram[hi_offs];
-	jal_blend_set(color, hi & 0x0f);
-	palette_set_color_rgb(machine(), color, pal4bit(lo >> 4), pal4bit(lo), pal4bit(hi >> 4));
+	m_blend->set(color, hi & 0x0f);
+	m_palette->set_pen_color(color, pal4bit(lo >> 4), pal4bit(lo), pal4bit(hi >> 4));
 }
 
-void argus_state::argus_change_bg_palette(int color, int lo_offs, int hi_offs)
+void argus_state::change_bg_palette(int color, int lo_offs, int hi_offs)
 {
 	UINT8 r,g,b,lo,hi,ir,ig,ib,ix;
 	rgb_t rgb,irgb;
@@ -390,7 +400,7 @@ void argus_state::argus_change_bg_palette(int color, int lo_offs, int hi_offs)
 	ib = pal4bit(m_palette_intensity >>  4);
 	ix = m_palette_intensity & 0x0f;
 
-	irgb = MAKE_RGB(ir,ig,ib);
+	irgb = rgb_t(ir,ig,ib);
 
 	lo = m_paletteram[lo_offs];
 	hi = m_paletteram[hi_offs];
@@ -404,16 +414,16 @@ void argus_state::argus_change_bg_palette(int color, int lo_offs, int hi_offs)
 	if (m_bg_status & 2)
 	{
 		UINT8 val = (r + g + b) / 3;
-		rgb = MAKE_RGB(val,val,val);
+		rgb = rgb_t(val,val,val);
 	}
 	else
 	{
-		rgb = MAKE_RGB(r,g,b);
+		rgb = rgb_t(r,g,b);
 	}
 
-	rgb = jal_blend_func(rgb,irgb,ix);
+	rgb = m_blend->func(rgb,irgb,ix);
 
-	palette_set_color(machine(),color,rgb);
+	m_palette->set_pen_color(color,rgb);
 }
 
 
@@ -426,23 +436,13 @@ WRITE8_MEMBER(argus_state::valtric_mosaic_w)
 	m_valtric_mosaic = data;
 }
 
-READ8_MEMBER(argus_state::argus_txram_r)
-{
-	return m_txram[offset];
-}
-
-WRITE8_MEMBER(argus_state::argus_txram_w)
+WRITE8_MEMBER(argus_state::txram_w)
 {
 	m_txram[offset] = data;
 	m_tx_tilemap->mark_tile_dirty(offset >> 1);
 }
 
-READ8_MEMBER(argus_state::argus_bg1ram_r)
-{
-	return m_bg1ram[offset];
-}
-
-WRITE8_MEMBER(argus_state::argus_bg1ram_w)
+WRITE8_MEMBER(argus_state::bg1ram_w)
 {
 	m_bg1ram[offset] = data;
 	m_bg1_tilemap->mark_tile_dirty(offset >> 1);
@@ -461,7 +461,7 @@ WRITE8_MEMBER(argus_state::argus_bg_status_w)
 
 			for (offs = 0x400; offs < 0x500; offs++)
 			{
-				argus_change_bg_palette((offs - 0x400) + 0x080, offs, offs + 0x400);
+				change_bg_palette((offs - 0x400) + 0x080, offs, offs + 0x400);
 			}
 		}
 	}
@@ -480,7 +480,7 @@ WRITE8_MEMBER(argus_state::valtric_bg_status_w)
 
 			for (offs = 0x400; offs < 0x600; offs += 2)
 			{
-				argus_change_bg_palette(((offs - 0x400) >> 1) + 0x100, offs & ~1, offs | 1);
+				change_bg_palette(((offs - 0x400) >> 1) + 0x100, offs & ~1, offs | 1);
 			}
 		}
 	}
@@ -502,14 +502,9 @@ WRITE8_MEMBER(argus_state::butasan_bg1_status_w)
 	}
 }
 
-WRITE8_MEMBER(argus_state::argus_flipscreen_w)
+WRITE8_MEMBER(argus_state::flipscreen_w)
 {
 	m_flipscreen = data & 0x80;
-}
-
-READ8_MEMBER(argus_state::argus_paletteram_r)
-{
-	return m_paletteram[offset];
 }
 
 WRITE8_MEMBER(argus_state::argus_paletteram_w)
@@ -522,14 +517,14 @@ WRITE8_MEMBER(argus_state::argus_paletteram_w)
 	{
 		offset &= 0x07f;
 
-		argus_change_palette(offset, offset, offset + 0x080);
+		change_palette(offset, offset, offset + 0x080);
 
 		if (offset == 0x07f || offset == 0x0ff)
 		{
 			m_palette_intensity = m_paletteram[0x0ff] | (m_paletteram[0x07f] << 8);
 
 			for (offs = 0x400; offs < 0x500; offs++)
-				argus_change_bg_palette((offs & 0xff) + 0x080, offs, offs + 0x400);
+				change_bg_palette((offs & 0xff) + 0x080, offs, offs + 0x400);
 		}
 	}
 	else if ((offset >= 0x400 && offset <= 0x4ff) ||
@@ -538,7 +533,7 @@ WRITE8_MEMBER(argus_state::argus_paletteram_w)
 		offs = offset & 0xff;
 		offset = offs | 0x400;
 
-		argus_change_bg_palette(offs + 0x080, offset, offset + 0x400);
+		change_bg_palette(offs + 0x080, offset, offset + 0x400);
 	}
 	else if ((offset >= 0x500 && offset <= 0x5ff) ||
 				(offset >= 0x900 && offset <= 0x9ff))       /* BG1 color */
@@ -546,7 +541,7 @@ WRITE8_MEMBER(argus_state::argus_paletteram_w)
 		offs = offset & 0xff;
 		offset = offs | 0x500;
 
-		argus_change_palette(offs + 0x180, offset, offset + 0x400);
+		change_palette(offs + 0x180, offset, offset + 0x400);
 	}
 	else if ((offset >= 0x700 && offset <= 0x7ff) ||
 				(offset >= 0xb00 && offset <= 0xbff))       /* text color */
@@ -554,7 +549,7 @@ WRITE8_MEMBER(argus_state::argus_paletteram_w)
 		offs = offset & 0xff;
 		offset = offs | 0x700;
 
-		argus_change_palette(offs + 0x280, offset, offset + 0x400);
+		change_palette(offs + 0x280, offset, offset + 0x400);
 	}
 }
 
@@ -564,7 +559,7 @@ WRITE8_MEMBER(argus_state::valtric_paletteram_w)
 
 	if (offset <= 0x1ff)                            /* Sprite color */
 	{
-		argus_change_palette(offset >> 1, offset & ~1, offset | 1);
+		change_palette(offset >> 1, offset & ~1, offset | 1);
 
 		if (offset == 0x1fe || offset == 0x1ff)
 		{
@@ -573,16 +568,16 @@ WRITE8_MEMBER(argus_state::valtric_paletteram_w)
 			m_palette_intensity = m_paletteram[0x1ff] | (m_paletteram[0x1fe] << 8);
 
 			for (offs = 0x400; offs < 0x600; offs += 2)
-				argus_change_bg_palette(((offs & 0x1ff) >> 1) + 0x100, offs & ~1, offs | 1);
+				change_bg_palette(((offs & 0x1ff) >> 1) + 0x100, offs & ~1, offs | 1);
 		}
 	}
 	else if (offset >= 0x400 && offset <= 0x5ff)        /* BG color */
 	{
-		argus_change_bg_palette(((offset & 0x1ff) >> 1) + 0x100, offset & ~1, offset | 1);
+		change_bg_palette(((offset & 0x1ff) >> 1) + 0x100, offset & ~1, offset | 1);
 	}
 	else if (offset >= 0x600 && offset <= 0x7ff)        /* Text color */
 	{
-		argus_change_palette(((offset & 0x1ff) >> 1) + 0x200, offset & ~1, offset | 1);
+		change_palette(((offset & 0x1ff) >> 1) + 0x200, offset & ~1, offset | 1);
 	}
 }
 
@@ -592,36 +587,31 @@ WRITE8_MEMBER(argus_state::butasan_paletteram_w)
 
 	if (offset <= 0x1ff)                            /* BG0 color */
 	{
-		argus_change_palette((offset >> 1) + 0x100, offset & ~1, offset | 1);
+		change_palette((offset >> 1) + 0x100, offset & ~1, offset | 1);
 	}
 	else if (offset <= 0x23f)                       /* BG1 color */
 	{
-		argus_change_palette(((offset & 0x3f) >> 1) + 0x0c0, offset & ~1, offset | 1);
+		change_palette(((offset & 0x3f) >> 1) + 0x0c0, offset & ~1, offset | 1);
 	}
 	else if (offset >= 0x400 && offset <= 0x47f)    /* Sprite color */
 	{                                               /* 16 colors */
-		argus_change_palette((offset & 0x7f) >> 1, offset & ~1, offset | 1);
+		change_palette((offset & 0x7f) >> 1, offset & ~1, offset | 1);
 	}
 	else if (offset >= 0x480 && offset <= 0x4ff)    /* Sprite color */
 	{                                               /* 8  colors */
 		int offs = (offset & 0x070) | ((offset & 0x00f) >> 1);
 
-		argus_change_palette(offs + 0x040, offset & ~1, offset | 1);
-		argus_change_palette(offs + 0x048, offset & ~1, offset | 1);
+		change_palette(offs + 0x040, offset & ~1, offset | 1);
+		change_palette(offs + 0x048, offset & ~1, offset | 1);
 	}
 	else if (offset >= 0x600 && offset <= 0x7ff)    /* Text color */
 	{
-		argus_change_palette(((offset & 0x1ff) >> 1) + 0x200, offset & ~1, offset | 1);
+		change_palette(((offset & 0x1ff) >> 1) + 0x200, offset & ~1, offset | 1);
 	}
 	else if (offset >= 0x240 && offset <= 0x25f)    // dummy
-		argus_change_palette(((offset & 0x1f) >> 1) + 0xe0, offset & ~1, offset | 1);
+		change_palette(((offset & 0x1f) >> 1) + 0xe0, offset & ~1, offset | 1);
 	else if (offset >= 0x500 && offset <= 0x51f)    // dummy
-		argus_change_palette(((offset & 0x1f) >> 1) + 0xf0, offset & ~1, offset | 1);
-}
-
-READ8_MEMBER(argus_state::butasan_bg1ram_r)
-{
-	return m_butasan_bg1ram[offset];
+		change_palette(((offset & 0x1f) >> 1) + 0xf0, offset & ~1, offset | 1);
 }
 
 WRITE8_MEMBER(argus_state::butasan_bg1ram_w)
@@ -812,24 +802,21 @@ void argus_state::argus_bg0_scroll_handle()
 
 void argus_state::argus_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprect, int priority)
 {
-	UINT8 *spriteram = m_spriteram;
-	int offs;
-
 	/* Draw the sprites */
-	for (offs = 0; offs < m_spriteram.bytes(); offs += 16)
+	for (int offs = 0; offs < m_spriteram.bytes(); offs += 16)
 	{
-		if (!(spriteram[offs+15] == 0 && spriteram[offs+11] == 0xf0))
+		if (!(m_spriteram[offs+15] == 0 && m_spriteram[offs+11] == 0xf0))
 		{
 			int sx, sy, tile, flipx, flipy, color, pri;
 
-			sx = spriteram[offs+12]; if (spriteram[offs+13] & 0x01) sx -= 256;
-			sy = spriteram[offs+11]; if (!(spriteram[offs+13] & 0x02)) sy -= 256;
+			sx = m_spriteram[offs+12]; if (m_spriteram[offs+13] & 0x01) sx -= 256;
+			sy = m_spriteram[offs+11]; if (!(m_spriteram[offs+13] & 0x02)) sy -= 256;
 
-			tile  = spriteram[offs+14] | ((spriteram[offs+13] & 0xc0) << 2);
-			flipx = spriteram[offs+13] & 0x10;
-			flipy = spriteram[offs+13] & 0x20;
-			color = spriteram[offs+15] & 0x07;
-			pri   = (spriteram[offs+15] & 0x08) >> 3;
+			tile  = m_spriteram[offs+14] | ((m_spriteram[offs+13] & 0xc0) << 2);
+			flipx = m_spriteram[offs+13] & 0x10;
+			flipy = m_spriteram[offs+13] & 0x20;
+			color = m_spriteram[offs+15] & 0x07;
+			pri   = (m_spriteram[offs+15] & 0x08) >> 3;
 
 			if (m_flipscreen)
 			{
@@ -840,8 +827,8 @@ void argus_state::argus_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &clip
 			}
 
 			if (priority != pri)
-				jal_blend_drawgfx(
-							bitmap,cliprect,machine().gfx[0],
+				m_blend->drawgfx(m_palette,
+							bitmap,cliprect,m_gfxdecode->gfx(0),
 							tile,
 							color,
 							flipx, flipy,
@@ -862,10 +849,10 @@ void argus_state::valtric_draw_mosaic(screen_device &screen, bitmap_rgb32 &bitma
 	}
 
 	if (m_mosaic==0)
-		m_bg1_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg1_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	else
 	{
-		m_bg1_tilemap->draw(m_mosaicbitmap, cliprect, 0, 0);
+		m_bg1_tilemap->draw(screen, m_mosaicbitmap, cliprect, 0, 0);
 		{
 			int step=m_mosaic;
 			UINT32 *dest;
@@ -901,14 +888,13 @@ void argus_state::valtric_draw_mosaic(screen_device &screen, bitmap_rgb32 &bitma
 #else
 void argus_state::valtric_draw_mosaic(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	argus_state *state = screen.machine().driver_data<argus_state>();
 	int step = 0x10 - (m_valtric_mosaic & 0x0f);
 
 	if (step == 1)
-		m_bg1_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg1_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	else
 	{
-		m_bg1_tilemap->draw(m_mosaicbitmap, cliprect, 0, 0);
+		m_bg1_tilemap->draw(screen, m_mosaicbitmap, cliprect, 0, 0);
 		{
 			UINT32 *dest;
 			int x,y,xx,yy,c=0;
@@ -942,23 +928,20 @@ void argus_state::valtric_draw_mosaic(screen_device &screen, bitmap_rgb32 &bitma
 
 void argus_state::valtric_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	UINT8 *spriteram = m_spriteram;
-	int offs;
-
 	/* Draw the sprites */
-	for (offs = 0; offs < m_spriteram.bytes(); offs += 16)
+	for (int offs = 0; offs < m_spriteram.bytes(); offs += 16)
 	{
-		if (!(spriteram[offs+15] == 0 && spriteram[offs+11] == 0xf0))
+		if (!(m_spriteram[offs+15] == 0 && m_spriteram[offs+11] == 0xf0))
 		{
 			int sx, sy, tile, flipx, flipy, color;
 
-			sx = spriteram[offs+12]; if (spriteram[offs+13] & 0x01) sx -= 256;
-			sy = spriteram[offs+11]; if (!(spriteram[offs+13] & 0x02)) sy -= 256;
+			sx = m_spriteram[offs+12]; if (m_spriteram[offs+13] & 0x01) sx -= 256;
+			sy = m_spriteram[offs+11]; if (!(m_spriteram[offs+13] & 0x02)) sy -= 256;
 
-			tile  = spriteram[offs+14] | ((spriteram[offs+13] & 0xc0) << 2);
-			flipx = spriteram[offs+13] & 0x10;
-			flipy = spriteram[offs+13] & 0x20;
-			color = spriteram[offs+15] & 0x0f;
+			tile  = m_spriteram[offs+14] | ((m_spriteram[offs+13] & 0xc0) << 2);
+			flipx = m_spriteram[offs+13] & 0x10;
+			flipy = m_spriteram[offs+13] & 0x20;
+			color = m_spriteram[offs+15] & 0x0f;
 
 			if (m_flipscreen)
 			{
@@ -968,8 +951,8 @@ void argus_state::valtric_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cl
 				flipy = !flipy;
 			}
 
-			jal_blend_drawgfx(
-						bitmap,cliprect,machine().gfx[0],
+			m_blend->drawgfx(m_palette,
+						bitmap,cliprect,m_gfxdecode->gfx(0),
 						tile,
 						color,
 						flipx, flipy,
@@ -981,30 +964,24 @@ void argus_state::valtric_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cl
 
 void argus_state::butasan_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	UINT8 *spriteram = m_spriteram;
-	int offs;
-
 	/* Draw the sprites */
-	for (offs = 0; offs < m_spriteram.bytes(); offs += 16)
+	for (int offs = 0; offs < m_spriteram.bytes(); offs += 16)
 	{
 		int sx, sy, tile, flipx, flipy, color;
 		int fx, fy;
 
-		tile  = spriteram[offs+14] | ((spriteram[offs+15] & 0x0f) << 8);
-		flipx = spriteram[offs+8] & 0x01;
-		flipy = spriteram[offs+8] & 0x04;
-		color = spriteram[offs+9] & 0x0f;
+		tile  = m_spriteram[offs+14] | ((m_spriteram[offs+15] & 0x0f) << 8);
+		flipx = m_spriteram[offs+8] & 0x01;
+		flipy = m_spriteram[offs+8] & 0x04;
+		color = m_spriteram[offs+9] & 0x0f;
 
-		sx = spriteram[offs+10];
-		sy = spriteram[offs+12];
+		sx = m_spriteram[offs+10];
+		sy = m_spriteram[offs+12];
 
-		if (spriteram[offs+11] & 0x01) sx-=256;
-		if (spriteram[offs+13] & 0x01) sy-=256;
+		if (m_spriteram[offs+11] & 0x01) sx-=256;
+		if (m_spriteram[offs+13] & 0x01) sy-=256;
 
 		sy = 240 - sy;
-
-		fx = flipx;
-		fy = flipy;
 
 		if (m_flipscreen)
 		{
@@ -1014,13 +991,16 @@ void argus_state::butasan_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cl
 			flipy = !flipy;
 		}
 
+		fx = flipx;
+		fy = flipy;
+
 		{
 			int i, j, td;
 
 			if ((offs >= 0x100 && offs <= 0x2ff) || (offs >= 0x400 && offs <= 0x57f))
 			{
-				jal_blend_drawgfx(
-							bitmap,cliprect,machine().gfx[0],
+				m_blend->drawgfx(m_palette,
+							bitmap,cliprect,m_gfxdecode->gfx(0),
 							tile,
 							color,
 							flipx, flipy,
@@ -1033,8 +1013,8 @@ void argus_state::butasan_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cl
 				{
 					td = (fx) ? (1 - i) : i;
 
-					jal_blend_drawgfx(
-								bitmap,cliprect,machine().gfx[0],
+					m_blend->drawgfx(m_palette,
+								bitmap,cliprect,m_gfxdecode->gfx(0),
 								tile + td,
 								color,
 								flipx, flipy,
@@ -1053,8 +1033,8 @@ void argus_state::butasan_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cl
 						else
 							td = (fx) ? (i * 2) + 1 - j : i * 2 + j;
 
-						jal_blend_drawgfx(
-									bitmap,cliprect,machine().gfx[0],
+						m_blend->drawgfx(m_palette,
+									bitmap,cliprect,m_gfxdecode->gfx(0),
 									tile + td,
 									color,
 									flipx, flipy,
@@ -1074,8 +1054,8 @@ void argus_state::butasan_draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cl
 						else
 							td = (fx) ? (i * 4) + 3 - j : i * 4 + j;
 
-						jal_blend_drawgfx(
-									bitmap,cliprect,machine().gfx[0],
+						m_blend->drawgfx(m_palette,
+									bitmap,cliprect,m_gfxdecode->gfx(0),
 									tile + td,
 									color,
 									flipx, flipy,
@@ -1149,12 +1129,12 @@ UINT32 argus_state::screen_update_argus(screen_device &screen, bitmap_rgb32 &bit
 	/* scroll BG0 and render tile at proper position */
 	argus_bg0_scroll_handle();
 
-	m_bg0_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg0_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	argus_draw_sprites(bitmap, cliprect, 0);
 	if (m_bg_status & 1)    /* Backgound enable */
-		m_bg1_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg1_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	argus_draw_sprites(bitmap, cliprect, 1);
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -1165,9 +1145,9 @@ UINT32 argus_state::screen_update_valtric(screen_device &screen, bitmap_rgb32 &b
 	if (m_bg_status & 1)    /* Backgound enable */
 		valtric_draw_mosaic(screen, bitmap, cliprect);
 	else
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 	valtric_draw_sprites(bitmap, cliprect);
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -1176,12 +1156,12 @@ UINT32 argus_state::screen_update_butasan(screen_device &screen, bitmap_rgb32 &b
 	bg_setting();
 
 	if (m_bg_status & 1)    /* Backgound enable */
-		m_bg0_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg0_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	else
-		bitmap.fill(get_black_pen(machine()), cliprect);
-	if (m_butasan_bg1_status & 1) m_bg1_tilemap->draw(bitmap, cliprect, 0, 0);
+		bitmap.fill(m_palette->black_pen(), cliprect);
+	if (m_butasan_bg1_status & 1) m_bg1_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	butasan_draw_sprites(bitmap, cliprect);
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	butasan_log_vram();
 	return 0;

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Karl Stenerud
 /*
 must fix:
     callm
@@ -13,15 +15,6 @@ must fix:
  * A portable Motorola M68xxx processor emulation engine.
  * Copyright Karl Stenerud.  All rights reserved.
  *
- * This code may be freely used for non-commercial purposes as long as this
- * copyright notice remains unaltered in the source code and any binary files
- * containing this code in compiled form.
- *
- * All other licensing terms must be negotiated with the author
- * (Karl Stenerud).
- *
- * The latest version of this code can be obtained at:
- * http://kstenerud.cjb.net
  */
 
 /* Special thanks to Bart Trzynadlowski for his insight into the
@@ -102,7 +95,7 @@ M68KMAKE_PROTOTYPE_FOOTER
 /* Build the opcode handler table */
 void m68ki_build_opcode_table(void);
 
-extern void (*m68ki_instruction_jump_table[][0x10000])(m68ki_cpu_core *m68k); /* opcode handler jump table */
+extern void (*m68ki_instruction_jump_table[][0x10000])(m68000_base_device *m68k); /* opcode handler jump table */
 extern unsigned char m68ki_cycles[][0x10000];
 
 
@@ -124,13 +117,13 @@ M68KMAKE_TABLE_HEADER
 
 #define NUM_CPU_TYPES 7
 
-void (*m68ki_instruction_jump_table[NUM_CPU_TYPES][0x10000])(m68ki_cpu_core *m68k); /* opcode handler jump table */
+void (*m68ki_instruction_jump_table[NUM_CPU_TYPES][0x10000])(m68000_base_device *m68k); /* opcode handler jump table */
 unsigned char m68ki_cycles[NUM_CPU_TYPES][0x10000]; /* Cycles used by CPU type */
 
 /* This is used to generate the opcode handler jump table */
 struct opcode_handler_struct
 {
-	void (*opcode_handler)(m68ki_cpu_core *m68k);        /* handler function */
+	void (*opcode_handler)(m68000_base_device *m68k);        /* handler function */
 	unsigned int  mask;                  /* mask on opcode */
 	unsigned int  match;                 /* what to match after masking */
 	unsigned char cycles[NUM_CPU_TYPES]; /* cycles each cpu type takes */
@@ -174,7 +167,7 @@ void m68ki_build_opcode_table(void)
 		/* default to illegal */
 		for(k=0;k<NUM_CPU_TYPES;k++)
 		{
-			m68ki_instruction_jump_table[k][i] = _m68ki_cpu_core::m68k_op_illegal;
+			m68ki_instruction_jump_table[k][i] = m68000_base_device_ops::m68k_op_illegal;
 			m68ki_cycles[k][i] = 0;
 		}
 	}
@@ -269,9 +262,10 @@ M68KMAKE_OPCODE_HANDLER_HEADER
 
 #include "emu.h"
 #include "m68kcpu.h"
-extern void m68040_fpu_op0(m68ki_cpu_core *m68k);
-extern void m68040_fpu_op1(m68ki_cpu_core *m68k);
-extern void m68881_mmu_ops(m68ki_cpu_core *m68k);
+extern void m68040_fpu_op0(m68000_base_device *m68k);
+extern void m68040_fpu_op1(m68000_base_device *m68k);
+extern void m68881_mmu_ops(m68000_base_device *m68k);
+extern void m68881_ftrap(m68000_base_device *m68k);
 
 /* ======================================================================== */
 /* ========================= INSTRUCTION HANDLERS ========================= */
@@ -551,8 +545,9 @@ cpdbcc    32  .     .     1111...001001...  ..........  . . U U . . U   .   .   
 cpgen     32  .     .     1111...000......  ..........  . . U U . . U   .   .   4   4   .   .   .
 cpscc     32  .     .     1111...001......  ..........  . . U U . . U   .   .   4   4   .   .   .
 cptrapcc  32  .     .     1111...001111...  ..........  . . U U . . U   .   .   4   4   .   .   .
+ftrapcc   32  .     .     1111001001111...  ..........  . . U U . . U   .   .   4   4   .   .   .
 dbt       16  .     .     0101000011001...  ..........  U U U U U U U  12  12   6   6   6   6   6
-dbf       16  .     .     0101000111001...  ..........  U U U U U U U  12  12   6   6   6   6   6
+dbf       16  .     .     0101000111001...  ..........  U U U U U U U  12  12   6   4   4   4   4
 dbcc      16  .     .     0101....11001...  ..........  U U U U U U U  12  12   6   6   6   6   6
 divs      16  .     d     1000...111000...  ..........  U U U U U U U 158 122  56  56  56  56  56
 divs      16  .     .     1000...111......  A+-DXWLdxI  U U U U U U U 158 122  56  56  56  56  56
@@ -3158,8 +3153,8 @@ M68KMAKE_OP(bkpt, 0, ., .)
 {
 	if(CPU_TYPE_IS_010_PLUS((mc68kcpu)->cpu_type))
 	{
-		if ((mc68kcpu)->bkpt_ack_callback != NULL)
-			(*(mc68kcpu)->bkpt_ack_callback)((mc68kcpu)->device, CPU_TYPE_IS_EC020_PLUS((mc68kcpu)->cpu_type) ? (mc68kcpu)->ir & 7 : 0);
+		if (!(mc68kcpu)->bkpt_ack_callback.isnull())
+			((mc68kcpu)->bkpt_ack_callback)((*mc68kcpu->program), 0, CPU_TYPE_IS_EC020_PLUS((mc68kcpu)->cpu_type) ? (mc68kcpu)->ir & 7 : 0, 0xffffffff);
 	}
 	m68ki_exception_illegal(mc68kcpu);
 }
@@ -3324,7 +3319,7 @@ M68KMAKE_OP(callm, 32, ., .)
 		REG_PC(mc68kcpu) += 2;
 (void)ea;   /* just to avoid an 'unused variable' warning */
 		logerror("%s at %08x: called unimplemented instruction %04x (callm)\n",
-						(mc68kcpu)->device->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
+						(mc68kcpu)->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
 		return;
 	}
 	m68ki_exception_illegal(mc68kcpu);
@@ -3895,7 +3890,14 @@ M68KMAKE_OP(clr, 8, ., d)
 
 M68KMAKE_OP(clr, 8, ., .)
 {
-	m68ki_write_8((mc68kcpu), M68KMAKE_GET_EA_AY_8, 0);
+	UINT32 ea = M68KMAKE_GET_EA_AY_8;
+
+	if(CPU_TYPE_IS_000((mc68kcpu)->cpu_type))
+	{
+		m68ki_read_8((mc68kcpu), ea);   /* the 68000 does a dummy read, the value is discarded */
+	}
+
+	m68ki_write_8((mc68kcpu), ea, 0);
 
 	(mc68kcpu)->n_flag = NFLAG_CLEAR;
 	(mc68kcpu)->v_flag = VFLAG_CLEAR;
@@ -3917,7 +3919,14 @@ M68KMAKE_OP(clr, 16, ., d)
 
 M68KMAKE_OP(clr, 16, ., .)
 {
-	m68ki_write_16((mc68kcpu), M68KMAKE_GET_EA_AY_16, 0);
+	UINT32 ea = M68KMAKE_GET_EA_AY_16;
+
+	if(CPU_TYPE_IS_000((mc68kcpu)->cpu_type))
+	{
+		m68ki_read_16((mc68kcpu), ea);  /* the 68000 does a dummy read, the value is discarded */
+	}
+
+	m68ki_write_16((mc68kcpu), ea, 0);
 
 	(mc68kcpu)->n_flag = NFLAG_CLEAR;
 	(mc68kcpu)->v_flag = VFLAG_CLEAR;
@@ -3939,7 +3948,14 @@ M68KMAKE_OP(clr, 32, ., d)
 
 M68KMAKE_OP(clr, 32, ., .)
 {
-	m68ki_write_32((mc68kcpu), M68KMAKE_GET_EA_AY_32, 0);
+	UINT32 ea = M68KMAKE_GET_EA_AY_32;
+
+	if(CPU_TYPE_IS_000((mc68kcpu)->cpu_type))
+	{
+		m68ki_read_32((mc68kcpu), ea);  /* the 68000 does a dummy read, the value is discarded */
+	}
+
+	m68ki_write_32((mc68kcpu), ea, 0);
 
 	(mc68kcpu)->n_flag = NFLAG_CLEAR;
 	(mc68kcpu)->v_flag = VFLAG_CLEAR;
@@ -4260,8 +4276,8 @@ M68KMAKE_OP(cmpi, 32, ., d)
 	UINT32 dst = DY(mc68kcpu);
 	UINT32 res = dst - src;
 
-	if ((mc68kcpu)->cmpild_instr_callback != NULL)
-		(*(mc68kcpu)->cmpild_instr_callback)((mc68kcpu)->device, src, (mc68kcpu)->ir & 7);
+	if (!(mc68kcpu)->cmpild_instr_callback.isnull())
+		((mc68kcpu)->cmpild_instr_callback)(*(mc68kcpu)->program, (mc68kcpu)->ir & 7, src, 0xffffffff);
 
 	(mc68kcpu)->n_flag = NFLAG_32(res);
 	(mc68kcpu)->not_z_flag = MASK_OUT_ABOVE_32(res);
@@ -4402,7 +4418,7 @@ M68KMAKE_OP(cpbcc, 32, ., .)
 	if(CPU_TYPE_IS_EC020_PLUS((mc68kcpu)->cpu_type))
 	{
 		logerror("%s at %08x: called unimplemented instruction %04x (cpbcc)\n",
-						(mc68kcpu)->device->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
+						(mc68kcpu)->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
 		return;
 	}
 	m68ki_exception_1111(mc68kcpu);
@@ -4414,7 +4430,7 @@ M68KMAKE_OP(cpdbcc, 32, ., .)
 	if(CPU_TYPE_IS_EC020_PLUS((mc68kcpu)->cpu_type))
 	{
 		logerror("%s at %08x: called unimplemented instruction %04x (cpdbcc)\n",
-						(mc68kcpu)->device->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
+						(mc68kcpu)->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
 		return;
 	}
 	m68ki_exception_1111(mc68kcpu);
@@ -4426,7 +4442,7 @@ M68KMAKE_OP(cpgen, 32, ., .)
 	if(CPU_TYPE_IS_EC020_PLUS((mc68kcpu)->cpu_type) && (mc68kcpu->has_fpu || mc68kcpu->has_pmmu))
 	{
 		logerror("%s at %08x: called unimplemented instruction %04x (cpgen)\n",
-						(mc68kcpu)->device->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
+						(mc68kcpu)->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
 		return;
 	}
 	m68ki_exception_1111(mc68kcpu);
@@ -4438,7 +4454,7 @@ M68KMAKE_OP(cpscc, 32, ., .)
 	if(CPU_TYPE_IS_EC020_PLUS((mc68kcpu)->cpu_type))
 	{
 		logerror("%s at %08x: called unimplemented instruction %04x (cpscc)\n",
-						(mc68kcpu)->device->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
+						(mc68kcpu)->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
 		return;
 	}
 	m68ki_exception_1111(mc68kcpu);
@@ -4450,7 +4466,17 @@ M68KMAKE_OP(cptrapcc, 32, ., .)
 	if(CPU_TYPE_IS_EC020_PLUS((mc68kcpu)->cpu_type))
 	{
 		logerror("%s at %08x: called unimplemented instruction %04x (cptrapcc)\n",
-						(mc68kcpu)->device->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
+						(mc68kcpu)->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
+		return;
+	}
+	m68ki_exception_1111(mc68kcpu);
+}
+
+M68KMAKE_OP(ftrapcc, 32, ., .)
+{
+	if((mc68kcpu)->has_fpu)
+	{
+		m68881_ftrap(mc68kcpu);
 		return;
 	}
 	m68ki_exception_1111(mc68kcpu);
@@ -8261,8 +8287,8 @@ M68KMAKE_OP(reset, 0, ., .)
 {
 	if((mc68kcpu)->s_flag)
 	{
-		if ((mc68kcpu)->reset_instr_callback != NULL)
-			(*(mc68kcpu)->reset_instr_callback)((mc68kcpu)->device);
+		if (!(mc68kcpu)->reset_instr_callback.isnull())
+			((mc68kcpu)->reset_instr_callback)(1);
 		(mc68kcpu)->remaining_cycles -= (mc68kcpu)->cyc_reset;
 		return;
 	}
@@ -8967,8 +8993,8 @@ M68KMAKE_OP(rte, 32, ., .)
 		UINT32 new_pc;
 		UINT32 format_word;
 
-		if ((mc68kcpu)->rte_instr_callback != NULL)
-			(*(mc68kcpu)->rte_instr_callback)((mc68kcpu)->device);
+		if (!(mc68kcpu)->rte_instr_callback.isnull())
+			((mc68kcpu)->rte_instr_callback)(1);
 		m68ki_trace_t0(mc68kcpu);              /* auto-disable (see m68kcpu.h) */
 
 		if(CPU_TYPE_IS_000((mc68kcpu)->cpu_type))
@@ -9129,7 +9155,7 @@ M68KMAKE_OP(rtm, 32, ., .)
 	{
 		m68ki_trace_t0(mc68kcpu);              /* auto-disable (see m68kcpu.h) */
 		logerror("%s at %08x: called unimplemented instruction %04x (rtm)\n",
-						(mc68kcpu)->device->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
+						(mc68kcpu)->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
 		return;
 	}
 	m68ki_exception_illegal(mc68kcpu);
@@ -9994,21 +10020,20 @@ M68KMAKE_OP(tas, 8, ., .)
 {
 	UINT32 ea = M68KMAKE_GET_EA_AY_8;
 	UINT32 dst = m68ki_read_8((mc68kcpu), ea);
-	UINT32 allow_writeback = TRUE;
 
 	(mc68kcpu)->not_z_flag = dst;
 	(mc68kcpu)->n_flag = NFLAG_8(dst);
 	(mc68kcpu)->v_flag = VFLAG_CLEAR;
 	(mc68kcpu)->c_flag = CFLAG_CLEAR;
 
-	/* The Genesis/Megadrive games Gargoyles and Ex-Mutants need the TAS writeback
-	   disabled in order to function properly.  Some Amiga software may also rely
-	   on (mc68kcpu), but only when accessing specific addresses so additional functionality
-	   will be needed. */
-	if ((mc68kcpu)->tas_instr_callback != NULL)
-		allow_writeback = (*(mc68kcpu)->tas_instr_callback)((mc68kcpu)->device);
-
-	if (allow_writeback)
+	/* On the 68000 and 68010, the TAS instruction uses a unique bus cycle that may have
+	   side effects (e.g. delaying DMA) or may fail to write back at all depending on the
+	   bus implementation.
+	   In particular, the Genesis/Megadrive games Gargoyles and Ex-Mutants need the TAS
+	   to fail to write back in order to function properly. */
+	if (CPU_TYPE_IS_010_LESS((mc68kcpu)->cpu_type) && !(mc68kcpu)->tas_write_callback.isnull())
+		((mc68kcpu)->tas_write_callback)(*(mc68kcpu)->program, ea, dst | 0x80, 0xff);
+	else
 		m68ki_write_8((mc68kcpu), ea, dst | 0x80);
 }
 
@@ -10511,7 +10536,7 @@ M68KMAKE_OP(cpush, 32, ., .)
 	if(CPU_TYPE_IS_040_PLUS((mc68kcpu)->cpu_type))
 	{
 		logerror("%s at %08x: called unimplemented instruction %04x (cpush)\n",
-						(mc68kcpu)->device->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
+						(mc68kcpu)->tag(), REG_PC(mc68kcpu) - 2, (mc68kcpu)->ir);
 		return;
 	}
 	m68ki_exception_1111(mc68kcpu);

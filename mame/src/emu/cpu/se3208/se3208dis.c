@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:ElSemi
 #include "emu.h"
 #include "debugger.h"
 #include "se3208.h"
@@ -1388,7 +1390,6 @@ static _OP DecodeOp(UINT16 Opcode)
 								return MVFC;
 							else
 								return MVTC;
-							break;
 					}
 					break;
 			}

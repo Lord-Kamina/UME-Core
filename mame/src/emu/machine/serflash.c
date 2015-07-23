@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Luca Elia
 /* Serial Flash Device */
 
 /* todo: cleanup, refactor etc. */
@@ -20,7 +22,7 @@ const device_type SERFLASH = &device_creator<serflash_device>;
 //-------------------------------------------------
 
 serflash_device::serflash_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, SERFLASH, "SERFLASH", tag, owner, clock),
+	: device_t(mconfig, SERFLASH, "Serial Flash", tag, owner, clock, "serflash", __FILE__),
 		device_nvram_interface(mconfig, *this),
 		m_length(0)
 {
@@ -37,9 +39,8 @@ void serflash_device::device_start()
 	m_length = machine().root_device().memregion( tag() )->bytes();
 	m_region = machine().root_device().memregion( tag() )->base();
 
-	m_flashwritemap = auto_alloc_array(machine(), UINT8, m_length / FLASH_PAGE_SIZE);
-	memset(m_flashwritemap, 0, m_length / FLASH_PAGE_SIZE);
-
+	m_flashwritemap.resize(m_length / FLASH_PAGE_SIZE);
+	memset(&m_flashwritemap[0], 0, m_length / FLASH_PAGE_SIZE);
 }
 
 void serflash_device::device_reset()
@@ -72,7 +73,7 @@ void serflash_device::nvram_default()
 void serflash_device::nvram_read(emu_file &file)
 {
 	if (m_length % FLASH_PAGE_SIZE) return; // region size must be multiple of flash page size
-	int size = m_length /= FLASH_PAGE_SIZE;
+	int size = m_length / FLASH_PAGE_SIZE;
 
 
 	if (file)
@@ -98,7 +99,7 @@ void serflash_device::nvram_read(emu_file &file)
 void serflash_device::nvram_write(emu_file &file)
 {
 	if (m_length % FLASH_PAGE_SIZE) return; // region size must be multiple of flash page size
-	int size = m_length /= FLASH_PAGE_SIZE;
+	int size = m_length / FLASH_PAGE_SIZE;
 
 	UINT32 page = 0;
 	while (page < size)

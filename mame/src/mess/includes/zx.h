@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Juergen Buchmueller, Krzysztof Strzecha, Robbbert
 /*****************************************************************************
  *
  * includes/zx.h
@@ -30,7 +32,6 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_ram(*this, RAM_TAG),
-		m_screen(*this, "screen"),
 		m_cassette(*this, "cassette"),
 		m_speaker(*this, "speaker"),
 		m_region_maincpu(*this, "maincpu"),
@@ -43,7 +44,8 @@ public:
 		m_io_row5(*this, "ROW5"),
 		m_io_row6(*this, "ROW6"),
 		m_io_row7(*this, "ROW7"),
-		m_io_config(*this, "CONFIG") { }
+		m_io_config(*this, "CONFIG"),
+		m_screen(*this, "screen") { }
 
 	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 
@@ -76,7 +78,7 @@ public:
 	DECLARE_DRIVER_INIT(zx);
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(zx);
 	DECLARE_PALETTE_INIT(ts1000);
 	DECLARE_MACHINE_RESET(pc8300);
 	DECLARE_MACHINE_RESET(pow3000);
@@ -88,7 +90,6 @@ public:
 protected:
 	required_device<cpu_device> m_maincpu;
 	required_device<ram_device> m_ram;
-	required_device<screen_device> m_screen;
 	required_device<cassette_image_device> m_cassette;
 	required_device<speaker_sound_device> m_speaker;
 	required_memory_region m_region_maincpu;
@@ -102,6 +103,7 @@ protected:
 	required_ioport m_io_row6;
 	required_ioport m_io_row7;
 	optional_ioport m_io_config;
+	required_device<screen_device> m_screen;
 
 	void zx_ula_r(int offs, memory_region *region, const UINT8 param);
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);

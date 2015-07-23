@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /***************************************************************************
 
   video.c
@@ -20,8 +22,7 @@ TILE_GET_INFO_MEMBER(lastduel_state::ld_get_bg_tile_info)
 {
 	int tile = m_scroll2[2 * tile_index] & 0x1fff;
 	int color = m_scroll2[2 * tile_index + 1];
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			tile,color & 0xf,
 			TILE_FLIPYX((color & 0x60) >> 5));
 }
@@ -30,8 +31,7 @@ TILE_GET_INFO_MEMBER(lastduel_state::ld_get_fg_tile_info)
 {
 	int tile = m_scroll1[2 * tile_index] & 0x1fff;
 	int color = m_scroll1[2 * tile_index + 1];
-	SET_TILE_INFO_MEMBER(
-			3,
+	SET_TILE_INFO_MEMBER(3,
 			tile,
 			color & 0xf,
 			TILE_FLIPYX((color & 0x60) >> 5));
@@ -42,8 +42,7 @@ TILE_GET_INFO_MEMBER(lastduel_state::get_bg_tile_info)
 {
 	int tile = m_scroll2[tile_index] & 0x1fff;
 	int color = m_scroll2[tile_index + 0x0800];
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			tile,
 			color & 0xf,
 			TILE_FLIPYX((color & 0x60) >> 5));
@@ -53,8 +52,7 @@ TILE_GET_INFO_MEMBER(lastduel_state::get_fg_tile_info)
 {
 	int tile = m_scroll1[tile_index] & 0x1fff;
 	int color = m_scroll1[tile_index + 0x0800];
-	SET_TILE_INFO_MEMBER(
-			3,
+	SET_TILE_INFO_MEMBER(3,
 			tile,
 			color & 0xf,
 			TILE_FLIPYX((color & 0x60) >> 5));
@@ -64,8 +62,7 @@ TILE_GET_INFO_MEMBER(lastduel_state::get_fg_tile_info)
 TILE_GET_INFO_MEMBER(lastduel_state::get_fix_info)
 {
 	int tile = m_vram[tile_index];
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			tile & 0x7ff,
 			tile>>12,
 			(tile & 0x800) ? TILE_FLIPY : 0);
@@ -81,9 +78,9 @@ TILE_GET_INFO_MEMBER(lastduel_state::get_fix_info)
 
 VIDEO_START_MEMBER(lastduel_state,lastduel)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lastduel_state::ld_get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lastduel_state::ld_get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lastduel_state::get_fix_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lastduel_state::ld_get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lastduel_state::ld_get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lastduel_state::get_fix_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
 
 	m_fg_tilemap->set_transmask(0, 0xffff, 0x0001);
 	m_fg_tilemap->set_transmask(1, 0xf07f, 0x0f81);
@@ -96,9 +93,9 @@ VIDEO_START_MEMBER(lastduel_state,lastduel)
 
 VIDEO_START_MEMBER(lastduel_state,madgear)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lastduel_state::get_bg_tile_info),this),TILEMAP_SCAN_COLS,16,16,64,32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lastduel_state::get_fg_tile_info),this),TILEMAP_SCAN_COLS,16,16,64,32);
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lastduel_state::get_fix_info),this),TILEMAP_SCAN_ROWS,8,8,64,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lastduel_state::get_bg_tile_info),this),TILEMAP_SCAN_COLS,16,16,64,32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lastduel_state::get_fg_tile_info),this),TILEMAP_SCAN_COLS,16,16,64,32);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lastduel_state::get_fix_info),this),TILEMAP_SCAN_ROWS,8,8,64,32);
 
 	m_fg_tilemap->set_transmask(0, 0xffff, 0x8000);
 	m_fg_tilemap->set_transmask(1, 0x80ff, 0xff00);
@@ -188,7 +185,7 @@ WRITE16_MEMBER(lastduel_state::lastduel_palette_word_w)
 	green = ((data >> 8)  & 0x0f) * bright * 0x11 / 0x1f;
 	blue  = ((data >> 4)  & 0x0f) * bright * 0x11 / 0x1f;
 
-	palette_set_color (machine(), offset, MAKE_RGB(red, green, blue));
+	m_palette->set_pen_color (offset, rgb_t(red, green, blue));
 }
 
 /***************************************************************************
@@ -237,8 +234,8 @@ void lastduel_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			flipy = !flipy;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,
-				machine().gfx[0],
+
+				m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				code,
 				color,
 				flipx,flipy,
@@ -248,12 +245,12 @@ void lastduel_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 
 UINT32 lastduel_state::screen_update_lastduel(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
-	m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
 	draw_sprites(bitmap, cliprect, 0);
-	m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
 	draw_sprites(bitmap, cliprect, 1);
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -261,20 +258,20 @@ UINT32 lastduel_state::screen_update_madgear(screen_device &screen, bitmap_ind16
 {
 	if (m_tilemap_priority)
 	{
-		m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | TILEMAP_DRAW_OPAQUE, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | TILEMAP_DRAW_OPAQUE, 0);
 		draw_sprites(bitmap, cliprect, 0);
-		m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 		draw_sprites(bitmap, cliprect, 1);
 	}
 	else
 	{
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-		m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
 		draw_sprites(bitmap, cliprect, 0);
-		m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
 		draw_sprites(bitmap, cliprect, 1);
 	}
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

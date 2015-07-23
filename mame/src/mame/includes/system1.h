@@ -1,3 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:Jarek Parchanski, Nicola Salmoria, Mirko Buffoni
+#include "cpu/z80/z80.h"
 #include "machine/i8255.h"
 
 class system1_state : public driver_device
@@ -12,7 +15,16 @@ public:
 		m_nob_mcu_status(*this, "nob_mcu_status"),
 		m_maincpu(*this, "maincpu"),
 		m_soundcpu(*this, "soundcpu"),
-		m_mcu(*this, "mcu") { }
+		m_mcu(*this, "mcu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette"),
+		m_generic_paletteram_8(*this, "paletteram"),
+		m_decrypted_opcodes(*this, "decrypted_opcodes"),
+		m_maincpu_region(*this, "maincpu"),
+		m_bank1(*this, "bank1"),
+		m_bank0d(*this, "bank0d"),
+		m_bank1d(*this, "bank1d") { }
 
 	optional_device<i8255_device>  m_ppi8255;
 	required_shared_ptr<UINT8> m_ram;
@@ -32,7 +44,7 @@ public:
 	UINT8 m_mix_collide_summary;
 	UINT8 *m_sprite_collide;
 	UINT8 m_sprite_collide_summary;
-	bitmap_ind16 *m_sprite_bitmap;
+	bitmap_ind16 m_sprite_bitmap;
 	UINT8 m_video_mode;
 	UINT8 m_videoram_bank;
 	tilemap_t *m_tilemap_page[8];
@@ -103,6 +115,7 @@ public:
 	DECLARE_DRIVER_INIT(seganinj);
 	DECLARE_DRIVER_INIT(gardia);
 	DECLARE_DRIVER_INIT(spatter);
+	DECLARE_DRIVER_INIT(spattera);
 	TILE_GET_INFO_MEMBER(tile_get_info);
 	virtual void machine_start();
 	virtual void machine_reset();
@@ -123,7 +136,18 @@ public:
 	void bank44_custom_w(UINT8 data, UINT8 prevdata);
 	void bank0c_custom_w(UINT8 data, UINT8 prevdata);
 	void dakkochn_custom_w(UINT8 data, UINT8 prevdata);
-	required_device<cpu_device> m_maincpu;
+	required_device<z80_device> m_maincpu;
 	required_device<cpu_device> m_soundcpu;
 	optional_device<cpu_device> m_mcu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
+	required_shared_ptr<UINT8> m_generic_paletteram_8;
+	optional_shared_ptr<UINT8> m_decrypted_opcodes;
+	required_memory_region m_maincpu_region;
+	required_memory_bank m_bank1;
+	optional_memory_bank m_bank0d;
+	optional_memory_bank m_bank1d;
+
+	UINT8 *m_banked_decrypted_opcodes;
 };

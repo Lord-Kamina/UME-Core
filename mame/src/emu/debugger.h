@@ -1,12 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Aaron Giles
 /****************************************************************************
 
     debugger.h
 
     General debugging interfaces
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
-
 ****************************************************************************/
 
 #pragma once
@@ -45,8 +43,10 @@ void debugger_flush_all_traces_on_abnormal_exit(void);
 
 INLINE void debugger_instruction_hook(device_t *device, offs_t curpc)
 {
+#ifndef MAME_DEBUG_FAST
 	if ((device->machine().debug_flags & DEBUG_FLAG_CALL_HOOK) != 0)
 		device->debug()->instruction_hook(curpc);
+#endif
 }
 
 
@@ -73,7 +73,7 @@ INLINE void debugger_exception_hook(device_t *device, int exception)
     execution for the given CPU
 -------------------------------------------------*/
 
-INLINE void debugger_start_cpu_hook(device_t *device, attotime endtime)
+INLINE void debugger_start_cpu_hook(device_t *device, const attotime &endtime)
 {
 	if ((device->machine().debug_flags & DEBUG_FLAG_ENABLED) != 0)
 		device->debug()->start_hook(endtime);

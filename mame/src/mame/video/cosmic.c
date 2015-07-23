@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Lee Taylor
 /***************************************************************************
 
  cosmic.c
@@ -16,50 +18,46 @@ WRITE8_MEMBER(cosmic_state::cosmic_color_register_w)
 }
 
 
-static pen_t panic_map_color( running_machine &machine, UINT8 x, UINT8 y )
+pen_t cosmic_state::panic_map_color( UINT8 x, UINT8 y )
 {
-	cosmic_state *state = machine.driver_data<cosmic_state>();
-	offs_t offs = (state->m_color_registers[0] << 9) | (state->m_color_registers[2] << 10) | ((x >> 4) << 5) | (y >> 3);
-	pen_t pen = state->memregion("user1")->base()[offs];
+	offs_t offs = (m_color_registers[0] << 9) | (m_color_registers[2] << 10) | ((x >> 4) << 5) | (y >> 3);
+	pen_t pen = memregion("user1")->base()[offs];
 
-	if (state->m_color_registers[1])
+	if (m_color_registers[1])
 		pen >>= 4;
 
 	return pen & 0x0f;
 }
 
-static pen_t cosmica_map_color( running_machine &machine, UINT8 x, UINT8 y )
+pen_t cosmic_state::cosmica_map_color( UINT8 x, UINT8 y )
 {
-	cosmic_state *state = machine.driver_data<cosmic_state>();
-	offs_t offs = (state->m_color_registers[0] << 9) | ((x >> 4) << 5) | (y >> 3);
-	pen_t pen = state->memregion("user1")->base()[offs];
+	offs_t offs = (m_color_registers[0] << 9) | ((x >> 4) << 5) | (y >> 3);
+	pen_t pen = memregion("user1")->base()[offs];
 
-	if (state->m_color_registers[1]) // 0 according to the schematics, but that breaks alien formation colors
+	if (m_color_registers[1]) // 0 according to the schematics, but that breaks alien formation colors
 		pen >>= 4;
 
 	return pen & 0x07;
 }
 
-static pen_t cosmicg_map_color( running_machine &machine, UINT8 x, UINT8 y )
+pen_t cosmic_state::cosmicg_map_color( UINT8 x, UINT8 y )
 {
-	cosmic_state *state = machine.driver_data<cosmic_state>();
-	offs_t offs = (state->m_color_registers[0] << 8) | (state->m_color_registers[1] << 9) | ((y >> 4) << 4) | (x >> 4);
-	pen_t pen = state->memregion("user1")->base()[offs];
+	offs_t offs = (m_color_registers[0] << 8) | (m_color_registers[1] << 9) | ((y >> 4) << 4) | (x >> 4);
+	pen_t pen = memregion("user1")->base()[offs];
 
 	/* the upper 4 bits are for cocktail mode support */
 	return pen & 0x0f;
 }
 
-static pen_t magspot_map_color( running_machine &machine, UINT8 x, UINT8 y )
+pen_t cosmic_state::magspot_map_color( UINT8 x, UINT8 y )
 {
-	cosmic_state *state = machine.driver_data<cosmic_state>();
-	offs_t offs = (state->m_color_registers[0] << 9) | ((x >> 3) << 4) | (y >> 4);
-	pen_t pen = state->memregion("user1")->base()[offs];
+	offs_t offs = (m_color_registers[0] << 9) | ((x >> 3) << 4) | (y >> 4);
+	pen_t pen = memregion("user1")->base()[offs];
 
-	if (state->m_color_registers[1])
+	if (m_color_registers[1])
 		pen >>= 4;
 
-	return pen & state->m_magspot_pen_mask;
+	return pen & m_magspot_pen_mask;
 }
 
 
@@ -80,9 +78,6 @@ PALETTE_INIT_MEMBER(cosmic_state,panic)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x10);
-
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x10; i++)
 	{
@@ -90,21 +85,21 @@ PALETTE_INIT_MEMBER(cosmic_state,panic)
 		int g = pal1bit(i >> 1);
 		int b = ((i & 0x0c) == 0x08) ? 0xaa : pal1bit(i >> 2);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* background uses colors 0x00-0x0f */
 	for (i = 0; i < 0x0f; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_pen_indirect(i, i);
 
 	/* sprites use colors 0x00-0x07 */
 	for (i = 0x10; i < 0x30; i++)
 	{
 		UINT8 ctabentry = color_prom[i - 0x10] & 0x07;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 
-	m_map_color = panic_map_color;
+	m_map_color = &cosmic_state::panic_map_color;
 }
 
 
@@ -122,32 +117,29 @@ PALETTE_INIT_MEMBER(cosmic_state,cosmica)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x08);
-
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x08; i++)
 	{
-		rgb_t color = MAKE_RGB(pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
-		colortable_palette_set_color(machine().colortable, i, color);
+		rgb_t color = rgb_t(pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
+		palette.set_indirect_color(i, color);
 	}
 
 	/* background and sprites use colors 0x00-0x07 */
 	for (i = 0; i < 0x08; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_pen_indirect(i, i);
 
 	for (i = 0x08; i < 0x28; i++)
 	{
 		UINT8 ctabentry;
 
 		ctabentry = (color_prom[i - 0x08] >> 0) & 0x07;
-		colortable_entry_set_value(machine().colortable, i + 0x00, ctabentry);
+		palette.set_pen_indirect(i + 0x00, ctabentry);
 
 		ctabentry = (color_prom[i - 0x08] >> 4) & 0x07;
-		colortable_entry_set_value(machine().colortable, i + 0x20, ctabentry);
+		palette.set_pen_indirect(i + 0x20, ctabentry);
 	}
 
-	m_map_color = cosmica_map_color;
+	m_map_color = &cosmic_state::cosmica_map_color;
 }
 
 
@@ -164,16 +156,16 @@ PALETTE_INIT_MEMBER(cosmic_state,cosmicg)
 {
 	int i;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int r = (i > 8) ? 0xff : 0xaa * ((i >> 0) & 1);
 		int g = 0xaa * ((i >> 1) & 1);
 		int b = 0xaa * ((i >> 2) & 1);
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 	}
 
-	m_map_color = cosmicg_map_color;
+	m_map_color = &cosmic_state::cosmicg_map_color;
 }
 
 
@@ -182,9 +174,6 @@ PALETTE_INIT_MEMBER(cosmic_state,magspot)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x10);
-
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x10; i++)
 	{
@@ -192,21 +181,21 @@ PALETTE_INIT_MEMBER(cosmic_state,magspot)
 		int g = pal1bit(i >> 1);
 		int b = pal1bit(i >> 2);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* background uses colors 0x00-0x0f */
 	for (i = 0; i < 0x0f; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_pen_indirect(i, i);
 
 	/* sprites use colors 0x00-0x0f */
 	for (i = 0x10; i < 0x30; i++)
 	{
 		UINT8 ctabentry = color_prom[i - 0x10] & 0x0f;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 
-	m_map_color = magspot_map_color;
+	m_map_color = &cosmic_state::magspot_map_color;
 	m_magspot_pen_mask = 0x0f;
 }
 
@@ -216,28 +205,25 @@ PALETTE_INIT_MEMBER(cosmic_state,nomnlnd)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x10);
-
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x10; i++)
 	{
-		rgb_t color = MAKE_RGB(pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
-		colortable_palette_set_color(machine().colortable, i, color);
+		rgb_t color = rgb_t(pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
+		palette.set_indirect_color(i, color);
 	}
 
 	/* background uses colors 0x00-0x07 */
 	for (i = 0; i < 0x07; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_pen_indirect(i, i);
 
 	/* sprites use colors 0x00-0x07 */
 	for (i = 0x10; i < 0x30; i++)
 	{
 		UINT8 ctabentry = color_prom[i - 0x10] & 0x07;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 
-	m_map_color = magspot_map_color;
+	m_map_color = &cosmic_state::magspot_map_color;
 	m_magspot_pen_mask = 0x07;
 }
 
@@ -260,7 +246,7 @@ void cosmic_state::draw_bitmap( bitmap_ind16 &bitmap, const rectangle &cliprect 
 		UINT8 x = offs << 3;
 		UINT8 y = offs >> 5;
 
-		pen_t pen = m_map_color(machine(), x, y);
+		pen_t pen = (this->*m_map_color)(x, y);
 
 		for (i = 0; i < 8; i++)
 		{
@@ -297,13 +283,13 @@ void cosmic_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect
 
 			if (m_spriteram[offs] & 0x80)
 				/* 16x16 sprite */
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+				m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 						code, color,
 						0, ~m_spriteram[offs] & 0x40,
 						256-m_spriteram[offs + 2],m_spriteram[offs + 1],0);
 			else
 				/* 32x32 sprite */
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 						code >> 2, color,
 						0, ~m_spriteram[offs] & 0x40,
 						256-m_spriteram[offs + 2],m_spriteram[offs + 1],0);

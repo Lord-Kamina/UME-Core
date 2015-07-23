@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Krzysztof Strzecha
 /*********************************************************************
 
     primoptp.h
 
-    Format code for Primo casette files
+    Format code for Primo cassette files
 
 *********************************************************************/
 

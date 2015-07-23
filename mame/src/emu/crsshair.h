@@ -1,12 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     crsshair.h
 
     Crosshair handling.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
-
 ***************************************************************************/
 
 #pragma once
@@ -19,8 +17,8 @@
     CONSTANTS
 ***************************************************************************/
 
-#define CROSSHAIR_SCREEN_NONE   ((device_t *) 0)
-#define CROSSHAIR_SCREEN_ALL    ((device_t *) ~0)
+#define CROSSHAIR_SCREEN_NONE   ((screen_device *) 0)
+#define CROSSHAIR_SCREEN_ALL    ((screen_device *) ~0)
 
 /* user settings for visibility mode */
 #define CROSSHAIR_VISIBILITY_OFF                0
@@ -64,7 +62,7 @@ void crosshair_init(running_machine &machine);
 void crosshair_render(screen_device &screen);
 
 /* sets the screen(s) for a given player's crosshair */
-void crosshair_set_screen(running_machine &machine, int player, device_t *screen);
+void crosshair_set_screen(running_machine &machine, int player, screen_device *screen);
 
 /* return TRUE if any crosshairs are used */
 int crosshair_get_usage(running_machine &machine);

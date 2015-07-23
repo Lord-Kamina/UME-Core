@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Victory system
@@ -126,15 +128,15 @@ WRITE8_MEMBER(victory_state::lamp_control_w)
 
 static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, victory_state )
 	AM_RANGE(0x0000, 0xbfff) AM_ROM
-	AM_RANGE(0xc000, 0xc0ff) AM_READ(victory_video_control_r)
-	AM_RANGE(0xc100, 0xc1ff) AM_WRITE(victory_video_control_w)
-	AM_RANGE(0xc200, 0xc3ff) AM_WRITE(victory_paletteram_w)
+	AM_RANGE(0xc000, 0xc0ff) AM_READ(video_control_r)
+	AM_RANGE(0xc100, 0xc1ff) AM_WRITE(video_control_w)
+	AM_RANGE(0xc200, 0xc3ff) AM_WRITE(paletteram_w)
 	AM_RANGE(0xc400, 0xc7ff) AM_RAM AM_SHARE("videoram")
 	AM_RANGE(0xc800, 0xdfff) AM_RAM AM_SHARE("charram")
 	AM_RANGE(0xe000, 0xefff) AM_RAM
 	AM_RANGE(0xf000, 0xf7ff) AM_RAM AM_SHARE("nvram")
-	AM_RANGE(0xf800, 0xf800) AM_MIRROR(0x07fc) AM_DEVREADWRITE_LEGACY("custom", victory_sound_response_r, victory_sound_command_w)
-	AM_RANGE(0xf801, 0xf801) AM_MIRROR(0x07fc) AM_DEVREAD_LEGACY("custom", victory_sound_status_r)
+	AM_RANGE(0xf800, 0xf800) AM_MIRROR(0x07fc) AM_DEVREADWRITE("custom", victory_sound_device, response_r, command_w)
+	AM_RANGE(0xf801, 0xf801) AM_MIRROR(0x07fc) AM_DEVREAD("custom", victory_sound_device, status_r)
 ADDRESS_MAP_END
 
 
@@ -214,19 +216,19 @@ static MACHINE_CONFIG_START( victory, victory_state )
 	MCFG_CPU_ADD("maincpu", Z80, VICTORY_MAIN_CPU_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(main_map)
 	MCFG_CPU_IO_MAP(main_io_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", victory_state,  victory_vblank_interrupt)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", victory_state,  vblank_interrupt)
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK | VIDEO_ALWAYS_UPDATE)
-
 	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK | VIDEO_ALWAYS_UPDATE)
 	/* using the standard Exidy video parameters for now, needs to be confirmed */
 	MCFG_SCREEN_RAW_PARAMS(VICTORY_PIXEL_CLOCK, VICTORY_HTOTAL, VICTORY_HBEND, VICTORY_HBSTART, VICTORY_VTOTAL, VICTORY_VBEND, VICTORY_VBSTART)
-	MCFG_SCREEN_UPDATE_DRIVER(victory_state, screen_update_victory)
+	MCFG_SCREEN_UPDATE_DRIVER(victory_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(64)
+	MCFG_PALETTE_ADD("palette", 64)
 
 
 	/* audio hardware */
@@ -315,5 +317,5 @@ ROM_END
  *
  *************************************/
 
-GAME( 1982, victory,  0,       victory, victory, driver_device, 0, ROT0, "Exidy", "Victory", 0 )
-GAME( 1982, victorba, victory, victory, victory, driver_device, 0, ROT0, "Exidy", "Victor Banana", 0 )
+GAME( 1982, victory,  0,       victory, victory, driver_device, 0, ROT0, "Exidy", "Victory", GAME_SUPPORTS_SAVE )
+GAME( 1982, victorba, victory, victory, victory, driver_device, 0, ROT0, "Exidy", "Victor Banana", GAME_SUPPORTS_SAVE )

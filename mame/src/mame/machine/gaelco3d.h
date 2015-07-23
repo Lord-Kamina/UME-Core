@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Gaelco 3D serial hardware
@@ -10,9 +12,8 @@
     DEVICE CONFIGURATION MACROS
 ***************************************************************************/
 
-#define MCFG_GAELCO_SERIAL_ADD(_tag, _clock, _intrf) \
-	MCFG_DEVICE_ADD(_tag, GAELCO_SERIAL, _clock) \
-	MCFG_DEVICE_CONFIG(_intrf)
+#define MCFG_GAELCO_SERIAL_IRQ_HANDLER(_devcb) \
+	devcb = &gaelco_serial_device::set_irq_handler(*device, DEVCB_##_devcb);
 
 /* external status bits */
 #define GAELCOSER_STATUS_READY          0x01
@@ -34,56 +35,83 @@
     DEVICE INTERFACE TYPE
 ***************************************************************************/
 
-struct gaelco_serial_interface
+/* ----- device interface ----- */
+
+struct buf_t
 {
-	devcb_write_line irq_func;
+	volatile UINT8 data;
+	volatile UINT8 stat;
+	volatile int cnt;
+	volatile int data_cnt;
 };
 
+struct shmem_t
+{
+	volatile INT32  lock;
+	buf_t               buf[2];
+};
 
-/***************************************************************************
-    FUNCTION PROTOTYPES
-***************************************************************************/
-
-DECLARE_READ8_DEVICE_HANDLER( gaelco_serial_status_r);
-DECLARE_WRITE8_DEVICE_HANDLER( gaelco_serial_data_w);
-DECLARE_READ8_DEVICE_HANDLER( gaelco_serial_data_r);
-DECLARE_WRITE8_DEVICE_HANDLER( gaelco_serial_rts_w );
-/* Set to 1 during transmit, 0 for receive */
-DECLARE_WRITE8_DEVICE_HANDLER( gaelco_serial_tr_w);
-
-
-/* Big questions marks, related to serial i/o */
-
-/* Not used in surfplnt, but in radikalb
- * Set at beginning of transfer sub, cleared at end
- */
-DECLARE_WRITE8_DEVICE_HANDLER( gaelco_serial_unknown_w);
-
-
-/* only used in radikalb, set at beginning of receive isr, cleared at end */
-DECLARE_WRITE8_DEVICE_HANDLER( gaelco_serial_irq_enable );
-
-
-
-/* ----- device interface ----- */
+struct osd_shared_mem
+{
+	char *fn;
+	size_t size;
+	void *ptr;
+	int creator;
+};
 
 class gaelco_serial_device : public device_t
 {
 public:
 	gaelco_serial_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	~gaelco_serial_device() { global_free(m_token); }
+	~gaelco_serial_device() {}
 
-	// access to legacy token
-	void *token() const { assert(m_token != NULL); return m_token; }
+	template<class _Object> static devcb_base &set_irq_handler(device_t &device, _Object object) { return downcast<gaelco_serial_device &>(device).m_irq_handler.set_callback(object); }
+
+	DECLARE_READ8_MEMBER( status_r);
+	DECLARE_WRITE8_MEMBER( data_w);
+	DECLARE_READ8_MEMBER( data_r);
+	DECLARE_WRITE8_MEMBER( rts_w );
+	/* Set to 1 during transmit, 0 for receive */
+	DECLARE_WRITE8_MEMBER( tr_w);
+
+
+	/* Big questions marks, related to serial i/o */
+
+	/* Not used in surfplnt, but in radikalb
+	 * Set at beginning of transfer sub, cleared at end
+	 */
+	DECLARE_WRITE8_MEMBER( unknown_w);
+
+
+	/* only used in radikalb, set at beginning of receive isr, cleared at end */
+	DECLARE_WRITE8_MEMBER( irq_enable );
+
 protected:
 	// device-level overrides
-	virtual void device_config_complete();
 	virtual void device_start();
 	virtual void device_stop();
 	virtual void device_reset();
+
 private:
 	// internal state
-	void *m_token;
+	devcb_write_line m_irq_handler;
+
+	UINT8 m_status;
+	int m_last_in_msg_cnt;
+	int m_slack_cnt;
+
+	emu_timer *m_sync_timer;
+
+	buf_t *m_in_ptr;
+	buf_t *m_out_ptr;
+	osd_shared_mem *m_os_shmem;
+	shmem_t *m_shmem;
+
+	TIMER_CALLBACK_MEMBER( set_status_cb );
+	TIMER_CALLBACK_MEMBER( link_cb );
+	void set_status(UINT8 mask, UINT8 set, int wait);
+	void process_in();
+	void sync_link();
 };
 
 extern const device_type GAELCO_SERIAL;

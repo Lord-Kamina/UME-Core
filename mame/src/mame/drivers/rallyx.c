@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
 Rally X      (c) 1980 Namco
@@ -190,9 +192,7 @@ TODO:
 
 #include "emu.h"
 #include "cpu/z80/z80.h"
-#include "sound/namco.h"
 #include "sound/samples.h"
-#include "audio/timeplt.h"
 #include "includes/rallyx.h"
 
 #define MASTER_CLOCK    XTAL_18_432MHz
@@ -237,12 +237,11 @@ WRITE8_MEMBER(rallyx_state::rallyx_latch_w)
 
 		case 0x02:  /* SOUND ON */
 			/* this doesn't work in New Rally X so I'm not supporting it */
-//          pacman_sound_enable_w(machine().device("namco"), bit);
+//          m_namco_sound->pacman_sound_enable_w(bit);
 			break;
 
 		case 0x03:  /* FLIP */
-			flip_screen_set_no_update(bit);
-			machine().tilemap().set_flip_all(bit * (TILEMAP_FLIPX | TILEMAP_FLIPY));
+			flip_screen_set(bit);
 			break;
 
 		case 0x04:
@@ -271,7 +270,7 @@ WRITE8_MEMBER(rallyx_state::locomotn_latch_w)
 	switch (offset)
 	{
 		case 0x00:  /* SOUNDON */
-			timeplt_sh_irqtrigger_w(space,0,bit);
+			m_timeplt_audio->sh_irqtrigger_w(space,0,bit);
 			break;
 
 		case 0x01:  /* INTST */
@@ -283,8 +282,7 @@ WRITE8_MEMBER(rallyx_state::locomotn_latch_w)
 			break;
 
 		case 0x03:  /* FLIP */
-			flip_screen_set_no_update(bit);
-			machine().tilemap().set_flip_all(bit * (TILEMAP_FLIPX | TILEMAP_FLIPY));
+			flip_screen_set(bit);
 			break;
 
 		case 0x04:  /* OUT1 */
@@ -320,7 +318,7 @@ static ADDRESS_MAP_START( rallyx_map, AS_PROGRAM, 8, rallyx_state )
 	AM_RANGE(0xa100, 0xa100) AM_READ_PORT("DSW")
 	AM_RANGE(0xa000, 0xa00f) AM_WRITEONLY AM_SHARE("radarattr")
 	AM_RANGE(0xa080, 0xa080) AM_WRITE(watchdog_reset_w)
-	AM_RANGE(0xa100, 0xa11f) AM_DEVWRITE_LEGACY("namco", pacman_sound_w)
+	AM_RANGE(0xa100, 0xa11f) AM_DEVWRITE("namco", namco_device, pacman_sound_w)
 	AM_RANGE(0xa130, 0xa130) AM_WRITE(rallyx_scrollx_w)
 	AM_RANGE(0xa140, 0xa140) AM_WRITE(rallyx_scrolly_w)
 	AM_RANGE(0xa170, 0xa170) AM_WRITENOP            /* ? */
@@ -399,6 +397,10 @@ static INPUT_PORTS_START( rallyx )
 	PORT_DIPSETTING(    0x04, "30000" )     PORT_CONDITION("DSW", 0x38, EQUALS, 0x00)
 	PORT_DIPSETTING(    0x06, "40000" )     PORT_CONDITION("DSW", 0x38, EQUALS, 0x00)
 
+	PORT_DIPSETTING(    0x02, "20000" )     PORT_CONDITION("DSW", 0x38, EQUALS, 0x08)
+	PORT_DIPSETTING(    0x04, "40000" )     PORT_CONDITION("DSW", 0x38, EQUALS, 0x08)
+	PORT_DIPSETTING(    0x06, "60000" )     PORT_CONDITION("DSW", 0x38, EQUALS, 0x08)
+
 	PORT_DIPSETTING(    0x02, "10000" )     PORT_CONDITION("DSW", 0x38, EQUALS, 0x10)
 	PORT_DIPSETTING(    0x04, "20000" )     PORT_CONDITION("DSW", 0x38, EQUALS, 0x10)
 	PORT_DIPSETTING(    0x06, "30000" )     PORT_CONDITION("DSW", 0x38, EQUALS, 0x10)
@@ -468,6 +470,10 @@ static INPUT_PORTS_START( nrallyx )
 	PORT_DIPSETTING(    0x02, "20000/80000" )   PORT_CONDITION("DSW", 0x38, EQUALS, 0x30)
 	PORT_DIPSETTING(    0x04, "20000/100000" )  PORT_CONDITION("DSW", 0x38, EQUALS, 0x30)
 	PORT_DIPSETTING(    0x06, "20000/120000" )  PORT_CONDITION("DSW", 0x38, EQUALS, 0x30)
+
+	PORT_DIPSETTING(    0x02, "20000/80000" )   PORT_CONDITION("DSW", 0x38, EQUALS, 0x38)
+	PORT_DIPSETTING(    0x04, "20000/100000" )  PORT_CONDITION("DSW", 0x38, EQUALS, 0x38)
+	PORT_DIPSETTING(    0x06, "20000/120000" )  PORT_CONDITION("DSW", 0x38, EQUALS, 0x38)
 INPUT_PORTS_END
 
 
@@ -793,26 +799,12 @@ GFXDECODE_END
  *
  *************************************/
 
-static const namco_interface namco_config =
-{
-	3,              /* number of voices */
-	0               /* stereo */
-};
-
 static const char *const rallyx_sample_names[] =
 {
 	"*rallyx",
 	"bang",
 	0   /* end of array */
 };
-
-static const samples_interface rallyx_samples_interface =
-{
-	1,  /* 1 channel */
-	rallyx_sample_names
-};
-
-
 
 /*************************************
  *
@@ -834,13 +826,13 @@ MACHINE_RESET_MEMBER(rallyx_state,rallyx)
 
 INTERRUPT_GEN_MEMBER(rallyx_state::rallyx_vblank_irq)
 {
-	if(m_main_irq_mask)
+	if (m_main_irq_mask)
 		device.execute().set_input_line(0, ASSERT_LINE);
 }
 
 INTERRUPT_GEN_MEMBER(rallyx_state::jungler_vblank_irq)
 {
-	if(m_main_irq_mask)
+	if (m_main_irq_mask)
 		device.execute().set_input_line(INPUT_LINE_NMI, PULSE_LINE);
 }
 
@@ -850,35 +842,38 @@ static MACHINE_CONFIG_START( rallyx, rallyx_state )
 	MCFG_CPU_ADD("maincpu", Z80, MASTER_CLOCK/6)    /* 3.072 MHz */
 	MCFG_CPU_PROGRAM_MAP(rallyx_map)
 	MCFG_CPU_IO_MAP(io_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", rallyx_state,  rallyx_vblank_irq)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", rallyx_state, rallyx_vblank_irq)
 
 	MCFG_MACHINE_START_OVERRIDE(rallyx_state,rallyx)
 	MCFG_MACHINE_RESET_OVERRIDE(rallyx_state,rallyx)
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_HAS_SHADOWS)
-
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60.606060)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(36*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 36*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(rallyx_state, screen_update_rallyx)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(rallyx)
-	MCFG_PALETTE_LENGTH(64*4+4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rallyx)
 
-	MCFG_PALETTE_INIT_OVERRIDE(rallyx_state,rallyx)
+	MCFG_PALETTE_ADD("palette", 64*4+4)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_ENABLE_SHADOWS()
+	MCFG_PALETTE_INIT_OWNER(rallyx_state,rallyx)
 	MCFG_VIDEO_START_OVERRIDE(rallyx_state,rallyx)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("namco", NAMCO, MASTER_CLOCK/6/32) /* 96 KHz */
-	MCFG_SOUND_CONFIG(namco_config)
+	MCFG_NAMCO_AUDIO_VOICES(3)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
-	MCFG_SAMPLES_ADD("samples", rallyx_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(1)
+	MCFG_SAMPLES_NAMES(rallyx_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.80)
 MACHINE_CONFIG_END
 
@@ -888,25 +883,26 @@ static MACHINE_CONFIG_START( jungler, rallyx_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", Z80, MASTER_CLOCK/6)    /* 3.072 MHz */
 	MCFG_CPU_PROGRAM_MAP(jungler_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", rallyx_state,  jungler_vblank_irq)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", rallyx_state, jungler_vblank_irq)
 
 	MCFG_MACHINE_START_OVERRIDE(rallyx_state,rallyx)
 	MCFG_MACHINE_RESET_OVERRIDE(rallyx_state,rallyx)
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_HAS_SHADOWS)
-
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0)  /* frames per second, vblank duration */)
 	MCFG_SCREEN_SIZE(36*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 36*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(rallyx_state, screen_update_jungler)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(jungler)
-	MCFG_PALETTE_LENGTH(64*4+4+64)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", jungler)
 
-	MCFG_PALETTE_INIT_OVERRIDE(rallyx_state,jungler)
+	MCFG_PALETTE_ADD("palette", 64*4+4+64)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32+64)
+	MCFG_PALETTE_ENABLE_SHADOWS()
+	MCFG_PALETTE_INIT_OWNER(rallyx_state,jungler)
 	MCFG_VIDEO_START_OVERRIDE(rallyx_state,jungler)
 
 	/* sound hardware */

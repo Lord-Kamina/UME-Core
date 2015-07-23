@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol, Miodrag Milanovic
 /***************************************************************************
 
     drivers/genpc.c
@@ -13,30 +15,8 @@
 
 #include "cpu/nec/nec.h"
 #include "cpu/i86/i86.h"
-
-#include "video/isa_cga.h"
-#include "video/isa_ega.h"
-#include "video/isa_mda.h"
-#include "video/isa_svga_tseng.h"
-#include "video/isa_svga_s3.h"
-
-#include "machine/ram.h"
-#include "machine/isa.h"
-
-#include "machine/isa_adlib.h"
-#include "machine/isa_com.h"
-#include "machine/isa_fdc.h"
-#include "machine/isa_finalchs.h"
-#include "machine/isa_gblaster.h"
-#include "machine/isa_hdc.h"
-#include "machine/isa_sblaster.h"
-#include "machine/isa_mpu401.h"
-#include "machine/3c503.h"
-#include "machine/ne1000.h"
-#include "machine/isa_ibm_mfc.h"
 #include "machine/pc_lpt.h"
-
-#include "machine/pc_keyboards.h"
+#include "bus/pc_kbd/keyboards.h"
 
 class genpc_state : public driver_device
 {
@@ -81,8 +61,6 @@ ADDRESS_MAP_END
 static INPUT_PORTS_START( pcgen )
 INPUT_PORTS_END
 
-static const unsigned i86_address_mask = 0x000fffff;
-
 static DEVICE_INPUT_DEFAULTS_START(cga)
 	DEVICE_INPUT_DEFAULTS("DSW0",0x30, 0x20)
 DEVICE_INPUT_DEFAULTS_END
@@ -91,36 +69,13 @@ static DEVICE_INPUT_DEFAULTS_START(vga)
 	DEVICE_INPUT_DEFAULTS("DSW0",0x30, 0x00)
 DEVICE_INPUT_DEFAULTS_END
 
-static SLOT_INTERFACE_START(pc_isa8_cards)
-	SLOT_INTERFACE("mda", ISA8_MDA)
-	SLOT_INTERFACE("cga", ISA8_CGA)
-	SLOT_INTERFACE("ega", ISA8_EGA)
-	SLOT_INTERFACE("svga_et4k", ISA8_SVGA_ET4K)
-	SLOT_INTERFACE("com", ISA8_COM)
-	SLOT_INTERFACE("fdc", ISA8_FDC_SUPERIO)
-	SLOT_INTERFACE("fdc_xt", ISA8_FDC_XT)
-	SLOT_INTERFACE("fdc_at", ISA8_FDC_AT)
-	SLOT_INTERFACE("fdc_smc", ISA8_FDC_SMC)
-	SLOT_INTERFACE("fdc_ps2", ISA8_FDC_PS2)
-	SLOT_INTERFACE("finalchs", ISA8_FINALCHS)
-	SLOT_INTERFACE("hdc", ISA8_HDC)
-	SLOT_INTERFACE("adlib", ISA8_ADLIB)
-	SLOT_INTERFACE("hercules", ISA8_HERCULES)
-	SLOT_INTERFACE("gblaster", ISA8_GAME_BLASTER)
-	SLOT_INTERFACE("sblaster1_0", ISA8_SOUND_BLASTER_1_0)
-	SLOT_INTERFACE("sblaster1_5", ISA8_SOUND_BLASTER_1_5)
-	SLOT_INTERFACE("mpu401", ISA8_MPU401)
-	SLOT_INTERFACE("ne1000", NE1000)
-	SLOT_INTERFACE("3c503", EL2_3C503)
-	SLOT_INTERFACE("lpt", ISA8_LPT)
-	SLOT_INTERFACE("ibm_mfc", ISA8_IBM_MFC)
-SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_START( pcmda, genpc_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", V20, 4772720)
 	MCFG_CPU_PROGRAM_MAP(pc8_map)
 	MCFG_CPU_IO_MAP(pc8_io)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("mb:pic8259", pic8259_device, inta_cb)
 
 	MCFG_IBM5160_MOTHERBOARD_ADD("mb","maincpu")
 
@@ -137,6 +92,9 @@ static MACHINE_CONFIG_START( pcmda, genpc_state )
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("640K")
+
+	/* software lists */
+	MCFG_SOFTWARE_LIST_ADD("disk_list","ibm5150")
 MACHINE_CONFIG_END
 
 
@@ -145,6 +103,7 @@ static MACHINE_CONFIG_START( pcherc, genpc_state )
 	MCFG_CPU_ADD("maincpu", V20, 4772720)
 	MCFG_CPU_PROGRAM_MAP(pc8_map)
 	MCFG_CPU_IO_MAP(pc8_io)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("mb:pic8259", pic8259_device, inta_cb)
 
 	MCFG_IBM5160_MOTHERBOARD_ADD("mb","maincpu")
 
@@ -161,6 +120,9 @@ static MACHINE_CONFIG_START( pcherc, genpc_state )
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("640K")
+
+	/* software lists */
+	MCFG_SOFTWARE_LIST_ADD("disk_list","ibm5150")
 MACHINE_CONFIG_END
 
 
@@ -169,7 +131,7 @@ static MACHINE_CONFIG_START( pccga, genpc_state )
 	MCFG_CPU_ADD("maincpu",  I8086, 4772720)
 	MCFG_CPU_PROGRAM_MAP(pc16_map)
 	MCFG_CPU_IO_MAP(pc16_io)
-	MCFG_CPU_CONFIG(i86_address_mask)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("mb:pic8259", pic8259_device, inta_cb)
 
 	MCFG_IBM5160_MOTHERBOARD_ADD("mb","maincpu")
 	MCFG_DEVICE_INPUT_DEFAULTS(cga)
@@ -187,6 +149,9 @@ static MACHINE_CONFIG_START( pccga, genpc_state )
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("640K")
+
+	/* software lists */
+	MCFG_SOFTWARE_LIST_ADD("disk_list","ibm5150")
 MACHINE_CONFIG_END
 
 
@@ -195,7 +160,7 @@ static MACHINE_CONFIG_START( pcega, genpc_state )
 	MCFG_CPU_ADD("maincpu",  I8086, 4772720)
 	MCFG_CPU_PROGRAM_MAP(pc16_map)
 	MCFG_CPU_IO_MAP(pc16_io)
-	MCFG_CPU_CONFIG(i86_address_mask)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("mb:pic8259", pic8259_device, inta_cb)
 
 	MCFG_IBM5160_MOTHERBOARD_ADD("mb","maincpu")
 	MCFG_DEVICE_INPUT_DEFAULTS(vga)
@@ -213,6 +178,9 @@ static MACHINE_CONFIG_START( pcega, genpc_state )
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("640K")
+
+	/* software lists */
+	MCFG_SOFTWARE_LIST_ADD("disk_list","ibm5150")
 MACHINE_CONFIG_END
 
 
@@ -221,7 +189,7 @@ static MACHINE_CONFIG_START( xtvga, genpc_state )
 	MCFG_CPU_ADD("maincpu",  I8086, 4772720)
 	MCFG_CPU_PROGRAM_MAP(pc16_map)
 	MCFG_CPU_IO_MAP(pc16_io)
-	MCFG_CPU_CONFIG(i86_address_mask)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("mb:pic8259", pic8259_device, inta_cb)
 
 	MCFG_IBM5160_MOTHERBOARD_ADD("mb","maincpu")
 	MCFG_DEVICE_INPUT_DEFAULTS(vga)
@@ -239,6 +207,9 @@ static MACHINE_CONFIG_START( xtvga, genpc_state )
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("640K")
+
+	/* software lists */
+	MCFG_SOFTWARE_LIST_ADD("disk_list","ibm5150")
 MACHINE_CONFIG_END
 
 

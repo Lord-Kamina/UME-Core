@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol, Curt Coder
 /*
     This 1980s computer was manufactured by Vtech of Hong Kong.
     known as: CreatiVision, Dick Smith Wizzard, Funvision, Rameses, VZ 2000 and possibly others.
@@ -128,32 +130,6 @@ CN1     - main board connector (17x2 pin header)
 #include "includes/crvision.h"
 
 /***************************************************************************
-    READ/WRITE HANDLERS
-***************************************************************************/
-
-/*-------------------------------------------------
-    centronics_status_r - centronics status
--------------------------------------------------*/
-
-READ8_MEMBER( crvision_state::centronics_status_r )
-{
-	UINT8 data = 0;
-
-	data |= m_centronics->busy_r() << 7;
-
-	return data;
-}
-
-/*-------------------------------------------------
-    centronics_ctrl_w - centronics control
--------------------------------------------------*/
-
-WRITE8_MEMBER( crvision_state::centronics_ctrl_w )
-{
-	m_centronics->strobe_w(BIT(data, 4));
-}
-
-/***************************************************************************
     MEMORY MAPS
 ***************************************************************************/
 
@@ -171,8 +147,9 @@ static ADDRESS_MAP_START( crvision_map, AS_PROGRAM, 8, crvision_state )
 	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK(BANK_ROM2)
 	AM_RANGE(0x8000, 0xbfff) AM_ROMBANK(BANK_ROM1)
 //  AM_RANGE(0xc000, 0xe7ff) AM_RAMBANK(3)
-	AM_RANGE(0xe800, 0xe800) AM_DEVWRITE(CENTRONICS_TAG, centronics_device, write)
-	AM_RANGE(0xe801, 0xe801) AM_READWRITE(centronics_status_r, centronics_ctrl_w)
+	AM_RANGE(0xe800, 0xe800) AM_DEVWRITE("cent_data_out", output_latch_device, write)
+	AM_RANGE(0xe801, 0xe801) AM_DEVREAD("cent_status_in", input_buffer_device, read)
+	AM_RANGE(0xe801, 0xe801) AM_DEVWRITE("cent_ctrl_out", output_latch_device, write)
 //  AM_RANGE(0xe802, 0xf7ff) AM_RAMBANK(4)
 	AM_RANGE(0xf800, 0xffff) AM_ROM AM_REGION(M6502_TAG, 0)
 ADDRESS_MAP_END
@@ -213,39 +190,39 @@ INPUT_CHANGED_MEMBER( crvision_state::trigger_nmi )
 static INPUT_PORTS_START( crvision )
 	// Player 1 Joystick
 
-	PORT_START("PA0-0")
+	PORT_START("PA0.0")
 	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA0-1")
+	PORT_START("PA0.1")
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN )
 	PORT_BIT( 0xfd, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA0-2")
+	PORT_START("PA0.2")
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT )
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_1) PORT_CHAR('1')
 	PORT_BIT( 0xf3, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA0-3")
+	PORT_START("PA0.3")
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_UP )
 	PORT_BIT( 0xf7, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA0-4")
+	PORT_START("PA0.4")
 	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA0-5")
+	PORT_START("PA0.5")
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT )
 	PORT_BIT( 0xdf, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA0-6")
+	PORT_START("PA0.6")
 	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA0-7")
+	PORT_START("PA0.7")
 	PORT_BIT( 0x7f, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_NAME("P1 Button 2 / CNT'L") PORT_CODE(KEYCODE_LCONTROL) PORT_CODE(KEYCODE_RCONTROL)
 
 	// Player 1 Keyboard
 
-	PORT_START("PA1-0")
+	PORT_START("PA1.0")
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_F) PORT_CHAR('F')
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_G) PORT_CHAR('G')
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_LEFT) PORT_CODE(KEYCODE_BACKSPACE) PORT_CHAR(8)
@@ -254,7 +231,7 @@ static INPUT_PORTS_START( crvision )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_D) PORT_CHAR('D')
 	PORT_BIT( 0x81, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA1-1")
+	PORT_START("PA1.1")
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_B) PORT_CHAR('B')
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_Z) PORT_CHAR('Z')
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_X) PORT_CHAR('X')
@@ -262,70 +239,70 @@ static INPUT_PORTS_START( crvision )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_V) PORT_CHAR('V')
 	PORT_BIT( 0x83, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA1-2")
+	PORT_START("PA1.2")
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_W) PORT_CHAR('W')
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_E) PORT_CHAR('E')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_R) PORT_CHAR('R')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_T) PORT_CHAR('T')
 	PORT_BIT( 0x87, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA1-3")
+	PORT_START("PA1.3")
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_Q) PORT_CHAR('Q')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_4) PORT_CHAR('4') PORT_CHAR('$')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_5) PORT_CHAR('5') PORT_CHAR('%')
 	PORT_BIT( 0x8f, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA1-4")
+	PORT_START("PA1.4")
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_2) PORT_CHAR('2') PORT_CHAR('"')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_6) PORT_CHAR('6') PORT_CHAR('&')
 	PORT_BIT( 0x9f, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA1-5")
+	PORT_START("PA1.5")
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_3) PORT_CHAR('3') PORT_CHAR('#')
 	PORT_BIT( 0xbf, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA1-6")
+	PORT_START("PA1.6")
 	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA1-7")
+	PORT_START("PA1.7")
 	PORT_BIT( 0x7f, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_NAME("P1 Button 1 / SHIFT") PORT_CODE(KEYCODE_LSHIFT) PORT_CODE(KEYCODE_RSHIFT)
 
 	// Player 2 Joystick
 
-	PORT_START("PA2-0")
+	PORT_START("PA2.0")
 	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA2-1")
+	PORT_START("PA2.1")
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_PLAYER(2) PORT_CODE(KEYCODE_2_PAD)
 	PORT_BIT( 0xfd, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA2-2")
+	PORT_START("PA2.2")
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(2) PORT_CODE(KEYCODE_6_PAD)
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("SPACE") PORT_CODE(KEYCODE_SPACE) PORT_CHAR(' ')
 	PORT_BIT( 0xf3, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA2-3")
+	PORT_START("PA2.3")
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_PLAYER(2) PORT_CODE(KEYCODE_8_PAD)
 	PORT_BIT( 0xf7, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA2-4")
+	PORT_START("PA2.4")
 	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA2-5")
+	PORT_START("PA2.5")
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_PLAYER(2) PORT_CODE(KEYCODE_4_PAD)
 	PORT_BIT( 0xdf, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA2-6")
+	PORT_START("PA2.6")
 	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA2-7")
+	PORT_START("PA2.7")
 	PORT_BIT( 0x7f, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_NAME("P2 Button 2 / \xE2\x86\x92") PORT_CODE(KEYCODE_TAB) PORT_CHAR(9) PORT_PLAYER(2)
 
 	// Player 2 Keyboard
 
-	PORT_START("PA3-0")
+	PORT_START("PA3.0")
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_U) PORT_CHAR('U')
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_Y) PORT_CHAR('Y')
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("RET'N") PORT_CODE(KEYCODE_ENTER) PORT_CHAR('\r')
@@ -334,7 +311,7 @@ static INPUT_PORTS_START( crvision )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_I) PORT_CHAR('I')
 	PORT_BIT( 0x81, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA3-1")
+	PORT_START("PA3.1")
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_7) PORT_CHAR('7') PORT_CHAR('\'')
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_OPENBRACE) PORT_CHAR(':') PORT_CHAR('*')
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_0) PORT_CHAR('0') PORT_CHAR('@')
@@ -342,32 +319,32 @@ static INPUT_PORTS_START( crvision )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_8) PORT_CHAR('8') PORT_CHAR('(')
 	PORT_BIT( 0x83, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA3-2")
+	PORT_START("PA3.2")
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_L) PORT_CHAR('L')
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_K) PORT_CHAR('K')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_J) PORT_CHAR('J')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_H) PORT_CHAR('H')
 	PORT_BIT( 0x87, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA3-3")
+	PORT_START("PA3.3")
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR(';') PORT_CHAR('+')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_COMMA) PORT_CHAR(',') PORT_CHAR('<')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_M) PORT_CHAR('M')
 	PORT_BIT( 0x8f, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA3-4")
+	PORT_START("PA3.4")
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_SLASH) PORT_CHAR('/') PORT_CHAR('?')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_N) PORT_CHAR('N')
 	PORT_BIT( 0x9f, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA3-5")
+	PORT_START("PA3.5")
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_STOP) PORT_CHAR('.') PORT_CHAR('>')
 	PORT_BIT( 0xbf, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA3-6")
+	PORT_START("PA3.6")
 	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("PA3-7")
+	PORT_START("PA3.7")
 	PORT_BIT( 0x7f, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_NAME("P2 Button 1 / - =") PORT_CODE(KEYCODE_MINUS) PORT_CHAR('-') PORT_CHAR('=') PORT_PLAYER(2)
 
@@ -380,7 +357,7 @@ INPUT_PORTS_END
 -------------------------------------------------*/
 
 static INPUT_PORTS_START( manager )
-	PORT_START("Y0")
+	PORT_START("Y.0")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_STOP) PORT_CHAR('.') PORT_CHAR('>')
@@ -390,7 +367,7 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_S) PORT_CHAR('S') PORT_CHAR('s')
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_X) PORT_CHAR('X') PORT_CHAR('x')
 
-	PORT_START("Y1")
+	PORT_START("Y.1")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("\xC3\x84 \xC3\xA4") PORT_CODE(KEYCODE_QUOTE) PORT_CHAR(0x00C4) PORT_CHAR(0x00E4)
@@ -400,7 +377,7 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_A) PORT_CHAR('A') PORT_CHAR('a')
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_Z) PORT_CHAR('Z') PORT_CHAR('z')
 
-	PORT_START("Y2")
+	PORT_START("Y.2")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_I) PORT_CHAR('I') PORT_CHAR('i')
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_SLASH) PORT_CHAR('/') PORT_CHAR('?')
@@ -410,7 +387,7 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("CTRL") PORT_CODE(KEYCODE_LCONTROL) PORT_CHAR(UCHAR_MAMEKEY(LCONTROL))
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("SHIFT") PORT_CODE(KEYCODE_LSHIFT) PORT_CODE(KEYCODE_RSHIFT) PORT_CHAR(UCHAR_SHIFT_1)
 
-	PORT_START("Y3")
+	PORT_START("Y.3")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_N) PORT_CHAR('N') PORT_CHAR('n')
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_X) PORT_CHAR('X') PORT_CHAR('x')
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("\xC3\x96 \xC3\xB6") PORT_CODE(KEYCODE_COLON) PORT_CHAR(0x00D6) PORT_CHAR(0x00F6)
@@ -420,7 +397,7 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_D) PORT_CHAR('D') PORT_CHAR('d')
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_C) PORT_CHAR('C') PORT_CHAR('c')
 
-	PORT_START("Y4")
+	PORT_START("Y.4")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_COMMA) PORT_CHAR(',') PORT_CHAR('<')
@@ -430,7 +407,7 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_F) PORT_CHAR('F') PORT_CHAR('f')
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_V) PORT_CHAR('V') PORT_CHAR('v')
 
-	PORT_START("Y5")
+	PORT_START("Y.5")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_J) PORT_CHAR('J') PORT_CHAR('j')
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_L) PORT_CHAR('L') PORT_CHAR('l')
@@ -440,7 +417,7 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_G) PORT_CHAR('G') PORT_CHAR('g')
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_B) PORT_CHAR('B') PORT_CHAR('b')
 
-	PORT_START("Y6")
+	PORT_START("Y.6")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_S) PORT_CHAR('S') PORT_CHAR('s')
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_K) PORT_CHAR('K') PORT_CHAR('k')
@@ -450,7 +427,7 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_H) PORT_CHAR('H') PORT_CHAR('h')
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_N) PORT_CHAR('N') PORT_CHAR('n')
 
-	PORT_START("Y7")
+	PORT_START("Y.7")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_X) PORT_CHAR('X') PORT_CHAR('x')
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_N) PORT_CHAR('N') PORT_CHAR('n')
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_SPACE) PORT_CHAR(' ')
@@ -460,7 +437,7 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_J) PORT_CHAR('J') PORT_CHAR('j')
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_M) PORT_CHAR('M') PORT_CHAR('m')
 
-	PORT_START("JOY0")
+	PORT_START("JOY.0")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT )
@@ -470,11 +447,11 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON1 )
 
-	PORT_START("JOY1")
+	PORT_START("JOY.1")
 	PORT_BIT( 0x7f, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON2 )
 
-	PORT_START("JOY2")
+	PORT_START("JOY.2")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_PLAYER(2)
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(2)
@@ -484,7 +461,7 @@ static INPUT_PORTS_START( manager )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2)
 
-	PORT_START("JOY3")
+	PORT_START("JOY.3")
 	PORT_BIT( 0x7f, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(2)
 INPUT_PORTS_END
@@ -492,21 +469,6 @@ INPUT_PORTS_END
 /***************************************************************************
     DEVICE CONFIGURATION
 ***************************************************************************/
-
-/*-------------------------------------------------
-    TMS9928a_interface tms9918_intf
--------------------------------------------------*/
-
-static TMS9928A_INTERFACE( vdp_intf )
-{
-	SCREEN_TAG,
-	0x4000,
-	DEVCB_CPU_INPUT_LINE(M6502_TAG, INPUT_LINE_IRQ0)
-};
-
-/*-------------------------------------------------
-    pia6821_interface pia_intf
--------------------------------------------------*/
 
 WRITE8_MEMBER( crvision_state::pia_pa_w )
 {
@@ -535,19 +497,17 @@ WRITE8_MEMBER( crvision_state::pia_pa_w )
 
 UINT8 crvision_state::read_keyboard(int pa)
 {
-	int i;
-	UINT8 value;
-	static const char *const keynames[4][8] =
-			{
-				{ "PA0-0", "PA0-1", "PA0-2", "PA0-3", "PA0-4", "PA0-5", "PA0-6", "PA0-7" },
-				{ "PA1-0", "PA1-1", "PA1-2", "PA1-3", "PA1-4", "PA1-5", "PA1-6", "PA1-7" },
-				{ "PA2-0", "PA2-1", "PA2-2", "PA2-3", "PA2-4", "PA2-5", "PA2-6", "PA2-7" },
-				{ "PA3-0", "PA3-1", "PA3-2", "PA3-3", "PA3-4", "PA3-5", "PA3-6", "PA3-7" }
-			};
+	UINT8 value = 0;
 
-	for (i = 0; i < 8; i++)
+	for (int i = 0; i < 8; i++)
 	{
-		value = ioport(keynames[pa][i])->read();
+		switch (pa & 3)
+		{
+			case 0: value = m_inp_pa0[i]->read(); break;
+			case 1: value = m_inp_pa1[i]->read(); break;
+			case 2: value = m_inp_pa2[i]->read(); break;
+			case 3: value = m_inp_pa3[i]->read(); break;
+		}
 
 		if (value != 0xff)
 		{
@@ -598,33 +558,12 @@ READ8_MEMBER( crvision_state::pia_pb_r )
 
 	UINT8 data = 0xff;
 
-	if (BIT(m_keylatch, 0)) data &= read_keyboard(0);
-	if (BIT(m_keylatch, 1)) data &= read_keyboard(1);
-	if (BIT(m_keylatch, 2)) data &= read_keyboard(2);
-	if (BIT(m_keylatch, 3)) data &= read_keyboard(3);
+	for (int i = 0; i < 4; i++)
+		if (m_keylatch >> i & 1)
+			data &= read_keyboard(i);
 
 	return data;
 }
-
-static const pia6821_interface pia_intf =
-{
-	DEVCB_DRIVER_MEMBER(crvision_state, pia_pa_r),      // input A
-	DEVCB_DRIVER_MEMBER(crvision_state, pia_pb_r),      // input B
-	DEVCB_LINE_VCC,                                     // input CA1 (+5V)
-	DEVCB_DEVICE_LINE_MEMBER(SN76489_TAG, sn76496_base_device, ready_r),    // input CB1
-	DEVCB_LINE_VCC,                                     // input CA2 (+5V)
-	DEVCB_LINE_VCC,                                     // input CB2 (+5V)
-	DEVCB_DRIVER_MEMBER(crvision_state, pia_pa_w),      // output A
-	DEVCB_DEVICE_MEMBER(SN76489_TAG, sn76496_base_device, write),       // output B
-	DEVCB_NULL,                                         // output CA2
-	DEVCB_NULL,                                         // output CB2 (SN76489 pin CE_)
-	DEVCB_NULL,                                         // irq A
-	DEVCB_NULL                                          // irq B
-};
-
-/*-------------------------------------------------
-    pia6821_interface lasr2001_pia_intf
--------------------------------------------------*/
 
 READ8_MEMBER( laser2001_state::pia_pa_r )
 {
@@ -643,14 +582,9 @@ READ8_MEMBER( laser2001_state::pia_pa_r )
 
 	UINT8 data = 0xff;
 
-	if (!BIT(m_keylatch, 0)) data &= m_y0->read();
-	if (!BIT(m_keylatch, 1)) data &= m_y1->read();
-	if (!BIT(m_keylatch, 2)) data &= m_y2->read();
-	if (!BIT(m_keylatch, 3)) data &= m_y3->read();
-	if (!BIT(m_keylatch, 4)) data &= m_y4->read();
-	if (!BIT(m_keylatch, 5)) data &= m_y5->read();
-	if (!BIT(m_keylatch, 6)) data &= m_y6->read();
-	if (!BIT(m_keylatch, 7)) data &= m_y7->read();
+	for (int i = 0; i < 8; i++)
+		if (~m_keylatch >> i & 1)
+			data &= m_inp_y[i]->read();
 
 	return data;
 }
@@ -675,10 +609,9 @@ READ8_MEMBER( laser2001_state::pia_pb_r )
 {
 	UINT8 data = 0xff;
 
-	if (!BIT(m_joylatch, 0)) data &= m_joy0->read();
-	if (!BIT(m_joylatch, 1)) data &= m_joy1->read();
-	if (!BIT(m_joylatch, 2)) data &= m_joy2->read();
-	if (!BIT(m_joylatch, 3)) data &= m_joy3->read();
+	for (int i = 0; i < 4; i++)
+		if (~m_joylatch >> i & 1)
+			data &= m_inp_joy[i]->read();
 
 	return data;
 }
@@ -702,7 +635,7 @@ WRITE8_MEMBER( laser2001_state::pia_pb_w )
 	m_keylatch = data;
 
 	/* centronics data */
-	m_centronics->write(space, 0, data);
+	m_cent_data_out->write(space, 0, data);
 }
 
 READ_LINE_MEMBER( laser2001_state::pia_ca1_r )
@@ -715,10 +648,23 @@ WRITE_LINE_MEMBER( laser2001_state::pia_ca2_w )
 	m_cassette->output(state ? +1.0 : -1.0);
 }
 
+
+WRITE_LINE_MEMBER(laser2001_state::write_centronics_busy)
+{
+	m_centronics_busy = state;
+	m_pia->cb1_w(pia_cb1_r());
+}
+
+WRITE_LINE_MEMBER(laser2001_state::write_psg_ready)
+{
+	m_psg_ready = state;
+	m_pia->cb1_w(pia_cb1_r());
+}
+
 READ_LINE_MEMBER( laser2001_state::pia_cb1_r )
 {
-	/* actually this is a diode-AND (READY & _BUSY), but ctronics.c returns busy status if printer image is not mounted -> Manager won't boot */
-	return m_psg->ready_r() && (m_centronics->not_busy_r() || m_pia->ca2_output_z());
+	/* actually this is a diode-AND (READY & _BUSY), but ctronics.c returns busy status if no device is mounted -> Manager won't boot */
+	return m_psg_ready && (!m_centronics_busy || m_pia->ca2_output_z());
 }
 
 WRITE_LINE_MEMBER( laser2001_state::pia_cb2_w )
@@ -729,220 +675,55 @@ WRITE_LINE_MEMBER( laser2001_state::pia_cb2_w )
 	}
 	else
 	{
-		m_centronics->strobe_w(state);
+		m_centronics->write_strobe(state);
 	}
 }
-
-static const pia6821_interface lasr2001_pia_intf =
-{
-	DEVCB_DRIVER_MEMBER(laser2001_state, pia_pa_r),             // input A
-	DEVCB_DRIVER_MEMBER(laser2001_state, pia_pb_r),             // input B
-	DEVCB_DRIVER_LINE_MEMBER(laser2001_state, pia_ca1_r),       // input CA1
-	DEVCB_DRIVER_LINE_MEMBER(laser2001_state, pia_cb1_r),       // input CB1
-	DEVCB_LINE_GND,                                             // input CA2
-	DEVCB_LINE_VCC,                                             // input CB2 (+5V)
-	DEVCB_DRIVER_MEMBER(laser2001_state, pia_pa_w),             // output A
-	DEVCB_DRIVER_MEMBER(laser2001_state, pia_pb_w),             // output B
-	DEVCB_DRIVER_LINE_MEMBER(laser2001_state, pia_ca2_w),       // output CA2
-	DEVCB_DRIVER_LINE_MEMBER(laser2001_state, pia_cb2_w),       // output CB2
-	DEVCB_NULL,                                                 // irq A (floating)
-	DEVCB_NULL                                                  // irq B (floating)
-};
-
-/*-------------------------------------------------
-    cassette_interface crvision_cassette_interface
--------------------------------------------------*/
-
-static const cassette_interface crvision_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	NULL,
-	NULL
-};
-
-/*-------------------------------------------------
-    cassette_interface lasr2001_cassette_interface
--------------------------------------------------*/
-
-static const cassette_interface lasr2001_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED),
-	NULL,
-	NULL
-};
-
-/*-------------------------------------------------
-    centronics_interface lasr2001_centronics_intf
--------------------------------------------------*/
-
-static const centronics_interface lasr2001_centronics_intf =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DEVICE_LINE_MEMBER(PIA6821_TAG, pia6821_device, cb1_w)
-};
-
-/*-------------------------------------------------
-    sn76496_config psg_intf
--------------------------------------------------*/
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
 
 /***************************************************************************
     MACHINE INITIALIZATION
 ***************************************************************************/
 
-/*-------------------------------------------------
-    MACHINE_START( creativision )
--------------------------------------------------*/
-
 void crvision_state::machine_start()
 {
-	// state saving
+	// zerofill/state saving
+	m_keylatch = 0;
 	save_item(NAME(m_keylatch));
-	save_item(NAME(m_joylatch));
-}
 
-void crvision_pal_state::machine_start()
-{
-	// state saving
-	save_item(NAME(m_keylatch));
-	save_item(NAME(m_joylatch));
+	if (m_cart->exists())
+	{
+		m_maincpu->space(AS_PROGRAM).install_read_handler(0x4000, 0x7fff, read8_delegate(FUNC(crvision_cart_slot_device::read_rom40),(crvision_cart_slot_device*)m_cart));
+		m_maincpu->space(AS_PROGRAM).install_read_handler(0x8000, 0xbfff, read8_delegate(FUNC(crvision_cart_slot_device::read_rom80),(crvision_cart_slot_device*)m_cart));
+	}
 }
-
-/*-------------------------------------------------
-    MACHINE_START( lasr2001 )
--------------------------------------------------*/
 
 void laser2001_state::machine_start()
 {
-	// state saving
-	save_item(NAME(m_keylatch));
+	crvision_state::machine_start();
+
+	// zerofill/state saving
+	m_joylatch = 0;
+	m_centronics_busy = 0;
+	m_psg_ready = 0;
+
 	save_item(NAME(m_joylatch));
+	save_item(NAME(m_centronics_busy));
+	save_item(NAME(m_psg_ready));
 }
 
-/***************************************************************************
-    CARTRIDGE
-***************************************************************************/
-
-DEVICE_IMAGE_LOAD_MEMBER( crvision_state, crvision_cart )
-{
-	UINT32 size;
-	UINT8 *temp_copy;
-	UINT8 *mem = memregion(M6502_TAG)->base();
-	address_space &program = m_maincpu->space(AS_PROGRAM);
-
-	if (image.software_entry() == NULL)
-	{
-		size = image.length();
-		temp_copy = auto_alloc_array(machine(), UINT8, size);
-		image.fread( temp_copy, size);
-	}
-	else
-	{
-		size= image.get_software_region_length("rom");
-		temp_copy = auto_alloc_array(machine(), UINT8, size);
-		memcpy(temp_copy, image.get_software_region("rom"), size);
-	}
-
-	switch (size)
-	{
-	case 0x1000: // 4K
-		memcpy(mem + 0x9000, temp_copy, 0x1000);            // load 4KB at 0x9000
-		memcpy(mem + 0xb000, mem + 0x9000, 0x1000);         // mirror 4KB at 0xb000
-		program.install_read_bank(0x8000, 0xbfff, 0, 0x2000, BANK_ROM1);
-		break;
-
-	case 0x1800: // 6K
-		memcpy(mem + 0x9000, temp_copy, 0x1000);            // load lower 4KB at 0x9000
-		memcpy(mem + 0xb000, mem + 0x9000, 0x1000);         // mirror lower 4KB at 0xb000
-		memcpy(mem + 0x8000, temp_copy + 0x1000, 0x0800);   // load higher 2KB at 0x8000
-		memcpy(mem + 0x8800, mem + 0x8000, 0x0800);         // mirror higher 2KB at 0x8800
-		memcpy(mem + 0xa000, mem + 0x8000, 0x0800);         // mirror higher 2KB at 0xa000
-		memcpy(mem + 0xa800, mem + 0x8000, 0x0800);         // mirror higher 2KB at 0xa800
-		program.install_read_bank(0x8000, 0xbfff, 0, 0x2000, BANK_ROM1);
-		break;
-
-	case 0x2000: // 8K
-		memcpy(mem + 0x8000, temp_copy, 0x2000);            // load 8KB at 0x8000
-		memcpy(mem + 0xa000, mem + 0x8000, 0x2000);         // mirror 8KB at 0xa000
-		program.install_read_bank(0x8000, 0xbfff, 0, 0x2000, BANK_ROM1);
-		break;
-
-	case 0x2800: // 10K
-		memcpy(mem + 0x8000, temp_copy, 0x2000);            // load lower 8KB at 0x8000
-		memcpy(mem + 0xa000, mem + 0x8000, 0x2000);         // mirror lower 8KB at 0xa000
-		memcpy(mem + 0x4000, temp_copy + 0x2000, 0x0800);   // load higher 2KB at 0x4000
-		memcpy(mem + 0x4800, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x4800
-		memcpy(mem + 0x5000, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x5000
-		memcpy(mem + 0x5800, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x5800
-		memcpy(mem + 0x6000, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x6000
-		memcpy(mem + 0x6800, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x6800
-		memcpy(mem + 0x7000, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x7000
-		memcpy(mem + 0x7800, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x7800
-		program.install_read_bank(0x8000, 0xbfff, BANK_ROM1);
-		program.install_read_bank(0x4000, 0x7fff, BANK_ROM2);
-		break;
-
-	case 0x3000: // 12K
-		memcpy(mem + 0x8000, temp_copy, 0x2000);            // load lower 8KB at 0x8000
-		memcpy(mem + 0xa000, mem + 0x8000, 0x2000);         // mirror lower 8KB at 0xa000
-		memcpy(mem + 0x4000, temp_copy + 0x2000, 0x1000);   // load higher 4KB at 0x4000
-		memcpy(mem + 0x5000, mem + 0x4000, 0x1000);         // mirror higher 4KB at 0x5000
-		memcpy(mem + 0x6000, mem + 0x4000, 0x1000);         // mirror higher 4KB at 0x6000
-		memcpy(mem + 0x7000, mem + 0x4000, 0x1000);         // mirror higher 4KB at 0x7000
-		program.install_read_bank(0x8000, 0xbfff, BANK_ROM1);
-		program.install_read_bank(0x4000, 0x7fff, BANK_ROM2);
-		break;
-
-	case 0x4000: // 16K
-		memcpy(mem + 0xa000, temp_copy, 0x2000);            // load lower 8KB at 0xa000
-		memcpy(mem + 0x8000, temp_copy + 0x2000, 0x2000);   // load higher 8KB at 0x8000
-		program.install_read_bank(0x8000, 0xbfff, BANK_ROM1);
-		program.install_read_bank(0x4000, 0x7fff, BANK_ROM2);
-		break;
-
-	case 0x4800: // 18K
-		memcpy(mem + 0xa000, temp_copy, 0x2000);            // load lower 8KB at 0xa000
-		memcpy(mem + 0x8000, temp_copy + 0x2000, 0x2000);   // load higher 8KB at 0x8000
-		memcpy(mem + 0x4000, temp_copy + 0x4000, 0x0800);   // load higher 2KB at 0x4000
-		memcpy(mem + 0x4800, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x4800
-		memcpy(mem + 0x5000, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x5000
-		memcpy(mem + 0x5800, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x5800
-		memcpy(mem + 0x6000, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x6000
-		memcpy(mem + 0x6800, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x6800
-		memcpy(mem + 0x7000, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x7000
-		memcpy(mem + 0x7800, mem + 0x4000, 0x0800);         // mirror higher 2KB at 0x7800
-		program.install_read_bank(0x8000, 0xbfff, BANK_ROM1);
-		program.install_read_bank(0x4000, 0x7fff, BANK_ROM2);
-		break;
-
-	default:
-		auto_free(machine(), temp_copy);
-		return IMAGE_INIT_FAIL;
-	}
-
-	membank(BANK_ROM1)->configure_entry(0, mem + 0x8000);
-	membank(BANK_ROM1)->set_entry(0);
-
-	membank(BANK_ROM2)->configure_entry(0, mem + 0x4000);
-	membank(BANK_ROM2)->set_entry(0);
-
-	auto_free(machine(), temp_copy);
-
-	return IMAGE_INIT_PASS;
-}
 
 /***************************************************************************
     MACHINE DRIVERS
 ***************************************************************************/
+
+static SLOT_INTERFACE_START(crvision_cart)
+	SLOT_INTERFACE_INTERNAL("crv_rom4k",  CRVISION_ROM_4K)
+	SLOT_INTERFACE_INTERNAL("crv_rom6k",  CRVISION_ROM_6K)
+	SLOT_INTERFACE_INTERNAL("crv_rom8k",  CRVISION_ROM_8K)
+	SLOT_INTERFACE_INTERNAL("crv_rom10k", CRVISION_ROM_10K)
+	SLOT_INTERFACE_INTERNAL("crv_rom12k", CRVISION_ROM_12K)
+	SLOT_INTERFACE_INTERNAL("crv_rom16k", CRVISION_ROM_16K)
+	SLOT_INTERFACE_INTERNAL("crv_rom18k", CRVISION_ROM_18K)
+SLOT_INTERFACE_END
 
 /*-------------------------------------------------
     MACHINE_CONFIG_START( creativision, crvision_state )
@@ -954,25 +735,36 @@ static MACHINE_CONFIG_START( creativision, crvision_state )
 	MCFG_CPU_PROGRAM_MAP(crvision_map)
 
 	// devices
-	MCFG_PIA6821_ADD(PIA6821_TAG, pia_intf)
-	MCFG_CASSETTE_ADD("cassette", crvision_cassette_interface)
-	MCFG_CENTRONICS_PRINTER_ADD(CENTRONICS_TAG, standard_centronics)
+	MCFG_DEVICE_ADD(PIA6821_TAG, PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(crvision_state, pia_pa_r))
+	MCFG_PIA_READPB_HANDLER(READ8(crvision_state, pia_pb_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(crvision_state, pia_pa_w))
+	MCFG_PIA_WRITEPB_HANDLER(DEVWRITE8(SN76489_TAG, sn76496_base_device, write))
+
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+
+	MCFG_CENTRONICS_ADD(CENTRONICS_TAG, centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(DEVWRITELINE("cent_status_in", input_buffer_device, write_bit7))
+
+	MCFG_DEVICE_ADD("cent_status_in", INPUT_BUFFER, 0)
+
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", CENTRONICS_TAG)
+
+	MCFG_DEVICE_ADD("cent_ctrl_out", OUTPUT_LATCH, 0)
+	MCFG_OUTPUT_LATCH_BIT4_HANDLER(DEVWRITELINE(CENTRONICS_TAG, centronics_device, write_strobe))
 
 	// sound hardware
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD(SN76489_TAG, SN76489A, XTAL_2MHz)
-	MCFG_SOUND_CONFIG(psg_intf)
+	MCFG_SN76496_READY_HANDLER(DEVWRITELINE(PIA6821_TAG, pia6821_device, cb1_w))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(1, "mono", 0.25)
 
 	// cartridge
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin,rom")
-	MCFG_CARTSLOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("crvision_cart")
-	MCFG_CARTSLOT_LOAD(crvision_state, crvision_cart)
+	MCFG_CRVISION_CARTRIDGE_ADD("cartslot", crvision_cart, NULL)
 
 	// internal ram
 	MCFG_RAM_ADD(RAM_TAG)
@@ -980,7 +772,7 @@ static MACHINE_CONFIG_START( creativision, crvision_state )
 	MCFG_RAM_EXTRA_OPTIONS("15K") // 16K expansion (lower 14K available only, upper 2K shared with BIOS ROM)
 
 	// software lists
-	MCFG_SOFTWARE_LIST_ADD("cart_list","crvision")
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "crvision")
 MACHINE_CONFIG_END
 
 /*-------------------------------------------------
@@ -989,7 +781,9 @@ MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ntsc, creativision )
 	// video hardware
-	MCFG_TMS9928A_ADD( TMS9929_TAG, TMS9918, vdp_intf )
+	MCFG_DEVICE_ADD( TMS9929_TAG, TMS9918, XTAL_10_738635MHz / 2 )
+	MCFG_TMS9928A_VRAM_SIZE(0x4000)
+	MCFG_TMS9928A_OUT_INT_LINE_CB(INPUTLINE(M6502_TAG, INPUT_LINE_IRQ0))
 	MCFG_TMS9928A_SCREEN_ADD_NTSC( SCREEN_TAG )
 	MCFG_SCREEN_UPDATE_DEVICE( TMS9929_TAG, tms9918_device, screen_update )
 MACHINE_CONFIG_END
@@ -1000,7 +794,9 @@ MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED_CLASS( pal, creativision, crvision_pal_state )
 	// video hardware
-	MCFG_TMS9928A_ADD( TMS9929_TAG, TMS9929, vdp_intf )
+	MCFG_DEVICE_ADD( TMS9929_TAG, TMS9929, XTAL_10_738635MHz / 2 )
+	MCFG_TMS9928A_VRAM_SIZE(0x4000)
+	MCFG_TMS9928A_OUT_INT_LINE_CB(INPUTLINE(M6502_TAG, INPUT_LINE_IRQ0))
 	MCFG_TMS9928A_SCREEN_ADD_PAL( SCREEN_TAG )
 	MCFG_SCREEN_UPDATE_DEVICE( TMS9929_TAG, tms9929_device, screen_update )
 MACHINE_CONFIG_END
@@ -1015,29 +811,42 @@ static MACHINE_CONFIG_START( lasr2001, laser2001_state )
 	MCFG_CPU_PROGRAM_MAP(lasr2001_map)
 
 	// devices
-	MCFG_PIA6821_ADD(PIA6821_TAG, lasr2001_pia_intf)
-	MCFG_CASSETTE_ADD("cassette", lasr2001_cassette_interface)
-	MCFG_CENTRONICS_PRINTER_ADD(CENTRONICS_TAG, lasr2001_centronics_intf)
+	MCFG_DEVICE_ADD(PIA6821_TAG, PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(laser2001_state, pia_pa_r))
+	MCFG_PIA_READPB_HANDLER(READ8(laser2001_state, pia_pb_r))
+	MCFG_PIA_READCA1_HANDLER(READLINE(laser2001_state, pia_ca1_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(laser2001_state, pia_pa_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(laser2001_state, pia_pb_w))
+	MCFG_PIA_CA2_HANDLER(WRITELINE(laser2001_state, pia_ca2_w))
+	MCFG_PIA_CB2_HANDLER(WRITELINE(laser2001_state, pia_cb2_w))
+
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
+
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(laser2001_state, write_centronics_busy))
+
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", CENTRONICS_TAG)
 
 	// video hardware
-	MCFG_TMS9928A_ADD( TMS9929_TAG, TMS9929A, vdp_intf )
+	MCFG_DEVICE_ADD( TMS9929_TAG, TMS9929A, XTAL_10_738635MHz / 2 )
+	MCFG_TMS9928A_VRAM_SIZE(0x4000)
+	MCFG_TMS9928A_OUT_INT_LINE_CB(INPUTLINE(M6502_TAG, INPUT_LINE_IRQ0))
 	MCFG_TMS9928A_SCREEN_ADD_PAL( SCREEN_TAG )
 	MCFG_SCREEN_UPDATE_DEVICE( TMS9929_TAG, tms9929a_device, screen_update )
 
 	// sound hardware
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD(SN76489_TAG, SN76489A, XTAL_17_73447MHz/9)
-	MCFG_SOUND_CONFIG(psg_intf)
+	MCFG_SN76496_READY_HANDLER(WRITELINE(laser2001_state, write_psg_ready))
+
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(1, "mono", 0.25)
 
 	// cartridge
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin,rom")
-	MCFG_CARTSLOT_INTERFACE("crvision_cart")
-	MCFG_CARTSLOT_LOAD(crvision_state, crvision_cart)
+	MCFG_CRVISION_CARTRIDGE_ADD("cartslot", crvision_cart, NULL)
 
 	// internal ram
 	MCFG_RAM_ADD(RAM_TAG)

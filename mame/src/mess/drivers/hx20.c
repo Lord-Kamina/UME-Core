@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /***************************************************************************
 
     Epson HX-20
@@ -211,7 +213,7 @@ READ8_MEMBER( hx20_state::main_p1_r )
 	data |= m_kbrequest << 5;
 
 	// serial
-	data |= m_sio->pin_r() << 6;
+	data |= m_sio_pin << 6;
 
 	return data;
 }
@@ -269,7 +271,7 @@ READ8_MEMBER( hx20_state::main_p2_r )
 	if (m_slave_sio)
 		data |= m_slave_rx << 3;
 	else
-		data |= m_sio->rx_r() << 3;
+		data |= m_sio_rx << 3;
 
 	return data;
 }
@@ -297,7 +299,7 @@ WRITE8_MEMBER( hx20_state::main_p2_w )
 	*/
 
 	// RS-232
-	m_rs232->tx(BIT(data, 1));
+	m_rs232->write_txd(BIT(data, 1));
 
 	// serial
 	m_slave_sio = BIT(data, 2);
@@ -467,7 +469,7 @@ WRITE8_MEMBER( hx20_state::slave_p3_w )
 	*/
 
 	// RS-232
-	m_rs232->rts_w(BIT(data, 1));
+	m_rs232->write_rts(BIT(data, 1));
 
 	// main
 	m_slave_flag = BIT(data, 4);
@@ -537,7 +539,7 @@ WRITE8_MEMBER( hx20_state::slave_p4_w )
 //-------------------------------------------------
 
 static ADDRESS_MAP_START( hx20_mem, AS_PROGRAM, 8, hx20_state )
-	AM_RANGE(0x0000, 0x001f) AM_READWRITE_LEGACY(m6801_io_r, m6801_io_w)
+	AM_RANGE(0x0000, 0x001f) AM_DEVREADWRITE(HD6301V1_MAIN_TAG, hd63701_cpu_device, m6801_io_r, m6801_io_w)
 	AM_RANGE(0x0020, 0x0020) AM_WRITE(ksc_w)
 	AM_RANGE(0x0022, 0x0022) AM_READ(krtn07_r)
 	AM_RANGE(0x0026, 0x0026) AM_WRITE(lcd_cs_w)
@@ -568,7 +570,7 @@ ADDRESS_MAP_END
 //-------------------------------------------------
 
 static ADDRESS_MAP_START( hx20_sub_mem, AS_PROGRAM, 8, hx20_state )
-	AM_RANGE(0x0000, 0x001f) AM_READWRITE_LEGACY(m6801_io_r, m6801_io_w)
+	AM_RANGE(0x0000, 0x001f) AM_DEVREADWRITE(HD6301V1_SLAVE_TAG, hd63701_cpu_device, m6801_io_r, m6801_io_w)
 	AM_RANGE(0x0080, 0x00ff) AM_RAM
 	AM_RANGE(0xf000, 0xffff) AM_ROM AM_REGION(HD6301V1_SLAVE_TAG, 0)
 ADDRESS_MAP_END
@@ -668,8 +670,8 @@ static INPUT_PORTS_START( hx20 )
 	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_KEYBOARD )  PORT_CHAR('[') PORT_CHAR('{')
 	PORT_BIT( 0x0010, IP_ACTIVE_LOW, IPT_KEYBOARD )  PORT_CHAR(']') PORT_CHAR('}')
 	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_KEYBOARD )  PORT_CHAR('\\') PORT_CHAR('|')
-	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_LEFT" "UTF8_UP) PORT_CODE(KEYCODE_LEFT) PORT_CHAR(UCHAR_MAMEKEY(LEFT))
-	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_RIGHT" "UTF8_DOWN) PORT_CODE(KEYCODE_RIGHT) PORT_CHAR(UCHAR_MAMEKEY(RIGHT))
+	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_LEFT" " UTF8_UP) PORT_CODE(KEYCODE_LEFT) PORT_CHAR(UCHAR_MAMEKEY(LEFT))
+	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_RIGHT" " UTF8_DOWN) PORT_CODE(KEYCODE_RIGHT) PORT_CHAR(UCHAR_MAMEKEY(RIGHT))
 	PORT_BIT( 0x0100, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("PAPER FEED")
 	PORT_BIT( 0x0200, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("SHIFT") PORT_CODE(KEYCODE_LSHIFT) PORT_CODE(KEYCODE_RSHIFT) PORT_CHAR(UCHAR_SHIFT_1)
 	PORT_BIT( 0xfc00, IP_ACTIVE_LOW, IPT_UNUSED )
@@ -752,39 +754,16 @@ WRITE_LINE_MEMBER( hx20_state::rtc_irq_w )
 	update_interrupt();
 }
 
-static const struct mc146818_interface rtc_intf =
-{
-	DEVCB_DRIVER_LINE_MEMBER(hx20_state, rtc_irq_w)
-};
-
-
-//-------------------------------------------------
-//  rs232_port_interface rs232_intf
-//-------------------------------------------------
-
-static const rs232_port_interface rs232_intf =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 
 
 //**************************************************************************
 //  VIDEO
 //**************************************************************************
 
-//-------------------------------------------------
-//  PALETTE_INIT( hx20 )
-//-------------------------------------------------
-
-void hx20_state::palette_init()
+PALETTE_INIT_MEMBER(hx20_state, hx20)
 {
-	palette_set_color_rgb(machine(), 0, 0xa5, 0xad, 0xa5);
-	palette_set_color_rgb(machine(), 1, 0x31, 0x39, 0x10);
+	palette.set_pen_color(0, 0xa5, 0xad, 0xa5);
+	palette.set_pen_color(1, 0x31, 0x39, 0x10);
 }
 
 
@@ -853,7 +832,11 @@ static MACHINE_CONFIG_START( hx20, hx20_state )
 	MCFG_SCREEN_SIZE(120, 32)
 	MCFG_SCREEN_VISIBLE_AREA(0, 120-1, 0, 32-1)
 	MCFG_SCREEN_UPDATE_DRIVER(hx20_state, screen_update)
-	MCFG_PALETTE_LENGTH(2)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_PALETTE_ADD("palette", 2)
+	MCFG_PALETTE_INIT_OWNER(hx20_state, hx20)
+
 	MCFG_UPD7227_ADD(UPD7227_0_TAG, 0, 0)
 	MCFG_UPD7227_ADD(UPD7227_1_TAG, 40, 0)
 	MCFG_UPD7227_ADD(UPD7227_2_TAG, 80, 0)
@@ -867,10 +850,13 @@ static MACHINE_CONFIG_START( hx20, hx20_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	// devices
-	MCFG_MC146818_IRQ_ADD(MC146818_TAG, MC146818_STANDARD, rtc_intf)
-	MCFG_RS232_PORT_ADD(RS232_TAG, rs232_intf, default_rs232_devices, NULL)
-	MCFG_CASSETTE_ADD(CASSETTE_TAG, default_cassette_interface)
+	MCFG_MC146818_ADD(MC146818_TAG, XTAL_4_194304Mhz)
+	MCFG_MC146818_IRQ_HANDLER(WRITELINE(hx20_state, rtc_irq_w))
+	MCFG_RS232_PORT_ADD(RS232_TAG, default_rs232_devices, NULL)
+	MCFG_CASSETTE_ADD(CASSETTE_TAG)
 	MCFG_EPSON_SIO_ADD("sio", "tf20")
+	MCFG_EPSON_SIO_RX(WRITELINE(hx20_state, sio_rx_w))
+	MCFG_EPSON_SIO_PIN(WRITELINE(hx20_state, sio_pin_w))
 
 	// internal ram
 	MCFG_RAM_ADD(RAM_TAG)
@@ -878,7 +864,7 @@ static MACHINE_CONFIG_START( hx20, hx20_state )
 	MCFG_RAM_EXTRA_OPTIONS("32K")
 
 	// software lists
-	MCFG_SOFTWARE_LIST_ADD("flop_list", "hx20_flop")
+	MCFG_SOFTWARE_LIST_ADD("epson_cpm_list", "epson_cpm")
 MACHINE_CONFIG_END
 
 

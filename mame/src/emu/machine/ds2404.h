@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /**********************************************************************
 
     DALLAS DS2404
@@ -64,8 +66,6 @@ public:
 	DECLARE_WRITE8_MEMBER(ds2404_data_w);
 	DECLARE_WRITE8_MEMBER(ds2404_clk_w);
 
-	void ds2404_tick();
-
 protected:
 	// device-level overrides
 	virtual void device_start();
@@ -78,7 +78,7 @@ protected:
 	virtual void nvram_read(emu_file &file);
 	virtual void nvram_write(emu_file &file);
 
-	static TIMER_CALLBACK( ds2404_tick_callback );
+	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
 
 private:
 
@@ -101,6 +101,8 @@ private:
 		DS2404_STATE_READ_SCRATCHPAD,       /* Read Scratchpad command active */
 		DS2404_STATE_COPY_SCRATCHPAD        /* Copy Scratchpad command active */
 	};
+
+	emu_timer *m_tick_timer;
 
 	// configuration state
 	UINT32  m_ref_year;

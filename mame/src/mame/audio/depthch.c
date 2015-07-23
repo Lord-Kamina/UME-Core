@@ -1,9 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /*
  *  Depth Charge audio routines
  */
 
 #include "emu.h"
-#include "sound/samples.h"
 #include "includes/vicdual.h"
 
 /* output port 0x01 definitions - sound effect drive outputs */
@@ -29,15 +30,11 @@ static const char *const depthch_sample_names[] =
 };
 
 
-static const samples_interface depthch_samples_interface =
-{
-	4,
-	depthch_sample_names
-};
-
-
 MACHINE_CONFIG_FRAGMENT( depthch_audio )
-	MCFG_SAMPLES_ADD("samples", depthch_samples_interface)
+
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(4)
+	MCFG_SAMPLES_NAMES(depthch_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.5)
 MACHINE_CONFIG_END
 
@@ -48,14 +45,13 @@ enum
 	SND_LONGEXPL = 0,
 	SND_SHRTEXPL,
 	SND_SPRAY,
-	SND_SONAR,
+	SND_SONAR
 };
 
 
-WRITE8_HANDLER( depthch_audio_w )
+WRITE8_MEMBER( vicdual_state::depthch_audio_w )
 {
 	static int port1State = 0;
-	samples_device *samples = space.machine().device<samples_device>("samples");
 	int bitsChanged;
 	int bitsGoneHigh;
 	int bitsGoneLow;
@@ -69,25 +65,25 @@ WRITE8_HANDLER( depthch_audio_w )
 
 	if ( bitsGoneHigh & OUT_PORT_1_LONGEXPL )
 	{
-		PLAY( samples, SND_LONGEXPL, 0 );
+		PLAY( m_samples, SND_LONGEXPL, 0 );
 	}
 
 	if ( bitsGoneHigh & OUT_PORT_1_SHRTEXPL )
 	{
-		PLAY( samples, SND_SHRTEXPL, 0 );
+		PLAY( m_samples, SND_SHRTEXPL, 0 );
 	}
 
 	if ( bitsGoneHigh & OUT_PORT_1_SPRAY )
 	{
-		PLAY( samples, SND_SPRAY, 0 );
+		PLAY( m_samples, SND_SPRAY, 0 );
 	}
 
 	if ( bitsGoneHigh & OUT_PORT_1_SONAR )
 	{
-		PLAY( samples, SND_SONAR, 1 );
+		PLAY( m_samples, SND_SONAR, 1 );
 	}
 	if ( bitsGoneLow & OUT_PORT_1_SONAR )
 	{
-		STOP( samples, SND_SONAR );
+		STOP( m_samples, SND_SONAR );
 	}
 }

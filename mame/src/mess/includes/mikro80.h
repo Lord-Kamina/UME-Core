@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /*****************************************************************************
  *
  * includes/mikro80.h
@@ -74,10 +76,5 @@ protected:
 	required_ioport m_io_line8;
 	required_device<cpu_device> m_maincpu;
 };
-
-
-/*----------- defined in machine/mikro80.c -----------*/
-
-extern const i8255_interface mikro80_ppi8255_interface;
 
 #endif /* UT88_H_ */

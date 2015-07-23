@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Lee Taylor,John Clegg,Tomasz Slanina
 /****************************************************************************
 
 Traverse USA / Zippy Race  (c) 1983 Irem
@@ -59,7 +61,7 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, travrusa_state )
 	AM_RANGE(0x9000, 0x9000) AM_WRITE(travrusa_scroll_x_low_w)
 	AM_RANGE(0xa000, 0xa000) AM_WRITE(travrusa_scroll_x_high_w)
 	AM_RANGE(0xc800, 0xc9ff) AM_WRITEONLY AM_SHARE("spriteram")
-	AM_RANGE(0xd000, 0xd000) AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0xd000, 0xd000) AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0xd001, 0xd001) AM_WRITE(travrusa_flipscreen_w)    /* + coin counters - not written by shtrider */
 	AM_RANGE(0xd000, 0xd000) AM_READ_PORT("SYSTEM")     /* IN0 */
 	AM_RANGE(0xd001, 0xd001) AM_READ_PORT("P1")         /* IN1 */
@@ -315,11 +317,13 @@ static MACHINE_CONFIG_START( travrusa, travrusa_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(1*8, 31*8-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(travrusa_state, screen_update_travrusa)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(travrusa)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", travrusa)
 
-	MCFG_PALETTE_LENGTH(16*8+16*8)
-
+	MCFG_PALETTE_ADD("palette", 16*8+16*8)
+	MCFG_PALETTE_INDIRECT_ENTRIES(128+16)
+	MCFG_PALETTE_INIT_OWNER(travrusa_state, travrusa)
 
 	/* sound hardware */
 	MCFG_FRAGMENT_ADD(m52_sound_c_audio)
@@ -328,11 +332,16 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( shtrider, travrusa )
 
 	/* video hardware */
-	MCFG_GFXDECODE(shtrider)
-	MCFG_PALETTE_INIT_OVERRIDE(travrusa_state,shtrider)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", shtrider)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_INIT_OWNER(travrusa_state,shtrider)
 MACHINE_CONFIG_END
 
+static MACHINE_CONFIG_DERIVED( shtriderb, travrusa )
 
+	/* video hardware */
+	MCFG_GFXDECODE_MODIFY("gfxdecode", shtrider)
+MACHINE_CONFIG_END
 
 /***************************************************************************
 
@@ -536,13 +545,39 @@ ROM_START( shtridera )
 	ROM_LOAD( "3.bpr",   0x0220, 0x0100, CRC(5db47092) SHA1(8e234ee88143755a4fd5ec86a03b55be5f9c5db8) )
 ROM_END
 
+ROM_START( shtriderb )
+	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_LOAD( "sr1.20.m3", 0x0000, 0x2000, CRC(8bca38d7) SHA1(97482ea1b6e5415df7149184dd5662d96a3e155a) )
+	ROM_LOAD( "sr2.21.l3", 0x2000, 0x2000, CRC(56d4a66a) SHA1(e51a409ecc9f4d808678467ca7ce9bc0a35a7863) )
+	ROM_LOAD( "sr3.22.k3", 0x4000, 0x2000, CRC(44cab4cc) SHA1(9e87d88353c858c25fb4ff9528c3f369505ffd88) )
+	ROM_LOAD( "sr4.23.h3", 0x6000, 0x2000, CRC(02b96eaa) SHA1(ba4d61cf57142192684c45dd22720234d3521241) )
+
+	ROM_REGION( 0x8000, "iremsound", 0 )
+	ROM_LOAD( "sr11.7.a1", 0x6000, 0x2000, CRC(a8396b76) SHA1(614151fb1d25930e9fee4ab290a63f8fe97adbe6) )
+
+	ROM_REGION( 0x06000, "gfx1", 0 )
+	ROM_LOAD( "sr5.f3",  0x0000, 0x2000, CRC(34449f79) SHA1(30aa9da07bf32282d213f63e50c564a336fd0102) )
+	ROM_LOAD( "sr6.c3",  0x2000, 0x2000, CRC(de43653d) SHA1(a9fae236ee8e32d576123a4871ba3c46ca78ec3b) )
+	ROM_LOAD( "sr7.a3",  0x4000, 0x2000, CRC(3445b81c) SHA1(6768d411f8c3a347b10908e757a701d5b71ca2bc) )
+
+	ROM_REGION( 0x06000, "gfx2", 0 )
+	ROM_LOAD( "sr8.17.n3", 0x0000, 0x2000, CRC(4072b096) SHA1(e43482ac916a0fa259f74f99dc6ef72e86c23d9d) )
+	ROM_LOAD( "sr9.18.m3", 0x2000, 0x2000, CRC(fd4cc7e6) SHA1(3852883d32354e8c90c6cf701581ebc57d830c8b))
+	ROM_LOAD( "sr10.19.k3",0x4000, 0x2000, CRC(0a117925) SHA1(e061254428874b6153c2e9e514122373395f4da1) )
+
+	ROM_REGION( 0x0420,  "proms", 0 )
+	ROM_LOAD( "6349-2.k2",   0x0000, 0x0200, CRC(854487a7) SHA1(5f3a2a7f7ba89f945fda97debb5436af8a2c6885) )
+	ROM_LOAD( "prom1.6.f1",   0x0200, 0x0020, CRC(ee97c581) SHA1(a5d0ba5e03f3bcbdd72f89f0495a98cef2821e59))
+	ROM_LOAD( "prom2.12.h2",  0x0220, 0x0100, CRC(5db47092) SHA1(8e234ee88143755a4fd5ec86a03b55be5f9c5db8) )
+ROM_END
+
 DRIVER_INIT_MEMBER(travrusa_state,motorace)
 {
 	int A, j;
 	UINT8 *rom = memregion("maincpu")->base();
-	UINT8 *buffer = auto_alloc_array(machine(), UINT8, 0x2000);
+	dynamic_buffer buffer(0x2000);
 
-	memcpy(buffer, rom, 0x2000);
+	memcpy(&buffer[0], rom, 0x2000);
 
 	/* The first CPU ROM has the address and data lines scrambled */
 	for (A = 0; A < 0x2000; A++)
@@ -550,8 +585,6 @@ DRIVER_INIT_MEMBER(travrusa_state,motorace)
 		j = BITSWAP16(A,15,14,13,9,7,5,3,1,12,10,8,6,4,2,0,11);
 		rom[j] = BITSWAP8(buffer[A],2,7,4,1,6,3,0,5);
 	}
-
-	auto_free(machine(), buffer);
 }
 
 DRIVER_INIT_MEMBER(travrusa_state,shtridra)
@@ -564,6 +597,18 @@ DRIVER_INIT_MEMBER(travrusa_state,shtridra)
 		rom[A] = BITSWAP8(rom[A],7,5,6,3,4,2,1,0);
 }
 
+READ8_MEMBER(travrusa_state::shtridrb_port11_r)
+{
+	printf("shtridrb_port11_r %04x\n", space.device().safe_pc());
+	// reads, masks with 0xa8, checks for 0x88, resets game if not happy with value?
+	return 0x88;
+}
+
+
+DRIVER_INIT_MEMBER(travrusa_state, shtridrb)
+{
+	m_maincpu->space(AS_IO).install_read_handler(0x11, 0x11, 0x0000, 0xff00, read8_delegate(FUNC(travrusa_state::shtridrb_port11_r),this));
+}
 
 
 GAME( 1983, travrusa, 0,        travrusa, travrusa, driver_device, 0,         ROT270, "Irem",                    "Traverse USA / Zippy Race", GAME_SUPPORTS_SAVE )
@@ -571,5 +616,6 @@ GAME( 1983, travrusab,travrusa, travrusa, travrusa, driver_device, 0,         RO
 GAME( 1983, mototour, travrusa, travrusa, travrusa, driver_device, 0,         ROT270, "Irem (Tecfri license)",   "MotoTour / Zippy Race (Tecfri license)", GAME_SUPPORTS_SAVE )
 GAME( 1983, motorace, travrusa, travrusa, motorace, travrusa_state, motorace, ROT270, "Irem (Williams license)", "MotoRace USA", GAME_SUPPORTS_SAVE )
 
-GAME( 1985, shtrider, 0,        shtrider, shtrider, driver_device, 0,         ROT270|ORIENTATION_FLIP_X, "Seibu Kaihatsu",                 "Shot Rider", GAME_SUPPORTS_SAVE )
+GAME( 1985, shtrider, 0,        shtrider, shtrider, driver_device, 0,         ROT270|ORIENTATION_FLIP_X, "Seibu Kaihatsu",                 "Shot Rider", GAME_SUPPORTS_SAVE ) // possible bootleg
 GAME( 1984, shtridera,shtrider, shtrider, shtrider, travrusa_state, shtridra, ROT270|ORIENTATION_FLIP_X, "Seibu Kaihatsu (Sigma license)", "Shot Rider (Sigma license)", GAME_SUPPORTS_SAVE )
+GAME( 1985, shtriderb,shtrider, shtriderb,shtrider, travrusa_state, shtridrb, ROT270|ORIENTATION_FLIP_X, "bootleg",                        "Shot Rider (bootleg)", GAME_SUPPORTS_SAVE ) // resets when you attempt to start a game?

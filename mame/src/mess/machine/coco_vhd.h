@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
     coco_vhd.h
@@ -9,7 +11,6 @@
 #ifndef COCOVHD_H
 #define COCOVHD_H
 
-#include "image.h"
 
 /***************************************************************************
     TYPE DEFINITIONS

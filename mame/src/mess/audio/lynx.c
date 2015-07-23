@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner
 /******************************************************************************
  PeT mess@utanet.at 2000,2001
 ******************************************************************************/
@@ -139,19 +141,19 @@ void lynx_sound_device::register_save()
 	save_item(NAME(m_master_enable));
 	for (int chan = 0; chan < LYNX_AUDIO_CHANNELS; chan++)
 	{
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].reg.volume);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].reg.feedback);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].reg.output);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].reg.shifter);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].reg.bakup);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].reg.control1);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].reg.counter);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].reg.control2);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].attenuation);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].mask);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].shifter);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].ticks);
-		state_save_register_item(machine(), "Lynx sound", NULL, chan, m_audio[chan].count);
+		save_item(NAME(m_audio[chan].reg.volume), chan);
+		save_item(NAME(m_audio[chan].reg.feedback), chan);
+		save_item(NAME(m_audio[chan].reg.output), chan);
+		save_item(NAME(m_audio[chan].reg.shifter), chan);
+		save_item(NAME(m_audio[chan].reg.bakup), chan);
+		save_item(NAME(m_audio[chan].reg.control1), chan);
+		save_item(NAME(m_audio[chan].reg.counter), chan);
+		save_item(NAME(m_audio[chan].reg.control2), chan);
+		save_item(NAME(m_audio[chan].attenuation), chan);
+		save_item(NAME(m_audio[chan].mask), chan);
+		save_item(NAME(m_audio[chan].shifter), chan);
+		save_item(NAME(m_audio[chan].ticks), chan);
+		save_item(NAME(m_audio[chan].count), chan);
 	}
 }
 
@@ -187,7 +189,7 @@ void lynx_sound_device::init()
 
 void lynx_sound_device::device_start()
 {
-	m_mixer_channel = machine().sound().stream_alloc(*this, 0, 1, machine().sample_rate(), this);
+	m_mixer_channel = machine().sound().stream_alloc(*this, 0, 1, machine().sample_rate());
 	m_usec_per_sample = 1000000 / machine().sample_rate();
 	m_timer_delegate.bind_relative_to(*owner());
 	init();
@@ -197,7 +199,7 @@ void lynx_sound_device::device_start()
 
 void lynx2_sound_device::device_start()
 {
-	m_mixer_channel = machine().sound().stream_alloc(*this, 0, 2, machine().sample_rate(), this);
+	m_mixer_channel = machine().sound().stream_alloc(*this, 0, 2, machine().sample_rate());
 	m_usec_per_sample = 1000000 / machine().sample_rate();
 	m_timer_delegate.bind_relative_to(*owner());
 	init();

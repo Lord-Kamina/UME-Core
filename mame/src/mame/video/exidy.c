@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     Exidy 6502 hardware
@@ -32,7 +34,7 @@ void exidy_state::exidy_video_config(UINT8 _collision_mask, UINT8 _collision_inv
 
 void exidy_state::video_start()
 {
-	machine().primary_screen->register_screen_bitmap(m_background_bitmap);
+	m_screen->register_screen_bitmap(m_background_bitmap);
 	m_motion_object_1_vid.allocate(16, 16);
 	m_motion_object_2_vid.allocate(16, 16);
 	m_motion_object_2_clip.allocate(16, 16);
@@ -93,7 +95,7 @@ READ8_MEMBER(exidy_state::exidy_interrupt_r)
 
 inline void exidy_state::set_1_color(int index, int which)
 {
-	palette_set_color_rgb(machine(), index,
+	m_palette->set_pen_color(index,
 							pal1bit(m_color_latch[2] >> which),
 							pal1bit(m_color_latch[1] >> which),
 							pal1bit(m_color_latch[0] >> which));
@@ -214,7 +216,7 @@ void exidy_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 	int sx = 236 - *m_sprite2_xpos - 4;
 	int sy = 244 - *m_sprite2_ypos - 4;
 
-	drawgfx_transpen(bitmap, cliprect, machine().gfx[0],
+	m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 			((*m_spriteno >> 4) & 0x0f) + 32 + 16 * sprite_set_2, 1,
 			0, 0, sx, sy, 0);
 
@@ -228,7 +230,7 @@ void exidy_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 
 		if (sy < 0) sy = 0;
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				(*m_spriteno & 0x0f) + 16 * sprite_set_1, 0,
 				0, 0, sx, sy, 0);
 	}
@@ -293,7 +295,7 @@ void exidy_state::check_collision()
 	{
 		org_1_x = 236 - *m_sprite1_xpos - 4;
 		org_1_y = 244 - *m_sprite1_ypos - 4;
-		drawgfx_transpen(m_motion_object_1_vid, clip, machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(m_motion_object_1_vid,clip,
 				(*m_spriteno & 0x0f) + 16 * sprite_set_1, 0,
 				0, 0, 0, 0, 0);
 	}
@@ -302,7 +304,7 @@ void exidy_state::check_collision()
 	m_motion_object_2_vid.fill(0xff, clip);
 	org_2_x = 236 - *m_sprite2_xpos - 4;
 	org_2_y = 244 - *m_sprite2_ypos - 4;
-	drawgfx_transpen(m_motion_object_2_vid, clip, machine().gfx[0],
+	m_gfxdecode->gfx(0)->transpen(m_motion_object_2_vid,clip,
 			((*m_spriteno >> 4) & 0x0f) + 32 + 16 * sprite_set_2, 0,
 			0, 0, 0, 0, 0);
 
@@ -312,7 +314,7 @@ void exidy_state::check_collision()
 	{
 		sx = org_2_x - org_1_x;
 		sy = org_2_y - org_1_y;
-		drawgfx_transpen(m_motion_object_2_clip, clip, machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(m_motion_object_2_clip,clip,
 				((*m_spriteno >> 4) & 0x0f) + 32 + 16 * sprite_set_2, 0,
 				0, 0, sx, sy, 0);
 	}
@@ -335,7 +337,7 @@ void exidy_state::check_collision()
 
 				/* if we got one, trigger an interrupt */
 				if ((current_collision_mask & m_collision_mask) && (count++ < 128))
-					timer_set(machine().primary_screen->time_until_pos(org_1_x + sx, org_1_y + sy), TIMER_COLLISION_IRQ, current_collision_mask);
+					timer_set(m_screen->time_until_pos(org_1_x + sx, org_1_y + sy), TIMER_COLLISION_IRQ, current_collision_mask);
 			}
 
 			if (m_motion_object_2_vid.pix16(sy, sx) != 0xff)
@@ -343,7 +345,7 @@ void exidy_state::check_collision()
 				/* check for background collision (M2CHAR) */
 				if (m_background_bitmap.pix16(org_2_y + sy, org_2_x + sx) != 0)
 					if ((m_collision_mask & 0x08) && (count++ < 128))
-						timer_set(machine().primary_screen->time_until_pos(org_2_x + sx, org_2_y + sy), TIMER_COLLISION_IRQ, 0x08);
+						timer_set(m_screen->time_until_pos(org_2_x + sx, org_2_y + sy), TIMER_COLLISION_IRQ, 0x08);
 			}
 		}
 }

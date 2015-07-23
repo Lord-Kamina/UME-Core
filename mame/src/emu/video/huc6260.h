@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /**********************************************************************
 
     Hudson/NEC HuC6260 interface and definitions
@@ -18,63 +20,64 @@
 #define HUC6260_LPF         263     /* max number of lines in a single frame */
 
 
-PALETTE_INIT( huc6260 );
+#define MCFG_HUC6260_NEXT_PIXEL_DATA_CB(_devcb) \
+	devcb = &huc6260_device::set_next_pixel_data_callback(*device, DEVCB_##_devcb);
 
+#define MCFG_HUC6260_TIME_TIL_NEXT_EVENT_CB(_devcb) \
+	devcb = &huc6260_device::set_time_til_next_event_callback(*device, DEVCB_##_devcb);
 
-#define MCFG_HUC6260_ADD( _tag, clock, _intrf ) \
-	MCFG_DEVICE_ADD( _tag, HUC6260, clock )     \
-	MCFG_DEVICE_CONFIG( _intrf )
+#define MCFG_HUC6260_VSYNC_CHANGED_CB(_devcb) \
+	devcb = &huc6260_device::set_vsync_changed_callback(*device, DEVCB_##_devcb);
 
-
-struct huc6260_interface
-{
-	/* Tag for the screen we will be drawing on */
-	const char *screen_tag;
-
-	/* Callback function to retrieve pixel data */
-	devcb_read16                    get_next_pixel_data;
-
-	/* TODO: Choose proper types */
-	/* Callback function to get time until next event */
-	devcb_read16                    get_time_til_next_event;
-
-	/* Callback function which gets called when vsync changes */
-	devcb_write_line                vsync_changed;
-
-	/* Callback function which gets called when hsync changes */
-	devcb_write_line                hsync_changed;
-};
+#define MCFG_HUC6260_HSYNC_CHANGED_CB(_devcb) \
+	devcb = &huc6260_device::set_hsync_changed_callback(*device, DEVCB_##_devcb);
 
 
 class huc6260_device :  public device_t,
-						public huc6260_interface
+						public device_video_interface
 {
 public:
 	// construction/destruction
 	huc6260_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
+	template<class _Object> static devcb_base &set_next_pixel_data_callback(device_t &device, _Object object) { return downcast<huc6260_device &>(device).m_next_pixel_data_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_time_til_next_event_callback(device_t &device, _Object object) { return downcast<huc6260_device &>(device).m_time_til_next_event_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_vsync_changed_callback(device_t &device, _Object object) { return downcast<huc6260_device &>(device).m_vsync_changed_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_hsync_changed_callback(device_t &device, _Object object) { return downcast<huc6260_device &>(device).m_hsync_changed_cb.set_callback(object); }
+
 	void video_update(bitmap_ind16 &bitmap, const rectangle &cliprect);
 	DECLARE_READ8_MEMBER( read );
 	DECLARE_WRITE8_MEMBER( write );
+	DECLARE_PALETTE_INIT(huc6260);
+
+	READ8_MEMBER(palette_direct_read);
+	WRITE8_MEMBER(palette_direct_write);
 
 protected:
 	// device-level overrides
-	virtual void device_config_complete();
 	virtual void device_start();
 	virtual void device_reset();
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
+	virtual machine_config_constructor device_mconfig_additions() const;
 
 private:
-	screen_device *m_screen;
 	int     m_last_h;
 	int     m_last_v;
 	int     m_height;
 
 	/* callbacks */
-	devcb_resolved_read16       m_get_next_pixel_data;
-	devcb_resolved_read16       m_get_time_til_next_event;
-	devcb_resolved_write_line   m_hsync_changed;
-	devcb_resolved_write_line   m_vsync_changed;
+	/* Callback function to retrieve pixel data */
+	devcb_read16                    m_next_pixel_data_cb;
+
+	/* TODO: Choose proper types */
+	/* Callback function to get time until next event */
+	devcb_read16                    m_time_til_next_event_cb;
+
+	/* Callback function which gets called when vsync changes */
+	devcb_write_line                m_vsync_changed_cb;
+
+	/* Callback function which gets called when hsync changes */
+	devcb_write_line                m_hsync_changed_cb;
 
 	UINT16  m_palette[512];
 	UINT16  m_address;

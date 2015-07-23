@@ -1,9 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Lee Taylor, Chris Moore
 /*************************************************************************
     Universal Cheeky Mouse Driver
     (c)Lee Taylor May 1998, All rights reserved.
 
-    For use only in offical MAME releases.
-    Not to be distrabuted as part of any commerical work.
 ***************************************************************************
 Functions to emulate the video hardware of the machine.
 ***************************************************************************/
@@ -15,7 +15,7 @@ Functions to emulate the video hardware of the machine.
 /* bit 3 and 7 of the char color PROMs are used for something -- not currently emulated -
    thus GAME_IMPERFECT_GRAPHICS */
 
-void cheekyms_state::palette_init()
+PALETTE_INIT_MEMBER(cheekyms_state, cheekyms)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i, j, bit, r, g, b;
@@ -34,20 +34,20 @@ void cheekyms_state::palette_init()
 			bit = (color_prom[0x20 * (i / 2) + j] >> ((4 * (i & 1)) + 2)) & 0x01;
 			b = 0xff * bit;
 
-			palette_set_color(machine(), (i * 0x20) + j, MAKE_RGB(r,g,b));
+			palette.set_pen_color((i * 0x20) + j, rgb_t(r,g,b));
 		}
 	}
 }
 
 
-WRITE8_MEMBER(cheekyms_state::cheekyms_port_40_w)
+WRITE8_MEMBER(cheekyms_state::port_40_w)
 {
 	/* the lower bits probably trigger sound samples */
 	m_dac->write_unsigned8(data ? 0x80 : 0);
 }
 
 
-WRITE8_MEMBER(cheekyms_state::cheekyms_port_80_w)
+WRITE8_MEMBER(cheekyms_state::port_80_w)
 {
 	/* d0-d1 - sound enables, not sure which bit is which */
 	/* d3-d5 - man scroll amount */
@@ -61,7 +61,7 @@ WRITE8_MEMBER(cheekyms_state::cheekyms_port_80_w)
 
 
 
-TILE_GET_INFO_MEMBER(cheekyms_state::cheekyms_get_tile_info)
+TILE_GET_INFO_MEMBER(cheekyms_state::get_tile_info)
 {
 	int color;
 
@@ -94,11 +94,11 @@ void cheekyms_state::video_start()
 {
 	int width, height;
 
-	width = machine().primary_screen->width();
-	height = machine().primary_screen->height();
+	width = m_screen->width();
+	height = m_screen->height();
 	m_bitmap_buffer = auto_bitmap_ind16_alloc(machine(), width, height);
 
-	m_cm_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(cheekyms_state::cheekyms_get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_cm_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(cheekyms_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 	m_cm_tilemap->set_transparent_pen(0);
 }
 
@@ -123,26 +123,26 @@ void cheekyms_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			if (!flip)
 				code++;
 
-			drawgfx_transpen(bitmap, cliprect, gfx, code, color, 0, 0, x, y, 0);
+				gfx->transpen(bitmap,cliprect, code, color, 0, 0, x, y, 0);
 		}
 		else
 		{
 			if (m_spriteram[offs + 0] & 0x02)
 			{
-				drawgfx_transpen(bitmap, cliprect, gfx, code | 0x20, color, 0, 0,        x, y, 0);
-				drawgfx_transpen(bitmap, cliprect, gfx, code | 0x21, color, 0, 0, 0x10 + x, y, 0);
+					gfx->transpen(bitmap,cliprect, code | 0x20, color, 0, 0,        x, y, 0);
+					gfx->transpen(bitmap,cliprect, code | 0x21, color, 0, 0, 0x10 + x, y, 0);
 			}
 			else
 			{
-				drawgfx_transpen(bitmap, cliprect, gfx, code | 0x20, color, 0, 0, x,        y, 0);
-				drawgfx_transpen(bitmap, cliprect, gfx, code | 0x21, color, 0, 0, x, 0x10 + y, 0);
+					gfx->transpen(bitmap,cliprect, code | 0x20, color, 0, 0, x,        y, 0);
+					gfx->transpen(bitmap,cliprect, code | 0x21, color, 0, 0, x, 0x10 + y, 0);
 			}
 		}
 	}
 }
 
 
-UINT32 cheekyms_state::screen_update_cheekyms(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 cheekyms_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int y, x;
 	int scrolly = ((*m_port_80 >> 3) & 0x07);
@@ -155,10 +155,10 @@ UINT32 cheekyms_state::screen_update_cheekyms(screen_device &screen, bitmap_ind1
 	m_bitmap_buffer->fill(0, cliprect);
 
 	/* sprites go under the playfield */
-	draw_sprites(bitmap, cliprect, machine().gfx[1], flip);
+	draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(1), flip);
 
 	/* draw the tilemap to a temp bitmap */
-	m_cm_tilemap->draw(*m_bitmap_buffer, cliprect, 0, 0);
+	m_cm_tilemap->draw(screen, *m_bitmap_buffer, cliprect, 0, 0);
 
 	/* draw the tilemap to the final bitmap applying the scroll to the man character */
 	for (y = cliprect.min_y; y <= cliprect.max_y; y++)

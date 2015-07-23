@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                             -= Jaleco Mega System 1 =-
@@ -29,14 +31,15 @@ public:
 		m_audiocpu(*this, "audiocpu"),
 		m_oki1(*this, "oki1"),
 		m_oki2(*this, "oki2"),
-		m_region_maincpu(*this, "maincpu"),
-		m_region_oki1(*this, "oki1"),
+		m_rom_maincpu(*this, "maincpu"),
 		m_io_system(*this, "SYSTEM"),
 		m_io_p1(*this, "P1"),
 		m_io_p2(*this, "P2"),
 		m_io_dsw(*this, "DSW"),
 		m_io_dsw1(*this, "DSW1"),
-		m_io_dsw2(*this, "DSW2") { }
+		m_io_dsw2(*this, "DSW2"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	required_shared_ptr<UINT16> m_vregs;
 	required_shared_ptr<UINT16> m_objectram;
@@ -46,21 +49,21 @@ public:
 	optional_device<cpu_device> m_audiocpu;
 	optional_device<okim6295_device> m_oki1;
 	optional_device<okim6295_device> m_oki2;
-	required_memory_region m_region_maincpu;
-	optional_memory_region m_region_oki1;
+	required_region_ptr<UINT16> m_rom_maincpu;
 	required_ioport m_io_system;
 	required_ioport m_io_p1;
 	required_ioport m_io_p2;
 	optional_ioport m_io_dsw;
 	optional_ioport m_io_dsw1;
 	optional_ioport m_io_dsw2;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	UINT16 *m_spriteram;
 	UINT16 m_ip_select;
 	UINT16 m_ip_select_values[5];
 	UINT8 m_ignore_oki_status;
 	UINT16 m_protection_val;
-	int m_bank;
 	int m_scrollx[3];
 	int m_scrolly[3];
 	int m_active_layers;
@@ -101,6 +104,7 @@ public:
 	DECLARE_WRITE16_MEMBER(megasys1_scrollram_1_w);
 	DECLARE_WRITE16_MEMBER(megasys1_scrollram_2_w);
 	DECLARE_WRITE16_MEMBER(megasys1_vregs_A_w);
+	DECLARE_WRITE16_MEMBER(megasys1_vregs_monkelf_w);
 	DECLARE_READ16_MEMBER(megasys1_vregs_C_r);
 	DECLARE_WRITE16_MEMBER(megasys1_vregs_C_w);
 	DECLARE_WRITE16_MEMBER(megasys1_vregs_D_w);
@@ -122,6 +126,8 @@ public:
 	DECLARE_DRIVER_INIT(iganinju);
 	DECLARE_DRIVER_INIT(cybattlr);
 	DECLARE_DRIVER_INIT(rodlandj);
+	DECLARE_DRIVER_INIT(rittam);
+	DECLARE_DRIVER_INIT(rodlandjb);
 	DECLARE_DRIVER_INIT(avspirit);
 	DECLARE_DRIVER_INIT(monkelf);
 	DECLARE_DRIVER_INIT(edf);
@@ -144,8 +150,9 @@ public:
 	TIMER_DEVICE_CALLBACK_MEMBER(megasys1B_scanline);
 	inline void scrollram_w(offs_t offset, UINT16 data, UINT16 mem_mask, int which);
 	void create_tilemaps();
-	void draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect);
-	void rodlandj_gfx_unmangle(const char *region);
+	void megasys1_priority_create();
+	void draw_sprites(screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect);
+	void rodland_gfx_unmangle(const char *region);
 	void jitsupro_gfx_unmangle(const char *region);
 	void stdragona_gfx_unmangle(const char *region);
 	DECLARE_WRITE_LINE_MEMBER(irqhandler);

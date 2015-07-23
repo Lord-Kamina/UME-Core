@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ville Linde
 /*
     Ricoh RF5C400 emulator
 
@@ -38,7 +40,7 @@ enum
 	TYPE_MASK       = 0x00C0,
 	TYPE_16         = 0x0000,
 	TYPE_8LOW       = 0x0040,
-	TYPE_8HIGH      = 0x0080,
+	TYPE_8HIGH      = 0x0080
 };
 
 /* envelope phase */
@@ -47,7 +49,7 @@ enum
 	PHASE_NONE      = 0,
 	PHASE_ATTACK,
 	PHASE_DECAY,
-	PHASE_RELEASE,
+	PHASE_RELEASE
 };
 
 
@@ -64,10 +66,9 @@ const device_type RF5C400 = &device_creator<rf5c400_device>;
 //-------------------------------------------------
 
 rf5c400_device::rf5c400_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, RF5C400, "RF5C400", tag, owner, clock),
+	: device_t(mconfig, RF5C400, "RF5C400", tag, owner, clock, "rf5c400", __FILE__),
 		device_sound_interface(mconfig, *this),
-		m_rom(NULL),
-		m_rom_length(0),
+		m_rom(*this, DEVICE_SELF),
 		m_stream(NULL)
 {
 	memset(m_env_ar_table, 0, sizeof(double)*0x9f);
@@ -130,7 +131,7 @@ void rf5c400_device::sound_stream_update(sound_stream &stream, stream_sample_t *
 
 			if (env_phase == PHASE_NONE) break;
 
-			tmp = rom[pos>>16];
+			tmp = rom[(pos>>16) & m_rommask];
 			switch ( type )
 			{
 				case TYPE_16:
@@ -198,7 +199,7 @@ void rf5c400_device::sound_stream_update(sound_stream &stream, stream_sample_t *
 			*buf1++ += sample * pan_table[rvol];
 
 			pos += channel->step;
-			if ( (pos>>16) > m_rom_length || (pos>>16) > end)
+			if ( (pos>>16) > m_rom.length() || (pos>>16) > end)
 			{
 				pos -= loop<<16;
 				pos &= U64(0xFFFFFF0000);
@@ -229,9 +230,6 @@ UINT8 rf5c400_device::decode80(UINT8 val)
 void rf5c400_device::rf5c400_init_chip()
 {
 	int i;
-
-	m_rom = *region();
-	m_rom_length = region()->bytes() / 2;
 
 	// init volume table
 	{
@@ -335,6 +333,8 @@ void rf5c400_device::rf5c400_init_chip()
 	}
 
 	m_stream = stream_alloc(0, 2, clock()/384);
+
+	m_rommask = m_rom.length() - 1;
 }
 
 
@@ -428,11 +428,11 @@ WRITE16_MEMBER( rf5c400_device::rf5c400_w )
 
 			default:
 			{
-				//mame_printf_debug("%s:rf5c400_w: %08X, %08X, %08X\n", machine().describe_context(), data, offset, mem_mask);
+				//osd_printf_debug("%s:rf5c400_w: %08X, %08X, %08X\n", machine().describe_context(), data, offset, mem_mask);
 				break;
 			}
 		}
-		//mame_printf_debug("%s:rf5c400_w: %08X, %08X, %08X at %08X\n", machine().describe_context(), data, offset, mem_mask);
+		//osd_printf_debug("%s:rf5c400_w: %08X, %08X, %08X at %08X\n", machine().describe_context(), data, offset, mem_mask);
 	}
 	else
 	{

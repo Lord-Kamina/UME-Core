@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /*********************************************************************
 
     53c7xx.c
@@ -30,7 +32,7 @@
 	#define VERBOSE_LOG(machine, level, ...)
 #endif
 
-void verbose_log(running_machine &machine, int level, const char* format, ...)
+static void ATTR_PRINTF(3,4) verbose_log(running_machine &machine, int level, const char* format, ...)
 {
 	if (level <= DEBUG_LEVEL)
 	{
@@ -1163,7 +1165,7 @@ void ncr53c7xx_device::execute_run()
 						illegal();
 				}
 
-				VERBOSE_LOG(machine(), 3, disassemble_scripts());
+				VERBOSE_LOG(machine(), 3, "%s", disassemble_scripts());
 				break;
 			}
 

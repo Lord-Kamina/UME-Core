@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Angelo Salese
 /*******************************************************************************************
 
 Jackpot Cards / Jackpot Pool (c) 1997 Electronic Projects
@@ -18,7 +20,7 @@ TODO:
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
 #include "sound/okim6295.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 
 
 class jackpool_state : public driver_device
@@ -29,7 +31,9 @@ public:
 		m_vram(*this, "vram"),
 		m_io(*this, "io"),
 		m_maincpu(*this, "maincpu"),
-		m_eeprom(*this, "eeprom") { }
+		m_eeprom(*this, "eeprom"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	required_shared_ptr<UINT16> m_vram;
 	UINT8 m_map_vreg;
@@ -42,7 +46,9 @@ public:
 	UINT32 screen_update_jackpool(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(jackpool_interrupt);
 	required_device<cpu_device> m_maincpu;
-	required_device<eeprom_device> m_eeprom;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -52,7 +58,7 @@ void jackpool_state::video_start()
 
 UINT32 jackpool_state::screen_update_jackpool(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 	int count;// = 0x00000/2;
 
 	int y,x;
@@ -66,7 +72,7 @@ UINT32 jackpool_state::screen_update_jackpool(screen_device &screen, bitmap_ind1
 				int tile = (m_vram[count+(0x2000/2)] & 0x7fff);
 				int attr = (m_vram[count+(0x2000/2)+0x800] & 0x1f00)>>8;
 
-				drawgfx_opaque(bitmap,cliprect,gfx,tile,attr,0,0,x*8,y*8);
+				gfx->opaque(bitmap,cliprect,tile,attr,0,0,x*8,y*8);
 				count++;
 			}
 		}
@@ -83,7 +89,7 @@ UINT32 jackpool_state::screen_update_jackpool(screen_device &screen, bitmap_ind1
 					int attr = (m_vram[count+0x800] & 0x1f00)>>8;
 					int t_pen = (m_vram[count+0x800] & 0x1000);
 
-					drawgfx_transpen(bitmap,cliprect,gfx,tile,attr,0,0,x*8,y*8,(t_pen) ? 0 : -1);
+					gfx->transpen(bitmap,cliprect,tile,attr,0,0,x*8,y*8,(t_pen) ? 0 : -1);
 				}
 
 				count++;
@@ -120,8 +126,8 @@ READ16_MEMBER(jackpool_state::jackpool_io_r)
 		case 0x1c: return ioport("BET")->read();
 		case 0x1e: return 0xff; //ticket motor
 		case 0x20: return 0xff; //hopper motor
-		case 0x2c: return m_eeprom->read_bit();
-		case 0x2e: return m_eeprom->read_bit();
+		case 0x2c: return m_eeprom->do_read();
+		case 0x2e: return m_eeprom->do_read();
 //      default: printf("R %02x\n",offset*2); break;
 	}
 
@@ -148,11 +154,11 @@ WRITE16_MEMBER(jackpool_state::jackpool_io_w)
 		case 0x4a: /* ---- ---x Ticket motor */break;
 		case 0x4c: /* ---- ---x Hopper motor */break;
 		case 0x4e: m_map_vreg = data & 1;        break;
-		case 0x50: m_eeprom->set_cs_line((data & 1) ? CLEAR_LINE : ASSERT_LINE ); break;
-		case 0x52: m_eeprom->set_clock_line((data & 1) ? ASSERT_LINE : CLEAR_LINE ); break;
-		case 0x54: m_eeprom->write_bit(data & 1); break;
-//      case 0x5a: m_eeprom->set_cs_line((data & 1) ? CLEAR_LINE : ASSERT_LINE ); break;
-//      case 0x5c: m_eeprom->set_cs_line((data & 1) ? CLEAR_LINE : ASSERT_LINE ); break;
+		case 0x50: m_eeprom->cs_write((data & 1) ? ASSERT_LINE : CLEAR_LINE ); break;
+		case 0x52: m_eeprom->clk_write((data & 1) ? ASSERT_LINE : CLEAR_LINE ); break;
+		case 0x54: m_eeprom->di_write(data & 1); break;
+//      case 0x5a: m_eeprom->cs_write((data & 1) ? ASSERT_LINE : CLEAR_LINE ); break;
+//      case 0x5c: m_eeprom->cs_write((data & 1) ? ASSERT_LINE : CLEAR_LINE ); break;
 		case 0x60: break;
 //      default: printf("[%02x] <- %02x W\n",offset*2,data);      break;
 	}
@@ -161,17 +167,17 @@ WRITE16_MEMBER(jackpool_state::jackpool_io_w)
 	if(offset*2 == 0x54)
 	{
 		printf("Write bit %02x\n",data);
-		m_eeprom->write_bit(data & 1);
+		m_eeprom->di_write(data & 1);
 	}
 	if(offset*2 == 0x52)
 	{
 		printf("Clock bit %02x\n",data);
-		m_eeprom->set_clock_line((data & 1) ? ASSERT_LINE : CLEAR_LINE );
+		m_eeprom->clk_write((data & 1) ? ASSERT_LINE : CLEAR_LINE );
 	}
 	if(offset*2 == 0x50)
 	{
 		printf("chip select bit %02x\n",data);
-		m_eeprom->set_cs_line((data & 1) ? CLEAR_LINE : ASSERT_LINE );
+		m_eeprom->cs_write((data & 1) ? ASSERT_LINE : CLEAR_LINE );
 	}
 	#endif
 }
@@ -183,7 +189,7 @@ static ADDRESS_MAP_START( jackpool_mem, AS_PROGRAM, 16, jackpool_state )
 	AM_RANGE(0x340000, 0x347fff) AM_RAM AM_SHARE("vram")
 	AM_RANGE(0x348000, 0x34ffff) AM_RAM //<- vram banks 2 & 3?
 
-	AM_RANGE(0x360000, 0x3603ff) AM_RAM_WRITE(paletteram_xxxxBBBBGGGGRRRR_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x360000, 0x3603ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x380000, 0x380061) AM_READWRITE(jackpool_io_r,jackpool_io_w) AM_SHARE("io")//AM_READ(jackpool_io_r)
 
 	AM_RANGE(0x800000, 0x80000f) AM_READ(jackpool_ff_r) AM_WRITENOP //UART
@@ -264,7 +270,7 @@ static MACHINE_CONFIG_START( jackpool, jackpool_state )
 	MCFG_CPU_PROGRAM_MAP(jackpool_mem)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", jackpool_state, jackpool_interrupt)  // ?
 
-	MCFG_GFXDECODE(jackpool)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", jackpool)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -272,11 +278,12 @@ static MACHINE_CONFIG_START( jackpool, jackpool_state )
 	MCFG_SCREEN_SIZE(64*8, 64*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 64*8-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(jackpool_state, screen_update_jackpool)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_EEPROM_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
-	MCFG_PALETTE_LENGTH(0x200)
-
+	MCFG_PALETTE_ADD("palette", 0x200)
+	MCFG_PALETTE_FORMAT(xxxxBBBBGGGGRRRR)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 

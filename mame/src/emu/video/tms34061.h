@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari, Aaron Giles
 /****************************************************************************
  *                                                                          *
  *  Function prototypes and constants used by the TMS34061 emulator         *
@@ -10,6 +12,17 @@
 
 #ifndef __TMS34061_H__
 #define __TMS34061_H__
+
+
+#define MCFG_TMS34061_ROWSHIFT(_shift) \
+	tms34061_device::set_rowshift(*device, _shift);
+
+#define MCFG_TMS34061_VRAM_SIZE(_size) \
+	tms34061_device::set_vram_size(*device, _size);
+
+#define MCFG_TMS34061_INTERRUPT_CB(_devcb) \
+	devcb = &tms34061_device::set_interrupt_callback(*device, DEVCB_##_devcb);
+
 
 /* register constants */
 enum
@@ -35,18 +48,6 @@ enum
 	TMS34061_REGCOUNT
 };
 
-
-
-/* interface structure */
-struct tms34061_interface
-{
-	const char  *screen_tag;    /* the screen we are acting on */
-	UINT8       rowshift;       /* VRAM address is (row << rowshift) | col */
-	UINT32      vramsize;       /* size of video RAM */
-	void        (*interrupt)(running_machine &machine, int state);  /* interrupt gen callback */
-};
-
-
 /* display state structure */
 struct tms34061_display
 {
@@ -58,18 +59,64 @@ struct tms34061_display
 };
 
 
-/* starts/stops the emulator */
-void tms34061_start(running_machine &machine, const struct tms34061_interface *interface);
 
-/* reads/writes to the 34061 */
-UINT8 tms34061_r(address_space &space, int col, int row, int func);
-void tms34061_w(address_space &space, int col, int row, int func, UINT8 data);
 
-/* latch settings */
-DECLARE_READ8_HANDLER( tms34061_latch_r );
-DECLARE_WRITE8_HANDLER( tms34061_latch_w );
+// ======================> tms34061_device
 
-/* video update handling */
-void tms34061_get_display_state(struct tms34061_display *state);
+class tms34061_device :  public device_t,
+						public device_video_interface
+{
+public:
+	// construction/destruction
+	tms34061_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+	static void set_rowshift(device_t &device, UINT8 rowshift) { downcast<tms34061_device &>(device).m_rowshift = rowshift; }
+	static void set_vram_size(device_t &device, UINT32 vramsize) { downcast<tms34061_device &>(device).m_vramsize = vramsize; }
+	template<class _Object> static devcb_base &set_interrupt_callback(device_t &device, _Object object) { return downcast<tms34061_device &>(device).m_interrupt_cb.set_callback(object); }
+
+	/* reads/writes to the 34061 */
+	UINT8 read(address_space &space, int col, int row, int func);
+	void write(address_space &space, int col, int row, int func, UINT8 data);
+
+	/* latch settings */
+	DECLARE_READ8_MEMBER( latch_r );
+	DECLARE_WRITE8_MEMBER( latch_w );
+
+	/* video update handling */
+	void get_display_state();
+
+	struct tms34061_display m_display;
+
+protected:
+	// device-level overrides
+	virtual void device_start();
+	virtual void device_reset();
+
+private:
+	UINT8               m_rowshift;         /* VRAM address is (row << rowshift) | col */
+	UINT32              m_vramsize;         /* size of video RAM */
+	devcb_write_line   m_interrupt_cb;     /* interrupt gen callback */
+
+	UINT16              m_regs[TMS34061_REGCOUNT];
+	UINT16              m_xmask;
+	UINT8               m_yshift;
+	UINT32              m_vrammask;
+	UINT8 *             m_vram;
+	UINT8 *             m_latchram;
+	UINT8               m_latchdata;
+	UINT8 *             m_shiftreg;
+	emu_timer *         m_timer;
+
+	void update_interrupts(void);
+	TIMER_CALLBACK_MEMBER( interrupt );
+	void register_w(address_space &space, offs_t offset, UINT8 data);
+	UINT8 register_r(address_space &space, offs_t offset);
+	void adjust_xyaddress(int offset);
+	void xypixel_w(address_space &space, int offset, UINT8 data);
+	UINT8 xypixel_r(address_space &space, int offset);
+};
+
+// device type definition
+extern const device_type TMS34061;
 
 #endif

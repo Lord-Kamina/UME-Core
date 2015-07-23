@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*
 
 Space Bugger
@@ -108,8 +110,8 @@ Sound PCB
 
 static ADDRESS_MAP_START( sbugger_map, AS_PROGRAM, 8, sbugger_state )
 	AM_RANGE(0x0000, 0x37ff) AM_ROM
-	AM_RANGE(0xc800, 0xcbff) AM_RAM_WRITE(sbugger_videoram_attr_w) AM_SHARE("videoram_attr")
-	AM_RANGE(0xcc00, 0xcfff) AM_RAM_WRITE(sbugger_videoram_w) AM_SHARE("videoram")
+	AM_RANGE(0xc800, 0xcbff) AM_RAM_WRITE(videoram_attr_w) AM_SHARE("videoram_attr")
+	AM_RANGE(0xcc00, 0xcfff) AM_RAM_WRITE(videoram_w) AM_SHARE("videoram")
 	AM_RANGE(0xe000, 0xe0ff) AM_DEVREADWRITE("i8156", i8155_device, memory_r, memory_w) /* sp is set to e0ff */
 	AM_RANGE(0xf400, 0xffff) AM_RAM
 ADDRESS_MAP_END
@@ -137,7 +139,7 @@ static const gfx_layout char16layout =
 };
 
 static GFXDECODE_START( sbugger )
-	GFXDECODE_ENTRY( "gfx1", 0, char16layout,   0, 1  )
+	GFXDECODE_ENTRY( "gfx1", 0, char16layout,   0, 256  )
 GFXDECODE_END
 
 
@@ -206,69 +208,40 @@ INPUT_PORTS_END
 
 /* machine driver */
 
-WRITE_LINE_MEMBER(sbugger_state::sbugger_interrupt)
-{
-	m_maincpu->set_input_line(I8085_RST75_LINE, state ? CLEAR_LINE : ASSERT_LINE );
-}
-
-static I8156_INTERFACE(i8156_intf)
-{
-	// all ports set to input
-	DEVCB_INPUT_PORT("INPUTS"),
-	DEVCB_NULL,
-	DEVCB_INPUT_PORT("DSW1"),
-	DEVCB_NULL,
-	DEVCB_INPUT_PORT("DSW2"),
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(sbugger_state,sbugger_interrupt)
-};
-
-/*************************************
- *
- *  Sound interface
- *
- *************************************/
-
-
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
 
 static MACHINE_CONFIG_START( sbugger, sbugger_state )
 
 	MCFG_CPU_ADD("maincpu", I8085A, 6000000)        /* 3.00 MHz??? */
 	MCFG_CPU_PROGRAM_MAP(sbugger_map)
 	MCFG_CPU_IO_MAP(sbugger_io_map)
-	MCFG_I8156_ADD("i8156", 200000, i8156_intf)     /* freq is an approximation */
 
-	MCFG_GFXDECODE(sbugger)
+	MCFG_DEVICE_ADD("i8156", I8156, 200000)     /* freq is an approximation */
+	MCFG_I8155_IN_PORTA_CB(IOPORT("INPUTS"))
+	MCFG_I8155_IN_PORTB_CB(IOPORT("DSW1"))
+	MCFG_I8155_IN_PORTC_CB(IOPORT("DSW2"))
+	MCFG_I8155_OUT_TIMEROUT_CB(INPUTLINE("maincpu", I8085_RST75_LINE))
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", sbugger)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 64*8-1, 0*8, 32*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(sbugger_state, screen_update_sbugger)
+	MCFG_SCREEN_UPDATE_DRIVER(sbugger_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(512)
-
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INIT_OWNER(sbugger_state, sbugger)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("sn76489.1", SN76489, 3000000)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("sn76489.2", SN76489, 3000000)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 MACHINE_CONFIG_END
 
 
@@ -303,5 +276,5 @@ ROM_START( sbuggera )
 	ROM_LOAD( "spbugger.gfx", 0x0000, 0x1000, CRC(d3f345b5) SHA1(a5082ffc3043352e9b731af95770bdd62fb928bf) )
 ROM_END
 
-GAME( 1981, sbugger,  0,        sbugger,  sbugger, driver_device,  0, ROT270, "Game-A-Tron", "Space Bugger (set 1)", GAME_NOT_WORKING | GAME_IMPERFECT_COLORS )
-GAME( 1981, sbuggera, sbugger,  sbugger,  sbugger, driver_device,  0, ROT270, "Game-A-Tron", "Space Bugger (set 2)", GAME_IMPERFECT_COLORS )
+GAME( 1981, sbugger,  0,        sbugger,  sbugger, driver_device,  0, ROT270, "Game-A-Tron", "Space Bugger (set 1)", GAME_NOT_WORKING | GAME_WRONG_COLORS | GAME_SUPPORTS_SAVE )
+GAME( 1981, sbuggera, sbugger,  sbugger,  sbugger, driver_device,  0, ROT270, "Game-A-Tron", "Space Bugger (set 2)", GAME_WRONG_COLORS | GAME_SUPPORTS_SAVE )

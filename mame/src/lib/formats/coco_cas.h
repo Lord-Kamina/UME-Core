@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /*********************************************************************
 
     coco_cas.h
@@ -10,9 +12,6 @@
 #define COCO_CAS_H
 
 #include "cassimg.h"
-
-extern const struct CassetteFormat coco_cas_format;
-extern const struct CassetteModulation coco_cas_modulation;
 
 CASSETTE_FORMATLIST_EXTERN(coco_cassette_formats);
 CASSETTE_FORMATLIST_EXTERN(alice32_cassette_formats);

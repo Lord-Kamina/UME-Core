@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:insideoutboy, Nicola Salmoria
 /***************************************************************************
 
     Car Jamboree
@@ -214,10 +216,11 @@ static MACHINE_CONFIG_START( carjmbre, carjmbre_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(carjmbre_state, screen_update_carjmbre)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(carjmbre)
-	MCFG_PALETTE_LENGTH(64)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", carjmbre)
+	MCFG_PALETTE_ADD("palette", 64)
+	MCFG_PALETTE_INIT_OWNER(carjmbre_state, carjmbre)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")

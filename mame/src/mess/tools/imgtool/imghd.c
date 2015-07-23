@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, Raphael Nabet
 /*
     Code to interface the MESS image code with MAME's harddisk core.
 
@@ -47,12 +49,12 @@ static imgtoolerr_t map_chd_error(chd_error chderr)
 imgtoolerr_t imghd_create(imgtool_stream *stream, UINT32 hunksize, UINT32 cylinders, UINT32 heads, UINT32 sectors, UINT32 seclen)
 {
 	imgtoolerr_t err = IMGTOOLERR_SUCCESS;
-	UINT8 *cache = NULL;
+	dynamic_buffer cache;
 	chd_file chd;
 	chd_error rc;
 	UINT64 logicalbytes;
 	int hunknum, totalhunks;
-	astring metadata;
+	std::string metadata;
 	chd_codec_type compression[4] = { CHD_CODEC_NONE };
 
 	/* sanity check args */
@@ -92,7 +94,7 @@ imgtoolerr_t imghd_create(imgtool_stream *stream, UINT32 hunksize, UINT32 cylind
 	}
 
 	/* write the metadata */
-	metadata.format(HARD_DISK_METADATA_FORMAT, cylinders, heads, sectors, seclen);
+	strprintf(metadata,HARD_DISK_METADATA_FORMAT, cylinders, heads, sectors, seclen);
 	err = (imgtoolerr_t)chd.write_metadata(HARD_DISK_METADATA_TAG, 0, metadata);
 	if (rc != CHDERR_NONE)
 	{
@@ -101,19 +103,14 @@ imgtoolerr_t imghd_create(imgtool_stream *stream, UINT32 hunksize, UINT32 cylind
 	}
 
 	/* alloc and zero buffer */
-	cache = (UINT8*)malloc(hunksize);
-	if (!cache)
-	{
-		err = IMGTOOLERR_OUTOFMEMORY;
-		goto done;
-	}
-	memset(cache, '\0', hunksize);
+	cache.resize(hunksize);
+	memset(&cache[0], 0, hunksize);
 
 	/* zero out every hunk */
 	totalhunks = (logicalbytes + hunksize - 1) / hunksize;
 	for (hunknum = 0; hunknum < totalhunks; hunknum++)
 	{
-		rc = chd.write_units(hunknum, cache);
+		rc = chd.write_units(hunknum, &cache[0]);
 		if (rc)
 		{
 			err = IMGTOOLERR_WRITEERROR;
@@ -121,10 +118,7 @@ imgtoolerr_t imghd_create(imgtool_stream *stream, UINT32 hunksize, UINT32 cylind
 		}
 	}
 
-
 done:
-	if (cache)
-		free(cache);
 	return err;
 }
 

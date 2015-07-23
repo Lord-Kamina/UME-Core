@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Brad Oliver
 /***************************************************************************
 
     video.c
@@ -41,12 +43,12 @@
   bit 0 -- 2.2kohm resistor  -- BLUE
 
 ***************************************************************************/
-void matmania_state::palette_init()
+
+PALETTE_INIT_MEMBER(matmania_state, matmania)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
-	int i;
 
-	for (i = 0; i < 64; i++)
+	for (int i = 0; i < 64; i++)
 	{
 		int bit0, bit1, bit2, bit3, r, g, b;
 
@@ -66,7 +68,7 @@ void matmania_state::palette_init()
 		bit3 = BIT(color_prom[64], 3);
 		b = 0x0e * bit0 + 0x1f * bit1 + 0x43 * bit2 + 0x8f * bit3;
 
-		palette_set_color(machine(),i,MAKE_RGB(r,g,b));
+		palette.set_pen_color(i,rgb_t(r,g,b));
 		color_prom++;
 	}
 }
@@ -77,33 +79,32 @@ WRITE8_MEMBER(matmania_state::matmania_paletteram_w)
 {
 	int bit0, bit1, bit2, bit3, val;
 	int r, g, b;
-	int offs2;
 
 	m_paletteram[offset] = data;
-	offs2 = offset & 0x0f;
+	offset &= 0x0f;
 
-	val = m_paletteram[offs2];
+	val = m_paletteram[offset];
 	bit0 = BIT(val, 0);
 	bit1 = BIT(val, 1);
 	bit2 = BIT(val, 2);
 	bit3 = BIT(val, 3);
 	r = 0x0e * bit0 + 0x1f * bit1 + 0x43 * bit2 + 0x8f * bit3;
 
-	val = m_paletteram[offs2 | 0x10];
+	val = m_paletteram[offset | 0x10];
 	bit0 = BIT(val, 0);
 	bit1 = BIT(val, 1);
 	bit2 = BIT(val, 2);
 	bit3 = BIT(val, 3);
 	g = 0x0e * bit0 + 0x1f * bit1 + 0x43 * bit2 + 0x8f * bit3;
 
-	val = m_paletteram[offs2 | 0x20];
+	val = m_paletteram[offset | 0x20];
 	bit0 = BIT(val, 0);
 	bit1 = BIT(val, 1);
 	bit2 = BIT(val, 2);
 	bit3 = BIT(val, 3);
 	b = 0x0e * bit0 + 0x1f * bit1 + 0x43 * bit2 + 0x8f * bit3;
 
-	palette_set_color(machine(),offs2 + 64,MAKE_RGB(r,g,b));
+	m_palette->set_pen_color(offset + 64, rgb_t(r,g,b));
 }
 
 
@@ -115,8 +116,8 @@ WRITE8_MEMBER(matmania_state::matmania_paletteram_w)
 
 void matmania_state::video_start()
 {
-	int width = machine().primary_screen->width();
-	int height = machine().primary_screen->height();
+	int width = m_screen->width();
+	int height = m_screen->height();
 
 	/* Mat Mania has a virtual screen twice as large as the visible screen */
 	m_tmpbitmap  = auto_bitmap_ind16_alloc(machine(), width, 2 * height);
@@ -137,7 +138,7 @@ UINT32 matmania_state::screen_update_matmania(screen_device &screen, bitmap_ind1
 		int sx = 15 - offs / 32;
 		int sy = offs % 32;
 
-		drawgfx_opaque(*m_tmpbitmap, m_tmpbitmap->cliprect(), machine().gfx[1],
+		m_gfxdecode->gfx(1)->opaque(*m_tmpbitmap,m_tmpbitmap->cliprect(),
 				m_videoram[offs] + ((m_colorram[offs] & 0x08) << 5),
 				(m_colorram[offs] & 0x30) >> 4,
 				0,sy >= 16, /* flip horizontally tiles on the right half of the bitmap */
@@ -150,7 +151,7 @@ UINT32 matmania_state::screen_update_matmania(screen_device &screen, bitmap_ind1
 		int sx = 15 - offs / 32;
 		int sy = offs % 32;
 
-		drawgfx_opaque(*m_tmpbitmap2, m_tmpbitmap2->cliprect(), machine().gfx[1],
+		m_gfxdecode->gfx(1)->opaque(*m_tmpbitmap2,m_tmpbitmap2->cliprect(),
 				m_videoram3[offs] + ((m_colorram3[offs] & 0x08) << 5),
 				(m_colorram3[offs] & 0x30) >> 4,
 				0,sy >= 16, /* flip horizontally tiles on the right half of the bitmap */
@@ -172,7 +173,7 @@ UINT32 matmania_state::screen_update_matmania(screen_device &screen, bitmap_ind1
 	{
 		if (spriteram[offs] & 0x01)
 		{
-			drawgfx_transpen(bitmap, cliprect, machine().gfx[2],
+			m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 					spriteram[offs + 1] + ((spriteram[offs] & 0xf0) << 4),
 					(spriteram[offs] & 0x08) >> 3,
 					spriteram[offs] & 0x04, spriteram[offs] & 0x02,
@@ -187,7 +188,7 @@ UINT32 matmania_state::screen_update_matmania(screen_device &screen, bitmap_ind1
 		int sx = 31 - offs / 32;
 		int sy = offs % 32;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				m_videoram2[offs] + 256 * (m_colorram2[offs] & 0x07),
 				(m_colorram2[offs] & 0x30) >> 4,
 				0,0,
@@ -208,7 +209,7 @@ UINT32 matmania_state::screen_update_maniach(screen_device &screen, bitmap_ind16
 		int sx = 15 - offs / 32;
 		int sy = offs % 32;
 
-		drawgfx_opaque(*m_tmpbitmap, m_tmpbitmap->cliprect(), machine().gfx[1],
+		m_gfxdecode->gfx(1)->opaque(*m_tmpbitmap,m_tmpbitmap->cliprect(),
 				m_videoram[offs] + ((m_colorram[offs] & 0x03) << 8),
 				(m_colorram[offs] & 0x30) >> 4,
 				0,sy >= 16, /* flip horizontally tiles on the right half of the bitmap */
@@ -221,7 +222,7 @@ UINT32 matmania_state::screen_update_maniach(screen_device &screen, bitmap_ind16
 		int sx = 15 - offs / 32;
 		int sy = offs % 32;
 
-		drawgfx_opaque(*m_tmpbitmap2, m_tmpbitmap2->cliprect(), machine().gfx[1],
+		m_gfxdecode->gfx(1)->opaque(*m_tmpbitmap2,m_tmpbitmap2->cliprect(),
 				m_videoram3[offs] + ((m_colorram3[offs] & 0x03) << 8),
 				(m_colorram3[offs] & 0x30) >> 4,
 				0,sy >= 16, /* flip horizontally tiles on the right half of the bitmap */
@@ -245,7 +246,7 @@ UINT32 matmania_state::screen_update_maniach(screen_device &screen, bitmap_ind16
 	{
 		if (spriteram[offs] & 0x01)
 		{
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+			m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 					spriteram[offs+1] + ((spriteram[offs] & 0xf0) << 4),
 					(spriteram[offs] & 0x08) >> 3,
 					spriteram[offs] & 0x04,spriteram[offs] & 0x02,
@@ -260,7 +261,7 @@ UINT32 matmania_state::screen_update_maniach(screen_device &screen, bitmap_ind16
 		int sx = 31 - offs / 32;
 		int sy = offs % 32;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				m_videoram2[offs] + 256 * (m_colorram2[offs] & 0x07),
 				(m_colorram2[offs] & 0x30) >> 4,
 				0,0,

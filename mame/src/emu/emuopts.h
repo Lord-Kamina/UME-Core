@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     emuopts.h
 
     Options file and command line management.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -43,7 +14,6 @@
 #define __EMUOPTS_H__
 
 #include "options.h"
-
 
 //**************************************************************************
 //  CONSTANTS
@@ -60,6 +30,7 @@ enum
 	OPTION_PRIORITY_MAME_INI,
 	OPTION_PRIORITY_DEBUG_INI,
 	OPTION_PRIORITY_ORIENTATION_INI,
+	OPTION_PRIORITY_SYSTYPE_INI,
 	OPTION_PRIORITY_VECTOR_INI,
 	OPTION_PRIORITY_SOURCE_INI,
 	OPTION_PRIORITY_GPARENT_INI,
@@ -89,7 +60,6 @@ enum
 // core directory options
 #define OPTION_CFG_DIRECTORY        "cfg_directory"
 #define OPTION_NVRAM_DIRECTORY      "nvram_directory"
-#define OPTION_MEMCARD_DIRECTORY    "memcard_directory"
 #define OPTION_INPUT_DIRECTORY      "input_directory"
 #define OPTION_STATE_DIRECTORY      "state_directory"
 #define OPTION_SNAPSHOT_DIRECTORY   "snapshot_directory"
@@ -103,10 +73,14 @@ enum
 #define OPTION_RECORD               "record"
 #define OPTION_MNGWRITE             "mngwrite"
 #define OPTION_AVIWRITE             "aviwrite"
+#ifdef MAME_DEBUG
+#define OPTION_DUMMYWRITE           "dummywrite"
+#endif
 #define OPTION_WAVWRITE             "wavwrite"
 #define OPTION_SNAPNAME             "snapname"
 #define OPTION_SNAPSIZE             "snapsize"
 #define OPTION_SNAPVIEW             "snapview"
+#define OPTION_SNAPBILINEAR         "snapbilinear"
 #define OPTION_STATENAME            "statename"
 #define OPTION_BURNIN               "burnin"
 
@@ -149,7 +123,6 @@ enum
 #define OPTION_FLICKER              "flicker"
 
 // core sound options
-#define OPTION_SOUND                "sound"
 #define OPTION_SAMPLERATE           "samplerate"
 #define OPTION_SAMPLES              "samples"
 #define OPTION_VOLUME               "volume"
@@ -184,18 +157,28 @@ enum
 
 // core debugging options
 #define OPTION_LOG                  "log"
-#define OPTION_VERBOSE              "verbose"
-#define OPTION_UPDATEINPAUSE        "update_in_pause"
 #define OPTION_DEBUG                "debug"
-#define OPTION_DEBUG_INTERNAL       "debug_internal"
+#define OPTION_VERBOSE              "verbose"
+#define OPTION_OSLOG                "oslog"
+#define OPTION_UPDATEINPAUSE        "update_in_pause"
 #define OPTION_DEBUGSCRIPT          "debugscript"
 
 // core misc options
+#define OPTION_DRC                  "drc"
+#define OPTION_DRC_USE_C            "drc_use_c"
+#define OPTION_DRC_LOG_UML          "drc_log_uml"
+#define OPTION_DRC_LOG_NATIVE       "drc_log_native"
 #define OPTION_BIOS                 "bios"
 #define OPTION_CHEAT                "cheat"
 #define OPTION_SKIP_GAMEINFO        "skip_gameinfo"
 #define OPTION_UI_FONT              "uifont"
 #define OPTION_RAMSIZE              "ramsize"
+
+// core comm options
+#define OPTION_COMM_LOCAL_HOST      "comm_localhost"
+#define OPTION_COMM_LOCAL_PORT      "comm_localport"
+#define OPTION_COMM_REMOTE_HOST     "comm_remotehost"
+#define OPTION_COMM_REMOTE_PORT     "comm_remoteport"
 
 #define OPTION_CONFIRM_QUIT         "confirm_quit"
 #define OPTION_UI_MOUSE             "ui_mouse"
@@ -203,6 +186,11 @@ enum
 #define OPTION_AUTOBOOT_COMMAND     "autoboot_command"
 #define OPTION_AUTOBOOT_DELAY       "autoboot_delay"
 #define OPTION_AUTOBOOT_SCRIPT      "autoboot_script"
+
+#define OPTION_HTTP                 "http"
+#define OPTION_HTTP_PORT            "http_port"
+#define OPTION_HTTP_PATH            "http_path"
+#define OPTION_CONSOLE              "console"
 
 //**************************************************************************
 //  TYPE DEFINITIONS
@@ -221,9 +209,9 @@ public:
 	emu_options();
 
 	// parsing wrappers
-	bool parse_command_line(int argc, char *argv[], astring &error_string);
-	void parse_standard_inis(astring &error_string);
-	bool parse_slot_devices(int argc, char *argv[], astring &error_string, const char *name, const char *value);
+	bool parse_command_line(int argc, char *argv[], std::string &error_string);
+	void parse_standard_inis(std::string &error_string);
+	bool parse_slot_devices(int argc, char *argv[], std::string &error_string, const char *name, const char *value);
 
 	// core options
 	const char *system_name() const { return value(OPTION_SYSTEMNAME); }
@@ -249,7 +237,6 @@ public:
 	// core directory options
 	const char *cfg_directory() const { return value(OPTION_CFG_DIRECTORY); }
 	const char *nvram_directory() const { return value(OPTION_NVRAM_DIRECTORY); }
-	const char *memcard_directory() const { return value(OPTION_MEMCARD_DIRECTORY); }
 	const char *input_directory() const { return value(OPTION_INPUT_DIRECTORY); }
 	const char *state_directory() const { return value(OPTION_STATE_DIRECTORY); }
 	const char *snapshot_directory() const { return value(OPTION_SNAPSHOT_DIRECTORY); }
@@ -263,10 +250,14 @@ public:
 	const char *record() const { return value(OPTION_RECORD); }
 	const char *mng_write() const { return value(OPTION_MNGWRITE); }
 	const char *avi_write() const { return value(OPTION_AVIWRITE); }
+#ifdef MAME_DEBUG
+	bool dummy_write() const { return bool_value(OPTION_DUMMYWRITE); }
+#endif
 	const char *wav_write() const { return value(OPTION_WAVWRITE); }
 	const char *snap_name() const { return value(OPTION_SNAPNAME); }
 	const char *snap_size() const { return value(OPTION_SNAPSIZE); }
 	const char *snap_view() const { return value(OPTION_SNAPVIEW); }
+	bool snap_bilinear() const { return bool_value(OPTION_SNAPBILINEAR); }
 	const char *state_name() const { return value(OPTION_STATENAME); }
 	bool burnin() const { return bool_value(OPTION_BURNIN); }
 
@@ -309,7 +300,6 @@ public:
 	float flicker() const { return float_value(OPTION_FLICKER); }
 
 	// core sound options
-	bool sound() const { return bool_value(OPTION_SOUND); }
 	int sample_rate() const { return int_value(OPTION_SAMPLERATE); }
 	bool samples() const { return bool_value(OPTION_SAMPLES); }
 	int volume() const { return int_value(OPTION_VOLUME); }
@@ -341,19 +331,29 @@ public:
 	int coin_impulse() const { return int_value(OPTION_COIN_IMPULSE); }
 
 	// core debugging options
-	bool verbose() const { return bool_value(OPTION_VERBOSE); }
 	bool log() const { return bool_value(OPTION_LOG); }
 	bool debug() const { return bool_value(OPTION_DEBUG); }
-	bool debug_internal() const { return bool_value(OPTION_DEBUG_INTERNAL); }
+	bool verbose() const { return bool_value(OPTION_VERBOSE); }
+	bool oslog() const { return bool_value(OPTION_OSLOG); }
 	const char *debug_script() const { return value(OPTION_DEBUGSCRIPT); }
 	bool update_in_pause() const { return bool_value(OPTION_UPDATEINPAUSE); }
 
 	// core misc options
+	bool drc() const { return bool_value(OPTION_DRC); }
+	bool drc_use_c() const { return bool_value(OPTION_DRC_USE_C); }
+	bool drc_log_uml() const { return bool_value(OPTION_DRC_LOG_UML); }
+	bool drc_log_native() const { return bool_value(OPTION_DRC_LOG_NATIVE); }
 	const char *bios() const { return value(OPTION_BIOS); }
 	bool cheat() const { return bool_value(OPTION_CHEAT); }
 	bool skip_gameinfo() const { return bool_value(OPTION_SKIP_GAMEINFO); }
 	const char *ui_font() const { return value(OPTION_UI_FONT); }
 	const char *ram_size() const { return value(OPTION_RAMSIZE); }
+
+	// core comm options
+	const char *comm_localhost() const { return value(OPTION_COMM_LOCAL_HOST); }
+	const char *comm_localport() const { return value(OPTION_COMM_LOCAL_PORT); }
+	const char *comm_remotehost() const { return value(OPTION_COMM_REMOTE_HOST); }
+	const char *comm_remoteport() const { return value(OPTION_COMM_REMOTE_PORT); }
 
 	bool confirm_quit() const { return bool_value(OPTION_CONFIRM_QUIT); }
 	bool ui_mouse() const { return bool_value(OPTION_UI_MOUSE); }
@@ -362,21 +362,25 @@ public:
 	int autoboot_delay() const { return int_value(OPTION_AUTOBOOT_DELAY); }
 	const char *autoboot_script() const { return value(OPTION_AUTOBOOT_SCRIPT); }
 
-	// device-specific options
-	const char *device_option(device_image_interface &image);
+	bool http() const { return bool_value(OPTION_HTTP); }
+	const char *http_port() const { return value(OPTION_HTTP_PORT); }
+	const char *http_path() const { return value(OPTION_HTTP_PATH); }
+	bool console() const { return bool_value(OPTION_CONSOLE); }
 
+	// FIXME: Couriersud: This should be in image_device_exit
 	void remove_device_options();
 
-	const char *main_value(astring &buffer, const char *option) const;
-	const char *sub_value(astring &buffer, const char *name, const char *subname) const;
+	const char *main_value(std::string &buffer, const char *option) const;
+	const char *sub_value(std::string &buffer, const char *name, const char *subname) const;
+	bool add_slot_options(bool isfirst);
+
 private:
 	// device-specific option handling
 	void add_device_options(bool isfirst);
-	bool add_slot_options(bool isfirst);
 	void update_slot_options();
 
 	// INI parsing helper
-	bool parse_one_ini(const char *basename, int priority, astring *error_string = NULL);
+	bool parse_one_ini(const char *basename, int priority, std::string *error_string = NULL);
 
 	static const options_entry s_option_entries[];
 };

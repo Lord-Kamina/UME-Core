@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /***************************************************************************
 
     ef9340_1.h
@@ -22,9 +24,8 @@ static const UINT8 bgr2rgb[8] =
 
 
 ef9340_1_device::ef9340_1_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, EF9340_1, "EF9340+EF9341", tag, owner, clock)
-	, m_screen_tag(NULL)
-	, m_screen(NULL)
+	: device_t(mconfig, EF9340_1, "EF9340+EF9341", tag, owner, clock, "ef9340_1", __FILE__)
+	, device_video_interface(mconfig, *this)
 	//, m_start_vpos(START_Y)
 	//, m_start_vblank(START_Y + SCREEN_HEIGHT)
 	//, m_screen_lines(LINES)
@@ -34,10 +35,6 @@ ef9340_1_device::ef9340_1_device(const machine_config &mconfig, const char *tag,
 
 void ef9340_1_device::device_start()
 {
-	assert( m_screen_tag != NULL );
-	m_screen = machine().device<screen_device>(m_screen_tag);
-	assert( m_screen != NULL );
-
 	// Let the screen create our temporary bitmap with the screen's dimensions
 	m_screen->register_screen_bitmap(m_tmp_bitmap);
 
@@ -224,7 +221,6 @@ void ef9340_1_device::ef9341_write( UINT8 command, UINT8 b, UINT8 data )
 				case 0xA0:  /* Read slice */
 				default:
 					fatalerror/*logerror*/("ef9341 unimplemented data action %02X\n", m_ef9340.M & 0xE0 );
-					break;
 			}
 			m_ef9341.busy = 0;
 		}

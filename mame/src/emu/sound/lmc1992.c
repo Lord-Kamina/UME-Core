@@ -1,10 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     LMC1992 Digitally-Controlled Stereo Tone and Volume Circuit with
     Four-Channel Input-Selector emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -140,7 +139,7 @@ inline void lmc1992_device::execute_command(int addr, int data)
 //-------------------------------------------------
 
 lmc1992_device::lmc1992_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, LMC1992, "LMC1992", tag, owner, clock),
+	: device_t(mconfig, LMC1992, "LMC1992", tag, owner, clock, "lmc1992", __FILE__),
 		device_sound_interface(mconfig, *this)
 {
 }

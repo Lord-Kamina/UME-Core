@@ -1,17 +1,16 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert, R. Belmont
 #ifndef _watchdog_h_
 #define _watchdog_h_
 //============================================================
 //
 //  watchdog.h - watchdog handling
 //
-//  Copyright (c) 1996-2011, Nicola Salmoria and the MAME Team.
-//  Visit http://mamedev.org for licensing and usage restrictions.
-//
 //  SDLMAME by Olivier Galibert and R. Belmont
 //
 //============================================================
 
-#include "sdlsync.h"
+#include "modules/sync/osdsync.h"
 
 class watchdog
 {

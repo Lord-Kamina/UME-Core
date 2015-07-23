@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:ElSemi
 /*
     CRYSTAL SYSTEM by Brezzasoft (2001)
     using VRender0 System on a Chip
@@ -136,7 +138,9 @@ public:
 		m_textureram(*this, "textureram"),
 		m_frameram(*this, "frameram"),
 		m_reset_patch(*this, "reset_patch"),
-		m_maincpu(*this, "maincpu"){ }
+		m_maincpu(*this, "maincpu"),
+		m_vr0(*this, "vr0"),
+		m_ds1302(*this, "rtc") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT32> m_sysregs;
@@ -146,6 +150,11 @@ public:
 	required_shared_ptr<UINT32> m_frameram;
 	required_shared_ptr<UINT32> m_reset_patch;
 //  UINT32 *  m_nvram;    // currently this uses generic nvram handling
+
+	/* devices */
+	required_device<cpu_device> m_maincpu;
+	required_device<vr0video_device> m_vr0;
+	required_device<ds1302_device> m_ds1302;
 
 #ifdef IDLE_LOOP_SPEEDUP
 	UINT8     m_FlipCntRead;
@@ -161,9 +170,6 @@ public:
 	UINT32    m_DMActrl[2];
 	UINT8     m_OldPort4;
 
-	required_device<cpu_device> m_maincpu;
-	ds1302_device *m_ds1302;
-	device_t *m_vr0video;
 	DECLARE_READ32_MEMBER(FlipCount_r);
 	DECLARE_WRITE32_MEMBER(FlipCount_w);
 	DECLARE_READ32_MEMBER(Input_r);
@@ -189,6 +195,8 @@ public:
 	DECLARE_DRIVER_INIT(officeye);
 	DECLARE_DRIVER_INIT(crysking);
 	DECLARE_DRIVER_INIT(evosocc);
+	DECLARE_DRIVER_INIT(donghaer);
+
 	virtual void machine_start();
 	virtual void machine_reset();
 	UINT32 screen_update_crystal(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
@@ -578,10 +586,6 @@ void crystal_state::machine_start()
 {
 	int i;
 
-	m_ds1302 = machine().device<ds1302_device>("rtc");
-	m_vr0video = machine().device("vr0");
-
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(crystal_state::icallback),this));
 	for (i = 0; i < 4; i++)
 		m_Timer[i] = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(crystal_state::Timercb),this), (void*)(FPTR)i);
 
@@ -610,7 +614,6 @@ void crystal_state::machine_reset()
 	memset(m_vidregs, 0, 0x10000);
 	m_FlipCount = 0;
 	m_IntHigh = 0;
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(crystal_state::icallback),this));
 	m_Bank = 0;
 	membank("bank1")->set_base(memregion("user1")->base() + 0);
 	m_FlashCmd = 0xff;
@@ -689,7 +692,7 @@ UINT32 crystal_state::screen_update_crystal(screen_device &screen, bitmap_ind16 
 	while ((head & 0x7ff) != (tail & 0x7ff))
 	{
 		// ERROR: This cast is NOT endian-safe without the use of BYTE/WORD/DWORD_XOR_* macros!
-		DoFlip = vrender0_ProcessPacket(m_vr0video, 0x03800000 + head * 64, DrawDest, reinterpret_cast<UINT8*>(m_textureram.target()));
+		DoFlip = m_vr0->vrender0_ProcessPacket(0x03800000 + head * 64, DrawDest, reinterpret_cast<UINT8*>(m_textureram.target()));
 		head++;
 		head &= 0x7ff;
 		if (DoFlip)
@@ -822,22 +825,80 @@ static INPUT_PORTS_START(crystal)
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 INPUT_PORTS_END
 
-static const vr0_interface vr0_config =
-{
-	0x04800000
-};
 
-static const vr0video_interface vr0video_config =
-{
-	"maincpu"
-};
+
+static INPUT_PORTS_START(officeye)
+	PORT_START("P1_P2")
+	PORT_BIT( 0x00000001, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2) PORT_NAME("P2 Red")  // RED
+	PORT_BIT( 0x00000002, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x00000004, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(2) PORT_NAME("P2 Green")  // GREEN
+	PORT_BIT( 0x00000008, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(2) PORT_NAME("P2 Blue") // BLUE
+	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x00000080, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x0000ff00, IP_ACTIVE_LOW, IPT_UNKNOWN )
+
+	PORT_BIT( 0x00010000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1) PORT_NAME("P1 Red")  // RED
+	PORT_BIT( 0x00020000, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x00040000, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1) PORT_NAME("P1 Green")  // GREEN
+	PORT_BIT( 0x00080000, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x00100000, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(1) PORT_NAME("P1 Blue") // BLUE
+	PORT_BIT( 0x00200000, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x00400000, IP_ACTIVE_LOW, IPT_START1 )
+	PORT_BIT( 0x00800000, IP_ACTIVE_LOW, IPT_START2 ) // where is start3?
+	PORT_BIT( 0xff000000, IP_ACTIVE_LOW, IPT_UNKNOWN )
+
+	PORT_START("P3_P4")
+	PORT_BIT( 0x000000ff, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x0000ff00, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x00ff0000, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0xff000000, IP_ACTIVE_LOW, IPT_UNKNOWN )
+
+	PORT_START("SYSTEM")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_COIN1 )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_COIN2 )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_SERVICE1 )
+	PORT_SERVICE_NO_TOGGLE( 0x80, IP_ACTIVE_LOW )
+
+	PORT_START("DSW")
+	PORT_DIPNAME( 0x01, 0x01, DEF_STR( Pause ) )
+	PORT_DIPSETTING(    0x01, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x02, 0x02, DEF_STR( Free_Play ) )
+	PORT_DIPSETTING(    0x02, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x04, 0x04, DEF_STR( Unknown ) )
+	PORT_DIPSETTING(    0x04, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x08, 0x08, DEF_STR( Unknown ) )
+	PORT_DIPSETTING(    0x08, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Unknown ) )
+	PORT_DIPSETTING(    0x10, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )
+	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x40, 0x40, DEF_STR( Unknown ) )
+	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x80, 0x80, DEF_STR( Test ) )
+	PORT_DIPSETTING(    0x80, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+INPUT_PORTS_END
+
 
 static MACHINE_CONFIG_START( crystal, crystal_state )
 
 	MCFG_CPU_ADD("maincpu", SE3208, 43000000)
 	MCFG_CPU_PROGRAM_MAP(crystal_mem)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", crystal_state,  crystal_interrupt)
-
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(crystal_state, icallback)
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
@@ -848,18 +909,19 @@ static MACHINE_CONFIG_START( crystal, crystal_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 319, 0, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(crystal_state, screen_update_crystal)
 	MCFG_SCREEN_VBLANK_DRIVER(crystal_state, screen_eof_crystal)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_VIDEO_VRENDER0_ADD("vr0", vr0video_config)
+	MCFG_DEVICE_ADD("vr0", VIDEO_VRENDER0, 0)
+	MCFG_VIDEO_VRENDER0_CPU("maincpu")
 
-	MCFG_PALETTE_INIT(RRRRR_GGGGGG_BBBBB)
-	MCFG_PALETTE_LENGTH(65536)
+	MCFG_PALETTE_ADD_RRRRRGGGGGGBBBBB("palette")
 
 	MCFG_DS1302_ADD("rtc", XTAL_32_768kHz)
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_VRENDER0_ADD("vrender", 0)
-	MCFG_SOUND_CONFIG(vr0_config)
+	MCFG_VR0_REGBASE(0x04800000)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -877,7 +939,7 @@ MACHINE_CONFIG_END
 
 ROM_START( crysbios )
 	ROM_REGION( 0x20000, "maincpu", 0 ) // bios
-	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(BEFF39A9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb) )
+	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(beff39a9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb) )
 
 	ROM_REGION32_LE( 0x3000000, "user1", ROMREGION_ERASEFF ) // Flash
 
@@ -886,31 +948,31 @@ ROM_END
 
 ROM_START( crysking )
 	ROM_REGION( 0x20000, "maincpu", 0 ) // bios
-	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(BEFF39A9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb))
+	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(beff39a9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb))
 
 	ROM_REGION32_LE( 0x3000000, "user1", 0 ) // Flash
-	ROM_LOAD("bcsv0004f01.u1",  0x0000000, 0x1000000, CRC(8FEFF120) SHA1(2ea42fa893bff845b5b855e2556789f8354e9066) )
-	ROM_LOAD("bcsv0004f02.u2",  0x1000000, 0x1000000, CRC(0E799845) SHA1(419674ce043cb1efb18303f4cb7fdbbae642ee39) )
-	ROM_LOAD("bcsv0004f03.u3",  0x2000000, 0x1000000, CRC(659E2D17) SHA1(342c98f3f695ef4dea8b533612451c4d2fb58809) )
+	ROM_LOAD("bcsv0004f01.u1",  0x0000000, 0x1000000, CRC(8feff120) SHA1(2ea42fa893bff845b5b855e2556789f8354e9066) )
+	ROM_LOAD("bcsv0004f02.u2",  0x1000000, 0x1000000, CRC(0e799845) SHA1(419674ce043cb1efb18303f4cb7fdbbae642ee39) )
+	ROM_LOAD("bcsv0004f03.u3",  0x2000000, 0x1000000, CRC(659e2d17) SHA1(342c98f3f695ef4dea8b533612451c4d2fb58809) )
 
 	ROM_REGION( 0x10000, "user2",   ROMREGION_ERASEFF ) //Unmapped flash
 ROM_END
 
 ROM_START( evosocc )
 	ROM_REGION( 0x20000, "maincpu", 0 ) // bios
-	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(BEFF39A9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb))
+	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(beff39a9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb))
 
 	ROM_REGION32_LE( 0x3000000, "user1", 0 ) // Flash
-	ROM_LOAD("bcsv0001u01",  0x0000000, 0x1000000, CRC(2581A0EA) SHA1(ee483ac60a3ed00a21cb515974cec4af19916a7d) )
-	ROM_LOAD("bcsv0001u02",  0x1000000, 0x1000000, CRC(47EF1794) SHA1(f573706c17d1342b9b7aed9b40b8b648f0bf58db) )
-	ROM_LOAD("bcsv0001u03",  0x2000000, 0x1000000, CRC(F396A2EC) SHA1(f305eb10856fb5d4c229a6b09d6a2fb21b24ce66) )
+	ROM_LOAD("bcsv0001u01",  0x0000000, 0x1000000, CRC(2581a0ea) SHA1(ee483ac60a3ed00a21cb515974cec4af19916a7d) )
+	ROM_LOAD("bcsv0001u02",  0x1000000, 0x1000000, CRC(47ef1794) SHA1(f573706c17d1342b9b7aed9b40b8b648f0bf58db) )
+	ROM_LOAD("bcsv0001u03",  0x2000000, 0x1000000, CRC(f396a2ec) SHA1(f305eb10856fb5d4c229a6b09d6a2fb21b24ce66) )
 
 	ROM_REGION( 0x10000, "user2",   ROMREGION_ERASEFF ) //Unmapped flash
 ROM_END
 
 ROM_START( topbladv )
 	ROM_REGION( 0x20000, "maincpu", 0 ) // bios
-	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(BEFF39A9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb))
+	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(beff39a9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb))
 
 	ROM_REGION( 0x4300, "pic", 0 ) // pic16c727 - we don't have a core for this
 	ROM_LOAD("top_blade_v_pic16c727.bin",  0x000000, 0x4300, CRC(9cdea57b) SHA1(884156085f9e780cdf719aedc2e8a0fd5983613b) )
@@ -941,7 +1003,7 @@ ROM_END
 
 ROM_START( donghaer )
 	ROM_REGION( 0x20000, "maincpu", 0 ) // bios
-	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(BEFF39A9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb))
+	ROM_LOAD("mx27l1000.u14",  0x000000, 0x020000, CRC(beff39a9) SHA1(b6f6dda58d9c82273f9422c1bd623411e58982cb))
 
 	ROM_REGION( 0x4280, "pic", 0 ) // pic16f84a - we don't have a core for this (or the dump in this case)
 	ROM_LOAD("donghaer_pic16f84a.bin",  0x000000, 0x4280, NO_DUMP )
@@ -990,48 +1052,90 @@ DRIVER_INIT_MEMBER(crystal_state,evosocc)
 	Rom[WORD_XOR_LE(0x974ED2/2)] = 0x9001;  //PUSH R0
 }
 
+/* note on PIC protection from ElSemi (for actually emulating it instead of patching)
+
+The PIC uses a software UART bit banged on a single output pin of the main CPU:
+the data port is bit 0x20000000 on the PIO register, the same register where the EEPROM control lines are. The serial data is transmitted at 8 data bits, even parity, 1 stop bit. It's probably
+tricky to get it working properly because it doesn't rely on a clock signal, and so, the pic and main cpu must run in parallel, and the bit lengths must match. The pic bit delay routine is just a loop.
+also it seems that bit 0x40000000 is the PIC reset.
+
+*/
+
 DRIVER_INIT_MEMBER(crystal_state,topbladv)
 {
+	// patches based on analysis of PIC dump
 	UINT16 *Rom = (UINT16*) memregion("user1")->base();
+	/*
+	    PIC Protection data:
+	    - RAM ADDR - --PATCH--
+	    62 0f 02 02 fc 90 01 90
+	    68 6a 02 02 04 90 01 90
+	    2c cf 03 02 e9 df c2 c3
+	    00 e0 03 02 01 90 00 92
+	*/
 
-	Rom[WORD_XOR_LE(0x12d7a/2)] = 0x90FC;   //PUSH R7-R6-R5-R4-R3-R2
-	Rom[WORD_XOR_LE(0x12d7c/2)] = 0x9001;   //PUSH R0
+	Rom[WORD_XOR_LE(0x12d7a/2)]=0x90FC; //PUSH R7-R6-R5-R4-R3-R2
+	Rom[WORD_XOR_LE(0x12d7c/2)]=0x9001; //PUSH R0
 
-	Rom[WORD_XOR_LE(0x2fe18/2)] = 0x9001;   //PUSH R0
-	Rom[WORD_XOR_LE(0x2fe1a/2)] = 0x9200;   //PUSH SR
+	Rom[WORD_XOR_LE(0x18880/2)]=0x9004; //PUSH R2
+	Rom[WORD_XOR_LE(0x18882/2)]=0x9001; //PUSH R0
 
-	Rom[WORD_XOR_LE(0x18880/2)] = 0x9001;   //PUSH R0
-	Rom[WORD_XOR_LE(0x18882/2)] = 0x9200;   //PUSH SR
+	Rom[WORD_XOR_LE(0x2fe18/2)]=0x9001; //PUSH R0
+	Rom[WORD_XOR_LE(0x2fe1a/2)]=0x9200; //PUSH SR
 
-	Rom[WORD_XOR_LE(0xDACE/2)] = 0x901C;    //PUSH R4-R3-R2
-	Rom[WORD_XOR_LE(0xDAD0/2)] = 0x9001;    //PUSH R0
+	Rom[WORD_XOR_LE(0x2ED44/2)]=0xDFE9; //CALL 0x3cf00
+	Rom[WORD_XOR_LE(0x2ED46/2)]=0xC3C2; //MOV %SR0,%DR1
 
 }
 
 DRIVER_INIT_MEMBER(crystal_state,officeye)
 {
+	// patches based on analysis of PIC dump
 	UINT16 *Rom = (UINT16*) memregion("user1")->base();
 
-	Rom[WORD_XOR_LE(0x9c9e/2)] = 0x901C;    //PUSH R4-R3-R2
-	Rom[WORD_XOR_LE(0x9ca0/2)] = 0x9001;    //PUSH R0
+	/*
+	    PIC Protection data:
+	    - RAM ADDR - --PATCH--
+	    0a 83 01 02 1c 90 01 90
+	    50 85 01 02 7c 90 01 90
+	    4c 99 05 02 04 90 01 90
+	    3a c1 01 02 1c 90 01 90
+	*/
 
-	Rom[WORD_XOR_LE(0x9EE4/2)] = 0x907C;    //PUSH R6-R5-R4-R3-R2
-	Rom[WORD_XOR_LE(0x9EE6/2)] = 0x9001;    //PUSH R0
+	Rom[WORD_XOR_LE(0x9c9e/2)]=0x901C;  //PUSH R4-R3-R2
+	Rom[WORD_XOR_LE(0x9ca0/2)]=0x9001;  //PUSH R0
 
-	Rom[WORD_XOR_LE(0x4B2E0/2)] = 0x9004;   //PUSH R2
-	Rom[WORD_XOR_LE(0x4B2E2/2)] = 0x9001;   //PUSH R0
+	Rom[WORD_XOR_LE(0x9EE4/2)]=0x907C;  //PUSH R6-R5-R4-R3-R2
+	Rom[WORD_XOR_LE(0x9EE6/2)]=0x9001;  //PUSH R0
 
-/*
-    Rom[WORD_XOR_LE(0x18880/2)] = 0x9001; //PUSH R0
-    Rom[WORD_XOR_LE(0x18882/2)] = 0x9200; //PUSH SR
- */
+	Rom[WORD_XOR_LE(0x4B2E0/2)]=0x9004; //PUSH R2
+	Rom[WORD_XOR_LE(0x4B2E2/2)]=0x9001; //PUSH R0
+
+	Rom[WORD_XOR_LE(0xDACE/2)]=0x901c;  //PUSH R4-R3-R2
+	Rom[WORD_XOR_LE(0xDAD0/2)]=0x9001;  //PUSH R0
 }
 
+DRIVER_INIT_MEMBER(crystal_state, donghaer)
+{
+	UINT16 *Rom = (UINT16*)memregion("user1")->base();
+
+	Rom[WORD_XOR_LE(0x037A2 / 2)] = 0x9004; // PUSH %R2
+	Rom[WORD_XOR_LE(0x037A4 / 2)] = 0x8202; // LD   (%SP,0x8),%R2
+
+	Rom[WORD_XOR_LE(0x03834 / 2)] = 0x9001; // PUSH %R0
+	Rom[WORD_XOR_LE(0x03836 / 2)] = 0x9200; // PUSH %SR
+
+	Rom[WORD_XOR_LE(0x0AC9E / 2)] = 0x9004; // PUSH %R2
+	Rom[WORD_XOR_LE(0x0ACA0 / 2)] = 0x4081; // LERI 0x81
+
+	Rom[WORD_XOR_LE(0x19C70 / 2)] = 0x900C; // PUSH %R2-%R3
+	Rom[WORD_XOR_LE(0x19C72 / 2)] = 0x9001; // PUSH %R0
+}
 
 
 GAME( 2001, crysbios,        0, crystal,  crystal, driver_device,         0, ROT0, "BrezzaSoft", "Crystal System BIOS", GAME_IS_BIOS_ROOT )
 GAME( 2001, crysking, crysbios, crystal,  crystal, crystal_state,  crysking, ROT0, "BrezzaSoft", "The Crystal of Kings", 0 )
 GAME( 2001, evosocc,  crysbios, crystal,  crystal, crystal_state,  evosocc,  ROT0, "Evoga", "Evolution Soccer", 0 )
-GAME( 2003, topbladv, crysbios, topbladv, crystal, crystal_state,  topbladv, ROT0, "SonoKong / Expotato", "Top Blade V", GAME_NOT_WORKING ) // protection
-GAME( 2001, officeye,        0, crystal,  crystal, crystal_state,  officeye, ROT0, "Danbi", "Office Yeo In Cheon Ha (version 1.2)", GAME_NOT_WORKING ) // protection
-GAME( 2001, donghaer,        0, crystal,  crystal, crystal_state,  officeye, ROT0, "Danbi", "Donggul Donggul Haerong", GAME_NOT_WORKING )
+GAME( 2003, topbladv, crysbios, topbladv, crystal, crystal_state,  topbladv, ROT0, "SonoKong / Expotato", "Top Blade V", 0 )
+GAME( 2001, officeye,        0, crystal,  officeye,crystal_state,  officeye, ROT0, "Danbi", "Office Yeo In Cheon Ha (version 1.2)", GAME_NOT_WORKING ) // still has some instability issues
+GAME( 2001, donghaer,        0, crystal,  crystal, crystal_state,  donghaer, ROT0, "Danbi", "Donggul Donggul Haerong", GAME_NOT_WORKING )

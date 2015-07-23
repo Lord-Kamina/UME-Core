@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia
 /***************************************************************************
 
 XOR WORLD (c) 1990 Gaelco
 
-Driver by Manuel Abadia <manu@teleline.es>
+Driver by Manuel Abadia <emumanu+mame@gmail.com>
 
 Memory Map:
 -----------
@@ -28,7 +30,7 @@ EEPROM chip: 93C46
 ***************************************************************************/
 
 #include "emu.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "cpu/m68000/m68000.h"
 #include "sound/saa1099.h"
 #include "includes/xorworld.h"
@@ -47,27 +49,27 @@ EEPROM chip: 93C46
 WRITE16_MEMBER(xorworld_state::eeprom_chip_select_w)
 {
 	/* bit 0 is CS (active low) */
-	m_eeprom->set_cs_line((data & 0x01) ? CLEAR_LINE : ASSERT_LINE);
+	m_eeprom->cs_write((data & 0x01) ? ASSERT_LINE : CLEAR_LINE);
 }
 
 WRITE16_MEMBER(xorworld_state::eeprom_serial_clock_w)
 {
 	/* bit 0 is SK (active high) */
-	m_eeprom->set_clock_line((data & 0x01) ? ASSERT_LINE : CLEAR_LINE);
+	m_eeprom->clk_write((data & 0x01) ? ASSERT_LINE : CLEAR_LINE);
 }
 
 WRITE16_MEMBER(xorworld_state::eeprom_data_w)
 {
 	/* bit 0 is EEPROM data (DIN) */
-	m_eeprom->write_bit(data & 0x01);
+	m_eeprom->di_write(data & 0x01);
 }
 
-WRITE16_MEMBER(xorworld_state::xorworld_irq2_ack_w)
+WRITE16_MEMBER(xorworld_state::irq2_ack_w)
 {
 	m_maincpu->set_input_line(2, CLEAR_LINE);
 }
 
-WRITE16_MEMBER(xorworld_state::xorworld_irq6_ack_w)
+WRITE16_MEMBER(xorworld_state::irq6_ack_w)
 {
 	m_maincpu->set_input_line(6, CLEAR_LINE);
 }
@@ -77,15 +79,15 @@ static ADDRESS_MAP_START( xorworld_map, AS_PROGRAM, 16, xorworld_state )
 	AM_RANGE(0x200000, 0x200001) AM_READ_PORT("P1")
 	AM_RANGE(0x400000, 0x400001) AM_READ_PORT("P2")
 	AM_RANGE(0x600000, 0x600001) AM_READ_PORT("DSW")
-	AM_RANGE(0x800000, 0x800001) AM_DEVWRITE8("saa", saa1099_device, saa1099_data_w, 0x00ff)
-	AM_RANGE(0x800002, 0x800003) AM_DEVWRITE8("saa", saa1099_device, saa1099_control_w, 0x00ff)
+	AM_RANGE(0x800000, 0x800001) AM_DEVWRITE8("saa", saa1099_device, data_w, 0x00ff)
+	AM_RANGE(0x800002, 0x800003) AM_DEVWRITE8("saa", saa1099_device, control_w, 0x00ff)
 	AM_RANGE(0xa00008, 0xa00009) AM_WRITE(eeprom_chip_select_w)
 	AM_RANGE(0xa0000a, 0xa0000b) AM_WRITE(eeprom_serial_clock_w)
 	AM_RANGE(0xa0000c, 0xa0000d) AM_WRITE(eeprom_data_w)
-	AM_RANGE(0xffc000, 0xffc7ff) AM_RAM_WRITE(xorworld_videoram16_w) AM_SHARE("videoram")
+	AM_RANGE(0xffc000, 0xffc7ff) AM_RAM_WRITE(videoram_w) AM_SHARE("videoram")
 	AM_RANGE(0xffc800, 0xffc87f) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0xffc880, 0xffc881) AM_WRITE(xorworld_irq2_ack_w)
-	AM_RANGE(0xffc882, 0xffc883) AM_WRITE(xorworld_irq6_ack_w)
+	AM_RANGE(0xffc880, 0xffc881) AM_WRITE(irq2_ack_w)
+	AM_RANGE(0xffc882, 0xffc883) AM_WRITE(irq6_ack_w)
 	AM_RANGE(0xffc884, 0xffffff) AM_RAM
 ADDRESS_MAP_END
 
@@ -104,7 +106,7 @@ static INPUT_PORTS_START( xorworld )
 	PORT_DIPNAME( 0x08, 0x00, DEF_STR( Demo_Sounds ) )
 	PORT_DIPSETTING(    0x08, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)   /* used for accessing the NVRAM */
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)   /* used for accessing the NVRAM */
 	PORT_DIPNAME( 0x60, 0x40, DEF_STR( Difficulty ) )
 	PORT_DIPSETTING(    0x40, DEF_STR( Easy ) )
 	PORT_DIPSETTING(    0x60, DEF_STR( Normal ) )
@@ -174,7 +176,7 @@ static MACHINE_CONFIG_START( xorworld, xorworld_state )
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
 
-	MCFG_EEPROM_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 	// video hardware
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -182,10 +184,12 @@ static MACHINE_CONFIG_START( xorworld, xorworld_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(xorworld_state, screen_update_xorworld)
+	MCFG_SCREEN_UPDATE_DRIVER(xorworld_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(xorworld)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", xorworld)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(xorworld_state, xorworld)
 
 
 	// sound hardware
@@ -233,4 +237,4 @@ DRIVER_INIT_MEMBER(xorworld_state,xorworld)
 }
 
 
-GAME( 1990, xorworld, 0, xorworld, xorworld, xorworld_state, xorworld, ROT0, "Gaelco", "Xor World (prototype)", 0 )
+GAME( 1990, xorworld, 0, xorworld, xorworld, xorworld_state, xorworld, ROT0, "Gaelco", "Xor World (prototype)", GAME_SUPPORTS_SAVE )

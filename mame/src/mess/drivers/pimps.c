@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /***************************************************************************
 
         P.I.M.P.S. (Personal Interactive MicroProcessor System)
@@ -24,14 +26,17 @@ V Virtual Memory
 #include "cpu/i8085/i8085.h"
 #include "machine/terminal.h"
 
+#define TERMINAL_TAG "terminal"
 
 class pimps_state : public driver_device
 {
 public:
 	pimps_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_terminal(*this, TERMINAL_TAG) ,
-		m_maincpu(*this, "maincpu") { }
+		m_terminal(*this, TERMINAL_TAG),
+		m_maincpu(*this, "maincpu")
+	{
+	}
 
 	DECLARE_READ8_MEMBER(term_status_r);
 	DECLARE_READ8_MEMBER(term_r);
@@ -86,11 +91,6 @@ WRITE8_MEMBER( pimps_state::kbd_put )
 	m_term_data = data;
 }
 
-static GENERIC_TERMINAL_INTERFACE( terminal_intf )
-{
-	DEVCB_DRIVER_MEMBER(pimps_state, kbd_put)
-};
-
 static MACHINE_CONFIG_START( pimps, pimps_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu",I8085A, XTAL_2MHz)
@@ -98,7 +98,8 @@ static MACHINE_CONFIG_START( pimps, pimps_state )
 	MCFG_CPU_IO_MAP(pimps_io)
 
 	/* video hardware */
-	MCFG_GENERIC_TERMINAL_ADD(TERMINAL_TAG, terminal_intf)
+	MCFG_DEVICE_ADD(TERMINAL_TAG, GENERIC_TERMINAL, 0)
+	MCFG_GENERIC_TERMINAL_KEYBOARD_CB(WRITE8(pimps_state, kbd_put))
 MACHINE_CONFIG_END
 
 /* ROM definition */

@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Dirk Best
 /*************************************************************************
 
     RAM device
@@ -54,7 +56,7 @@ public:
 	// accessors
 	UINT32 size(void) const { return m_size; }
 	UINT32 mask(void) const { return m_size - 1; }
-	UINT8 *pointer(void) const { return m_pointer; }
+	UINT8 *pointer(void) { return &m_pointer[0]; }
 	static UINT32 parse_string(const char *s);
 	UINT32 default_size(void) const;
 	const char *extra_options(void) const { return m_extra_options; }
@@ -75,7 +77,7 @@ protected:
 private:
 	// device state
 	UINT32 m_size;
-	UINT8 *m_pointer;
+	dynamic_buffer m_pointer;
 
 	// device config
 	const char *m_default_size;

@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
 Atari Wolf Pack (prototype) driver
@@ -6,7 +8,6 @@ Atari Wolf Pack (prototype) driver
 
 #include "emu.h"
 #include "cpu/m6502/m6502.h"
-#include "sound/s14001a.h"
 #include "includes/wolfpack.h"
 
 
@@ -34,13 +35,13 @@ TIMER_CALLBACK_MEMBER(wolfpack_state::periodic_callback)
 	if (scanline >= 262)
 		scanline = 0;
 
-	timer_set(machine().primary_screen->time_until_pos(scanline), TIMER_PERIODIC, scanline);
+	timer_set(m_screen->time_until_pos(scanline), TIMER_PERIODIC, scanline);
 }
 
 
 void wolfpack_state::machine_reset()
 {
-	timer_set(machine().primary_screen->time_until_pos(0), TIMER_PERIODIC);
+	timer_set(m_screen->time_until_pos(0), TIMER_PERIODIC);
 }
 
 
@@ -53,7 +54,6 @@ CUSTOM_INPUT_MEMBER(wolfpack_state::wolfpack_dial_r)
 
 READ8_MEMBER(wolfpack_state::wolfpack_misc_r)
 {
-	device_t *device = machine().device("speech");
 	UINT8 val = 0;
 
 	/* BIT0 => SPEECH BUSY */
@@ -65,13 +65,13 @@ READ8_MEMBER(wolfpack_state::wolfpack_misc_r)
 	/* BIT6 => UNUSED      */
 	/* BIT7 => VBLANK      */
 
-	if (!s14001a_bsy_r(device))
+	if (!m_s14001a->bsy_r())
 		val |= 0x01;
 
 	if (!m_collision)
 		val |= 0x10;
 
-	if (machine().primary_screen->vpos() >= 240)
+	if (m_screen->vpos() >= 240)
 		val |= 0x80;
 
 	return val;
@@ -91,17 +91,15 @@ WRITE8_MEMBER(wolfpack_state::wolfpack_audamp_w){}
 
 WRITE8_MEMBER(wolfpack_state::wolfpack_word_w)
 {
-	device_t *device = machine().device("speech");
-		/* latch word from bus into temp register, and place on s14001a input bus */
-		/* there is no real need for a temp register at all, since the bus 'register' acts as one */
-		s14001a_reg_w(device, data & 0x1f); /* SA0 (IN5) is pulled low according to the schematic, so its 0x1f and not 0x3f as one would expect */
+	/* latch word from bus into temp register, and place on s14001a input bus */
+	/* there is no real need for a temp register at all, since the bus 'register' acts as one */
+	m_s14001a->reg_w(data & 0x1f); /* SA0 (IN5) is pulled low according to the schematic, so its 0x1f and not 0x3f as one would expect */
 }
 
 WRITE8_MEMBER(wolfpack_state::wolfpack_start_speech_w)
 {
-	device_t *device = machine().device("speech");
-		s14001a_set_volume(device, 15); /* hack, should be executed just once during game init, or defaulted to this in the s14001a core */
-		s14001a_rst_w(device, data&1);
+	m_s14001a->set_volume(15); /* hack, should be executed just once during game init, or defaulted to this in the s14001a core */
+	m_s14001a->rst_w(data&1);
 }
 
 
@@ -316,9 +314,12 @@ static MACHINE_CONFIG_START( wolfpack, wolfpack_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 511, 16, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(wolfpack_state, screen_update_wolfpack)
 	MCFG_SCREEN_VBLANK_DRIVER(wolfpack_state, screen_eof_wolfpack)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(wolfpack)
-	MCFG_PALETTE_LENGTH(12)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", wolfpack)
+	MCFG_PALETTE_ADD("palette", 12)
+	MCFG_PALETTE_INDIRECT_ENTRIES(8)
+	MCFG_PALETTE_INIT_OWNER(wolfpack_state, wolfpack)
 
 	/* sound hardware */
 	MCFG_SOUND_ADD("speech", S14001A, 20000) /* RC Clock (C=100pf, R=470K-670K ohms, adjustable) ranging from 14925.37313hz to 21276.59574hz, likely factory set to 20000hz since anything below 19500 is too slow */

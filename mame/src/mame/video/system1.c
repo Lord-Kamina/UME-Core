@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Jarek Parchanski, Nicola Salmoria, Mirko Buffoni
 /*************************************************************************
 
     System1 / System 2
@@ -98,7 +100,7 @@
 
 TILE_GET_INFO_MEMBER(system1_state::tile_get_info)
 {
-	const UINT8 *rambase = (const UINT8 *)param;
+	const UINT8 *rambase = (const UINT8 *)tilemap.user_data();
 	UINT32 tiledata = rambase[tile_index*2+0] | (rambase[tile_index*2+1] << 8);
 	UINT32 code = ((tiledata >> 4) & 0x800) | (tiledata & 0x7ff);
 	UINT32 color = (tiledata >> 5) & 0xff;
@@ -129,18 +131,19 @@ void system1_state::video_start_common(int pagecount)
 	/* create the tilemap pages */
 	for (pagenum = 0; pagenum < pagecount; pagenum++)
 	{
-		m_tilemap_page[pagenum] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(system1_state::tile_get_info),this), TILEMAP_SCAN_ROWS, 8,8, 32,32);
+		m_tilemap_page[pagenum] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(system1_state::tile_get_info),this), TILEMAP_SCAN_ROWS, 8,8, 32,32);
 		m_tilemap_page[pagenum]->set_transparent_pen(0);
 		m_tilemap_page[pagenum]->set_user_data(m_videoram + 0x800 * pagenum);
 	}
 
 	/* allocate a temporary bitmap for sprite rendering */
-	m_sprite_bitmap = auto_bitmap_ind16_alloc(machine(), 512, 256);
+	m_screen->register_screen_bitmap(m_sprite_bitmap);
 
 	/* register for save stats */
 	save_item(NAME(m_video_mode));
 	save_item(NAME(m_mix_collide_summary));
 	save_item(NAME(m_sprite_collide_summary));
+	save_item(NAME(m_videoram_bank));
 	save_pointer(NAME(m_videoram), 0x800 * pagecount);
 	save_pointer(NAME(m_mix_collide), 64);
 	save_pointer(NAME(m_sprite_collide), 1024);
@@ -187,19 +190,19 @@ WRITE8_MEMBER(system1_state::system1_videomode_w)
 
 READ8_MEMBER(system1_state::system1_mixer_collision_r)
 {
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	return m_mix_collide[offset & 0x3f] | 0x7e | (m_mix_collide_summary << 7);
 }
 
 WRITE8_MEMBER(system1_state::system1_mixer_collision_w)
 {
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	m_mix_collide[offset & 0x3f] = 0;
 }
 
 WRITE8_MEMBER(system1_state::system1_mixer_collision_reset_w)
 {
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	m_mix_collide_summary = 0;
 }
 
@@ -213,19 +216,19 @@ WRITE8_MEMBER(system1_state::system1_mixer_collision_reset_w)
 
 READ8_MEMBER(system1_state::system1_sprite_collision_r)
 {
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	return m_sprite_collide[offset & 0x3ff] | 0x7e | (m_sprite_collide_summary << 7);
 }
 
 WRITE8_MEMBER(system1_state::system1_sprite_collision_w)
 {
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	m_sprite_collide[offset & 0x3ff] = 0;
 }
 
 WRITE8_MEMBER(system1_state::system1_sprite_collision_reset_w)
 {
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	m_sprite_collide_summary = 0;
 }
 
@@ -255,7 +258,7 @@ inline void system1_state::videoram_wait_states(cpu_device *cpu)
 READ8_MEMBER(system1_state::system1_videoram_r)
 {
 	UINT8 *videoram = m_videoram;
-	videoram_wait_states(machine().firstcpu);
+	videoram_wait_states(m_maincpu);
 	offset |= 0x1000 * ((m_videoram_bank >> 1) % (m_tilemap_pages / 2));
 	return videoram[offset];
 }
@@ -263,7 +266,7 @@ READ8_MEMBER(system1_state::system1_videoram_r)
 WRITE8_MEMBER(system1_state::system1_videoram_w)
 {
 	UINT8 *videoram = m_videoram;
-	videoram_wait_states(machine().firstcpu);
+	videoram_wait_states(m_maincpu);
 	offset |= 0x1000 * ((m_videoram_bank >> 1) % (m_tilemap_pages / 2));
 	videoram[offset] = data;
 
@@ -271,7 +274,7 @@ WRITE8_MEMBER(system1_state::system1_videoram_w)
 
 	/* force a partial update if the page is changing */
 	if (m_tilemap_pages > 2 && offset >= 0x740 && offset < 0x748 && offset % 2 == 0)
-		machine().primary_screen->update_now();
+		m_screen->update_now();
 }
 
 WRITE8_MEMBER(system1_state::system1_videoram_bank_w)
@@ -347,7 +350,7 @@ WRITE8_MEMBER(system1_state::system1_paletteram_w)
 		b = pal2bit(data >> 6);
 	}
 
-	palette_set_color(machine(),offset,MAKE_RGB(r,g,b));
+	m_palette->set_pen_color(offset,rgb_t(r,g,b));
 }
 
 
@@ -493,14 +496,14 @@ void system1_state::video_update_common(screen_device &screen, bitmap_ind16 &bit
 	int x, y;
 
 	/* first clear the sprite bitmap and draw sprites within this area */
-	m_sprite_bitmap->fill(0, cliprect);
-	draw_sprites(*m_sprite_bitmap, cliprect, spritexoffs);
+	m_sprite_bitmap.fill(0, cliprect);
+	draw_sprites(m_sprite_bitmap, cliprect, spritexoffs);
 
 	/* iterate over rows */
 	for (y = cliprect.min_y; y <= cliprect.max_y; y++)
 	{
 		UINT16 *fgbase = &fgpixmap.pix16(y & 0xff);
-		UINT16 *sprbase = &m_sprite_bitmap->pix16(y & 0xff);
+		UINT16 *sprbase = &m_sprite_bitmap.pix16(y & 0xff);
 		UINT16 *dstbase = &bitmap.pix16(y);
 		int bgy = (y + bgyscroll) & 0x1ff;
 		int bgxscroll = bgrowscroll[y >> 3 & 0x1f];
@@ -514,7 +517,7 @@ void system1_state::video_update_common(screen_device &screen, bitmap_ind16 &bit
 		for (x = cliprect.min_x; x <= cliprect.max_x; x++)
 		{
 			int bgx = ((x - bgxscroll) / 2) & 0x1ff;
-			UINT16 fgpix = fgbase[x / 2];
+			UINT16 fgpix = fgbase[(x / 2) & 0xff];
 			UINT16 bgpix = bgbase[bgx >> 8][bgx & 0xff];
 			UINT16 sprpix = sprbase[x];
 			UINT8 lookup_index;

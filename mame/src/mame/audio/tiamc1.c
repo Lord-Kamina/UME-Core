@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Eugene Sandulenko
 /***************************************************************************
 
   TIA-MC1 sound hardware
@@ -56,7 +58,7 @@ const device_type TIAMC1 = &device_creator<tiamc1_sound_device>;
 //-------------------------------------------------
 
 tiamc1_sound_device::tiamc1_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, TIAMC1, "TIA-MC1 Custom", tag, owner, clock),
+	: device_t(mconfig, TIAMC1, "TIA-MC1 Audio Custom", tag, owner, clock, "tiamc1_sound", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_channel(NULL),
 		m_timer1_divider(0)
@@ -85,15 +87,15 @@ void tiamc1_sound_device::device_start()
 
 		for (j = 0; j < 3; j++)
 		{
-			state_save_register_item(machine(), "channel", NULL, i * 3 + j, t->channel[j].count);
-			state_save_register_item(machine(), "channel", NULL, i * 3 + j, t->channel[j].cnval);
-			state_save_register_item(machine(), "channel", NULL, i * 3 + j, t->channel[j].bcdMode);
-			state_save_register_item(machine(), "channel", NULL, i * 3 + j, t->channel[j].cntMode);
-			state_save_register_item(machine(), "channel", NULL, i * 3 + j, t->channel[j].valMode);
-			state_save_register_item(machine(), "channel", NULL, i * 3 + j, t->channel[j].gate);
-			state_save_register_item(machine(), "channel", NULL, i * 3 + j, t->channel[j].output);
-			state_save_register_item(machine(), "channel", NULL, i * 3 + j, t->channel[j].loadCnt);
-			state_save_register_item(machine(), "channel", NULL, i * 3 + j, t->channel[j].enable);
+			save_item(NAME(t->channel[j].count), i * 3 + j);
+			save_item(NAME(t->channel[j].cnval), i * 3 + j);
+			save_item(NAME(t->channel[j].bcdMode), i * 3 + j);
+			save_item(NAME(t->channel[j].cntMode), i * 3 + j);
+			save_item(NAME(t->channel[j].valMode), i * 3 + j);
+			save_item(NAME(t->channel[j].gate), i * 3 + j);
+			save_item(NAME(t->channel[j].output), i * 3 + j);
+			save_item(NAME(t->channel[j].loadCnt), i * 3 + j);
+			save_item(NAME(t->channel[j].enable), i * 3 + j);
 		}
 	}
 
@@ -218,7 +220,7 @@ void tiamc1_sound_device::timer8253_wr(struct timer8253struct *t, int reg, UINT8
 				break;
 
 			default:
-				mame_printf_debug("unhandled val mode %i\n", t->channel[chn].valMode);
+				osd_printf_debug("unhandled val mode %i\n", t->channel[chn].valMode);
 			}
 
 			switch (t->channel[chn].cntMode)
@@ -238,7 +240,7 @@ void tiamc1_sound_device::timer8253_wr(struct timer8253struct *t, int reg, UINT8
 				break;
 
 			default:
-				mame_printf_debug("unhandled cnt mode %i\n", t->channel[chn].cntMode);
+				osd_printf_debug("unhandled cnt mode %i\n", t->channel[chn].cntMode);
 			}
 		}
 		break;
@@ -258,7 +260,7 @@ void tiamc1_sound_device::timer8253_wr(struct timer8253struct *t, int reg, UINT8
 			t->channel[chn].cnval = (t->channel[chn].cnval >> 8) | (val << 8);
 			break;
 		default:
-			mame_printf_debug("unhandled val mode %i\n", t->channel[chn].valMode);
+			osd_printf_debug("unhandled val mode %i\n", t->channel[chn].valMode);
 		}
 
 		if (t->channel[chn].cntMode==0)
@@ -282,7 +284,7 @@ void tiamc1_sound_device::timer8253_wr(struct timer8253struct *t, int reg, UINT8
 				break;
 
 			default:
-				mame_printf_debug("unhandled val mode %i\n", t->channel[chn].valMode);
+				osd_printf_debug("unhandled val mode %i\n", t->channel[chn].valMode);
 			}
 
 			switch (t->channel[chn].cntMode)
@@ -299,7 +301,7 @@ void tiamc1_sound_device::timer8253_wr(struct timer8253struct *t, int reg, UINT8
 				break;
 
 			default:
-				mame_printf_debug("unhandled cnt mode %i\n", t->channel[chn].cntMode);
+				osd_printf_debug("unhandled cnt mode %i\n", t->channel[chn].cntMode);
 			}
 		}
 	}

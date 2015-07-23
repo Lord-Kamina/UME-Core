@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi
 /***************************************************************************
 
 Jailbreak - (c) 1986 Konami
@@ -87,7 +89,6 @@ Notes:
 #include "machine/konami1.h"
 #include "cpu/m6809/m6809.h"
 #include "sound/sn76496.h"
-#include "sound/vlm5030.h"
 #include "includes/konamipt.h"
 #include "includes/jailbrek.h"
 
@@ -114,16 +115,14 @@ INTERRUPT_GEN_MEMBER(jailbrek_state::jb_interrupt_nmi)
 
 READ8_MEMBER(jailbrek_state::jailbrek_speech_r)
 {
-	device_t *device = machine().device("vlm");
-	return (vlm5030_bsy(device) ? 1 : 0);
+	return (m_vlm->bsy() ? 1 : 0);
 }
 
 WRITE8_MEMBER(jailbrek_state::jailbrek_speech_w)
 {
-	device_t *device = machine().device("vlm");
 	/* bit 0 could be latch direction like in yiear */
-	vlm5030_st(device, (data >> 1) & 1);
-	vlm5030_rst(device, (data >> 2) & 1);
+	m_vlm->st((data >> 1) & 1);
+	m_vlm->rst((data >> 2) & 1);
 }
 
 static ADDRESS_MAP_START( jailbrek_map, AS_PROGRAM, 8, jailbrek_state )
@@ -146,7 +145,7 @@ static ADDRESS_MAP_START( jailbrek_map, AS_PROGRAM, 8, jailbrek_state )
 	AM_RANGE(0x3302, 0x3302) AM_READ_PORT("P2")
 	AM_RANGE(0x3303, 0x3303) AM_READ_PORT("DSW1")
 	AM_RANGE(0x4000, 0x4000) AM_WRITE(jailbrek_speech_w) /* speech pins */
-	AM_RANGE(0x5000, 0x5000) AM_DEVWRITE_LEGACY("vlm", vlm5030_data_w) /* speech data */
+	AM_RANGE(0x5000, 0x5000) AM_DEVWRITE("vlm", vlm5030_device, data_w) /* speech data */
 	AM_RANGE(0x6000, 0x6000) AM_READ(jailbrek_speech_r)
 	AM_RANGE(0x8000, 0xffff) AM_ROM
 ADDRESS_MAP_END
@@ -232,23 +231,6 @@ static GFXDECODE_START( jailbrek )
 GFXDECODE_END
 
 
-/*************************************
- *
- *  Sound definitions
- *
- *************************************/
-
-
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
-
 void jailbrek_state::machine_start()
 {
 	save_item(NAME(m_irq_enable));
@@ -264,27 +246,28 @@ void jailbrek_state::machine_reset()
 static MACHINE_CONFIG_START( jailbrek, jailbrek_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M6809, MASTER_CLOCK/12)
+	MCFG_CPU_ADD("maincpu", KONAMI1, MASTER_CLOCK/12)
 	MCFG_CPU_PROGRAM_MAP(jailbrek_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", jailbrek_state,  jb_interrupt)
 	MCFG_CPU_PERIODIC_INT_DRIVER(jailbrek_state, jb_interrupt_nmi,  500) /* ? */
 
 
 	/* video hardware */
-	MCFG_GFXDECODE(jailbrek)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", jailbrek)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(jailbrek_state, jailbrek)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/3, 396, 8, 248, 256, 16, 240)
 	MCFG_SCREEN_UPDATE_DRIVER(jailbrek_state, screen_update_jailbrek)
-
+	MCFG_SCREEN_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("snsnd", SN76489A, MASTER_CLOCK/12)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("vlm", VLM5030, VOICE_CLOCK)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
@@ -431,8 +414,6 @@ DRIVER_INIT_MEMBER(jailbrek_state,jailbrek)
 			SPEECH_ROM[ind] = SPEECH_ROM[ind + 0x2000];
 		}
 	}
-
-	konami1_decode(machine(), "maincpu");
 }
 
 GAME( 1986, jailbrek, 0,        jailbrek, jailbrek, jailbrek_state, jailbrek, ROT0, "Konami", "Jail Break", GAME_SUPPORTS_SAVE )

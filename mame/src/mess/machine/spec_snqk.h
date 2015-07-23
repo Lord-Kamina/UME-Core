@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Kevin Thacker
 /*****************************************************************************
  *
  * machine/spec_snqk.h
@@ -8,7 +10,6 @@
 #define __SPEC_SNQK_H__
 
 #include "imagedev/snapquik.h"
-#include "imagedev/cartslot.h"
 
 void spectrum_setup_sna(running_machine &machine, UINT8 *snapdata, UINT32 snapsize);
 void spectrum_setup_z80(running_machine &machine, UINT8 *snapdata, UINT32 snapsize);

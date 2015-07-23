@@ -1,8 +1,10 @@
+// license:???
+// copyright-holders:Patrick Lawrence, Aaron Giles
 /***************************************************************************
 
     Atari Crystal Castles hardware
 
-    driver by Pat Lawrence
+    driver by Patrick Lawrence
 
     Games supported:
         * Crystal Castles (1983) [8 sets]
@@ -146,7 +148,7 @@ inline void ccastles_state::schedule_next_irq( int curscanline )
 			break;
 
 	/* next one at the start of this scanline */
-	m_irq_timer->adjust(machine().primary_screen->time_until_pos(curscanline), curscanline);
+	m_irq_timer->adjust(m_screen->time_until_pos(curscanline), curscanline);
 }
 
 
@@ -160,7 +162,7 @@ TIMER_CALLBACK_MEMBER(ccastles_state::clock_irq)
 	}
 
 	/* force an update now */
-	machine().primary_screen->update_partial(machine().primary_screen->vpos());
+	m_screen->update_partial(m_screen->vpos());
 
 	/* find the next edge */
 	schedule_next_irq(param);
@@ -169,7 +171,7 @@ TIMER_CALLBACK_MEMBER(ccastles_state::clock_irq)
 
 CUSTOM_INPUT_MEMBER(ccastles_state::get_vblank)
 {
-	int scanline = machine().primary_screen->vpos();
+	int scanline = m_screen->vpos();
 	return m_syncprom[scanline & 0xff] & 1;
 }
 
@@ -205,7 +207,7 @@ void ccastles_state::machine_start()
 
 	/* reconfigure the visible area to match */
 	visarea.set(0, 255, m_vblank_end, m_vblank_start - 1);
-	machine().primary_screen->configure(320, 256, visarea, HZ_TO_ATTOSECONDS(PIXEL_CLOCK) * VTOTAL * HTOTAL);
+	m_screen->configure(320, 256, visarea, HZ_TO_ATTOSECONDS(PIXEL_CLOCK) * VTOTAL * HTOTAL);
 
 	/* configure the ROM banking */
 	membank("bank1")->configure_entries(0, 2, memregion("maincpu")->base() + 0xa000, 0x6000);
@@ -442,21 +444,6 @@ static GFXDECODE_START( ccastles )
 GFXDECODE_END
 
 
-
-/*************************************
- *
- *  Sound interfaces
- *
- *************************************/
-
-static const pokey_interface pokey_config =
-{
-	{ DEVCB_NULL },
-	DEVCB_INPUT_PORT("IN1")
-};
-
-
-
 /*************************************
  *
  *  Machine driver
@@ -475,26 +462,26 @@ static MACHINE_CONFIG_START( ccastles, ccastles_state )
 	MCFG_X2212_ADD_AUTOSAVE("nvram_4a")
 
 	/* video hardware */
-	MCFG_GFXDECODE(ccastles)
-	MCFG_PALETTE_LENGTH(32)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", ccastles)
+	MCFG_PALETTE_ADD("palette", 32)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(PIXEL_CLOCK, HTOTAL, 0, HTOTAL - 1, VTOTAL, 0, VTOTAL - 1)   /* will be adjusted later */
 	MCFG_SCREEN_UPDATE_DRIVER(ccastles_state, screen_update_ccastles)
-
+	MCFG_SCREEN_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_POKEY_ADD("pokey1", MASTER_CLOCK/8)
+	MCFG_SOUND_ADD("pokey1", POKEY, MASTER_CLOCK/8)
 	/* NOTE: 1k + 0.2k is not 100% exact, but should not make an audible difference */
 	MCFG_POKEY_OUTPUT_OPAMP(RES_K(1) + RES_K(0.2), CAP_U(0.01), 5.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
-	MCFG_POKEY_ADD("pokey2", MASTER_CLOCK/8)
+	MCFG_SOUND_ADD("pokey2", POKEY, MASTER_CLOCK/8)
 	/* NOTE: 1k + 0.2k is not 100% exact, but should not make an audible difference */
 	MCFG_POKEY_OUTPUT_OPAMP(RES_K(1) + RES_K(0.2), CAP_U(0.01), 5.0)
-	MCFG_POKEY_CONFIG(pokey_config)
+	MCFG_POKEY_ALLPOT_R_CB(IOPORT("IN1"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 

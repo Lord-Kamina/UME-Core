@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Kevin Thacker
 /***************************************************************************
 
   mess/machine/spec_snqk.c
@@ -26,7 +28,7 @@
 ***************************************************************************/
 
 #include "emu.h"
-#include "ui.h"
+#include "ui/ui.h"
 #include "cpu/z80/z80.h"
 #include "includes/spectrum.h"
 #include "sound/ay8910.h"
@@ -44,27 +46,27 @@
     data for the end user
 -------------------------------------------------*/
 
-static void log_quickload(const char *type, UINT32 start, UINT32 length, UINT32 exec, const char *exec_format)
+static void log_quickload(running_machine &machine, const char *type, UINT32 start, UINT32 length, UINT32 exec, const char *exec_format)
 {
-	astring tempstring;
+	std::string tempstring;
 
 	logerror("Loading %04X bytes of RAM at %04X\n", length, start);
 
-	tempstring.catprintf("Quickload type: %s   Length: %d bytes\n", type, length);
-	tempstring.catprintf("Start: 0x%04X   End: 0x%04X   Exec: ", start, start + length - 1);
+	strcatprintf(tempstring,"Quickload type: %s   Length: %d bytes\n", type, length);
+	strcatprintf(tempstring,"Start: 0x%04X   End: 0x%04X   Exec: ", start, start + length - 1);
 
 	logerror("Quickload loaded.\n");
-	if (!mame_stricmp(exec_format, EXEC_NA))
-		tempstring.cat("N/A");
+	if (!core_stricmp(exec_format, EXEC_NA))
+		tempstring.append("N/A");
 	else
 	{
 		logerror("Execution can resume with ");
 		logerror(exec_format, exec);
 		logerror("\n");
-		tempstring.catprintf(exec_format, exec);
+		strcatprintf(tempstring,exec_format, exec);
 	}
 
-	ui_popup_time(10, "%s", tempstring.cstr());
+	machine.ui().popup_time(10, "%s", tempstring.c_str());
 }
 
 /*******************************************************************
@@ -112,24 +114,20 @@ static void spectrum_page_basicrom(running_machine &machine)
 
 SNAPSHOT_LOAD_MEMBER( spectrum_state,spectrum)
 {
-	UINT8 *snapshot_data = NULL;
+	dynamic_buffer snapshot_data(snapshot_size);
 
-	snapshot_data = (UINT8*)malloc(snapshot_size);
-	if (!snapshot_data)
-		goto error;
+	image.fread(&snapshot_data[0], snapshot_size);
 
-	image.fread(snapshot_data, snapshot_size);
-
-	if (!mame_stricmp(file_type, "sna"))
+	if (!core_stricmp(file_type, "sna"))
 	{
 		if ((snapshot_size != SNA48_SIZE) && (snapshot_size != SNA128_SIZE_1) && (snapshot_size != SNA128_SIZE_2))
 		{
 			logerror("Invalid .SNA file size.\n");
 			goto error;
 		}
-		spectrum_setup_sna(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_sna(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "sp"))
+	else if (!core_stricmp(file_type, "sp"))
 	{
 		if ((snapshot_data[0] != 'S' && snapshot_data[1] != 'P') && (snapshot_size != SP_NEW_SIZE_16K && snapshot_size != SP_NEW_SIZE_48K))
 		{
@@ -139,36 +137,36 @@ SNAPSHOT_LOAD_MEMBER( spectrum_state,spectrum)
 				goto error;
 			}
 		}
-		spectrum_setup_sp(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_sp(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "ach"))
+	else if (!core_stricmp(file_type, "ach"))
 	{
 		if (snapshot_size != ACH_SIZE)
 		{
 			logerror("Invalid .ACH file size.\n");
 			goto error;
 		}
-		spectrum_setup_ach(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_ach(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "prg"))
+	else if (!core_stricmp(file_type, "prg"))
 	{
 		if (snapshot_size != PRG_SIZE)
 		{
 			logerror("Invalid .PRG file size.\n");
 			goto error;
 		}
-		spectrum_setup_prg(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_prg(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "plusd"))
+	else if (!core_stricmp(file_type, "plusd"))
 	{
 		if ((snapshot_size != PLUSD48_SIZE) && (snapshot_size != PLUSD128_SIZE))
 		{
 			logerror("Invalid .PLUSD file size.\n");
 			goto error;
 		}
-		spectrum_setup_plusd(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_plusd(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "sem"))
+	else if (!core_stricmp(file_type, "sem"))
 	{
 		if (snapshot_data[0] != 0x05 && snapshot_data[1] != 'S' && \
 			snapshot_data[2] != 'P' && snapshot_data[3] != 'E' && \
@@ -180,36 +178,36 @@ SNAPSHOT_LOAD_MEMBER( spectrum_state,spectrum)
 				goto error;
 			}
 		}
-		spectrum_setup_sem(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_sem(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "sit"))
+	else if (!core_stricmp(file_type, "sit"))
 	{
 		if (snapshot_size != SIT_SIZE)
 		{
 			logerror("Invalid .SIT file size.\n");
 			goto error;
 		}
-		spectrum_setup_sit(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_sit(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "zx"))
+	else if (!core_stricmp(file_type, "zx"))
 	{
 		if (snapshot_size != ZX_SIZE)
 		{
 			logerror("Invalid .ZX file size.\n");
 			goto error;
 		}
-		spectrum_setup_zx(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_zx(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "snp"))
+	else if (!core_stricmp(file_type, "snp"))
 	{
 		if (snapshot_size != SNP_SIZE)
 		{
 			logerror("Invalid .SNP file size.\n");
 			goto error;
 		}
-		spectrum_setup_snp(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_snp(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "snx"))
+	else if (!core_stricmp(file_type, "snx"))
 	{
 		if (snapshot_data[0] != 'X' && snapshot_data[1] != 'S' && \
 			snapshot_data[2] != 'N' && snapshot_data[3] != 'A')
@@ -217,29 +215,25 @@ SNAPSHOT_LOAD_MEMBER( spectrum_state,spectrum)
 			logerror("Invalid .SNX file size.\n");
 			goto error;
 		}
-		spectrum_setup_snx(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_snx(machine(), &snapshot_data[0], snapshot_size);
 	}
-	else if (!mame_stricmp(file_type, "frz"))
+	else if (!core_stricmp(file_type, "frz"))
 	{
 		if (snapshot_size != FRZ_SIZE)
 		{
 			logerror("Invalid .FRZ file size.\n");
 			goto error;
 		}
-		spectrum_setup_frz(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_frz(machine(), &snapshot_data[0], snapshot_size);
 	}
 	else
 	{
-		spectrum_setup_z80(machine(), snapshot_data, snapshot_size);
+		spectrum_setup_z80(machine(), &snapshot_data[0], snapshot_size);
 	}
-
-	free(snapshot_data);
 
 	return IMAGE_INIT_PASS;
 
 error:
-	if (snapshot_data)
-		free(snapshot_data);
 	return IMAGE_INIT_FAIL;
 }
 
@@ -2453,40 +2447,32 @@ void spectrum_setup_z80(running_machine &machine, UINT8 *snapdata, UINT32 snapsi
 
 QUICKLOAD_LOAD_MEMBER( spectrum_state,spectrum)
 {
-	UINT8 *quickload_data = NULL;
+	dynamic_buffer quickload_data(quickload_size);
 
-	quickload_data = (UINT8*)malloc(quickload_size);
-	if (!quickload_data)
-		goto error;
+	image.fread(&quickload_data[0], quickload_size);
 
-	image.fread(quickload_data, quickload_size);
-
-	if (!mame_stricmp(file_type, "scr"))
+	if (!core_stricmp(file_type, "scr"))
 	{
 		if ((quickload_size != SCR_SIZE) && (quickload_size != SCR_BITMAP))
 		{
 			logerror("Invalid .SCR file size.\n");
 			goto error;
 		}
-		spectrum_setup_scr(machine(), quickload_data, quickload_size);
+		spectrum_setup_scr(machine(), &quickload_data[0], quickload_size);
 	}
-	else if (!mame_stricmp(file_type, "raw"))
+	else if (!core_stricmp(file_type, "raw"))
 	{
 		if (quickload_size != RAW_SIZE)
 		{
 			logerror("Invalid .RAW file size.\n");
 			goto error;
 		}
-		spectrum_setup_raw(machine(), quickload_data, quickload_size);
+		spectrum_setup_raw(machine(), &quickload_data[0], quickload_size);
 	}
-
-	free(quickload_data);
 
 	return IMAGE_INIT_PASS;
 
 error:
-	if (quickload_data)
-		free(quickload_data);
 	return IMAGE_INIT_FAIL;
 }
 
@@ -2527,7 +2513,7 @@ void spectrum_setup_scr(running_machine &machine, UINT8 *quickdata, UINT32 quick
 	for (i = 0; i < quicksize; i++)
 		space.write_byte(i + BASE_RAM, quickdata[i]);
 
-	log_quickload(quicksize == SCR_SIZE ? "SCREEN$" : "SCREEN$ (Mono)", BASE_RAM, quicksize, 0, EXEC_NA);
+	log_quickload(machine, quicksize == SCR_SIZE ? "SCREEN$" : "SCREEN$ (Mono)", BASE_RAM, quicksize, 0, EXEC_NA);
 }
 
 /*******************************************************************
@@ -2576,5 +2562,5 @@ void spectrum_setup_raw(running_machine &machine, UINT8 *quickdata, UINT32 quick
 	spectrum_border_update(machine, data);
 	logerror("Border color:%02X\n", data);
 
-	log_quickload("BYTES", start, len, 0, EXEC_NA);
+	log_quickload(machine, "BYTES", start, len, 0, EXEC_NA);
 }

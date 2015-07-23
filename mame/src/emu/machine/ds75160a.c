@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     National Semiconductor DS75160A IEEE-488 GPIB Transceiver emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -28,7 +27,7 @@ const device_type DS75160A = &device_creator<ds75160a_device>;
 //-------------------------------------------------
 
 ds75160a_device::ds75160a_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, DS75160A, "DS75160A", tag, owner, clock),
+	: device_t(mconfig, DS75160A, "DS75160A", tag, owner, clock, "ds75160a", __FILE__),
 		m_read(*this),
 		m_write(*this),
 		m_data(0xff),

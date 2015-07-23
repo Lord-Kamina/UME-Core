@@ -1,12 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     crsshair.c
 
     Crosshair handling.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
-
 ***************************************************************************/
 
 #include "emu.h"
@@ -38,7 +36,7 @@ struct crosshair_global
 	UINT8               visible[MAX_PLAYERS];   /* visibility per player */
 	bitmap_argb32 *     bitmap[MAX_PLAYERS];    /* bitmap per player */
 	render_texture *    texture[MAX_PLAYERS];   /* texture per player */
-	device_t *screen[MAX_PLAYERS];  /* the screen on which this player's crosshair is drawn */
+	screen_device *     screen[MAX_PLAYERS];    /* the screen on which this player's crosshair is drawn */
 	float               x[MAX_PLAYERS];         /* current X position */
 	float               y[MAX_PLAYERS];         /* current Y position */
 	float               last_x[MAX_PLAYERS];    /* last X position */
@@ -116,13 +114,13 @@ static const UINT8 crosshair_raw_top[] =
 /* per-player colors */
 static const rgb_t crosshair_colors[] =
 {
-	MAKE_RGB(0x40,0x40,0xff),
-	MAKE_RGB(0xff,0x40,0x40),
-	MAKE_RGB(0x40,0xff,0x40),
-	MAKE_RGB(0xff,0xff,0x40),
-	MAKE_RGB(0xff,0x40,0xff),
-	MAKE_RGB(0x40,0xff,0xff),
-	MAKE_RGB(0xff,0xff,0xff)
+	rgb_t(0x40,0x40,0xff),
+	rgb_t(0xff,0x40,0x40),
+	rgb_t(0x40,0xff,0x40),
+	rgb_t(0xff,0xff,0x40),
+	rgb_t(0xff,0x40,0xff),
+	rgb_t(0x40,0xff,0xff),
+	rgb_t(0xff,0xff,0xff)
 };
 
 
@@ -154,9 +152,10 @@ static void create_bitmap(running_machine &machine, int player)
 	rgb_t color = crosshair_colors[player];
 
 	/* if we have a bitmap and texture for this player, kill it */
-	if (global.bitmap[player] == NULL)
+	if (global.bitmap[player] == NULL) {
 		global.bitmap[player] = global_alloc(bitmap_argb32);
-	machine.render().texture_free(global.texture[player]);
+		global.texture[player] = machine.render().texture_alloc(render_texture::hq_scale);
+	}
 
 	emu_file crossfile(machine.options().crosshair_path(), OPEN_FLAG_READ);
 	if (global.name[player][0] != 0)
@@ -181,7 +180,7 @@ static void create_bitmap(running_machine &machine, int player)
 	{
 		/* allocate a blank bitmap to start with */
 		global.bitmap[player]->allocate(CROSSHAIR_RAW_SIZE, CROSSHAIR_RAW_SIZE);
-		global.bitmap[player]->fill(MAKE_ARGB(0x00,0xff,0xff,0xff));
+		global.bitmap[player]->fill(rgb_t(0x00,0xff,0xff,0xff));
 
 		/* extract the raw source data to it */
 		for (y = 0; y < CROSSHAIR_RAW_SIZE / 2; y++)
@@ -193,12 +192,11 @@ static void create_bitmap(running_machine &machine, int player)
 			/* extract to two rows simultaneously */
 			for (x = 0; x < CROSSHAIR_RAW_SIZE; x++)
 				if ((crosshair_raw_top[y * CROSSHAIR_RAW_ROWBYTES + x / 8] << (x % 8)) & 0x80)
-					dest0[x] = dest1[x] = MAKE_ARGB(0xff,0x00,0x00,0x00) | color;
+					dest0[x] = dest1[x] = rgb_t(0xff,0x00,0x00,0x00) | color;
 		}
 	}
 
-	/* create a texture to reference the bitmap */
-	global.texture[player] = machine.render().texture_alloc(render_texture::hq_scale);
+	/* reference the new bitmap */
 	global.texture[player]->set_bitmap(*global.bitmap[player], global.bitmap[player]->cliprect(), TEXFORMAT_ARGB32);
 }
 
@@ -235,7 +233,7 @@ void crosshair_init(running_machine &machine)
 				global.visible[player] = (CROSSHAIR_VISIBILITY_DEFAULT == CROSSHAIR_VISIBILITY_OFF) ? FALSE : TRUE;
 
 				/* for now, use the main screen */
-				global.screen[player] = machine.primary_screen;
+				global.screen[player] = machine.first_screen();
 
 				create_bitmap(machine, player);
 			}
@@ -245,8 +243,8 @@ void crosshair_init(running_machine &machine)
 		config_register(machine, "crosshairs", config_saveload_delegate(FUNC(crosshair_load), &machine), config_saveload_delegate(FUNC(crosshair_save), &machine));
 
 	/* register the animation callback */
-	if (machine.primary_screen != NULL)
-		machine.primary_screen->register_vblank_callback(vblank_state_delegate(FUNC(animate), &machine));
+	if (machine.first_screen() != NULL)
+		machine.first_screen()->register_vblank_callback(vblank_state_delegate(FUNC(animate), &machine));
 }
 
 
@@ -303,8 +301,6 @@ void crosshair_get_user_settings(running_machine &machine, UINT8 player, crossha
 
 void crosshair_set_user_settings(running_machine &machine, UINT8 player, crosshair_user_settings *settings)
 {
-	int changed = FALSE;
-
 	global.auto_time = settings->auto_time;
 	global.used[player] = settings->used;
 	global.mode[player] = settings->mode;
@@ -314,9 +310,9 @@ void crosshair_set_user_settings(running_machine &machine, UINT8 player, crossha
 	global.visible[player] = (settings->mode == CROSSHAIR_VISIBILITY_ON) ? TRUE : FALSE;
 
 	/* update bitmap if name has changed */
-	changed = strcmp(settings->name, global.name[player]);
+	int changed = strcmp(settings->name, global.name[player]);
 	strcpy(global.name[player], settings->name);
-	if (changed)
+	if (changed != 0)
 		create_bitmap(machine, player);
 }
 
@@ -394,7 +390,7 @@ void crosshair_render(screen_device &screen)
 			/* add a quad assuming a 4:3 screen (this is not perfect) */
 			screen.container().add_quad(global.x[player] - 0.03f, global.y[player] - 0.04f,
 										global.x[player] + 0.03f, global.y[player] + 0.04f,
-										MAKE_ARGB(0xc0, global.fade, global.fade, global.fade),
+										rgb_t(0xc0, global.fade, global.fade, global.fade),
 										global.texture[player], PRIMFLAG_BLENDMODE(BLENDMODE_ALPHA));
 		}
 }
@@ -405,7 +401,7 @@ void crosshair_render(screen_device &screen)
     given player's crosshair
 -------------------------------------------------*/
 
-void crosshair_set_screen(running_machine &machine, int player, device_t *screen)
+void crosshair_set_screen(running_machine &machine, int player, screen_device *screen)
 {
 	global.screen[player] = screen;
 }

@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
 Atari Poolshark video emulation
@@ -18,34 +20,32 @@ TILE_GET_INFO_MEMBER(poolshrk_state::get_tile_info)
 
 void poolshrk_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(poolshrk_state::get_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(poolshrk_state::get_tile_info),this), TILEMAP_SCAN_ROWS,
 			8, 8, 32, 32);
 
 	m_bg_tilemap->set_transparent_pen(0);
 }
 
 
-UINT32 poolshrk_state::screen_update_poolshrk(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 poolshrk_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	int i;
-
 	m_bg_tilemap->mark_all_dirty();
 
 	bitmap.fill(0, cliprect);
 
 	/* draw sprites */
 
-	for (i = 0; i < 16; i++)
+	for (int i = 0; i < 16; i++)
 	{
 		int hpos = m_hpos_ram[i];
 		int vpos = m_vpos_ram[i];
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[0], i, (i == 0) ? 0 : 1, 0, 0,
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect, i, (i == 0) ? 0 : 1, 0, 0,
 			248 - hpos, vpos - 15, 0);
 	}
 
 	/* draw playfield */
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

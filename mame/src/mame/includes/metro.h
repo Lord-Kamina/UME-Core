@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia, David Haywood
 /*************************************************************************
 
     Metro Games
@@ -6,8 +8,9 @@
 
 #include "sound/okim6295.h"
 #include "sound/2151intf.h"
-#include "video/konicdev.h"
-#include "machine/eeprom.h"
+#include "sound/es8712.h"
+#include "video/k053936.h"
+#include "machine/eepromser.h"
 
 class metro_state : public driver_device
 {
@@ -25,6 +28,7 @@ public:
 		m_audiocpu(*this, "audiocpu"),
 		m_oki(*this, "oki"),
 		m_ymsnd(*this, "ymsnd"),
+		m_essnd(*this, "essnd"),
 		m_k053936(*this, "k053936") ,
 		m_vram_0(*this, "vram_0"),
 		m_vram_1(*this, "vram_1"),
@@ -42,7 +46,10 @@ public:
 		m_screenctrl(*this, "screenctrl"),
 		m_input_sel(*this, "input_sel"),
 		m_k053936_ram(*this, "k053936_ram"),
-		m_eeprom(*this, "eeprom")
+		m_eeprom(*this, "eeprom"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette")
 	{ }
 
 	/* devices */
@@ -50,6 +57,7 @@ public:
 	optional_device<cpu_device> m_audiocpu;
 	optional_device<okim6295_device> m_oki;
 	optional_device<device_t> m_ymsnd; // TODO set correct type
+	optional_device<es8712_device> m_essnd;
 	optional_device<k053936_device> m_k053936;
 	/* memory pointers */
 	optional_shared_ptr<UINT16> m_vram_0;
@@ -57,7 +65,6 @@ public:
 	optional_shared_ptr<UINT16> m_vram_2;
 	required_shared_ptr<UINT16> m_spriteram;
 	optional_shared_ptr<UINT16> m_tiletable;
-	UINT16 *    m_tiletable_old;
 	optional_shared_ptr<UINT16> m_blitter_regs;
 	optional_shared_ptr<UINT16> m_scroll;
 	optional_shared_ptr<UINT16> m_window;
@@ -70,8 +77,10 @@ public:
 	optional_shared_ptr<UINT16> m_input_sel;
 	optional_shared_ptr<UINT16> m_k053936_ram;
 
-	optional_device<eeprom_device> m_eeprom;
-
+	optional_device<eeprom_serial_93cxx_device> m_eeprom;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 
 	int         m_flip_screen;
 
@@ -136,7 +145,7 @@ public:
 	DECLARE_WRITE16_MEMBER(vram_0_clr_w);
 	DECLARE_WRITE16_MEMBER(vram_1_clr_w);
 	DECLARE_WRITE16_MEMBER(vram_2_clr_w);
-	DECLARE_WRITE8_MEMBER(puzzlet_portb_w);
+	DECLARE_WRITE16_MEMBER(puzzlet_portb_w);
 	DECLARE_WRITE16_MEMBER(metro_k053936_w);
 	DECLARE_WRITE16_MEMBER(metro_vram_0_w);
 	DECLARE_WRITE16_MEMBER(metro_vram_1_w);
@@ -151,7 +160,8 @@ public:
 	DECLARE_READ16_MEMBER(dokyusp_eeprom_r);
 	DECLARE_WRITE16_MEMBER(dokyusp_eeprom_bit_w);
 	DECLARE_WRITE16_MEMBER(dokyusp_eeprom_reset_w);
-	DECLARE_WRITE16_MEMBER(mouja_sound_rombank_w);
+	DECLARE_WRITE8_MEMBER(mouja_sound_rombank_w);
+	void gakusai_oki_bank_set();
 
 	// vmetal
 	DECLARE_WRITE8_MEMBER(vmetal_control_w);
@@ -169,8 +179,6 @@ public:
 	TILE_GET_INFO_MEMBER(metro_k053936_get_tile_info);
 	TILE_GET_INFO_MEMBER(metro_k053936_gstrik2_get_tile_info);
 	TILEMAP_MAPPER_MEMBER(tilemap_scan_gstrik2);
-	DECLARE_MACHINE_START(metro);
-	DECLARE_MACHINE_RESET(metro);
 	void expand_gfx1();
 	DECLARE_VIDEO_START(metro_i4100);
 	DECLARE_VIDEO_START(metro_i4220);
@@ -191,19 +199,15 @@ public:
 	IRQ_CALLBACK_MEMBER(metro_irq_callback);
 	inline UINT8 get_tile_pix( UINT16 code, UINT8 x, UINT8 y, int big, UINT16 *pix );
 	inline void metro_vram_w( offs_t offset, UINT16 data, UINT16 mem_mask, int layer, UINT16 *vram );
-	void metro_draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect );
-	void draw_layers( bitmap_ind16 &bitmap, const rectangle &cliprect, int pri, int layers_ctrl );
+	void metro_draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect );
+	void draw_layers( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int pri, int layers_ctrl );
 	inline int blt_read( const UINT8 *ROM, const int offs );
 	void metro_common(  );
-	void draw_tilemap( bitmap_ind16 &bitmap, const rectangle &cliprect, UINT32 flags, UINT32 pcode,
+	void draw_tilemap( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, UINT32 flags, UINT32 pcode,
 					int sx, int sy, int wx, int wy, int big, UINT16 *tilemapram, int layer );
-	DECLARE_WRITE_LINE_MEMBER(blzntrnd_irqhandler);
-	DECLARE_WRITE_LINE_MEMBER(ymf278b_interrupt);
+	DECLARE_READ_LINE_MEMBER(metro_rxd_r);
 
 protected:
+	virtual void machine_start();
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
 };
-
-
-/*----------- defined in video/metro.c -----------*/
-void metro_draw_sprites(running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect);

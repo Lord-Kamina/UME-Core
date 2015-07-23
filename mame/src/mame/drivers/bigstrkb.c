@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Jaleco's Big Striker (bootleg version)
 
  Driver by David Haywood
@@ -48,12 +50,12 @@ static ADDRESS_MAP_START( bigstrkb_map, AS_PROGRAM, 16, bigstrkb_state )
 
 	AM_RANGE(0x0D0000, 0x0dffff) AM_RAM  // 0xd2000 - 0xd3fff?   0xd8000?
 
-	AM_RANGE(0x0e0000, 0x0e3fff) AM_RAM_WRITE(bsb_videoram2_w) AM_SHARE("videoram2")
-	AM_RANGE(0x0e8000, 0x0ebfff) AM_RAM_WRITE(bsb_videoram3_w) AM_SHARE("videoram3")
-	AM_RANGE(0x0ec000, 0x0effff) AM_RAM_WRITE(bsb_videoram_w) AM_SHARE("videoram")
+	AM_RANGE(0x0e0000, 0x0e3fff) AM_RAM_WRITE(videoram2_w) AM_SHARE("videoram2")
+	AM_RANGE(0x0e8000, 0x0ebfff) AM_RAM_WRITE(videoram3_w) AM_SHARE("videoram3")
+	AM_RANGE(0x0ec000, 0x0effff) AM_RAM_WRITE(videoram_w) AM_SHARE("videoram")
 
 	AM_RANGE(0x0f0000, 0x0f7fff) AM_RAM
-	AM_RANGE(0x0f8000, 0x0f87ff) AM_RAM_WRITE(paletteram_RRRRGGGGBBBBRGBx_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x0f8000, 0x0f87ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x0f8800, 0x0fffff) AM_RAM
 
 	AM_RANGE(0x1f0000, 0x1f7fff) AM_RAM
@@ -200,16 +202,18 @@ static MACHINE_CONFIG_START( bigstrkb, bigstrkb_state )
 	MCFG_CPU_PROGRAM_MAP(bigstrkb_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", bigstrkb_state,  irq6_line_hold)
 
-	MCFG_GFXDECODE(bigstrkb)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", bigstrkb)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(bigstrkb_state, screen_update_bigstrkb)
+	MCFG_SCREEN_UPDATE_DRIVER(bigstrkb_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x400)
+	MCFG_PALETTE_ADD("palette", 0x400)
+	MCFG_PALETTE_FORMAT(RRRRGGGGBBBBRGBx)
 
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -290,5 +294,5 @@ ROM_END
 
 /* GAME drivers */
 
-GAME( 1992, bigstrkb, bigstrik, bigstrkb, bigstrkb, driver_device, 0, ROT0, "bootleg", "Big Striker (bootleg)", GAME_IMPERFECT_SOUND | GAME_NO_COCKTAIL )
-GAME( 1992, bigstrkba,bigstrik, bigstrkb, bigstrkb, driver_device, 0, ROT0, "bootleg", "Big Striker (bootleg w/Italian teams)", GAME_IMPERFECT_SOUND | GAME_NO_COCKTAIL )
+GAME( 1992, bigstrkb, bigstrik, bigstrkb, bigstrkb, driver_device, 0, ROT0, "bootleg", "Big Striker (bootleg)", GAME_IMPERFECT_SOUND | GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1992, bigstrkba,bigstrik, bigstrkb, bigstrkb, driver_device, 0, ROT0, "bootleg", "Big Striker (bootleg w/Italian teams)", GAME_IMPERFECT_SOUND | GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )

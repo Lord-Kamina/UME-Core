@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles, Nathan Woods
 
 /***************************************************************************
 
@@ -35,7 +37,12 @@ enum
 	V9938_MODE_UNKNOWN
 };
 
+#define MODEL_V9938 (0)
+#define MODEL_V9958 (1)
+
 #define EXPMEM_OFFSET 0x20000
+
+#define LONG_WIDTH (512 + 32)
 
 static const char *const v9938_modes[] = {
 	"TEXT 1", "MULTICOLOR", "GRAPHIC 1", "GRAPHIC 2", "GRAPHIC 3",
@@ -64,6 +71,7 @@ const device_type V9958 = &device_creator<v9958_device>;
 v99x8_device::v99x8_device(const machine_config &mconfig, device_type type, const char *name, const char *shortname, const char *tag, device_t *owner, UINT32 clock)
 :   device_t(mconfig, type, name, tag, owner, clock, shortname, __FILE__),
 	device_memory_interface(mconfig, *this),
+	device_video_interface(mconfig, *this),
 	m_space_config("vram", ENDIANNESS_BIG, 8, 18),
 	m_model(0),
 	m_offset_x(0),
@@ -75,6 +83,7 @@ v99x8_device::v99x8_device(const machine_config &mconfig, device_type type, cons
 	m_pal_write(0),
 	m_cmd_write(0),
 	m_read_ahead(0),
+	m_v9958_sp_mode(0),
 	m_address_latch(0),
 	m_vram_size(0),
 	m_int_state(0),
@@ -82,29 +91,24 @@ v99x8_device::v99x8_device(const machine_config &mconfig, device_type type, cons
 	m_scanline(0),
 	m_blink(0),
 	m_blink_count(0),
-	m_size(0),
-	m_size_old(0),
-	m_size_auto(0),
-	m_size_now(0),
 	m_mx_delta(0),
 	m_my_delta(0),
 	m_button_state(0),
-	m_screen(NULL),
-	m_screen_name(NULL),
 	m_vdp_ops_count(0),
-	m_vdp_engine(NULL)
+	m_vdp_engine(NULL),
+	m_palette(*this, "palette")
 {
 	static_set_addrmap(*this, AS_DATA, ADDRESS_MAP_NAME(memmap));
 }
 
 v9938_device::v9938_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-: v99x8_device(mconfig, V9938, "V9938", "v9938", tag, owner, clock)
+: v99x8_device(mconfig, V9938, "V9938 VDP", "v9938", tag, owner, clock)
 {
 	m_model = MODEL_V9938;
 }
 
 v9958_device::v9958_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-: v99x8_device(mconfig, V9938, "V9938", "v9938", tag, owner, clock)
+: v99x8_device(mconfig, V9938, "V9958 VDP", "v9958", tag, owner, clock)
 {
 	m_model = MODEL_V9958;
 }
@@ -157,23 +161,10 @@ int v99x8_device::interrupt ()
 	}
 
 	max = (m_cont_reg[9] & 2) ? 313 : 262;
-	if (++m_scanline == max)
+	if (++m_scanline >= max)
 		m_scanline = 0;
 
 	return m_int_state;
-}
-
-void v99x8_device::set_resolution (int i)
-{
-	if (i == RENDER_AUTO)
-	{
-		m_size_auto = 1;
-	}
-	else
-	{
-		m_size = i;
-		m_size_auto = 0;
-	}
 }
 
 /*
@@ -218,7 +209,7 @@ Palette functions
 /*
 About the colour burst registers:
 
-The color burst registers will only have effect on the composite video outputfrom
+The color burst registers will only have effect on the composite video output from
 the V9938. but the output is only NTSC (Never The Same Color ,so the
 effects are already present) . this system is not used in europe
 the european machines use a separate PAL  (Phase Alternating Line) encoder
@@ -243,13 +234,13 @@ b0 is set if b2 and b1 are set (remember, color bus is 3 bits)
 
 */
 
-PALETTE_INIT( v9938 )
+PALETTE_INIT_MEMBER(v9938_device, v9938)
 {
 	int i;
 
 	// create the full 512 colour palette
 	for (i=0;i<512;i++)
-		palette_set_color_rgb(machine, i, pal3bit(i >> 6), pal3bit(i >> 3), pal3bit(i >> 0));
+		palette.set_pen_color(i, pal3bit(i >> 6), pal3bit(i >> 3), pal3bit(i >> 0));
 }
 
 /*
@@ -263,18 +254,20 @@ to emulate this. Also it keeps the palette a reasonable size. :)
 
 */
 
-UINT16 *v99x8_device::s_pal_indYJK;
+UINT16 v99x8_device::s_pal_indYJK[0x20000];
 
-PALETTE_INIT( v9958 )
+PALETTE_INIT_MEMBER(v9958_device, v9958)
 {
 	int r,g,b,y,j,k,i,k0,j0,n;
 	UINT8 pal[19268*3];
 
 	// init v9938 512-color palette
-	PALETTE_INIT_CALL(v9938);
+	for (i=0;i<512;i++)
+		palette.set_pen_color(i, pal3bit(i >> 6), pal3bit(i >> 3), pal3bit(i >> 0));
 
-	if (v99x8_device::s_pal_indYJK == NULL)
-		v99x8_device::s_pal_indYJK = auto_alloc_array(machine,UINT16, 0x20000);
+
+	if(palette.entries() != 19780)
+		fatalerror("V9958: not enough palette, must be 19780");
 
 	// set up YJK table
 	LOG(("Building YJK table for V9958 screens, may take a while ... \n"));
@@ -291,9 +284,9 @@ PALETTE_INIT( v9958 )
 		if (g < 0) g = 0; else if (g > 31) g = 31;
 		if (b < 0) b = 0; else if (b > 31) b = 31;
 
-		r = (r << 3) | (r >> 2);
-		b = (b << 3) | (b >> 2);
-		g = (g << 3) | (g >> 2);
+		//r = (r << 3) | (r >> 2);
+		//b = (b << 3) | (b >> 2);
+		//g = (g << 3) | (g >> 2);
 		// have we seen this one before?
 		n = 0;
 		while (n < i)
@@ -312,7 +305,7 @@ PALETTE_INIT( v9958 )
 			pal[i*3+0] = r;
 			pal[i*3+1] = g;
 			pal[i*3+2] = b;
-			palette_set_color(machine, i+512, MAKE_RGB(r, g, b));
+			palette.set_pen_color(i+512, rgb_t(pal5bit(r), pal5bit(g), pal5bit(b)));
 			v99x8_device::s_pal_indYJK[y | j << 5 | k << (5 + 6)] = i + 512;
 			i++;
 		}
@@ -327,27 +320,6 @@ UINT32 v99x8_device::screen_update(screen_device &screen, bitmap_ind16 &bitmap, 
 	copybitmap(bitmap, m_bitmap, 0, 0, 0, 0, cliprect);
 	return 0;
 }
-
-/*
-    so lookups for screen 12 will look like:
-
-    int ind;
-
-    ind = (*data & 7) << 11 | (*(data + 1) & 7) << 14 |
-    (*(data + 2) & 7) << 5 | (*(data + 3) & 7) << 8;
-
-    pixel0 = s_pal_indYJK[ind | (*data >> 3) & 31];
-    pixel1 = s_pal_indYJK[ind | (*(data + 1) >> 3) & 31];
-    pixel2 = s_pal_indYJK[ind | (*(data + 2) >> 3) & 31];
-    pixel3 = s_pal_indYJK[ind | (*(data + 3) >> 3) & 31];
-
-    and for screen 11:
-
-    pixel0 = (*data) & 8 ? pal_ind16[(*data) >> 4] : s_pal_indYJK[ind | (*data >> 3) & 30];
-    pixel1 = *(data+1) & 8 ? pal_ind16[*(data+1) >> 4] : s_pal_indYJK[ind | *(data+1) >> 3) & 30];
-    pixel2 = *(data+2) & 8 ? pal_ind16[*(data+2) >> 4] : s_pal_indYJK[ind | *(data+2) >> 3) & 30];
-    pixel3 = *(data+3) & 8 ? pal_ind16[*(data+3) >> 4] : s_pal_indYJK[ind | *(data+3) >> 3) & 30];
-*/
 
 READ8_MEMBER( v99x8_device::read )
 {
@@ -567,11 +539,6 @@ void v99x8_device::register_w(UINT8 data)
 		m_cont_reg[17] = (m_cont_reg[17] + 1) & 0x3f;
 }
 
-void v99x8_device::static_set_screen(device_t &device, const char *screen_name)
-{
-	downcast<v99x8_device &>(device).m_screen_name = screen_name;
-}
-
 void v99x8_device::static_set_vram_size(device_t &device, UINT32 vram_size)
 {
 	downcast<v99x8_device &>(device).m_vram_size = vram_size;
@@ -585,18 +552,11 @@ void v99x8_device::static_set_vram_size(device_t &device, UINT32 vram_size)
 
 void v99x8_device::device_start()
 {
-	// find our devices
-	m_screen = machine().device<screen_device>(m_screen_name);
-	assert(m_screen != NULL);
-	if (!m_screen->started())
-		throw device_missing_dependencies();
-
 	m_int_callback.resolve_safe();
 	m_vdp_ops_count = 1;
 	m_vdp_engine = NULL;
 
 	m_screen->register_screen_bitmap(m_bitmap);
-	m_size_old = -1;
 
 	// Video RAM is allocated as an own address space
 	m_vram_space = &space(AS_DATA);
@@ -629,10 +589,6 @@ void v99x8_device::device_start()
 	save_item(NAME(m_scanline));
 	save_item(NAME(m_blink));
 	save_item(NAME(m_blink_count));
-	save_item(NAME(m_size));
-	save_item(NAME(m_size_old));
-	save_item(NAME(m_size_auto));
-	save_item(NAME(m_size_now));
 	save_item(NAME(m_mx_delta));
 	save_item(NAME(m_my_delta));
 	save_item(NAME(m_button_state));
@@ -870,6 +826,11 @@ void v99x8_device::register_write (int reg, int data)
 			LOG(("v9938: Attempting to write %02xh to V9958 R#%d\n", data, reg));
 			data = 0;
 		}
+		else
+		{
+			if(reg == 25)
+				m_v9958_sp_mode = data & 0x18;
+		}
 		break;
 
 	case 44:
@@ -898,67 +859,43 @@ inline bool v99x8_device::v9938_second_field()
 	return !(((m_cont_reg[9] & 0x04) && !(m_stat_reg[2] & 2)) || m_blink);
 }
 
-/*
-* This file is included for a number of different situations:
-* _Width : can be 512 + 32 or 256 + 16
-* V9938_BPP : can be 8 or 16
-*/
 
-
-template<typename _PixelType, int _Width>
-void v99x8_device::default_border(const pen_t *pens, _PixelType *ln)
+void v99x8_device::default_border(const pen_t *pens, UINT16 *ln)
 {
-	_PixelType pen;
+	UINT16 pen;
 	int i;
 
 	pen = pens[m_pal_ind16[(m_cont_reg[7]&0x0f)]];
-	i = _Width;
+	i = LONG_WIDTH;
 	while (i--) *ln++ = pen;
-
-	if (m_size_now != RENDER_HIGH) m_size_now = RENDER_LOW;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::graphic7_border(const pen_t *pens, _PixelType *ln)
+void v99x8_device::graphic7_border(const pen_t *pens, UINT16 *ln)
 {
-	_PixelType pen;
+	UINT16 pen;
 	int i;
 
 	pen = pens[m_pal_ind256[m_cont_reg[7]]];
-	i = _Width;
+	i = LONG_WIDTH;
 	while (i--) *ln++ = pen;
-
-	if (m_size_now != RENDER_HIGH) m_size_now = RENDER_LOW;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::graphic5_border(const pen_t *pens, _PixelType *ln)
+void v99x8_device::graphic5_border(const pen_t *pens, UINT16 *ln)
 {
 	int i;
-	_PixelType pen0;
-	if (_Width > 512)
-	{
-		_PixelType pen1;
+	UINT16 pen0;
+	UINT16 pen1;
 
-		pen1 = pens[m_pal_ind16[(m_cont_reg[7]&0x03)]];
-		pen0 = pens[m_pal_ind16[((m_cont_reg[7]>>2)&0x03)]];
-		i = (_Width) / 2;
-		while (i--) { *ln++ = pen0; *ln++ = pen1; }
-	}
-	else
-	{
-		pen0 = pens[m_pal_ind16[((m_cont_reg[7]>>2)&0x03)]];
-		i = _Width;
-		while (i--) *ln++ = pen0;
-	}
-	m_size_now = RENDER_HIGH;
+	pen1 = pens[m_pal_ind16[(m_cont_reg[7]&0x03)]];
+	pen0 = pens[m_pal_ind16[((m_cont_reg[7]>>2)&0x03)]];
+	i = LONG_WIDTH / 2;
+	while (i--) { *ln++ = pen0; *ln++ = pen1; }
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_text1(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_text1(const pen_t *pens, UINT16 *ln, int line)
 {
 	int pattern, x, xx, name, xxx;
-	_PixelType fg, bg, pen;
+	UINT16 fg, bg, pen;
 	int nametbl_addr, patterntbl_addr;
 
 	patterntbl_addr = m_cont_reg[4] << 11;
@@ -971,9 +908,7 @@ void v99x8_device::mode_text1(const pen_t *pens, _PixelType *ln, int line)
 
 	pen = pens[m_pal_ind16[(m_cont_reg[7]&0x0f)]];
 
-	xxx = m_offset_x + 8;
-	if (_Width > 512)
-		xxx *= 2;
+	xxx = (m_offset_x + 8) * 2;
 	while (xxx--) *ln++ = pen;
 
 	for (x=0;x<40;x++)
@@ -983,26 +918,21 @@ void v99x8_device::mode_text1(const pen_t *pens, _PixelType *ln, int line)
 		for (xx=0;xx<6;xx++)
 		{
 			*ln++ = (pattern & 0x80) ? fg : bg;
-			if (_Width > 512)
-				*ln++ = (pattern & 0x80) ? fg : bg;
+			*ln++ = (pattern & 0x80) ? fg : bg;
 			pattern <<= 1;
 		}
 		/* width height 212, characters start repeating at the bottom */
 		name = (name + 1) & 0x3ff;
 	}
 
-	xxx = (16 - m_offset_x) + 8;
-	if (_Width > 512)
-		xxx *= 2;
+	xxx = ((16 - m_offset_x) + 8) * 2;
 	while (xxx--) *ln++ = pen;
-	if (m_size_now != RENDER_HIGH) m_size_now = RENDER_LOW;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_text2(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_text2(const pen_t *pens, UINT16 *ln, int line)
 {
 	int pattern, x, charcode, name, xxx, patternmask, colourmask;
-	_PixelType fg, bg, fg0, bg0, pen;
+	UINT16 fg, bg, fg0, bg0, pen;
 	int nametbl_addr, patterntbl_addr, colourtbl_addr;
 
 	patterntbl_addr = m_cont_reg[4] << 11;
@@ -1022,10 +952,8 @@ void v99x8_device::mode_text2(const pen_t *pens, _PixelType *ln, int line)
 
 	name = (line/8)*80;
 
-	xxx = m_offset_x + 8;
+	xxx = (m_offset_x + 8) * 2;
 	pen = pens[m_pal_ind16[(m_cont_reg[7]&0x0f)]];
-	if (_Width > 512)
-		xxx *= 2;
 	while (xxx--) *ln++ = pen;
 
 	for (x=0;x<80;x++)
@@ -1039,21 +967,12 @@ void v99x8_device::mode_text2(const pen_t *pens, _PixelType *ln, int line)
 				pattern = m_vram_space->read_byte(patterntbl_addr + ((charcode * 8) +
 					((line + m_cont_reg[23]) & 7)));
 
-				if (_Width > 512)
-				{
-					*ln++ = (pattern & 0x80) ? fg0 : bg0;
-					*ln++ = (pattern & 0x40) ? fg0 : bg0;
-					*ln++ = (pattern & 0x20) ? fg0 : bg0;
-					*ln++ = (pattern & 0x10) ? fg0 : bg0;
-					*ln++ = (pattern & 0x08) ? fg0 : bg0;
-					*ln++ = (pattern & 0x04) ? fg0 : bg0;
-				}
-				else
-				{
-					*ln++ = (pattern & 0x80) ? fg0 : bg0;
-					*ln++ = (pattern & 0x20) ? fg0 : bg0;
-					*ln++ = (pattern & 0x08) ? fg0 : bg0;
-				}
+				*ln++ = (pattern & 0x80) ? fg0 : bg0;
+				*ln++ = (pattern & 0x40) ? fg0 : bg0;
+				*ln++ = (pattern & 0x20) ? fg0 : bg0;
+				*ln++ = (pattern & 0x10) ? fg0 : bg0;
+				*ln++ = (pattern & 0x08) ? fg0 : bg0;
+				*ln++ = (pattern & 0x04) ? fg0 : bg0;
 
 				name++;
 				continue;
@@ -1063,38 +982,25 @@ void v99x8_device::mode_text2(const pen_t *pens, _PixelType *ln, int line)
 		pattern = m_vram_space->read_byte(patterntbl_addr + ((charcode * 8) +
 			((line + m_cont_reg[23]) & 7)));
 
-		if (_Width > 512)
-		{
-			*ln++ = (pattern & 0x80) ? fg : bg;
-			*ln++ = (pattern & 0x40) ? fg : bg;
-			*ln++ = (pattern & 0x20) ? fg : bg;
-			*ln++ = (pattern & 0x10) ? fg : bg;
-			*ln++ = (pattern & 0x08) ? fg : bg;
-			*ln++ = (pattern & 0x04) ? fg : bg;
-		}
-		else
-		{
-			*ln++ = (pattern & 0x80) ? fg : bg;
-			*ln++ = (pattern & 0x20) ? fg : bg;
-			*ln++ = (pattern & 0x08) ? fg : bg;
-		}
+		*ln++ = (pattern & 0x80) ? fg : bg;
+		*ln++ = (pattern & 0x40) ? fg : bg;
+		*ln++ = (pattern & 0x20) ? fg : bg;
+		*ln++ = (pattern & 0x10) ? fg : bg;
+		*ln++ = (pattern & 0x08) ? fg : bg;
+		*ln++ = (pattern & 0x04) ? fg : bg;
 
 		name++;
 	}
 
-	xxx = 16  - m_offset_x + 8;
-	if (_Width > 512)
-		xxx *= 2;
+	xxx = (16 - m_offset_x + 8) * 2;
 	while (xxx--) *ln++ = pen;
-	m_size_now = RENDER_HIGH;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_multi(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_multi(const pen_t *pens, UINT16 *ln, int line)
 {
 	int nametbl_addr, patterntbl_addr, colour;
 	int name, line2, x, xx;
-	_PixelType pen, pen_bg;
+	UINT16 pen, pen_bg;
 
 	nametbl_addr = (m_cont_reg[2] << 10);
 	patterntbl_addr = (m_cont_reg[4] << 11);
@@ -1103,10 +1009,7 @@ void v99x8_device::mode_multi(const pen_t *pens, _PixelType *ln, int line)
 	name = (line2/8)*32;
 
 	pen_bg = pens[m_pal_ind16[(m_cont_reg[7]&0x0f)]];
-	if (_Width < 512)
-		xx = m_offset_x;
-	else
-		xx = m_offset_x * 2;
+	xx = m_offset_x * 2;
 	while (xx--) *ln++ = pen_bg;
 
 	for (x=0;x<32;x++)
@@ -1118,40 +1021,30 @@ void v99x8_device::mode_multi(const pen_t *pens, _PixelType *ln, int line)
 		*ln++ = pen;
 		*ln++ = pen;
 		*ln++ = pen;
-		if (_Width > 512)
-		{
-			*ln++ = pen;
-			*ln++ = pen;
-			*ln++ = pen;
-			*ln++ = pen;
-		}
+		*ln++ = pen;
+		*ln++ = pen;
+		*ln++ = pen;
+		*ln++ = pen;
 		pen = pens[m_pal_ind16[colour&15]];
 		/* eight pixels */
 		*ln++ = pen;
 		*ln++ = pen;
 		*ln++ = pen;
 		*ln++ = pen;
-		if (_Width > 512)
-		{
-			*ln++ = pen;
-			*ln++ = pen;
-			*ln++ = pen;
-			*ln++ = pen;
-		}
+		*ln++ = pen;
+		*ln++ = pen;
+		*ln++ = pen;
+		*ln++ = pen;
 		name++;
 	}
 
-	xx = 16 - m_offset_x;
-	if (_Width > 512)
-		xx *= 2;
+	xx = (16 - m_offset_x) * 2;
 	while (xx--) *ln++ = pen_bg;
-	if (m_size_now != RENDER_HIGH) m_size_now = RENDER_LOW;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_graphic1(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_graphic1(const pen_t *pens, UINT16 *ln, int line)
 {
-	_PixelType fg, bg, pen;
+	UINT16 fg, bg, pen;
 	int nametbl_addr, patterntbl_addr, colourtbl_addr;
 	int pattern, x, xx, line2, name, charcode, colour, xxx;
 
@@ -1164,10 +1057,7 @@ void v99x8_device::mode_graphic1(const pen_t *pens, _PixelType *ln, int line)
 	name = (line2/8)*32;
 
 	pen = pens[m_pal_ind16[(m_cont_reg[7]&0x0f)]];
-	if (_Width < 512)
-		xxx = m_offset_x;
-	else
-		xxx = m_offset_x * 2;
+	xxx = m_offset_x * 2;
 	while (xxx--) *ln++ = pen;
 
 	for (x=0;x<32;x++)
@@ -1181,30 +1071,25 @@ void v99x8_device::mode_graphic1(const pen_t *pens, _PixelType *ln, int line)
 		for (xx=0;xx<8;xx++)
 		{
 			*ln++ = (pattern & 0x80) ? fg : bg;
-			if (_Width > 512)
-				*ln++ = (pattern & 0x80) ? fg : bg;
+			*ln++ = (pattern & 0x80) ? fg : bg;
 			pattern <<= 1;
 		}
 		name++;
 	}
 
-	xx = 16 - m_offset_x;
-	if (_Width > 512)
-		xx *= 2;
+	xx = (16 - m_offset_x) * 2;
 	while (xx--) *ln++ = pen;
-	if (m_size_now != RENDER_HIGH) m_size_now = RENDER_LOW;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_graphic23(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_graphic23(const pen_t *pens, UINT16 *ln, int line)
 {
-	_PixelType fg, bg, pen;
+	UINT16 fg, bg, pen;
 	int nametbl_addr, patterntbl_addr, colourtbl_addr;
 	int pattern, x, xx, line2, name, charcode,
 	colour, colourmask, patternmask, xxx;
 
-	colourmask = (m_cont_reg[3] & 0x7f) * 8 | 7;
-	patternmask = (m_cont_reg[4] & 0x03) * 256 | (colourmask & 255);
+	colourmask = ((m_cont_reg[3] & 0x7f) * 8) | 7;
+	patternmask = ((m_cont_reg[4] & 0x03) * 256) | 0xff;
 
 	nametbl_addr =  (m_cont_reg[2] << 10);
 	colourtbl_addr =  ((m_cont_reg[3] & 0x80) << 6) + (m_cont_reg[10] << 14);
@@ -1214,10 +1099,7 @@ void v99x8_device::mode_graphic23(const pen_t *pens, _PixelType *ln, int line)
 	name = (line2/8)*32;
 
 	pen = pens[m_pal_ind16[(m_cont_reg[7]&0x0f)]];
-	if (_Width < 512)
-		xxx = m_offset_x;
-	else
-		xxx = m_offset_x * 2;
+	xxx = m_offset_x * 2;
 	while (xxx--) *ln++ = pen;
 
 	for (x=0;x<32;x++)
@@ -1230,26 +1112,21 @@ void v99x8_device::mode_graphic23(const pen_t *pens, _PixelType *ln, int line)
 		for (xx=0;xx<8;xx++)
 		{
 			*ln++ = (pattern & 0x80) ? fg : bg;
-			if (_Width > 512)
-				*ln++ = (pattern & 0x80) ? fg : bg;
+			*ln++ = (pattern & 0x80) ? fg : bg;
 			pattern <<= 1;
 		}
 		name++;
 	}
 
-	xx = 16 - m_offset_x;
-	if (_Width > 512)
-		xx *= 2;
+	xx = (16 - m_offset_x) * 2;
 	while (xx--) *ln++ = pen;
-	if (m_size_now != RENDER_HIGH) m_size_now = RENDER_LOW;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_graphic4(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_graphic4(const pen_t *pens, UINT16 *ln, int line)
 {
 	int nametbl_addr, colour;
 	int line2, linemask, x, xx;
-	_PixelType pen, pen_bg;
+	UINT16 pen, pen_bg;
 
 	linemask = ((m_cont_reg[2] & 0x1f) << 3) | 7;
 
@@ -1260,10 +1137,7 @@ void v99x8_device::mode_graphic4(const pen_t *pens, _PixelType *ln, int line)
 		nametbl_addr += 0x8000;
 
 	pen_bg = pens[m_pal_ind16[(m_cont_reg[7]&0x0f)]];
-	if (_Width < 512)
-		xx = m_offset_x;
-	else
-		xx = m_offset_x * 2;
+	xx = m_offset_x * 2;
 	while (xx--) *ln++ = pen_bg;
 
 	for (x=0;x<128;x++)
@@ -1271,28 +1145,22 @@ void v99x8_device::mode_graphic4(const pen_t *pens, _PixelType *ln, int line)
 		colour = m_vram_space->read_byte(nametbl_addr++);
 		pen = pens[m_pal_ind16[colour>>4]];
 		*ln++ = pen;
-		if (_Width > 512)
-			*ln++ = pen;
+		*ln++ = pen;
 		pen = pens[m_pal_ind16[colour&15]];
 		*ln++ = pen;
-		if (_Width > 512)
-			*ln++ = pen;
+		*ln++ = pen;
 	}
 
-	xx = 16 - m_offset_x;
-	if (_Width > 512)
-		xx *= 2;
+	xx = (16 - m_offset_x) * 2;
 	while (xx--) *ln++ = pen_bg;
-	if (m_size_now != RENDER_HIGH) m_size_now = RENDER_LOW;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_graphic5(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_graphic5(const pen_t *pens, UINT16 *ln, int line)
 {
 	int nametbl_addr, colour;
 	int line2, linemask, x, xx;
-	_PixelType pen_bg0[4];
-	_PixelType pen_bg1[4];
+	UINT16 pen_bg0[4];
+	UINT16 pen_bg1[4];
 
 	linemask = ((m_cont_reg[2] & 0x1f) << 3) | 7;
 
@@ -1302,70 +1170,42 @@ void v99x8_device::mode_graphic5(const pen_t *pens, _PixelType *ln, int line)
 	if ( (m_cont_reg[2] & 0x20) && v9938_second_field() )
 		nametbl_addr += 0x8000;
 
-	if (_Width > 512)
+	pen_bg1[0] = pens[m_pal_ind16[(m_cont_reg[7]&0x03)]];
+	pen_bg0[0] = pens[m_pal_ind16[((m_cont_reg[7]>>2)&0x03)]];
+
+	xx = m_offset_x;
+	while (xx--) { *ln++ = pen_bg0[0]; *ln++ = pen_bg1[0]; }
+
+	x = (m_cont_reg[8] & 0x20) ? 0 : 1;
+
+	for (;x<4;x++)
 	{
-		pen_bg1[0] = pens[m_pal_ind16[(m_cont_reg[7]&0x03)]];
-		pen_bg0[0] = pens[m_pal_ind16[((m_cont_reg[7]>>2)&0x03)]];
-
-		xx = m_offset_x;
-		while (xx--) { *ln++ = pen_bg0[0]; *ln++ = pen_bg1[0]; }
-
-		x = (m_cont_reg[8] & 0x20) ? 0 : 1;
-
-		for (;x<4;x++)
-		{
-			pen_bg0[x] = pens[m_pal_ind16[x]];
-			pen_bg1[x] = pens[m_pal_ind16[x]];
-		}
-
-		for (x=0;x<128;x++)
-		{
-			colour = m_vram_space->read_byte(nametbl_addr++);
-
-			*ln++ = pen_bg0[colour>>6];
-			*ln++ = pen_bg1[(colour>>4)&3];
-			*ln++ = pen_bg0[(colour>>2)&3];
-			*ln++ = pen_bg1[(colour&3)];
-		}
-
-		pen_bg1[0] = pens[m_pal_ind16[(m_cont_reg[7]&0x03)]];
-		pen_bg0[0] = pens[m_pal_ind16[((m_cont_reg[7]>>2)&0x03)]];
-		xx = 16 - m_offset_x;
-		while (xx--) { *ln++ = pen_bg0[0]; *ln++ = pen_bg1[0]; }
+		pen_bg0[x] = pens[m_pal_ind16[x]];
+		pen_bg1[x] = pens[m_pal_ind16[x]];
 	}
-	else
+
+	for (x=0;x<128;x++)
 	{
-		pen_bg0[0] = pens[m_pal_ind16[((m_cont_reg[7]>>2)&0x03)]];
+		colour = m_vram_space->read_byte(nametbl_addr++);
 
-		x = (m_cont_reg[8] & 0x20) ? 0 : 1;
-
-		for (;x<4;x++)
-			pen_bg0[x] = pens[m_pal_ind16[x]];
-
-		xx = m_offset_x;
-		while (xx--) *ln++ = pen_bg0[0];
-
-		for (x=0;x<128;x++)
-		{
-			colour = m_vram_space->read_byte(nametbl_addr++);
-			*ln++ = pen_bg0[colour>>6];
-			*ln++ = pen_bg0[(colour>>2)&3];
-		}
-
-		pen_bg0[0] = pens[m_pal_ind16[((m_cont_reg[7]>>2)&0x03)]];
-		xx = 16 - m_offset_x;
-		while (xx--) *ln++ = pen_bg0[0];
+		*ln++ = pen_bg0[colour>>6];
+		*ln++ = pen_bg1[(colour>>4)&3];
+		*ln++ = pen_bg0[(colour>>2)&3];
+		*ln++ = pen_bg1[(colour&3)];
 	}
-	m_size_now = RENDER_HIGH;
+
+	pen_bg1[0] = pens[m_pal_ind16[(m_cont_reg[7]&0x03)]];
+	pen_bg0[0] = pens[m_pal_ind16[((m_cont_reg[7]>>2)&0x03)]];
+	xx = 16 - m_offset_x;
+	while (xx--) { *ln++ = pen_bg0[0]; *ln++ = pen_bg1[0]; }
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_graphic6(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_graphic6(const pen_t *pens, UINT16 *ln, int line)
 {
 	UINT8 colour;
 	int line2, linemask, x, xx, nametbl_addr;
-	_PixelType pen_bg, fg0;
-	_PixelType fg1;
+	UINT16 pen_bg, fg0;
+	UINT16 fg1;
 
 	linemask = ((m_cont_reg[2] & 0x1f) << 3) | 7;
 
@@ -1376,10 +1216,7 @@ void v99x8_device::mode_graphic6(const pen_t *pens, _PixelType *ln, int line)
 		nametbl_addr += 0x10000;
 
 	pen_bg = pens[m_pal_ind16[(m_cont_reg[7]&0x0f)]];
-	if (_Width < 512)
-		xx = m_offset_x;
-	else
-		xx = m_offset_x * 2;
+	xx = m_offset_x * 2;
 	while (xx--) *ln++ = pen_bg;
 
 	if (m_cont_reg[2] & 0x40)
@@ -1389,21 +1226,11 @@ void v99x8_device::mode_graphic6(const pen_t *pens, _PixelType *ln, int line)
 			nametbl_addr++;
 			colour = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
 			fg0 = pens[m_pal_ind16[colour>>4]];
-			if (_Width < 512)
-			{
-				*ln++ = fg0; *ln++ = fg0;
-				*ln++ = fg0; *ln++ = fg0;
-				*ln++ = fg0; *ln++ = fg0;
-				*ln++ = fg0; *ln++ = fg0;
-			}
-			else
-			{
-				fg1 = pens[m_pal_ind16[colour&15]];
-				*ln++ = fg0; *ln++ = fg1; *ln++ = fg0; *ln++ = fg1;
-				*ln++ = fg0; *ln++ = fg1; *ln++ = fg0; *ln++ = fg1;
-				*ln++ = fg0; *ln++ = fg1; *ln++ = fg0; *ln++ = fg1;
-				*ln++ = fg0; *ln++ = fg1; *ln++ = fg0; *ln++ = fg1;
-			}
+			fg1 = pens[m_pal_ind16[colour&15]];
+			*ln++ = fg0; *ln++ = fg1; *ln++ = fg0; *ln++ = fg1;
+			*ln++ = fg0; *ln++ = fg1; *ln++ = fg0; *ln++ = fg1;
+			*ln++ = fg0; *ln++ = fg1; *ln++ = fg0; *ln++ = fg1;
+			*ln++ = fg0; *ln++ = fg1; *ln++ = fg0; *ln++ = fg1;
 			nametbl_addr += 7;
 		}
 	}
@@ -1413,25 +1240,20 @@ void v99x8_device::mode_graphic6(const pen_t *pens, _PixelType *ln, int line)
 		{
 			colour = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
 			*ln++ = pens[m_pal_ind16[colour>>4]];
-			if (_Width > 512)
-				*ln++ = pens[m_pal_ind16[colour&15]];
+			*ln++ = pens[m_pal_ind16[colour&15]];
 			nametbl_addr++;
 		}
 	}
 
-	xx = 16 - m_offset_x;
-	if (_Width > 512)
-		xx *= 2;
+	xx = (16 - m_offset_x) * 2;
 	while (xx--) *ln++ = pen_bg;
-	m_size_now = RENDER_HIGH;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_graphic7(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_graphic7(const pen_t *pens, UINT16 *ln, int line)
 {
 	UINT8 colour;
 	int line2, linemask, x, xx, nametbl_addr;
-	_PixelType pen, pen_bg;
+	UINT16 pen, pen_bg;
 
 	linemask = ((m_cont_reg[2] & 0x1f) << 3) | 7;
 
@@ -1442,13 +1264,76 @@ void v99x8_device::mode_graphic7(const pen_t *pens, _PixelType *ln, int line)
 		nametbl_addr += 0x10000;
 
 	pen_bg = pens[m_pal_ind256[m_cont_reg[7]]];
-	if (_Width < 512)
-		xx = m_offset_x;
-	else
-		xx = m_offset_x * 2;
+	xx = m_offset_x * 2;
 	while (xx--) *ln++ = pen_bg;
 
-	if (m_cont_reg[2] & 0x40)
+	if ((m_v9958_sp_mode & 0x18) == 0x08) // v9958 screen 12, puzzle star title screen
+	{
+		for (x=0;x<64;x++)
+		{
+			int colour[4];
+			int ind;
+
+			colour[0] = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
+			nametbl_addr++;
+			colour[1] = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
+			nametbl_addr++;
+			colour[2] = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
+			nametbl_addr++;
+			colour[3] = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
+
+			ind = (colour[0] & 7) << 11 | (colour[1] & 7) << 14 |
+			(colour[2] & 7) << 5 | (colour[3] & 7) << 8;
+
+			*ln++ = s_pal_indYJK[ind | ((colour[0] >> 3) & 31)];
+			*ln++ = s_pal_indYJK[ind | ((colour[0] >> 3) & 31)];
+
+			*ln++ = s_pal_indYJK[ind | ((colour[1] >> 3) & 31)];
+			*ln++ = s_pal_indYJK[ind | ((colour[1] >> 3) & 31)];
+
+			*ln++ = s_pal_indYJK[ind | ((colour[2] >> 3) & 31)];
+			*ln++ = s_pal_indYJK[ind | ((colour[2] >> 3) & 31)];
+
+			*ln++ = s_pal_indYJK[ind | ((colour[3] >> 3) & 31)];
+			*ln++ = s_pal_indYJK[ind | ((colour[3] >> 3) & 31)];
+
+			nametbl_addr++;
+		}
+	}
+	else if ((m_v9958_sp_mode & 0x18) == 0x18) // v9958 screen 10/11, puzzle star & sexy boom gameplay
+	{
+		for (x=0;x<64;x++)
+		{
+			int colour[4];
+			int ind;
+
+			colour[0] = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
+			nametbl_addr++;
+			colour[1] = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
+			nametbl_addr++;
+			colour[2] = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
+			nametbl_addr++;
+			colour[3] = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
+
+			ind = (colour[0] & 7) << 11 | (colour[1] & 7) << 14 |
+			(colour[2] & 7) << 5 | (colour[3] & 7) << 8;
+
+			*ln++ = colour[0] & 8 ? m_pal_ind16[colour[0] >> 4] : s_pal_indYJK[ind | ((colour[0] >> 3) & 30)];
+			*ln++ = colour[0] & 8 ? m_pal_ind16[colour[0] >> 4] : s_pal_indYJK[ind | ((colour[0] >> 3) & 30)];
+
+			*ln++ = colour[1] & 8 ? m_pal_ind16[colour[1] >> 4] : s_pal_indYJK[ind | ((colour[1] >> 3) & 30)];
+			*ln++ = colour[1] & 8 ? m_pal_ind16[colour[1] >> 4] : s_pal_indYJK[ind | ((colour[1] >> 3) & 30)];
+
+			*ln++ = colour[2] & 8 ? m_pal_ind16[colour[2] >> 4] : s_pal_indYJK[ind | ((colour[2] >> 3) & 30)];
+			*ln++ = colour[2] & 8 ? m_pal_ind16[colour[2] >> 4] : s_pal_indYJK[ind | ((colour[2] >> 3) & 30)];
+
+			*ln++ = colour[3] & 8 ? m_pal_ind16[colour[3] >> 4] : s_pal_indYJK[ind | ((colour[3] >> 3) & 30)];
+			*ln++ = colour[3] & 8 ? m_pal_ind16[colour[3] >> 4] : s_pal_indYJK[ind | ((colour[3] >> 3) & 30)];
+
+			nametbl_addr++;
+		}
+	}
+	else if (m_cont_reg[2] & 0x40)
 	{
 		for (x=0;x<32;x++)
 		{
@@ -1459,13 +1344,10 @@ void v99x8_device::mode_graphic7(const pen_t *pens, _PixelType *ln, int line)
 			*ln++ = pen; *ln++ = pen;
 			*ln++ = pen; *ln++ = pen;
 			*ln++ = pen; *ln++ = pen;
-			if (_Width > 512)
-			{
-				*ln++ = pen; *ln++ = pen;
-				*ln++ = pen; *ln++ = pen;
-				*ln++ = pen; *ln++ = pen;
-				*ln++ = pen; *ln++ = pen;
-			}
+			*ln++ = pen; *ln++ = pen;
+			*ln++ = pen; *ln++ = pen;
+			*ln++ = pen; *ln++ = pen;
+			*ln++ = pen; *ln++ = pen;
 			nametbl_addr++;
 		}
 	}
@@ -1476,134 +1358,91 @@ void v99x8_device::mode_graphic7(const pen_t *pens, _PixelType *ln, int line)
 			colour = m_vram_space->read_byte(((nametbl_addr&1) << 16) | (nametbl_addr>>1));
 			pen = pens[m_pal_ind256[colour]];
 			*ln++ = pen;
-			if (_Width > 512)
-				*ln++ = pen;
+			*ln++ = pen;
 			nametbl_addr++;
 		}
 	}
 
-	xx = 16 - m_offset_x;
-	if (_Width > 512)
-		xx *= 2;
+	xx = (16 - m_offset_x) * 2;
 	while (xx--) *ln++ = pen_bg;
-	if (m_size_now != RENDER_HIGH) m_size_now = RENDER_LOW;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::mode_unknown(const pen_t *pens, _PixelType *ln, int line)
+void v99x8_device::mode_unknown(const pen_t *pens, UINT16 *ln, int line)
 {
-	_PixelType fg, bg;
+	UINT16 fg, bg;
 	int x;
 
 	fg = pens[m_pal_ind16[m_cont_reg[7] >> 4]];
 	bg = pens[m_pal_ind16[m_cont_reg[7] & 15]];
 
-	if (_Width < 512)
-	{
-		x = m_offset_x;
-		while (x--) *ln++ = bg;
+	x = m_offset_x * 2;
+	while (x--) *ln++ = bg;
 
-		x = 256;
-		while (x--) *ln++ = fg;
+	x = 512;
+	while (x--) *ln++ = fg;
 
-		x = 16 - m_offset_x;
-		while (x--) *ln++ = bg;
-	}
-	else
-	{
-		x = m_offset_x * 2;
-		while (x--) *ln++ = bg;
-
-		x = 512;
-		while (x--) *ln++ = fg;
-
-		x = (16 - m_offset_x) * 2;
-		while (x--) *ln++ = bg;
-	}
-	if (m_size_now != RENDER_HIGH) m_size_now = RENDER_LOW;
+	x = (16 - m_offset_x) * 2;
+	while (x--) *ln++ = bg;
 }
 
-template<typename _PixelType, int _Width>
-void v99x8_device::default_draw_sprite(const pen_t *pens, _PixelType *ln, UINT8 *col)
+void v99x8_device::default_draw_sprite(const pen_t *pens, UINT16 *ln, UINT8 *col)
 {
 	int i;
-	if (_Width > 512)
-		ln += m_offset_x * 2;
-	else
-		ln += m_offset_x;
+	ln += m_offset_x * 2;
 
 	for (i=0;i<256;i++)
 	{
 		if (col[i] & 0x80)
 		{
 			*ln++ = pens[m_pal_ind16[col[i]&0x0f]];
-			if (_Width > 512)
-				*ln++ = pens[m_pal_ind16[col[i]&0x0f]];
+			*ln++ = pens[m_pal_ind16[col[i]&0x0f]];
 		}
 		else
 		{
-			if (_Width > 512)
-				ln += 2;
-			else
-				ln++;
+			ln += 2;
 		}
 	}
 }
-template<typename _PixelType, int _Width>
-void v99x8_device::graphic5_draw_sprite(const pen_t *pens, _PixelType *ln, UINT8 *col)
+
+void v99x8_device::graphic5_draw_sprite(const pen_t *pens, UINT16 *ln, UINT8 *col)
 {
 	int i;
-	if (_Width > 512)
-		ln += m_offset_x * 2;
-	else
-		ln += m_offset_x;
+	ln += m_offset_x * 2;
 
 	for (i=0;i<256;i++)
 	{
 		if (col[i] & 0x80)
 		{
 			*ln++ = pens[m_pal_ind16[(col[i]>>2)&0x03]];
-			if (_Width > 512)
-				*ln++ = pens[m_pal_ind16[col[i]&0x03]];
+			*ln++ = pens[m_pal_ind16[col[i]&0x03]];
 		}
 		else
 		{
-			if (_Width > 512)
-				ln += 2;
-			else
-				ln++;
+			ln += 2;
 		}
 	}
 }
 
 
-template<typename _PixelType, int _Width>
-void v99x8_device::graphic7_draw_sprite(const pen_t *pens, _PixelType *ln, UINT8 *col)
+void v99x8_device::graphic7_draw_sprite(const pen_t *pens, UINT16 *ln, UINT8 *col)
 {
 	static const UINT16 g7_ind16[16] = {
 		0, 2, 192, 194, 48, 50, 240, 242,
 	482, 7, 448, 455, 56, 63, 504, 511  };
 	int i;
 
-	if (_Width > 512)
-		ln += m_offset_x * 2;
-	else
-		ln += m_offset_x;
+	ln += m_offset_x * 2;
 
 	for (i=0;i<256;i++)
 	{
 		if (col[i] & 0x80)
 		{
 			*ln++ = pens[g7_ind16[col[i]&0x0f]];
-			if (_Width > 512)
-				*ln++ = pens[g7_ind16[col[i]&0x0f]];
+			*ln++ = pens[g7_ind16[col[i]&0x0f]];
 		}
 		else
 		{
-			if (_Width > 512)
-				ln += 2;
-			else
-				ln++;
+			ln += 2;
 		}
 	}
 }
@@ -1859,98 +1698,74 @@ void v99x8_device::sprite_mode2 (int line, UINT8 *col)
 		m_stat_reg[0] = (m_stat_reg[0] & 0xa0) | p;
 }
 
-#define SHORT_WIDTH (256 + 16)
-#define LONG_WIDTH (512 + 32)
 
 const v99x8_device::v99x8_mode v99x8_device::s_modes[] = {
 	{ 0x02,
-		&v99x8_device::mode_text1<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_text1<UINT16, SHORT_WIDTH>,
-		&v99x8_device::default_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::default_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_text1,
+		&v99x8_device::default_border,
 		NULL,
-		NULL,
-	NULL },
+		NULL
+	},
 	{ 0x01,
-		&v99x8_device::mode_multi<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_multi<UINT16, SHORT_WIDTH>,
-		&v99x8_device::default_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::default_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_multi,
+		&v99x8_device::default_border,
 		&v99x8_device::sprite_mode1,
-		&v99x8_device::default_draw_sprite<UINT16, LONG_WIDTH>,
-	&v99x8_device::default_draw_sprite<UINT16, SHORT_WIDTH> },
+		&v99x8_device::default_draw_sprite
+	},
 	{ 0x00,
-		&v99x8_device::mode_graphic1<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_graphic1<UINT16, SHORT_WIDTH>,
-		&v99x8_device::default_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::default_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_graphic1,
+		&v99x8_device::default_border,
 		&v99x8_device::sprite_mode1,
-		&v99x8_device::default_draw_sprite<UINT16, LONG_WIDTH>,
-	&v99x8_device::default_draw_sprite<UINT16, SHORT_WIDTH> },
+		&v99x8_device::default_draw_sprite
+	},
 	{ 0x04,
-		&v99x8_device::mode_graphic23<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_graphic23<UINT16, SHORT_WIDTH>,
-		&v99x8_device::default_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::default_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_graphic23,
+		&v99x8_device::default_border,
 		&v99x8_device::sprite_mode1,
-		&v99x8_device::default_draw_sprite<UINT16, LONG_WIDTH>,
-	&v99x8_device::default_draw_sprite<UINT16, SHORT_WIDTH> },
+		&v99x8_device::default_draw_sprite
+	},
 	{ 0x08,
-		&v99x8_device::mode_graphic23<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_graphic23<UINT16, SHORT_WIDTH>,
-		&v99x8_device::default_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::default_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_graphic23,
+		&v99x8_device::default_border,
 		&v99x8_device::sprite_mode2,
-		&v99x8_device::default_draw_sprite<UINT16, LONG_WIDTH>,
-	&v99x8_device::default_draw_sprite<UINT16, SHORT_WIDTH> },
+		&v99x8_device::default_draw_sprite
+	},
 	{ 0x0c,
-		&v99x8_device::mode_graphic4<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_graphic4<UINT16, SHORT_WIDTH>,
-		&v99x8_device::default_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::default_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_graphic4,
+		&v99x8_device::default_border,
 		&v99x8_device::sprite_mode2,
-		&v99x8_device::default_draw_sprite<UINT16, LONG_WIDTH>,
-	&v99x8_device::default_draw_sprite<UINT16, SHORT_WIDTH> },
+		&v99x8_device::default_draw_sprite
+	},
 	{ 0x10,
-		&v99x8_device::mode_graphic5<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_graphic5<UINT16, SHORT_WIDTH>,
-		&v99x8_device::graphic5_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::graphic5_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_graphic5,
+		&v99x8_device::graphic5_border,
 		&v99x8_device::sprite_mode2,
-		&v99x8_device::graphic5_draw_sprite<UINT16, LONG_WIDTH>,
-	&v99x8_device::graphic5_draw_sprite<UINT16, SHORT_WIDTH> },
+		&v99x8_device::graphic5_draw_sprite
+	},
 	{ 0x14,
-		&v99x8_device::mode_graphic6<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_graphic6<UINT16, SHORT_WIDTH>,
-		&v99x8_device::default_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::default_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_graphic6,
+		&v99x8_device::default_border,
 		&v99x8_device::sprite_mode2,
-		&v99x8_device::default_draw_sprite<UINT16, LONG_WIDTH>,
-	&v99x8_device::default_draw_sprite<UINT16, SHORT_WIDTH> },
+		&v99x8_device::default_draw_sprite
+	},
 	{ 0x1c,
-		&v99x8_device::mode_graphic7<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_graphic7<UINT16, SHORT_WIDTH>,
-		&v99x8_device::graphic7_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::graphic7_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_graphic7,
+		&v99x8_device::graphic7_border,
 		&v99x8_device::sprite_mode2,
-		&v99x8_device::graphic7_draw_sprite<UINT16, LONG_WIDTH>,
-	&v99x8_device::graphic7_draw_sprite<UINT16, SHORT_WIDTH> },
+		&v99x8_device::graphic7_draw_sprite
+	},
 	{ 0x0a,
-		&v99x8_device::mode_text2<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_text2<UINT16, SHORT_WIDTH>,
-		&v99x8_device::default_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::default_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_text2,
+		&v99x8_device::default_border,
 		NULL,
-		NULL,
-	NULL },
+		NULL
+	},
 	{ 0xff,
-		&v99x8_device::mode_unknown<UINT16, LONG_WIDTH>,
-		&v99x8_device::mode_unknown<UINT16, SHORT_WIDTH>,
-		&v99x8_device::default_border<UINT16, LONG_WIDTH>,
-		&v99x8_device::default_border<UINT16, SHORT_WIDTH>,
+		&v99x8_device::mode_unknown,
+		&v99x8_device::default_border,
 		NULL,
-		NULL,
-	NULL },
+		NULL
+	}
 };
 
 void v99x8_device::set_mode()
@@ -1967,57 +1782,34 @@ void v99x8_device::set_mode()
 
 void v99x8_device::refresh_16(int line)
 {
-	const pen_t *pens = machine().pens;
-	int i, double_lines;
+	const pen_t *pens = m_palette->pens();
+	bool double_lines = false;
 	UINT8 col[256];
 	UINT16 *ln, *ln2 = NULL;
 
-	double_lines = 0;
-
-	if (m_size == RENDER_HIGH)
+	if (m_cont_reg[9] & 0x08)
 	{
-		if (m_cont_reg[9] & 0x08)
-		{
-			m_size_now = RENDER_HIGH;
-			ln = &m_bitmap.pix16(line*2+((m_stat_reg[2]>>1)&1));
-		}
-		else
-		{
-			ln = &m_bitmap.pix16(line*2);
-			ln2 = &m_bitmap.pix16(line*2+1);
-			double_lines = 1;
-		}
+		ln = &m_bitmap.pix16(line*2+((m_stat_reg[2]>>1)&1));
 	}
 	else
-		ln = &m_bitmap.pix16(line);
+	{
+		ln = &m_bitmap.pix16(line*2);
+		ln2 = &m_bitmap.pix16(line*2+1);
+		double_lines = true;
+	}
 
 	if ( !(m_cont_reg[1] & 0x40) || (m_stat_reg[2] & 0x40) )
 	{
-		if (m_size == RENDER_HIGH)
-			(this->*s_modes[m_mode].border_16) (pens, ln);
-		else
-			(this->*s_modes[m_mode].border_16s) (pens, ln);
+		(this->*s_modes[m_mode].border_16) (pens, ln);
 	}
 	else
 	{
-		i = (line - m_offset_y) & 255;
-		if (m_size == RENDER_HIGH)
+		int i = (line - m_offset_y) & 255;
+		(this->*s_modes[m_mode].visible_16) (pens, ln, i);
+		if (s_modes[m_mode].sprites)
 		{
-			(this->*s_modes[m_mode].visible_16) (pens, ln, i);
-			if (s_modes[m_mode].sprites)
-			{
-				(this->*s_modes[m_mode].sprites) (i, col);
-				(this->*s_modes[m_mode].draw_sprite_16) (pens, ln, col);
-			}
-		}
-		else
-		{
-			(this->*s_modes[m_mode].visible_16s) (pens, ln, i);
-			if (s_modes[m_mode].sprites)
-			{
-				(this->*s_modes[m_mode].sprites) (i, col);
-				(this->*s_modes[m_mode].draw_sprite_16s) (pens, ln, col);
-			}
+			(this->*s_modes[m_mode].sprites) (i, col);
+			(this->*s_modes[m_mode].draw_sprite_16) (pens, ln, col);
 		}
 	}
 
@@ -2157,7 +1949,7 @@ void v99x8_device::interrupt_start_vblank()
 	#if 0
 	if (machine.input().code_pressed (KEYCODE_D) )
 	{
-		for (i=0;i<24;i++) mame_printf_debug ("R#%d = %02x\n", i, m_cont_reg[i]);
+		for (i=0;i<24;i++) osd_printf_debug ("R#%d = %02x\n", i, m_cont_reg[i]);
 	}
 	#endif
 
@@ -2183,22 +1975,6 @@ void v99x8_device::interrupt_start_vblank()
 				m_blink_count = (m_cont_reg[13] & 0x0f) * 10;
 		}
 	}
-
-	// check screen rendering size
-	if (m_size_auto && (m_size_now >= 0) && (m_size != m_size_now) )
-		m_size = m_size_now;
-
-	if (m_size != m_size_old)
-	{
-		if (m_size == RENDER_HIGH)
-			m_screen->set_visible_area (0, 512 + 32 - 1, 0, 424 + 56 - 1);
-		else
-			m_screen->set_visible_area (0, 256 + 16 - 1, 0, 212 + 28 - 1);
-
-		m_size_old = m_size;
-	}
-
-	m_size_now = -1;
 }
 
 /***************************************************************************
@@ -3184,7 +2960,7 @@ UINT8 v99x8_device::command_unit_w(UINT8 Op)
 	// Start execution if we still have time slices
 	if(m_vdp_engine&&(m_vdp_ops_count>0)) (this->*m_vdp_engine)();
 
-	// Operation successfull initiated
+	// Operation successfully initiated
 	return(1);
 }
 
@@ -3203,4 +2979,34 @@ void v99x8_device::update_command()
 		m_vdp_ops_count=13662;
 		if(m_vdp_engine) (this->*m_vdp_engine)();
 	}
+}
+
+static MACHINE_CONFIG_FRAGMENT( v9938 )
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INIT_OWNER(v9938_device, v9938)
+MACHINE_CONFIG_END
+
+//-------------------------------------------------
+//  machine_config_additions - return a pointer to
+//  the device's machine fragment
+//-------------------------------------------------
+
+machine_config_constructor v9938_device::device_mconfig_additions() const
+{
+	return MACHINE_CONFIG_NAME( v9938 );
+}
+
+static MACHINE_CONFIG_FRAGMENT( v9958 )
+	MCFG_PALETTE_ADD("palette", 19780)
+	MCFG_PALETTE_INIT_OWNER(v9958_device, v9958)
+MACHINE_CONFIG_END
+
+//-------------------------------------------------
+//  machine_config_additions - return a pointer to
+//  the device's machine fragment
+//-------------------------------------------------
+
+machine_config_constructor v9958_device::device_mconfig_additions() const
+{
+	return MACHINE_CONFIG_NAME( v9958 );
 }

@@ -1,5 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #include "video/vsystem_spr.h"
 #include "video/vsystem_spr2.h"
+#include "video/k053936.h"
 
 class f1gp_state : public driver_device
 {
@@ -18,12 +21,15 @@ public:
 		m_spriteram(*this, "spriteram"),
 		m_fgregs(*this, "fgregs"),
 		m_rozregs(*this, "rozregs"),
+		m_z80bank(*this, "bank1"),
 		m_spr_old(*this, "vsystem_spr_old"),
 		m_spr_old2(*this, "vsystem_spr_ol2"),
 		m_spr(*this, "vsystem_spr"),
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
 		m_audiocpu(*this, "audiocpu"),
 		m_k053936(*this, "k053936"),
-		m_maincpu(*this, "maincpu") { }
+		m_palette(*this, "palette")  { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_sharedram;
@@ -38,6 +44,8 @@ public:
 	optional_shared_ptr<UINT16> m_spriteram;
 	optional_shared_ptr<UINT16> m_fgregs;
 	optional_shared_ptr<UINT16> m_rozregs;
+
+	optional_memory_bank m_z80bank;
 
 	/* devices referenced above */
 	optional_device<vsystem_spr2_device> m_spr_old; // f1gp
@@ -63,12 +71,12 @@ public:
 	int       m_pending_command;
 
 	/* devices */
+	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
 	optional_device<cpu_device> m_audiocpu;
 	optional_device<k053936_device> m_k053936;
-	DECLARE_READ16_MEMBER(sharedram_r);
-	DECLARE_WRITE16_MEMBER(sharedram_w);
-	DECLARE_READ16_MEMBER(extrarom_r);
-	DECLARE_READ16_MEMBER(extrarom2_r);
+	required_device<palette_device> m_palette;
+
 	DECLARE_WRITE8_MEMBER(f1gp_sh_bankswitch_w);
 	DECLARE_WRITE16_MEMBER(sound_command_w);
 	DECLARE_READ16_MEMBER(command_pending_r);
@@ -94,7 +102,6 @@ public:
 	UINT32 screen_update_f1gp(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_f1gpb(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_f1gp2(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	void f1gpb_draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect );
+	void f1gpb_draw_sprites( screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect );
 	DECLARE_WRITE_LINE_MEMBER(irqhandler);
-	required_device<cpu_device> m_maincpu;
 };

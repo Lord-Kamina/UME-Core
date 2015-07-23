@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 /*
  * standalone MIPS disassembler by smf
  *
@@ -164,11 +166,11 @@ int main( int argc, char *argv[] )
 				{
 					usage();
 				}
-				if( mame_stricmp( argv[ i ], "bin" ) == 0 )
+				if( core_stricmp( argv[ i ], "bin" ) == 0 )
 				{
 					format = FORMAT_BIN;
 				}
-				else if( mame_stricmp( argv[ i ], "psx" ) == 0 )
+				else if( core_stricmp( argv[ i ], "psx" ) == 0 )
 				{
 					format = FORMAT_PSX;
 				}
@@ -183,15 +185,15 @@ int main( int argc, char *argv[] )
 				{
 					usage();
 				}
-				if( mame_stricmp( argv[ i ], "psx" ) == 0 )
+				if( core_stricmp( argv[ i ], "psx" ) == 0 )
 				{
 					cpu = CPU_PSX;
 				}
-				else if( mame_stricmp( argv[ i ], "r3000" ) == 0 )
+				else if( core_stricmp( argv[ i ], "r3000" ) == 0 )
 				{
 					cpu = CPU_R3000;
 				}
-				else if( mame_stricmp( argv[ i ], "r4000" ) == 0 )
+				else if( core_stricmp( argv[ i ], "r4000" ) == 0 )
 				{
 					cpu = CPU_R4000;
 				}
@@ -330,9 +332,8 @@ int main( int argc, char *argv[] )
 	return 0;
 }
 
-void *malloc_file_line(size_t size, const char *file, int line)
+void *osd_malloc_array(size_t size)
 {
-	// allocate the memory and fail if we can't
 	return osd_malloc(size);
 }
 

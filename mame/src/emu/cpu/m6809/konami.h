@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /*********************************************************************
 
     konami.h
@@ -18,9 +20,9 @@
 //  TYPE DEFINITIONS
 //**************************************************************************
 
-// callbacks
-typedef void (*konami_set_lines_func)(device_t *device, int lines);
-#define KONAMI_SETLINES_CALLBACK(name) void name(device_t *device, int lines)
+#define MCFG_KONAMICPU_LINE_CB(_devcb) \
+	devcb = &konami_cpu_device::set_line_callback(*device, DEVCB_##_devcb);
+
 
 // device type definition
 extern const device_type KONAMI;
@@ -34,7 +36,7 @@ public:
 	konami_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
 	// configuration
-	void configure_set_lines(konami_set_lines_func func) { m_set_lines = func; }
+	template<class _Object> static devcb_base &set_line_callback(device_t &device, _Object object) { return downcast<konami_cpu_device &>(device).m_set_lines.set_callback(object); }
 
 protected:
 	// device-level overrides
@@ -50,7 +52,7 @@ private:
 	typedef m6809_base_device super;
 
 	// incidentals
-	konami_set_lines_func m_set_lines;
+	devcb_write8 m_set_lines;
 
 	// konami-specific addressing modes
 	UINT16 &ireg();
@@ -73,14 +75,7 @@ private:
 	void execute_one();
 };
 
-#define KONAMI_IRQ_LINE 0   /* IRQ line number */
-#define KONAMI_FIRQ_LINE 1   /* FIRQ line number */
-
-
-//**************************************************************************
-//  FUNCTIONS
-//**************************************************************************
-
-void konami_configure_set_lines(device_t *device, konami_set_lines_func func);
+#define KONAMI_IRQ_LINE  M6809_IRQ_LINE   /* 0 - IRQ line number */
+#define KONAMI_FIRQ_LINE M6809_FIRQ_LINE  /* 1 - FIRQ line number */
 
 #endif /* __KONAMI_CPU_H__ */

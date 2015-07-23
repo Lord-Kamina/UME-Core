@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Sega G-80 raster hardware
@@ -109,8 +111,6 @@
 #include "sound/dac.h"
 #include "sound/sn76496.h"
 #include "sound/samples.h"
-#include "sound/sp0250.h"
-#include "audio/segasnd.h"
 #include "machine/i8255.h"
 #include "machine/segacrpt.h"
 #include "machine/segag80.h"
@@ -186,7 +186,7 @@ WRITE8_MEMBER(segag80r_state::vidram_w){ segag80r_videoram_w(space, decrypt_offs
 WRITE8_MEMBER(segag80r_state::monsterb_vidram_w){ monsterb_videoram_w(space, decrypt_offset(space, offset), data); }
 WRITE8_MEMBER(segag80r_state::pignewt_vidram_w){ pignewt_videoram_w(space, decrypt_offset(space, offset), data); }
 WRITE8_MEMBER(segag80r_state::sindbadm_vidram_w){ sindbadm_videoram_w(space, decrypt_offset(space, offset), data); }
-WRITE8_MEMBER(segag80r_state::usb_ram_w){ device_t *device = machine().device("usbsnd"); sega_usb_ram_w(device, space, decrypt_offset(m_maincpu->space(AS_PROGRAM), offset), data); }
+WRITE8_MEMBER(segag80r_state::usb_ram_w){ m_usbsnd->ram_w(space, decrypt_offset(m_maincpu->space(AS_PROGRAM), offset), data); }
 
 
 
@@ -292,7 +292,7 @@ WRITE8_MEMBER(segag80r_state::sindbadm_soundport_w)
 WRITE8_MEMBER(segag80r_state::sindbadm_misc_w)
 {
 	coin_counter_w(machine(), 0, data & 0x02);
-//  mame_printf_debug("Unknown = %02X\n", data);
+//  osd_printf_debug("Unknown = %02X\n", data);
 }
 
 
@@ -307,24 +307,6 @@ WRITE8_MEMBER(segag80r_state::sindbadm_sn2_SN76496_w)
 }
 
 
-
-/*************************************
- *
- *  PPI 8255 configurations
- *
- *************************************/
-
-static I8255A_INTERFACE( sindbadm_ppi_intf )
-{
-	DEVCB_NULL,                             /* Port A read */
-	DEVCB_DRIVER_MEMBER(segag80r_state,sindbadm_soundport_w),   /* Port A write */
-	DEVCB_INPUT_PORT("FC"),                 /* Port B read */
-	DEVCB_NULL,                             /* Port B write */
-	DEVCB_NULL,                             /* Port C read */
-	DEVCB_DRIVER_MEMBER(segag80r_state,sindbadm_misc_w)         /* Port C write */
-};
-
-
 /*************************************
  *
  *  Main CPU memory handlers
@@ -336,6 +318,13 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, segag80r_state )
 	AM_RANGE(0x0000, 0x07ff) AM_ROM     /* CPU board ROM */
 	AM_RANGE(0x0800, 0x7fff) AM_ROM     /* PROM board ROM area */
 	AM_RANGE(0x8000, 0xbfff) AM_ROM     /* PROM board ROM area */
+	AM_RANGE(0xc800, 0xcfff) AM_RAM_WRITE(mainram_w) AM_SHARE("mainram")
+	AM_RANGE(0xe000, 0xffff) AM_RAM_WRITE(vidram_w) AM_SHARE("videoram")
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 8, segag80r_state )
+	AM_RANGE(0x0000, 0x7fff) AM_ROM AM_SHARE("decrypted_opcodes")
+	AM_RANGE(0x8000, 0xbfff) AM_ROM AM_REGION("maincpu", 0x8000)
 	AM_RANGE(0xc800, 0xcfff) AM_RAM_WRITE(mainram_w) AM_SHARE("mainram")
 	AM_RANGE(0xe000, 0xffff) AM_RAM_WRITE(vidram_w) AM_SHARE("videoram")
 ADDRESS_MAP_END
@@ -814,23 +803,6 @@ GFXDECODE_END
 
 /*************************************
  *
- *  Sound interface
- *
- *************************************/
-
-
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
-
-/*************************************
- *
  *  Machine drivers
  *
  *************************************/
@@ -845,13 +817,13 @@ static MACHINE_CONFIG_START( g80r_base, segag80r_state )
 
 
 	/* video hardware */
-	MCFG_GFXDECODE(segag80r)
-	MCFG_PALETTE_LENGTH(64)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", segag80r)
+	MCFG_PALETTE_ADD("palette", 64)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(PIXEL_CLOCK, HTOTAL, HBEND, HBSTART, VTOTAL, VBEND, VBSTART)
 	MCFG_SCREEN_UPDATE_DRIVER(segag80r_state, screen_update_segag80r)
-
+	MCFG_SCREEN_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -885,10 +857,11 @@ static MACHINE_CONFIG_DERIVED( spaceod, g80r_base )
 	/* basic machine hardware */
 
 	/* background board changes */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
 	MCFG_SCREEN_MODIFY("screen")
-	MCFG_GFXDECODE(spaceod)
-	MCFG_PALETTE_LENGTH(64+64)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", spaceod)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(64+64)
 
 	/* sound boards */
 	MCFG_FRAGMENT_ADD(spaceod_sound_board)
@@ -903,24 +876,30 @@ static MACHINE_CONFIG_DERIVED( monsterb, g80r_base )
 	MCFG_CPU_IO_MAP(main_ppi8255_portmap)
 
 	/* background board changes */
-	MCFG_GFXDECODE(monsterb)
-	MCFG_PALETTE_LENGTH(64+64)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", monsterb)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(64+64)
 
 	/* sound boards */
 	MCFG_FRAGMENT_ADD(monsterb_sound_board)
 MACHINE_CONFIG_END
 
+static MACHINE_CONFIG_DERIVED( monster2, monsterb )
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
+MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( pignewt, g80r_base )
 
 	/* basic machine hardware */
 
 	/* background board changes */
-	MCFG_GFXDECODE(monsterb)
-	MCFG_PALETTE_LENGTH(64+64)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", monsterb)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(64+64)
 
 	/* sound boards */
-	MCFG_FRAGMENT_ADD(sega_universal_sound_board)
+	MCFG_SEGAUSB_ADD("usbsnd")
 MACHINE_CONFIG_END
 
 
@@ -929,13 +908,18 @@ static MACHINE_CONFIG_DERIVED( sindbadm, g80r_base )
 	/* basic machine hardware */
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_IO_MAP(sindbadm_portmap)
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", segag80r_state,  sindbadm_vblank_start)
 
-	MCFG_I8255A_ADD( "ppi8255", sindbadm_ppi_intf )
+	MCFG_DEVICE_ADD("ppi8255", I8255A, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(segag80r_state, sindbadm_soundport_w))
+	MCFG_I8255_IN_PORTB_CB(IOPORT("FC"))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(segag80r_state, sindbadm_misc_w))
 
 	/* video hardware */
-	MCFG_GFXDECODE(monsterb)
-	MCFG_PALETTE_LENGTH(64+64)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", monsterb)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(64+64)
 
 	/* sound boards */
 
@@ -946,11 +930,9 @@ static MACHINE_CONFIG_DERIVED( sindbadm, g80r_base )
 	/* sound hardware */
 	MCFG_SOUND_ADD("sn1", SN76496, SINDBADM_SOUND_CLOCK/4)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("sn2", SN76496, SINDBADM_SOUND_CLOCK/2)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 MACHINE_CONFIG_END
 
 
@@ -1415,14 +1397,14 @@ ROM_END
 
 void segag80r_state::monsterb_expand_gfx(const char *region)
 {
-	UINT8 *temp, *dest;
+	UINT8 *dest;
 	int i;
 
 	/* expand the background ROMs; A11/A12 of each ROM is independently controlled via */
 	/* banking */
 	dest = memregion(region)->base();
-	temp = auto_alloc_array(machine(), UINT8, 0x4000);
-	memcpy(temp, dest, 0x4000);
+	dynamic_buffer temp(0x4000);
+	memcpy(&temp[0], dest, 0x4000);
 
 	/* 16 effective total banks */
 	for (i = 0; i < 16; i++)
@@ -1430,7 +1412,6 @@ void segag80r_state::monsterb_expand_gfx(const char *region)
 		memcpy(&dest[0x0000 + i * 0x800], &temp[0x0000 + (i & 3) * 0x800], 0x800);
 		memcpy(&dest[0x8000 + i * 0x800], &temp[0x2000 + (i >> 2) * 0x800], 0x800);
 	}
-	auto_free(machine(), temp);
 }
 
 
@@ -1443,7 +1424,6 @@ void segag80r_state::monsterb_expand_gfx(const char *region)
 
 DRIVER_INIT_MEMBER(segag80r_state,astrob)
 {
-	device_t *speech = machine().device("segaspeech");
 	address_space &iospace = m_maincpu->space(AS_IO);
 
 	/* configure the 315-0062 security chip */
@@ -1453,11 +1433,14 @@ DRIVER_INIT_MEMBER(segag80r_state,astrob)
 	m_background_pcb = G80_BACKGROUND_NONE;
 
 	/* install speech board */
-	iospace.install_legacy_write_handler(*speech, 0x38, 0x38, FUNC(sega_speech_data_w));
-	iospace.install_legacy_write_handler(*speech, 0x3b, 0x3b, FUNC(sega_speech_control_w));
+	iospace.install_write_handler(0x38, 0x38, write8_delegate(FUNC(speech_sound_device::data_w), (speech_sound_device*)m_speech));
+	iospace.install_write_handler(0x3b, 0x3b, write8_delegate(FUNC(speech_sound_device::control_w), (speech_sound_device*)m_speech));
 
 	/* install Astro Blaster sound board */
 	iospace.install_write_handler(0x3e, 0x3f, write8_delegate(FUNC(segag80r_state::astrob_sound_w),this));
+
+	save_item(NAME(m_sound_state));
+	save_item(NAME(m_sound_rate));
 }
 
 
@@ -1468,6 +1451,12 @@ DRIVER_INIT_MEMBER(segag80r_state,005)
 
 	/* configure video */
 	m_background_pcb = G80_BACKGROUND_NONE;
+
+	save_item(NAME(m_sound_state));
+	save_item(NAME(m_sound_addr));
+	save_item(NAME(m_sound_data));
+	save_item(NAME(m_square_state));
+	save_item(NAME(m_square_count));
 }
 
 
@@ -1490,6 +1479,8 @@ DRIVER_INIT_MEMBER(segag80r_state,spaceod)
 	/* install our wacky mangled ports */
 	iospace.install_read_handler(0xf8, 0xfb, read8_delegate(FUNC(segag80r_state::spaceod_mangled_ports_r),this));
 	iospace.install_read_handler(0xfc, 0xfc, read8_delegate(FUNC(segag80r_state::spaceod_port_fc_r),this));
+
+	save_item(NAME(m_sound_state));
 }
 
 
@@ -1508,16 +1499,44 @@ DRIVER_INIT_MEMBER(segag80r_state,monsterb)
 	/* install background board handlers */
 	iospace.install_write_handler(0xb8, 0xbd, write8_delegate(FUNC(segag80r_state::monsterb_back_port_w),this));
 	pgmspace.install_write_handler(0xe000, 0xffff, write8_delegate(FUNC(segag80r_state::monsterb_vidram_w),this));
+
+	save_item(NAME(m_sound_state));
+	save_item(NAME(m_sound_addr));
+	save_item(NAME(m_n7751_command));
+	save_item(NAME(m_n7751_busy));
 }
 
 
 DRIVER_INIT_MEMBER(segag80r_state,monster2)
 {
+	static const UINT8 convtable[32][4] =
+	{
+		/*       opcode                   data                     address      */
+		/*  A    B    C    D         A    B    C    D                           */
+		{ 0x88,0x08,0x80,0x00 }, { 0x00,0x08,0x20,0x28 },   /* ...0...0...0...0 */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x28,0xa8,0x08,0x88 },   /* ...0...0...0...1 */
+		{ 0x28,0x20,0xa8,0xa0 }, { 0x28,0x20,0xa8,0xa0 },   /* ...0...0...1...0 */
+		{ 0x88,0x08,0x80,0x00 }, { 0x88,0x08,0x80,0x00 },   /* ...0...0...1...1 */
+		{ 0x00,0x08,0x20,0x28 }, { 0x88,0x08,0x80,0x00 },   /* ...0...1...0...0 */
+		{ 0xa0,0x80,0x20,0x00 }, { 0x80,0x88,0x00,0x08 },   /* ...0...1...0...1 */
+		{ 0x88,0x08,0x80,0x00 }, { 0xa0,0x80,0x20,0x00 },   /* ...0...1...1...0 */
+		{ 0x88,0x08,0x80,0x00 }, { 0x28,0x20,0xa8,0xa0 },   /* ...0...1...1...1 */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x80,0x88,0x00,0x08 },   /* ...1...0...0...0 */
+		{ 0x80,0x88,0x00,0x08 }, { 0x00,0x08,0x20,0x28 },   /* ...1...0...0...1 */
+		{ 0x28,0x20,0xa8,0xa0 }, { 0x28,0xa8,0x08,0x88 },   /* ...1...0...1...0 */
+		{ 0x00,0x08,0x20,0x28 }, { 0x80,0xa0,0x88,0xa8 },   /* ...1...0...1...1 */
+		{ 0x80,0x88,0x00,0x08 }, { 0xa0,0x80,0x20,0x00 },   /* ...1...1...0...0 */
+		{ 0x80,0xa0,0x88,0xa8 }, { 0xa0,0x80,0x20,0x00 },   /* ...1...1...0...1 */
+		{ 0xa0,0x80,0x20,0x00 }, { 0x80,0xa0,0x88,0xa8 },   /* ...1...1...1...0 */
+		{ 0x28,0x20,0xa8,0xa0 }, { 0x00,0x08,0x20,0x28 }    /* ...1...1...1...1 */
+	};
+
+	sega_decode(memregion("maincpu")->base(), m_decrypted_opcodes, 0x8000, convtable);
+
 	address_space &iospace = m_maincpu->space(AS_IO);
 	address_space &pgmspace = m_maincpu->space(AS_PROGRAM);
 
 	/* configure the 315-5006 security chip */
-	spatter_decode(machine(), "maincpu");
 	m_decrypt = segag80_security(0);
 
 	/* configure video */
@@ -1528,12 +1547,16 @@ DRIVER_INIT_MEMBER(segag80r_state,monster2)
 	iospace.install_write_handler(0xb4, 0xb5, write8_delegate(FUNC(segag80r_state::pignewt_back_color_w),this));
 	iospace.install_write_handler(0xb8, 0xbd, write8_delegate(FUNC(segag80r_state::pignewt_back_port_w),this));
 	pgmspace.install_write_handler(0xe000, 0xffff, write8_delegate(FUNC(segag80r_state::pignewt_vidram_w),this));
+
+	save_item(NAME(m_sound_state));
+	save_item(NAME(m_sound_addr));
+	save_item(NAME(m_n7751_command));
+	save_item(NAME(m_n7751_busy));
 }
 
 
 DRIVER_INIT_MEMBER(segag80r_state,pignewt)
 {
-	device_t *usbsnd = machine().device("usbsnd");
 	address_space &iospace = m_maincpu->space(AS_IO);
 	address_space &pgmspace = m_maincpu->space(AS_PROGRAM);
 
@@ -1550,19 +1573,42 @@ DRIVER_INIT_MEMBER(segag80r_state,pignewt)
 	pgmspace.install_write_handler(0xe000, 0xffff, write8_delegate(FUNC(segag80r_state::pignewt_vidram_w),this));
 
 	/* install Universal sound board */
-	iospace.install_legacy_readwrite_handler(*usbsnd, 0x3f, 0x3f, FUNC(sega_usb_status_r), FUNC(sega_usb_data_w));
-	pgmspace.install_legacy_read_handler(*usbsnd, 0xd000, 0xdfff, FUNC(sega_usb_ram_r));
+	iospace.install_readwrite_handler(0x3f, 0x3f, read8_delegate(FUNC(usb_sound_device::status_r), (usb_sound_device*)m_usbsnd), write8_delegate(FUNC(usb_sound_device::data_w), (usb_sound_device*)m_usbsnd));
+	pgmspace.install_read_handler(0xd000, 0xdfff, read8_delegate(FUNC(usb_sound_device::ram_r), (usb_sound_device*)m_usbsnd));
 	pgmspace.install_write_handler(0xd000, 0xdfff, write8_delegate(FUNC(segag80r_state::usb_ram_w),this));
 }
 
 
 DRIVER_INIT_MEMBER(segag80r_state,sindbadm)
 {
+	static const UINT8 convtable[32][4] =
+	{
+		/*       opcode                   data                     address      */
+		/*  A    B    C    D         A    B    C    D                           */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x88,0x80,0x08,0x00 },   /* ...0...0...0...0 */
+		{ 0xa8,0xa0,0x88,0x80 }, { 0x00,0x20,0x80,0xa0 },   /* ...0...0...0...1 */
+		{ 0xa8,0xa0,0x88,0x80 }, { 0x00,0x20,0x80,0xa0 },   /* ...0...0...1...0 */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x88,0x80,0x08,0x00 },   /* ...0...0...1...1 */
+		{ 0xa8,0x88,0xa0,0x80 }, { 0xa0,0x20,0xa8,0x28 },   /* ...0...1...0...0 */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x88,0x80,0x08,0x00 },   /* ...0...1...0...1 */
+		{ 0xa8,0xa0,0x88,0x80 }, { 0x00,0x20,0x80,0xa0 },   /* ...0...1...1...0 */
+		{ 0xa8,0xa0,0x88,0x80 }, { 0x00,0x20,0x80,0xa0 },   /* ...0...1...1...1 */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x88,0x80,0x08,0x00 },   /* ...1...0...0...0 */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x88,0x80,0x08,0x00 },   /* ...1...0...0...1 */
+		{ 0xa8,0xa0,0x88,0x80 }, { 0x00,0x20,0x80,0xa0 },   /* ...1...0...1...0 */
+		{ 0xa8,0xa0,0x88,0x80 }, { 0x00,0x20,0x80,0xa0 },   /* ...1...0...1...1 */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x88,0x80,0x08,0x00 },   /* ...1...1...0...0 */
+		{ 0xa8,0x88,0xa0,0x80 }, { 0xa0,0x20,0xa8,0x28 },   /* ...1...1...0...1 */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x88,0x80,0x08,0x00 },   /* ...1...1...1...0 */
+		{ 0x28,0xa8,0x08,0x88 }, { 0x88,0x80,0x08,0x00 }    /* ...1...1...1...1 */
+	};
+
+	sega_decode(memregion("maincpu")->base(), m_decrypted_opcodes, 0x8000, convtable);
+
 	address_space &iospace = m_maincpu->space(AS_IO);
 	address_space &pgmspace = m_maincpu->space(AS_PROGRAM);
 
 	/* configure the encrypted Z80 */
-	sindbadm_decode(machine(), "maincpu");
 	m_decrypt = segag80_security(0);
 
 	/* configure video */
@@ -1597,7 +1643,7 @@ GAME( 1981, spaceod2,  spaceod,  spaceod,  spaceod, segag80r_state,  spaceod,  R
 GAME( 1982, monsterb,  0,        monsterb, monsterb, segag80r_state, monsterb, ROT270, "Sega", "Monster Bash", GAME_IMPERFECT_SOUND )
 
 /* 2-board G-80 system */
-GAME( 1982, monsterb2, monsterb, monsterb, monsterb, segag80r_state, monster2, ROT270, "Sega", "Monster Bash (2 board version)", GAME_IMPERFECT_SOUND )
+GAME( 1982, monsterb2, monsterb, monster2, monsterb, segag80r_state, monster2, ROT270, "Sega", "Monster Bash (2 board version)", GAME_IMPERFECT_SOUND )
 GAME( 1983, pignewt,   0,        pignewt,  pignewt, segag80r_state,  pignewt,  ROT270, "Sega", "Pig Newton (version C)", GAME_IMPERFECT_SOUND )
 GAME( 1983, pignewta,  pignewt,  pignewt,  pignewta, segag80r_state, pignewt,  ROT270, "Sega", "Pig Newton (version A)", GAME_IMPERFECT_SOUND )
 GAME( 1983, sindbadm,  0,        sindbadm, sindbadm, segag80r_state, sindbadm, ROT270, "Sega", "Sindbad Mystery", 0 )

@@ -1,16 +1,16 @@
+// license:BSD-3-Clause
+// copyright-holders:Mathis Rosenhauer
 #include "emu.h"
-#include "video/vector.h"
-#include "machine/6522via.h"
 #include "cpu/m6809/m6809.h"
 #include "sound/ay8910.h"
 
 #include "includes/vectrex.h"
 
 
-#define VC_RED      MAKE_RGB(0xff, 0x00, 0x00)
-#define VC_GREEN    MAKE_RGB(0x00, 0xff, 0x00)
-#define VC_BLUE     MAKE_RGB(0x00, 0x00, 0xff)
-#define VC_DARKRED  MAKE_RGB(0x80, 0x00, 0x00)
+#define VC_RED      rgb_t(0xff, 0x00, 0x00)
+#define VC_GREEN    rgb_t(0x00, 0xff, 0x00)
+#define VC_BLUE     rgb_t(0x00, 0x00, 0xff)
+#define VC_DARKRED  rgb_t(0x80, 0x00, 0x00)
 
 #define DAMPC (-0.2)
 #define MMI (5.0)
@@ -44,18 +44,8 @@ static const double minestorm_3d_angles[3] = {0, 0.1692, 0.2086};
 static const double narrow_escape_angles[3] = {0, 0.1631, 0.3305};
 static const double crazy_coaster_angles[3] = {0, 0.1631, 0.3305};
 
-
 static const double unknown_game_angles[3] = {0,0.16666666, 0.33333333};
 
-
-int vectrex_state::vectrex_verify_cart(char *data)
-{
-	/* Verify the file is accepted by the Vectrex bios */
-	if (!memcmp(data,"g GCE", 5))
-		return IMAGE_VERIFY_PASS;
-	else
-		return IMAGE_VERIFY_FAIL;
-}
 
 
 void vectrex_state::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
@@ -89,71 +79,6 @@ void vectrex_state::device_timer(emu_timer &timer, device_timer_id id, int param
 }
 
 
-/*********************************************************************
-
-   ROM load and id functions
-
-*********************************************************************/
-
-DEVICE_IMAGE_LOAD_MEMBER(vectrex_state,vectrex_cart)
-{
-	UINT8 *mem = memregion("maincpu")->base();
-	if (image.software_entry() == NULL)
-	{
-		image.fread( mem, 0x8000);
-		if (image.length() > 0x8000)
-		{
-			image.fread( mem+0x10000, 0x8000);
-			m_64k_cart = 1;
-		}
-	} else {
-		int size = image.get_software_region_length("rom");
-		memcpy(mem, image.get_software_region("rom"), size);
-	}
-
-	/* check image! */
-	if (vectrex_verify_cart((char*)mem) == IMAGE_VERIFY_FAIL)
-	{
-		logerror("Invalid image!\n");
-		return IMAGE_INIT_FAIL;
-	}
-
-	if (memcmp(mem + 0x06,"SRAM",4)) {
-		m_maincpu->space(AS_PROGRAM).unmap_write(0x0000, 0x7fff);
-	}
-
-	/* If VIA T2 starts, reset refresh timer.
-	   This is the best strategy for most games. */
-	m_reset_refresh = 1;
-
-	m_imager_angles = narrow_escape_angles;
-
-	/* let's do this 3D detection with a strcmp using data inside the cart images */
-	/* slightly prettier than having to hardcode CRCs */
-
-	/* handle 3D Narrow Escape but skip the 2-d hack of it from Fred Taft */
-	if (!memcmp(mem + 0x11,"NARROW",6) && (((char*)mem)[0x39] == 0x0c))
-	{
-		m_imager_angles = narrow_escape_angles;
-	}
-
-	if (!memcmp(mem + 0x11,"CRAZY COASTER", 13))
-	{
-		m_imager_angles = crazy_coaster_angles;
-	}
-
-	if (!memcmp(mem + 0x11,"3D MINE STORM", 13))
-	{
-		m_imager_angles = minestorm_3d_angles;
-
-		/* Don't reset T2 each time it's written.
-		   This would cause jerking in mine3. */
-		m_reset_refresh = 0;
-	}
-
-	return IMAGE_INIT_PASS;
-}
-
 
 /*********************************************************************
 
@@ -178,7 +103,7 @@ void vectrex_state::vectrex_configuration()
 		switch ((cport >> 2) & 0x07)
 		{
 		case 0x00:
-			m_imager_colors[0] = m_imager_colors[1] = m_imager_colors[2] = RGB_BLACK;
+			m_imager_colors[0] = m_imager_colors[1] = m_imager_colors[2] = rgb_t::black;
 			break;
 		case 0x01:
 			m_imager_colors[0] = m_imager_colors[1] = m_imager_colors[2] = VC_DARKRED;
@@ -208,7 +133,7 @@ void vectrex_state::vectrex_configuration()
 		switch ((cport >> 5) & 0x07)
 		{
 		case 0x00:
-			m_imager_colors[3] = m_imager_colors[4] = m_imager_colors[5] = RGB_BLACK;
+			m_imager_colors[3] = m_imager_colors[4] = m_imager_colors[5] = rgb_t::black;
 			break;
 		case 0x01:
 			m_imager_colors[3] = m_imager_colors[4] = m_imager_colors[5] = VC_DARKRED;
@@ -237,8 +162,8 @@ void vectrex_state::vectrex_configuration()
 	else
 	{
 		vector_add_point_function = &vectrex_state::vectrex_add_point;
-		m_beam_color = RGB_WHITE;
-		m_imager_colors[0] = m_imager_colors[1] = m_imager_colors[2] = m_imager_colors[3] = m_imager_colors[4] = m_imager_colors[5] = RGB_WHITE;
+		m_beam_color = rgb_t::white;
+		m_imager_colors[0] = m_imager_colors[1] = m_imager_colors[2] = m_imager_colors[3] = m_imager_colors[4] = m_imager_colors[5] = rgb_t::white;
 	}
 	m_lightpen_port = m_io_lpenconf->read() & 0x03;
 }
@@ -379,13 +304,10 @@ WRITE8_MEMBER(vectrex_state::vectrex_psg_port_w)
 
 DRIVER_INIT_MEMBER(vectrex_state,vectrex)
 {
-	int i;
-
-	m_64k_cart = 0;
 	m_imager_angles = unknown_game_angles;
-	m_beam_color = RGB_WHITE;
-	for (i=0; i<ARRAY_LENGTH(m_imager_colors); i++)
-		m_imager_colors[i] = RGB_WHITE;
+	m_beam_color = rgb_t::white;
+	for (int i = 0; i < ARRAY_LENGTH(m_imager_colors); i++)
+		m_imager_colors[i] = rgb_t::white;
 
 	/*
 	 * Minestorm's PRNG doesn't work with a 0 seed (mines in the first
@@ -395,4 +317,40 @@ DRIVER_INIT_MEMBER(vectrex_state,vectrex)
 	 */
 	m_gce_vectorram[0x7e] = machine().rand() | 1;
 	m_gce_vectorram[0x7f] = machine().rand() | 1;
+}
+
+void vectrex_state::machine_start()
+{
+	if (m_cart && m_cart->exists())
+	{
+		// install cart accesses
+		if (m_cart->get_type() == VECTREX_SRAM)
+			m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x0000, 0x7fff, read8_delegate(FUNC(vectrex_cart_slot_device::read_rom),(vectrex_cart_slot_device*)m_cart), write8_delegate(FUNC(vectrex_cart_slot_device::write_ram),(vectrex_cart_slot_device*)m_cart));
+		else
+			m_maincpu->space(AS_PROGRAM).install_read_handler(0x0000, 0x7fff, read8_delegate(FUNC(vectrex_cart_slot_device::read_rom),(vectrex_cart_slot_device*)m_cart));
+
+		// setup 3d imager and refresh timer
+
+		// If VIA T2 starts, reset refresh timer. This is the best strategy for most games.
+		m_reset_refresh = 1;
+		m_imager_angles = narrow_escape_angles;
+
+		// let's do this 3D detection
+		switch (m_cart->get_vec3d())
+		{
+			case VEC3D_MINEST:
+				m_imager_angles = minestorm_3d_angles;
+				// Don't reset T2 each time it's written. This would cause jerking in mine3.
+				m_reset_refresh = 0;
+				break;
+			case VEC3D_CCOAST:
+				m_imager_angles = crazy_coaster_angles;
+				break;
+			case VEC3D_NARROW:
+				m_imager_angles = narrow_escape_angles;
+				break;
+			default:
+				break;
+		}
+	}
 }

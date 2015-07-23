@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:insideoutboy, David Haywood, Stephh
 /*
 
 Flower (c)1986 Komax (USA license)
@@ -115,7 +117,7 @@ static ADDRESS_MAP_START( flower_cpu1_2, AS_PROGRAM, 8, flower_state )
 	AM_RANGE(0xa002, 0xa002) AM_WRITE(flower_maincpu_irq_ack)
 	AM_RANGE(0xa003, 0xa003) AM_WRITE(flower_subcpu_irq_ack)
 	AM_RANGE(0xa004, 0xa004) AM_WRITE(flower_coin_counter_w)
-	AM_RANGE(0xa005, 0xa005) AM_WRITENOP    // subcpu nmi (unused)
+	AM_RANGE(0xa005, 0xa005) AM_WRITENOP // subcpu nmi (unused)
 	AM_RANGE(0xa100, 0xa100) AM_READ_PORT("IN0CPU1")
 	AM_RANGE(0xa101, 0xa101) AM_READ_PORT("IN1CPU1")
 	AM_RANGE(0xa102, 0xa102) AM_READ_PORT("IN0CPU0")
@@ -194,20 +196,20 @@ static INPUT_PORTS_START( flower )
 	PORT_DIPSETTING(    0x00, "50k, then every 80k" )
 
 	PORT_START("IN0CPU1")
-	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_JOYSTICK_UP    ) PORT_8WAY
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN  ) PORT_8WAY
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT  ) PORT_8WAY
-	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_8WAY
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_JOYSTICK_UP )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT )
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_NAME("P1 Laser")
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_NAME("P1 Missile")
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_NAME("P1 Cutter")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
 	PORT_START("IN1CPU1")
-	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_JOYSTICK_UP    ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN  ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT  ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_8WAY PORT_COCKTAIL
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_COCKTAIL
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_COCKTAIL
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_COCKTAIL
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_COCKTAIL
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_COCKTAIL PORT_NAME("P2 Laser")
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_COCKTAIL PORT_NAME("P2 Missile")
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_COCKTAIL PORT_NAME("P2 Cutter")
@@ -250,15 +252,15 @@ static MACHINE_CONFIG_START( flower, flower_state )
 	// cpus are Z80 "A" type, official maximum speed of 4 MHz, but 4.6 MHz has been proven to work in practice
 	MCFG_CPU_ADD("maincpu", Z80,XTAL_18_432MHz/4)
 	MCFG_CPU_PROGRAM_MAP(flower_cpu1_2)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", flower_state,  irq0_line_hold)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", flower_state, irq0_line_hold)
 
 	MCFG_CPU_ADD("subcpu", Z80,XTAL_18_432MHz/4)
 	MCFG_CPU_PROGRAM_MAP(flower_cpu1_2)
-	MCFG_CPU_PERIODIC_INT_DRIVER(flower_state, irq0_line_hold,  120)    // controls game speed? irqsource and frequency unknown
+	MCFG_CPU_PERIODIC_INT_DRIVER(flower_state, irq0_line_hold, 120) // controls game speed? irqsource and frequency unknown
 
 	MCFG_CPU_ADD("audiocpu", Z80,XTAL_18_432MHz/4)
 	MCFG_CPU_PROGRAM_MAP(flower_sound_cpu)
-	MCFG_CPU_PERIODIC_INT_DRIVER(flower_state, irq0_line_hold,  90) // controls music speed. irqsource and frequency unknown, same as subcpu perhaps?
+	MCFG_CPU_PERIODIC_INT_DRIVER(flower_state, irq0_line_hold, 90) // controls music speed. irqsource and frequency unknown, same as subcpu perhaps?
 
 	// tight sync, slowdowns otherwise
 //  MCFG_QUANTUM_PERFECT_CPU("maincpu")
@@ -266,16 +268,15 @@ static MACHINE_CONFIG_START( flower, flower_state )
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_REFRESH_RATE(60)        // ?
+	MCFG_SCREEN_REFRESH_RATE(60) // ?
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(34*8, 33*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 34*8-1, 0*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(flower_state, screen_update_flower)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(flower)
-
-	MCFG_PALETTE_LENGTH(256)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", flower)
+	MCFG_PALETTE_ADD_RRRRGGGGBBBB_PROMS("palette", 256)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")

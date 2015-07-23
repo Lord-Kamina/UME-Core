@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     SNK Wave sound driver.
@@ -20,7 +22,7 @@ const device_type SNKWAVE = &device_creator<snkwave_device>;
 //-------------------------------------------------
 
 snkwave_device::snkwave_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, SNKWAVE, "SNK Wave", tag, owner, clock),
+	: device_t(mconfig, SNKWAVE, "SNK Wave", tag, owner, clock, "snkwave", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_stream(NULL),
 		m_external_clock(0),
@@ -29,6 +31,7 @@ snkwave_device::snkwave_device(const machine_config &mconfig, const char *tag, d
 		m_counter(0),
 		m_waveform_position(0)
 {
+	memset(m_waveform, 0, sizeof(m_waveform));
 }
 
 //-------------------------------------------------
@@ -37,8 +40,6 @@ snkwave_device::snkwave_device(const machine_config &mconfig, const char *tag, d
 
 void snkwave_device::device_start()
 {
-	assert(static_config() == 0);
-
 	/* adjust internal clock */
 	m_external_clock = clock();
 

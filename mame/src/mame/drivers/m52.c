@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Irem M52 hardware
@@ -64,7 +66,7 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, m52_state )
 	AM_RANGE(0x8400, 0x87ff) AM_RAM_WRITE(m52_colorram_w) AM_SHARE("colorram")
 	AM_RANGE(0x8800, 0x8800) AM_MIRROR(0x07ff) AM_READ(m52_protection_r)
 	AM_RANGE(0xc800, 0xcbff) AM_MIRROR(0x0400) AM_WRITEONLY AM_SHARE("spriteram")
-	AM_RANGE(0xd000, 0xd000) AM_MIRROR(0x07fc) AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0xd000, 0xd000) AM_MIRROR(0x07fc) AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0xd001, 0xd001) AM_MIRROR(0x07fc) AM_WRITE(m52_flipscreen_w)   /* + coin counters */
 	AM_RANGE(0xd000, 0xd000) AM_MIRROR(0x07f8) AM_READ_PORT("IN0")
 	AM_RANGE(0xd001, 0xd001) AM_MIRROR(0x07f8) AM_READ_PORT("IN1")
@@ -80,7 +82,7 @@ static ADDRESS_MAP_START( alpha1v_map, AS_PROGRAM, 8, m52_state )
 	AM_RANGE(0x8000, 0x83ff) AM_RAM_WRITE(m52_videoram_w) AM_SHARE("videoram")
 	AM_RANGE(0x8400, 0x87ff) AM_RAM_WRITE(m52_colorram_w) AM_SHARE("colorram")
 	AM_RANGE(0xc800, 0xc9ff) AM_WRITEONLY AM_SHARE("spriteram") // bigger or mirrored?
-	AM_RANGE(0xd000, 0xd000) AM_READ_PORT("IN0") AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0xd000, 0xd000) AM_READ_PORT("IN0") AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0xd001, 0xd001) AM_READ_PORT("IN1") AM_WRITE(alpha1v_flipscreen_w)
 	AM_RANGE(0xd002, 0xd002) AM_READ_PORT("IN2")
 	AM_RANGE(0xd003, 0xd003) AM_READ_PORT("DSW1")
@@ -398,12 +400,15 @@ static MACHINE_CONFIG_START( m52, m52_state )
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", m52_state,  irq0_line_hold)
 
 	/* video hardware */
-	MCFG_GFXDECODE(m52)
-	MCFG_PALETTE_LENGTH(128*4+16*4+3*4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", m52)
+	MCFG_PALETTE_ADD("palette", 128*4+16*4+3*4)
+	MCFG_PALETTE_INDIRECT_ENTRIES(512+32+32)
+	MCFG_PALETTE_INIT_OWNER(m52_state, m52)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/3, 384, 136, 376, 282, 22, 274)
 	MCFG_SCREEN_UPDATE_DRIVER(m52_state, screen_update_m52)
+	MCFG_SCREEN_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_FRAGMENT_ADD(m52_sound_c_audio)

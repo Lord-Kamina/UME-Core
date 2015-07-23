@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Eolith Speedup Handling */
 
 /*
@@ -9,28 +11,22 @@
 */
 
 #include "emu.h"
-#include "includes/eolithsp.h"
 #include "includes/eolith.h"
 
-static int eolith_speedup_address;
-static int eolith_speedup_address2;
-static int eolith_speedup_resume_scanline;
-static int eolith_vblank = 0;
-static int eolith_scanline = 0;
 
-void eolith_speedup_read(address_space &space)
+void eolith_state::speedup_read()
 {
 	/* for debug */
-	//if ((space.device().safe_pc()!=eolith_speedup_address) && (eolith_vblank!=1) )
-	//    printf("%s:eolith speedup_read data %02x\n",space.machine().describe_context(), eolith_vblank);
+	//if ((space.device().safe_pc()!=m_speedup_address) && (m_speedup_vblank!=1) )
+	//    printf("%s:eolith speedup_read data %02x\n",space.machine().describe_context(), m_speedup_vblank);
 
-	if (eolith_vblank==0 && eolith_scanline < eolith_speedup_resume_scanline)
+	if (m_speedup_vblank==0 && m_speedup_scanline < m_speedup_resume_scanline)
 	{
-		int pc = space.device().safe_pc();
+		int pc = m_maincpu->pc();
 
-		if ((pc==eolith_speedup_address) || (pc==eolith_speedup_address2))
+		if ((pc==m_speedup_address) || (pc==m_speedup_address2))
 		{
-			space.device().execute().spin_until_trigger(1000);
+			m_maincpu->spin_until_trigger(1000);
 		}
 	}
 }
@@ -62,6 +58,7 @@ static const struct
 	{ "penfan",   0x4001FA66, -1, 240 },
 	{ "penfana",  0x4001FAb6, -1, 240 },
 	{ "candy",    0x4001990C, -1, 240 },
+	{ "hidnc2k",  0x40016824, -1, 240 },
 	/* eolith16.c */
 	{ "klondkp",  0x0001a046, -1, 240 },
 	/* vegaeo.c */
@@ -70,22 +67,28 @@ static const struct
 };
 
 
-void init_eolith_speedup(running_machine &machine)
+void eolith_state::init_speedup()
 {
 	int n_game = 0;
-	eolith_speedup_address = 0;
-	eolith_speedup_resume_scanline = 0;
+	m_speedup_address = 0;
+	m_speedup_address2 = 0;
+	m_speedup_resume_scanline = 0;
+	m_speedup_vblank = 0;
+	m_speedup_scanline = 0;
 
 	while( eolith_speedup_table[ n_game ].s_name != NULL )
 	{
-		if( strcmp( machine.system().name, eolith_speedup_table[ n_game ].s_name ) == 0 )
+		if( strcmp( machine().system().name, eolith_speedup_table[ n_game ].s_name ) == 0 )
 		{
-			eolith_speedup_address = eolith_speedup_table[ n_game ].speedup_address;
-			eolith_speedup_address2 = eolith_speedup_table[ n_game ].speedup_address2;
-			eolith_speedup_resume_scanline = eolith_speedup_table[ n_game ].speedup_resume_scanline;
+			m_speedup_address = eolith_speedup_table[ n_game ].speedup_address;
+			m_speedup_address2 = eolith_speedup_table[ n_game ].speedup_address2;
+			m_speedup_resume_scanline = eolith_speedup_table[ n_game ].speedup_resume_scanline;
 		}
 		n_game++;
 	}
+
+	save_item(NAME(m_speedup_vblank));
+	save_item(NAME(m_speedup_scanline));
 }
 
 /* todo, use timers instead! */
@@ -93,26 +96,26 @@ TIMER_DEVICE_CALLBACK_MEMBER(eolith_state::eolith_speedup)
 {
 	if (param==0)
 	{
-		eolith_vblank = 0;
+		m_speedup_vblank = 0;
 	}
 
-	if (param==eolith_speedup_resume_scanline)
+	if (param==m_speedup_resume_scanline)
 	{
 		machine().scheduler().trigger(1000);
 	}
 
 	if (param==240)
 	{
-		eolith_vblank = 1;
+		m_speedup_vblank = 1;
 	}
 }
 
 CUSTOM_INPUT_MEMBER(eolith_state::eolith_speedup_getvblank)
 {
-//  printf("%s:eolith speedup_read data %02x\n",machine().describe_context(), eolith_vblank);
+//  printf("%s:eolith speedup_read data %02x\n",machine().describe_context(), m_speedup_vblank);
 
 
-	return (machine().primary_screen->vpos() >= 240);
+	return (m_screen->vpos() >= 240);
 }
 
 // StealSee doesn't use interrupts, just the vblank
@@ -121,8 +124,8 @@ CUSTOM_INPUT_MEMBER(eolith_state::stealsee_speedup_getvblank)
 	int pc = m_maincpu->pc();
 
 	if (pc==0x400081ec)
-		if(!eolith_vblank)
+		if(!m_speedup_vblank)
 			m_maincpu->eat_cycles(500);
 
-	return (machine().primary_screen->vpos() >= 240);
+	return (m_screen->vpos() >= 240);
 }

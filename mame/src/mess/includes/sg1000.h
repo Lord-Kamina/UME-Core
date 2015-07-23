@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 #ifndef __SG1000__
 #define __SG1000__
 
@@ -5,15 +7,13 @@
 #include "cpu/z80/z80.h"
 #include "formats/sc3000_bit.h"
 #include "formats/sf7000_dsk.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/cassette.h"
 #include "imagedev/printer.h"
-#include "machine/ctronics.h"
+#include "bus/centronics/ctronics.h"
 #include "machine/i8255.h"
 #include "machine/i8251.h"
 #include "machine/ram.h"
-#include "machine/sega8_slot.h"
-#include "machine/serial.h"
+#include "bus/sega8/sega8_slot.h"
 #include "machine/upd765.h"
 #include "sound/sn76496.h"
 #include "video/tms9928a.h"
@@ -34,8 +34,6 @@
 
 
 INPUT_PORTS_EXTERN( sk1100 );
-extern const i8255_interface ( sc3000_ppi_intf );
-extern const cassette_interface sc3000_cassette_interface;
 
 class sg1000_state : public driver_device
 {
@@ -50,13 +48,13 @@ public:
 			m_maincpu(*this, Z80_TAG),
 			m_ram(*this, RAM_TAG),
 			m_rom(*this, Z80_TAG),
-			m_cartslot(*this, CARTSLOT_TAG)
+			m_cart(*this, CARTSLOT_TAG)
 	{ }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<ram_device> m_ram;
 	required_memory_region m_rom;
-	optional_device<sega8_cart_slot_device> m_cartslot;
+	optional_device<sega8_cart_slot_device> m_cart;
 
 	virtual void machine_start();
 
@@ -140,6 +138,8 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 
+	int m_centronics_busy;
+	DECLARE_WRITE_LINE_MEMBER( write_centronics_busy );
 	DECLARE_READ8_MEMBER( ppi_pa_r );
 	DECLARE_WRITE8_MEMBER( ppi_pc_w );
 

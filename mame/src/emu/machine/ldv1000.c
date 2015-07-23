@@ -1,37 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     ldv1000.c
 
     Pioneer LD-V1000 laserdisc emulation.
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 **************************************************************************
 
@@ -104,37 +77,6 @@ static ADDRESS_MAP_START( ldv1000_portmap, AS_IO, 8, pioneer_ldv1000_device )
 ADDRESS_MAP_END
 
 
-static I8255_INTERFACE(ppi0intf)
-{
-	DEVCB_NULL,
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, pioneer_ldv1000_device, ppi0_porta_w),
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, pioneer_ldv1000_device, ppi0_portb_r),
-	DEVCB_NULL,
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, pioneer_ldv1000_device, ppi0_portc_r),
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, pioneer_ldv1000_device, ppi0_portc_w)
-};
-
-
-static I8255_INTERFACE(ppi1intf)
-{
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, pioneer_ldv1000_device, ppi1_porta_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, pioneer_ldv1000_device, ppi1_portb_w),
-	DEVCB_NULL,
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, pioneer_ldv1000_device, ppi1_portc_w)
-};
-
-
-static Z80CTC_INTERFACE( ctcintf )
-{
-	DEVCB_DEVICE_LINE_MEMBER(DEVICE_SELF_OWNER, pioneer_ldv1000_device, ctc_interrupt),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
 static const z80_daisy_config daisy_chain[] =
 {
 	{ "ldvctc" },
@@ -148,9 +90,19 @@ static MACHINE_CONFIG_FRAGMENT( ldv1000 )
 	MCFG_CPU_PROGRAM_MAP(ldv1000_map)
 	MCFG_CPU_IO_MAP(ldv1000_portmap)
 
-	MCFG_Z80CTC_ADD("ldvctc", XTAL_5MHz/2, ctcintf)
-	MCFG_I8255_ADD("ldvppi0", ppi0intf)
-	MCFG_I8255_ADD("ldvppi1", ppi1intf)
+	MCFG_DEVICE_ADD("ldvctc", Z80CTC, XTAL_5MHz/2)
+	MCFG_Z80CTC_INTR_CB(WRITELINE(pioneer_ldv1000_device, ctc_interrupt))
+
+	MCFG_DEVICE_ADD("ldvppi0", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(pioneer_ldv1000_device, ppi0_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(pioneer_ldv1000_device, ppi0_portb_r))
+	MCFG_I8255_IN_PORTC_CB(READ8(pioneer_ldv1000_device, ppi0_portc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pioneer_ldv1000_device, ppi0_portc_w))
+
+	MCFG_DEVICE_ADD("ldvppi1", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(pioneer_ldv1000_device, ppi1_porta_r))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(pioneer_ldv1000_device, ppi1_portb_w))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pioneer_ldv1000_device, ppi1_portc_w))
 MACHINE_CONFIG_END
 
 
@@ -349,12 +301,12 @@ machine_config_constructor pioneer_ldv1000_device::device_mconfig_additions() co
 //  start of the blanking period
 //-------------------------------------------------
 
-void pioneer_ldv1000_device::player_vsync(const vbi_metadata &vbi, int fieldnum, attotime curtime)
+void pioneer_ldv1000_device::player_vsync(const vbi_metadata &vbi, int fieldnum, const attotime &curtime)
 {
 	// generate interrupts if we hit the edges
 	slider_position sliderpos = get_slider_position();
-	m_z80_ctc->trigger(1, sliderpos == SLIDER_MINIMUM);
-	m_z80_ctc->trigger(2, sliderpos == SLIDER_MAXIMUM);
+	m_z80_ctc->trg1(sliderpos == SLIDER_MINIMUM);
+	m_z80_ctc->trg2(sliderpos == SLIDER_MAXIMUM);
 
 	// signal VSYNC and set a timer to turn it off
 	m_vsync = true;
@@ -373,7 +325,7 @@ void pioneer_ldv1000_device::player_vsync(const vbi_metadata &vbi, int fieldnum,
 //  the first visible line of the frame
 //-------------------------------------------------
 
-INT32 pioneer_ldv1000_device::player_update(const vbi_metadata &vbi, int fieldnum, attotime curtime)
+INT32 pioneer_ldv1000_device::player_update(const vbi_metadata &vbi, int fieldnum, const attotime &curtime)
 {
 	if (LOG_FRAMES_SEEN)
 	{

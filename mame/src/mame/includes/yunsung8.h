@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /*************************************************************************
 
     Yun Sung 8 Bit Games
@@ -12,7 +14,9 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_audiocpu(*this, "audiocpu") ,
 		m_maincpu(*this, "maincpu"),
-		m_msm(*this, "msm") { }
+		m_msm(*this, "msm"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	/* video-related */
 	tilemap_t     *m_tilemap_0;
@@ -47,4 +51,6 @@ public:
 	DECLARE_WRITE_LINE_MEMBER(yunsung8_adpcm_int);
 	required_device<cpu_device> m_maincpu;
 	required_device<msm5205_device> m_msm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };

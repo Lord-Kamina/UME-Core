@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Atari Centipede hardware
@@ -8,19 +10,6 @@
         * Millipede
         * Maze Invaders (prototype)
         * Bulls Eye Darts
-
-    Known ROMs (listed in the manual) that need to be dumped/verified:
-
-    Centipede:
-      136001-203.d1  <-- Are these the proper labels for the timed version???
-      136001-204.e1
-      136001-205.fh1
-      136001-206.j1
-
-      136001-303.d1  <-- Revision 3 set for the above listed roms
-      136001-304.e1
-      136001-305.fh1
-      136001-306.j1
 
     Millipede:
       136013-109.5p
@@ -428,7 +417,7 @@ each direction to assign the boundries.
 #include "emu.h"
 #include "cpu/m6502/m6502.h"
 #include "cpu/s2650/s2650.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "machine/atari_vg.h"
 #include "includes/centiped.h"
 #include "sound/ay8910.h"
@@ -450,7 +439,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(centiped_state::generate_interrupt)
 		m_maincpu->set_input_line(0, ((scanline - 1) & 32) ? ASSERT_LINE : CLEAR_LINE);
 
 	/* do a partial update now to handle sprite multiplexing (Maze Invaders) */
-	machine().primary_screen->update_partial(scanline);
+	m_screen->update_partial(scanline);
 }
 
 
@@ -632,7 +621,7 @@ WRITE8_MEMBER(centiped_state::led_w)
 }
 
 
-READ8_MEMBER(centiped_state::caterplr_rand_r)
+READ8_MEMBER(centiped_state::caterplr_unknown_r)
 {
 	return machine().rand() % 0xff;
 }
@@ -662,12 +651,12 @@ static ADDRESS_MAP_START( centiped_base_map, AS_PROGRAM, 8, centiped_state )
 	AM_RANGE(0x0000, 0x03ff) AM_RAM AM_SHARE("rambase")
 	AM_RANGE(0x0400, 0x07bf) AM_RAM_WRITE(centiped_videoram_w) AM_SHARE("videoram")
 	AM_RANGE(0x07c0, 0x07ff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0x0800, 0x0800) AM_READ_PORT("DSW1")       /* DSW1 */
-	AM_RANGE(0x0801, 0x0801) AM_READ_PORT("DSW2")       /* DSW2 */
-	AM_RANGE(0x0c00, 0x0c00) AM_READ(centiped_IN0_r)    /* IN0 */
-	AM_RANGE(0x0c01, 0x0c01) AM_READ_PORT("IN1")        /* IN1 */
-	AM_RANGE(0x0c02, 0x0c02) AM_READ(centiped_IN2_r)    /* IN2 */
-	AM_RANGE(0x0c03, 0x0c03) AM_READ_PORT("IN3")        /* IN3 */
+	AM_RANGE(0x0800, 0x0800) AM_READ_PORT("DSW1")
+	AM_RANGE(0x0801, 0x0801) AM_READ_PORT("DSW2")
+	AM_RANGE(0x0c00, 0x0c00) AM_READ(centiped_IN0_r)
+	AM_RANGE(0x0c01, 0x0c01) AM_READ_PORT("IN1")
+	AM_RANGE(0x0c02, 0x0c02) AM_READ(centiped_IN2_r)
+	AM_RANGE(0x0c03, 0x0c03) AM_READ_PORT("IN3")
 	AM_RANGE(0x1400, 0x140f) AM_WRITE(centiped_paletteram_w) AM_SHARE("paletteram")
 	AM_RANGE(0x1600, 0x163f) AM_DEVWRITE("earom",atari_vg_earom_device, write)
 	AM_RANGE(0x1680, 0x1680) AM_DEVWRITE("earom", atari_vg_earom_device, ctrl_w)
@@ -694,12 +683,12 @@ static ADDRESS_MAP_START( centipdb_map, AS_PROGRAM, 8, centiped_state )
 	AM_RANGE(0x0000, 0x03ff) AM_MIRROR(0x4000) AM_RAM
 	AM_RANGE(0x0400, 0x07bf) AM_MIRROR(0x4000) AM_RAM_WRITE(centiped_videoram_w) AM_SHARE("videoram")
 	AM_RANGE(0x07c0, 0x07ff) AM_MIRROR(0x4000) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0x0800, 0x0800) AM_MIRROR(0x4000) AM_READ_PORT("DSW1")     /* DSW1 */
-	AM_RANGE(0x0801, 0x0801) AM_MIRROR(0x4000) AM_READ_PORT("DSW2")     /* DSW2 */
-	AM_RANGE(0x0c00, 0x0c00) AM_MIRROR(0x4000) AM_READ(centiped_IN0_r)  /* IN0 */
-	AM_RANGE(0x0c01, 0x0c01) AM_MIRROR(0x4000) AM_READ_PORT("IN1")      /* IN1 */
-	AM_RANGE(0x0c02, 0x0c02) AM_MIRROR(0x4000) AM_READ(centiped_IN2_r)  /* IN2 */
-	AM_RANGE(0x0c03, 0x0c03) AM_MIRROR(0x4000) AM_READ_PORT("IN3")      /* IN3 */
+	AM_RANGE(0x0800, 0x0800) AM_MIRROR(0x4000) AM_READ_PORT("DSW1")
+	AM_RANGE(0x0801, 0x0801) AM_MIRROR(0x4000) AM_READ_PORT("DSW2")
+	AM_RANGE(0x0c00, 0x0c00) AM_MIRROR(0x4000) AM_READ(centiped_IN0_r)
+	AM_RANGE(0x0c01, 0x0c01) AM_MIRROR(0x4000) AM_READ_PORT("IN1")
+	AM_RANGE(0x0c02, 0x0c02) AM_MIRROR(0x4000) AM_READ(centiped_IN2_r)
+	AM_RANGE(0x0c03, 0x0c03) AM_MIRROR(0x4000) AM_READ_PORT("IN3")
 	AM_RANGE(0x1000, 0x1001) AM_MIRROR(0x4000) AM_DEVWRITE("pokey", ay8910_device, data_address_w)
 	AM_RANGE(0x1001, 0x1001) AM_MIRROR(0x4000) AM_DEVREAD("pokey", ay8910_device, data_r)
 	AM_RANGE(0x1400, 0x140f) AM_MIRROR(0x4000) AM_WRITE(centiped_paletteram_w) AM_SHARE("paletteram")
@@ -725,7 +714,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( caterplr_map, AS_PROGRAM, 8, centiped_state )
 	AM_IMPORT_FROM(centiped_base_map)
-	AM_RANGE(0x1780, 0x1780) AM_READ(caterplr_rand_r)
+	AM_RANGE(0x1780, 0x1780) AM_READ(caterplr_unknown_r)
 	AM_RANGE(0x1000, 0x100f) AM_READWRITE(caterplr_AY8910_r, caterplr_AY8910_w)
 ADDRESS_MAP_END
 
@@ -831,7 +820,7 @@ ADDRESS_MAP_END
 
 READ8_MEMBER(centiped_state::multiped_eeprom_r)
 {
-	return m_eeprom->read_bit() ? 0x80 : 0;
+	return m_eeprom->do_read() ? 0x80 : 0;
 }
 
 WRITE8_MEMBER(centiped_state::multiped_eeprom_w)
@@ -843,15 +832,15 @@ WRITE8_MEMBER(centiped_state::multiped_eeprom_w)
 
 	// a1 low: latch bit
 	if (~offset & 2)
-		m_eeprom->write_bit((data & 0x80) ? 1 : 0);
+		m_eeprom->di_write((data & 0x80) ? 1 : 0);
 
 	// a2 low: write latch or select next bit to read
 	if (~offset & 4)
-		m_eeprom->set_clock_line((~data & 0x80) ? ASSERT_LINE : CLEAR_LINE);
+		m_eeprom->clk_write((~data & 0x80) ? ASSERT_LINE : CLEAR_LINE);
 
 	// both high: reset
 	else if (offset & 2)
-		m_eeprom->set_cs_line((data & 0x80) ? CLEAR_LINE : ASSERT_LINE);
+		m_eeprom->cs_write((data & 0x80) ? ASSERT_LINE : CLEAR_LINE);
 }
 
 WRITE8_MEMBER(centiped_state::multiped_prgbank_w)
@@ -881,10 +870,10 @@ static ADDRESS_MAP_START( warlords_map, AS_PROGRAM, 8, centiped_state )
 	AM_RANGE(0x0000, 0x03ff) AM_RAM
 	AM_RANGE(0x0400, 0x07bf) AM_RAM_WRITE(centiped_videoram_w) AM_SHARE("videoram")
 	AM_RANGE(0x07c0, 0x07ff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0x0800, 0x0800) AM_READ_PORT("DSW1")   /* DSW1 */
-	AM_RANGE(0x0801, 0x0801) AM_READ_PORT("DSW2")   /* DSW2 */
-	AM_RANGE(0x0c00, 0x0c00) AM_READ_PORT("IN0")    /* IN0 */
-	AM_RANGE(0x0c01, 0x0c01) AM_READ_PORT("IN1")    /* IN1 */
+	AM_RANGE(0x0800, 0x0800) AM_READ_PORT("DSW1")
+	AM_RANGE(0x0801, 0x0801) AM_READ_PORT("DSW2")
+	AM_RANGE(0x0c00, 0x0c00) AM_READ_PORT("IN0")
+	AM_RANGE(0x0c01, 0x0c01) AM_READ_PORT("IN1")
 	AM_RANGE(0x1000, 0x100f) AM_DEVREADWRITE("pokey", pokey_device, read, write)
 	AM_RANGE(0x1800, 0x1800) AM_WRITE(irq_ack_w)
 	AM_RANGE(0x1c00, 0x1c02) AM_WRITE(coin_count_w)
@@ -1080,7 +1069,7 @@ static INPUT_PORTS_START( caterplr )
 INPUT_PORTS_END
 
 
-static INPUT_PORTS_START( centtime )
+static INPUT_PORTS_START( centiped4 )
 	PORT_INCLUDE( centiped )
 
 	PORT_MODIFY("IN0")
@@ -1685,56 +1674,6 @@ static GFXDECODE_START( warlords )
 GFXDECODE_END
 
 
-
-/*************************************
- *
- *  Sound interfaces
- *
- *************************************/
-
-static const ay8910_interface centipdb_ay8910_interface =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(centiped_state,caterplr_rand_r)
-};
-
-
-static const pokey_interface milliped_pokey_interface_1 =
-{
-	{ DEVCB_NULL },
-	DEVCB_INPUT_PORT("DSW1")
-};
-
-
-static const pokey_interface milliped_pokey_interface_2 =
-{
-	{ DEVCB_NULL },
-	DEVCB_INPUT_PORT("DSW2")
-};
-
-
-static const pokey_interface warlords_pokey_interface =
-{
-	{
-		DEVCB_INPUT_PORT("PADDLE0"),
-		DEVCB_INPUT_PORT("PADDLE1"),
-		DEVCB_INPUT_PORT("PADDLE2"),
-		DEVCB_INPUT_PORT("PADDLE3")
-	}
-};
-
-
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
-
 /*************************************
  *
  *  Machine drivers
@@ -1760,9 +1699,10 @@ static MACHINE_CONFIG_START( centiped_base, centiped_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(centiped_state, screen_update_centiped)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(centiped)
-	MCFG_PALETTE_LENGTH(4+4*4*4*4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", centiped)
+	MCFG_PALETTE_ADD("palette", 4+4*4*4*4)
 
 	MCFG_VIDEO_START_OVERRIDE(centiped_state,centiped)
 
@@ -1775,7 +1715,7 @@ static MACHINE_CONFIG_DERIVED( centiped, centiped_base )
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_POKEY_ADD("pokey", 12096000/8)
+	MCFG_DEVICE_ADD("pokey", POKEY, 12096000/8)
 	MCFG_POKEY_OUTPUT_OPAMP_LOW_PASS(RES_K(3.3), CAP_U(0.01), 5.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.5)
 
@@ -1805,7 +1745,7 @@ static MACHINE_CONFIG_DERIVED( centipdb, centiped )
 
 	/* sound hardware */
 	MCFG_SOUND_REPLACE("pokey", AY8910, 12096000/8)
-	MCFG_SOUND_CONFIG(centipdb_ay8910_interface)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(centiped_state, caterplr_unknown_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 2.0)
 MACHINE_CONFIG_END
 
@@ -1821,7 +1761,7 @@ static MACHINE_CONFIG_DERIVED( magworm, centiped_base )
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("pokey", AY8910, 12096000/8)
-	MCFG_SOUND_CONFIG(centipdb_ay8910_interface)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(centiped_state, caterplr_unknown_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 2.0)
 
 MACHINE_CONFIG_END
@@ -1834,20 +1774,21 @@ static MACHINE_CONFIG_DERIVED( milliped, centiped )
 	MCFG_CPU_PROGRAM_MAP(milliped_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(milliped)
-	MCFG_PALETTE_LENGTH(4*4+4*4*4*4*4)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", milliped)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(4*4+4*4*4*4*4)
 
 	MCFG_VIDEO_START_OVERRIDE(centiped_state,milliped)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(centiped_state, screen_update_milliped)
 
 	/* sound hardware */
-	MCFG_POKEY_REPLACE("pokey", 12096000/8)
-	MCFG_POKEY_CONFIG(milliped_pokey_interface_1)
+	MCFG_SOUND_REPLACE("pokey", POKEY, 12096000/8)
+	MCFG_POKEY_ALLPOT_R_CB(IOPORT("DSW1"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
-	MCFG_POKEY_ADD("pokey2", 12096000/8)
-	MCFG_POKEY_CONFIG(milliped_pokey_interface_2)
+	MCFG_DEVICE_ADD("pokey2", POKEY, 12096000/8)
+	MCFG_POKEY_ALLPOT_R_CB(IOPORT("DSW2"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 
@@ -1859,7 +1800,7 @@ static MACHINE_CONFIG_DERIVED( multiped, milliped )
 	MCFG_CPU_PROGRAM_MAP(multiped_map)
 
 	MCFG_DEVICE_REMOVE("earom")
-	MCFG_EEPROM_93C46_8BIT_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_93C46_8BIT_ADD("eeprom")
 MACHINE_CONFIG_END
 
 
@@ -1870,17 +1811,21 @@ static MACHINE_CONFIG_DERIVED( warlords, centiped )
 	MCFG_CPU_PROGRAM_MAP(warlords_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(warlords)
-	MCFG_PALETTE_LENGTH(8*4+8*4)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", warlords)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(8*4+8*4)
 
-	MCFG_PALETTE_INIT_OVERRIDE(centiped_state,warlords)
+	MCFG_PALETTE_INIT_OWNER(centiped_state,warlords)
 	MCFG_VIDEO_START_OVERRIDE(centiped_state,warlords)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(centiped_state, screen_update_warlords)
 
 	/* sound hardware */
-	MCFG_POKEY_REPLACE("pokey", 12096000/8)
-	MCFG_POKEY_CONFIG(warlords_pokey_interface)
+	MCFG_SOUND_REPLACE("pokey", POKEY, 12096000/8)
+	MCFG_POKEY_POT0_R_CB(IOPORT("PADDLE0"))
+	MCFG_POKEY_POT1_R_CB(IOPORT("PADDLE1"))
+	MCFG_POKEY_POT2_R_CB(IOPORT("PADDLE2"))
+	MCFG_POKEY_POT3_R_CB(IOPORT("PADDLE3"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -1910,9 +1855,10 @@ static MACHINE_CONFIG_START( bullsdrt, centiped_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(centiped_state, screen_update_bullsdrt)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(centiped)
-	MCFG_PALETTE_LENGTH(4+4*4*4*4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", centiped)
+	MCFG_PALETTE_ADD("palette", 4+4*4*4*4)
 
 	MCFG_VIDEO_START_OVERRIDE(centiped_state,bullsdrt)
 
@@ -1921,7 +1867,6 @@ static MACHINE_CONFIG_START( bullsdrt, centiped_state )
 
 	MCFG_SOUND_ADD("snsnd", SN76496, 12096000/8)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 MACHINE_CONFIG_END
 
 
@@ -1932,7 +1877,34 @@ MACHINE_CONFIG_END
  *
  *************************************/
 
+/*
+    Alt. part numbers for mask ROMs:
+
+    136001-*03 = 136001-*07
+    136001-*04 = 136001-*08
+    136001-*05 = 136001-*09
+    136001-*06 = 136001-*10
+    136001-*01 = 136001-*11
+    136001-*02 = 136001-*12
+*/
+
 ROM_START( centiped )
+	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_LOAD( "136001-407.d1",  0x2000, 0x0800, CRC(c4d995eb) SHA1(d0b2f0461cfa35842045d40ffb65e777703b773e) )
+	ROM_LOAD( "136001-408.e1",  0x2800, 0x0800, CRC(bcdebe1b) SHA1(53f3bf88a79ce40661c0a9381928e55d8c61777a) )
+	ROM_LOAD( "136001-409.fh1", 0x3000, 0x0800, CRC(66d7b04a) SHA1(8fa758095b618085090491dfb5ea114cdc87f9df) )
+	ROM_LOAD( "136001-410.j1",  0x3800, 0x0800, CRC(33ce4640) SHA1(780c2eb320f64fad6b265c0dada961646ed30174) )
+
+	ROM_REGION( 0x1000, "gfx1", 0 )
+	ROM_LOAD( "136001-211.f7",  0x0000, 0x0800, CRC(880acfb9) SHA1(6c862352c329776f2f9974a0df9dbe41f9dbc361) )
+	ROM_LOAD( "136001-212.hj7", 0x0800, 0x0800, CRC(b1397029) SHA1(974c03d29aeca672fffa4dfc00a06be6a851aacb) )
+
+	ROM_REGION( 0x0100, "proms", 0 )
+	ROM_LOAD( "136001-213.p4",  0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
+ROM_END
+
+
+ROM_START( centiped3 )
 	ROM_REGION( 0x10000, "maincpu", 0 )
 	ROM_LOAD( "136001-307.d1",  0x2000, 0x0800, CRC(5ab0d9de) SHA1(8ea6e3304202831aabaf31dbd0f970a7b3bfe421) )
 	ROM_LOAD( "136001-308.e1",  0x2800, 0x0800, CRC(4c07fd3e) SHA1(af4fdbf32c23b1864819d620a874e7f205da3cdb) )
@@ -1940,11 +1912,11 @@ ROM_START( centiped )
 	ROM_LOAD( "136001-310.j1",  0x3800, 0x0800, CRC(44e40fa4) SHA1(c557db83876afc8ab52047ab1a3c3bfef34d6351) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 )
-	ROM_LOAD( "136001-211.f7",  0x0000, 0x0800, CRC(880acfb9) SHA1(6c862352c329776f2f9974a0df9dbe41f9dbc361) ) /* May be labeled "136001-201", same data */
-	ROM_LOAD( "136001-212.hj7", 0x0800, 0x0800, CRC(b1397029) SHA1(974c03d29aeca672fffa4dfc00a06be6a851aacb) ) /* May be labeled "136001-202", same data */
+	ROM_LOAD( "136001-211.f7",  0x0000, 0x0800, CRC(880acfb9) SHA1(6c862352c329776f2f9974a0df9dbe41f9dbc361) )
+	ROM_LOAD( "136001-212.hj7", 0x0800, 0x0800, CRC(b1397029) SHA1(974c03d29aeca672fffa4dfc00a06be6a851aacb) )
 
 	ROM_REGION( 0x0100, "proms", 0 )
-	ROM_LOAD( "136001-213.p4",   0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
+	ROM_LOAD( "136001-213.p4",  0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
 ROM_END
 
 
@@ -1960,7 +1932,7 @@ ROM_START( centipdd ) /* Centipede "Dux" graphics hack by Two-Bit Score in 1989 
 	ROM_LOAD( "dux-212.hj7", 0x0800, 0x0800, CRC(f980c777) SHA1(3997a45ed38d7ae68dddf70b37da6e2e0c6a7710) )
 
 	ROM_REGION( 0x0100, "proms", 0 )
-	ROM_LOAD( "136001-213.p4",   0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
+	ROM_LOAD( "136001-213.p4",  0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
 ROM_END
 
 
@@ -1972,27 +1944,27 @@ ROM_START( centiped2 )
 	ROM_LOAD( "136001-210.j1",  0x3800, 0x0800, CRC(93999153) SHA1(8788c2b39fc5bfbb147a5e7c26ad360bba8d1063) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 )
-	ROM_LOAD( "136001-211.f7",  0x0000, 0x0800, CRC(880acfb9) SHA1(6c862352c329776f2f9974a0df9dbe41f9dbc361) ) /* May be labeled "136001-201", same data */
-	ROM_LOAD( "136001-212.hj7", 0x0800, 0x0800, CRC(b1397029) SHA1(974c03d29aeca672fffa4dfc00a06be6a851aacb) ) /* May be labeled "136001-202", same data */
+	ROM_LOAD( "136001-211.f7",  0x0000, 0x0800, CRC(880acfb9) SHA1(6c862352c329776f2f9974a0df9dbe41f9dbc361) )
+	ROM_LOAD( "136001-212.hj7", 0x0800, 0x0800, CRC(b1397029) SHA1(974c03d29aeca672fffa4dfc00a06be6a851aacb) )
 
 	ROM_REGION( 0x0100, "proms", 0 )
-	ROM_LOAD( "136001-213.p4",   0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
+	ROM_LOAD( "136001-213.p4",  0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
 ROM_END
 
 
-ROM_START( centtime )
+ROM_START( centiped1 )
 	ROM_REGION( 0x10000, "maincpu", 0 )
-	ROM_LOAD( "cent_d1.bin",  0x2000, 0x0800, CRC(c4d995eb) SHA1(d0b2f0461cfa35842045d40ffb65e777703b773e) )
-	ROM_LOAD( "cent_e1.bin",  0x2800, 0x0800, CRC(bcdebe1b) SHA1(53f3bf88a79ce40661c0a9381928e55d8c61777a) )
-	ROM_LOAD( "cent_fh1.bin", 0x3000, 0x0800, CRC(66d7b04a) SHA1(8fa758095b618085090491dfb5ea114cdc87f9df) )
-	ROM_LOAD( "cent_j1.bin",  0x3800, 0x0800, CRC(33ce4640) SHA1(780c2eb320f64fad6b265c0dada961646ed30174) )
+	ROM_LOAD( "136001-107.d1",  0x2000, 0x0800, CRC(674ab844) SHA1(b328cc6be05d4531a2dc8abbd7a0ea8f612d6084) )
+	ROM_LOAD( "136001-108.e1",  0x2800, 0x0800, CRC(47ceddc9) SHA1(bdce4ed0812d8f73a4935f6302065fd3f2eff8c7) )
+	ROM_LOAD( "136001-109.fh1", 0x3000, 0x0800, CRC(7ee80952) SHA1(a913be14f551368480badbe519be658689ec3027) )
+	ROM_LOAD( "136001-110.j1",  0x3800, 0x0800, CRC(93b33dce) SHA1(b17f1c2186a7a0b98e07f85b4da9b623c2f3c05b) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 )
-	ROM_LOAD( "136001-211.f7",  0x0000, 0x0800, CRC(880acfb9) SHA1(6c862352c329776f2f9974a0df9dbe41f9dbc361) ) /* May be labeled "136001-201", same data */
-	ROM_LOAD( "136001-212.hj7", 0x0800, 0x0800, CRC(b1397029) SHA1(974c03d29aeca672fffa4dfc00a06be6a851aacb) ) /* May be labeled "136001-202", same data */
+	ROM_LOAD( "136001-111.f7",  0x0000, 0x0800, CRC(880acfb9) SHA1(6c862352c329776f2f9974a0df9dbe41f9dbc361) )
+	ROM_LOAD( "136001-112.hj7", 0x0800, 0x0800, CRC(b1397029) SHA1(974c03d29aeca672fffa4dfc00a06be6a851aacb) )
 
 	ROM_REGION( 0x0100, "proms", 0 )
-	ROM_LOAD( "136001-213.p4",   0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
+	ROM_LOAD( "136001-113.p4",  0x0000, 0x0100, CRC(4cd24c85) SHA1(00f4876279255f3a2d136a9d916b388812cbd1fc) )
 ROM_END
 
 
@@ -2008,7 +1980,7 @@ ROM_START( caterplr )
 	ROM_LOAD( "olympia.c33",  0x0800, 0x0800, CRC(c2b08489) SHA1(9427e54537312ee0a70ec7bd1c039e92f8cfadad) )
 
 	ROM_REGION( 0x0100, "proms", 0 )
-	ROM_LOAD( "136001-213.p4",   0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
+	ROM_LOAD( "136001-213.p4", 0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
 ROM_END
 
 
@@ -2025,7 +1997,7 @@ ROM_START( centipdb )
 	ROM_LOAD( "136001-212.hj7", 0x0800, 0x0800, CRC(b1397029) SHA1(974c03d29aeca672fffa4dfc00a06be6a851aacb) )
 
 	ROM_REGION( 0x0100, "proms", 0 )
-	ROM_LOAD( "136001-213.p4",   0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
+	ROM_LOAD( "136001-213.p4", 0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
 ROM_END
 
 
@@ -2059,19 +2031,35 @@ ROM_START( magworm )
 ROM_END
 
 
+ROM_START( magworma )
+	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_LOAD( "h41.1d",  0x2000, 0x0800, CRC(773a3da6) SHA1(577ae0578231df83a768d6a50b86dcaf715a32d7) )
+	ROM_LOAD( "h42.1e",  0x2800, 0x0800, CRC(482c7808) SHA1(6d274a988e603d33131cb6ffbfe2cdd22fabf25b) )
+	ROM_LOAD( "h43.1fh", 0x3000, 0x0800, CRC(1c46f769) SHA1(dc25ab3d9abf2180d3ff20f96b69fd6ed3b0e08c) )
+	ROM_LOAD( "h44.1j",  0x3800, 0x0800, CRC(19a79e26) SHA1(0485ae6d21ad7c9d04475ad7858c47205830df84) )
+
+	ROM_REGION( 0x1000, "gfx1", 0 ) /* same as magworm */
+	ROM_LOAD( "h45.7hj", 0x0000, 0x0800, CRC(cea64e1a) SHA1(9022102124e1ad93f912ce8bdf85f8a886b0879b) )
+	ROM_LOAD( "h45.7f",  0x0800, 0x0800, CRC(24558ea5) SHA1(8cd7131e19afd7a96191b1b3c3fba7ae9a140f4b) )
+
+	ROM_REGION( 0x0200, "proms", 0 )
+	ROM_LOAD( "prom.4p", 0x0000, 0x0200, CRC(a5101624) SHA1(36d11e343a78046b99ea1a2daba4908ec60ae61e) ) /* not used */
+ROM_END
+
+
 ROM_START( milliped )
 	ROM_REGION( 0x10000, "maincpu", 0 )
-	ROM_LOAD( "136013-104.1mn", 0x4000, 0x1000, CRC(40711675) SHA1(b595d6a0f5d3c611ade1b83a94c3b909d2124dc4) )
-	ROM_LOAD( "136013-103.1l",  0x5000, 0x1000, CRC(fb01baf2) SHA1(9c1d0bbc20bf25dd21761a311fd1ed80aa029241) )
-	ROM_LOAD( "136013-102.1jk", 0x6000, 0x1000, CRC(62e137e0) SHA1(9fe40db55ba1d20d4f11704f7f5df9ff75b87f30) )
-	ROM_LOAD( "136013-101.1h",  0x7000, 0x1000, CRC(46752c7d) SHA1(ab06b1fd80271849946f90757b3837b617394929) )
+	ROM_LOAD( "136013-104.mn1", 0x4000, 0x1000, CRC(40711675) SHA1(b595d6a0f5d3c611ade1b83a94c3b909d2124dc4) )
+	ROM_LOAD( "136013-103.l1",  0x5000, 0x1000, CRC(fb01baf2) SHA1(9c1d0bbc20bf25dd21761a311fd1ed80aa029241) )
+	ROM_LOAD( "136013-102.jk1", 0x6000, 0x1000, CRC(62e137e0) SHA1(9fe40db55ba1d20d4f11704f7f5df9ff75b87f30) )
+	ROM_LOAD( "136013-101.h1",  0x7000, 0x1000, CRC(46752c7d) SHA1(ab06b1fd80271849946f90757b3837b617394929) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 )
-	ROM_LOAD( "136013-107.5r", 0x0000, 0x0800, CRC(68c3437a) SHA1(4c7ea33d9501456ee8f5a642da7d6c972f2bb90d) )
-	ROM_LOAD( "136013-106.5p", 0x0800, 0x0800, CRC(f4468045) SHA1(602fcc7290f9f4eacb841c76665961ebf4307f80) )
+	ROM_LOAD( "136013-107.r5", 0x0000, 0x0800, CRC(68c3437a) SHA1(4c7ea33d9501456ee8f5a642da7d6c972f2bb90d) )
+	ROM_LOAD( "136013-106.p5", 0x0800, 0x0800, CRC(f4468045) SHA1(602fcc7290f9f4eacb841c76665961ebf4307f80) )
 
 	ROM_REGION( 0x0100, "proms", 0 )
-	ROM_LOAD( "136001-213.7e", 0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) ) /* not used */
+	ROM_LOAD( "136001-213.e7", 0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) ) // Sync PROM
 ROM_END
 
 
@@ -2087,7 +2075,7 @@ ROM_START( millipdd ) /* Millipede "Dux" graphics hack by Two-Bit Score in 1989 
 	ROM_LOAD( "mil-dux.5p", 0x0800, 0x0800, CRC(2a6ef4b0) SHA1(832dae8c1b1f959bb8582f9503d84bea9d50c08c) )
 
 	ROM_REGION( 0x0100, "proms", 0 )
-	ROM_LOAD( "136001-213.7e", 0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) ) /* not used */
+	ROM_LOAD( "136001-213.7e", 0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) ) // Sync PROM
 ROM_END
 
 
@@ -2102,46 +2090,48 @@ ROM_START( multiped )
 	ROM_LOAD( "cm_5p.bin", 0x2000, 0x2000, CRC(cfbc3622) SHA1(a22da8f9b28effcd90794cb87ebc2afdf3fc4282) )
 
 	ROM_REGION( 0x0100, "proms", 0 )
-	ROM_LOAD( "136001-213.7e", 0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) ) /* not used */
+	ROM_LOAD( "136001-213.7e", 0x0000, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) ) // Sync PROM
 ROM_END
 
 
 ROM_START( mazeinv )
 	ROM_REGION( 0x10000, "maincpu", 0 )
-	ROM_LOAD( "005.011",      0x3000, 0x1000, CRC(37129536) SHA1(356cb986a40b332100e00fb72194fd4dade2cba7) )
-	ROM_LOAD( "004.011",      0x4000, 0x1000, CRC(2d0fbf2f) SHA1(9d4c2bc9f80604d1ff5c5bf5a4a78378efdd8b33) )
-	ROM_LOAD( "003.011",      0x5000, 0x1000, CRC(0ff3747c) SHA1(1a7e1c487c24875dada967fb3a9ceaca25b7e2a7) )
-	ROM_LOAD( "002.011",      0x6000, 0x1000, CRC(96478e07) SHA1(e99d9970dc12ed36520d91646f1955cce87b55b6) )
-	ROM_LOAD( "001.011",      0x7000, 0x1000, CRC(d5c29a01) SHA1(5201a6cd42e4954c6cd4298f7b6cee4a8c181248) )
+	ROM_LOAD( "136011-005.p1",  0x3000, 0x1000, CRC(37129536) SHA1(356cb986a40b332100e00fb72194fd4dade2cba7) )
+	ROM_LOAD( "136011-004.mn1", 0x4000, 0x1000, CRC(2d0fbf2f) SHA1(9d4c2bc9f80604d1ff5c5bf5a4a78378efdd8b33) )
+	ROM_LOAD( "136011-003.l1",  0x5000, 0x1000, CRC(0ff3747c) SHA1(1a7e1c487c24875dada967fb3a9ceaca25b7e2a7) )
+	ROM_LOAD( "136011-002.k1",  0x6000, 0x1000, CRC(96478e07) SHA1(e99d9970dc12ed36520d91646f1955cce87b55b6) )
+	ROM_LOAD( "136011-001.hj1", 0x7000, 0x1000, CRC(d5c29a01) SHA1(5201a6cd42e4954c6cd4298f7b6cee4a8c181248) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 )
-	ROM_LOAD( "007.011",      0x0000, 0x0800, CRC(16e738f4) SHA1(96335afc4510aae6b4ee6dfd8f5c1b2baa8c2798) )
-	ROM_LOAD( "006.011",      0x0800, 0x0800, CRC(d4705e4e) SHA1(e099f3df0d2f56d557631e69bc76ae2f09a80b42) )
+	ROM_LOAD( "136011-007.hj6", 0x0000, 0x0800, CRC(16e738f4) SHA1(96335afc4510aae6b4ee6dfd8f5c1b2baa8c2798) )
+	ROM_LOAD( "136011-006.f6",  0x0800, 0x0800, CRC(d4705e4e) SHA1(e099f3df0d2f56d557631e69bc76ae2f09a80b42) )
 
 	ROM_REGION( 0x0120, "proms", 0 )
-	ROM_LOAD( "009.011",      0x0000, 0x0020, CRC(dcc48de5) SHA1(5594568dd6a605d6d9d9646b1af645af72a7f53d) )
-	ROM_LOAD( "008.011",      0x0020, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) )
+	ROM_LOAD( "136011-009.c11", 0x0000, 0x0020, CRC(dcc48de5) SHA1(5594568dd6a605d6d9d9646b1af645af72a7f53d) ) // Color PROM
+	ROM_LOAD( "136011-008.c10", 0x0020, 0x0100, CRC(6fa3093a) SHA1(2b7aeca74c1ae4156bf1878453a047330f96f0a8) ) // Sync PROM
 ROM_END
 
 
 ROM_START( warlords )
 	ROM_REGION( 0x10000, "maincpu", 0 )
-	ROM_LOAD( "037154.1m",    0x5000, 0x0800, CRC(18006c87) SHA1(6b4aab1b1710819d29f4bbc29269eb9c915626c0) )
-	ROM_LOAD( "037153.1k",    0x5800, 0x0800, CRC(67758f4c) SHA1(b65ca677b54de7a8202838207d9a7bb0aed3e0f2) )
-	ROM_LOAD( "037158.1j",    0x6000, 0x0800, CRC(1f043a86) SHA1(b1e271c0979d62202ae86c4b6860fb67bbef6400) )
-	ROM_LOAD( "037157.1h",    0x6800, 0x0800, CRC(1a639100) SHA1(41ec333aee7192f8aeef49e5257f201f4db01cff) )
-	ROM_LOAD( "037156.1e",    0x7000, 0x0800, CRC(534f34b4) SHA1(1680982ded17350c2ae10bb47f7eb8908bb10db2) )
-	ROM_LOAD( "037155.1d",    0x7800, 0x0800, CRC(23b94210) SHA1(d74c1ca90caf15942805043b4ebe4ee077799da0) )
+	ROM_LOAD( "037154-01.m1", 0x5000, 0x0800, CRC(18006c87) SHA1(6b4aab1b1710819d29f4bbc29269eb9c915626c0) )
+	ROM_LOAD( "037153-01.k1", 0x5800, 0x0800, CRC(67758f4c) SHA1(b65ca677b54de7a8202838207d9a7bb0aed3e0f2) )
+	ROM_LOAD( "037158-01.j1", 0x6000, 0x0800, CRC(1f043a86) SHA1(b1e271c0979d62202ae86c4b6860fb67bbef6400) )
+	ROM_LOAD( "037157-01.h1", 0x6800, 0x0800, CRC(1a639100) SHA1(41ec333aee7192f8aeef49e5257f201f4db01cff) )
+	ROM_LOAD( "037156-01.e1", 0x7000, 0x0800, CRC(534f34b4) SHA1(1680982ded17350c2ae10bb47f7eb8908bb10db2) )
+	ROM_LOAD( "037155-01.d1", 0x7800, 0x0800, CRC(23b94210) SHA1(d74c1ca90caf15942805043b4ebe4ee077799da0) )
 
 	ROM_REGION( 0x0800, "gfx1", 0 )
-	ROM_LOAD( "037159.6e",    0x0000, 0x0800, CRC(ff979a08) SHA1(422053473e41e3e1f71eb28e40eedc78f22326b3) )
+	ROM_LOAD( "037159-01.e6", 0x0000, 0x0800, CRC(ff979a08) SHA1(422053473e41e3e1f71eb28e40eedc78f22326b3) )
 
-	ROM_REGION( 0x0100, "proms", 0 )
+	ROM_REGION( 0x0200, "proms", 0 )
 	/* Only the first 0x80 bytes are used by the hardware. A7 is grounded. */
 	/* Bytes 0x00-0x3f are used fore the color cocktail version. */
 	/* Bytes 0x40-0x7f are for the upright version of the cabinet with a */
 	/* mirror and painted background. */
-	ROM_LOAD( "warlord.clr",  0x0000, 0x0100, CRC(a2c5c277) SHA1(f04de9fb6ee9619b4a4aae10c92b16b3123046cf) )
+	ROM_LOAD( "037235-01.n7", 0x0000, 0x0100, CRC(a2c5c277) SHA1(f04de9fb6ee9619b4a4aae10c92b16b3123046cf) )
+	ROM_LOAD( "037161-01.m6", 0x0100, 0x0100, CRC(4cd24c85) SHA1(00f4876279255f3a2d136a9d916b388812cbd1fc) ) // Sync PROM
+
 ROM_END
 
 
@@ -2196,19 +2186,24 @@ DRIVER_INIT_MEMBER(centiped_state,multiped)
  *
  *************************************/
 
-GAME( 1980, centiped, 0,        centiped, centiped, driver_device, 0,        ROT270, "Atari",   "Centipede (revision 3)", GAME_SUPPORTS_SAVE)
-GAME( 1980, centiped2,centiped, centiped, centiped, driver_device, 0,        ROT270, "Atari",   "Centipede (revision 2)", GAME_SUPPORTS_SAVE )
-GAME( 1980, centtime, centiped, centiped, centtime, driver_device, 0,        ROT270, "Atari",   "Centipede (1 player, timed)", GAME_SUPPORTS_SAVE )
-GAME( 1980, centipdb, centiped, centipdb, centiped, driver_device, 0,        ROT270, "bootleg", "Centipede (bootleg)", GAME_SUPPORTS_SAVE )
-GAME( 1989, centipdd, centiped, centiped, centiped, driver_device, 0,        ROT270, "hack (Two-Bit Score)", "Centipede Dux (hack)", GAME_SUPPORTS_SAVE )
-GAME( 1980, caterplr, centiped, caterplr, caterplr, driver_device, 0,        ROT270, "bootleg", "Caterpillar (bootleg of Centipede)", GAME_SUPPORTS_SAVE )
-GAME( 1980, millpac,  centiped, centipdb, centiped, driver_device, 0,        ROT270, "bootleg? (Valadon Automation)", "Millpac (bootleg of Centipede)", GAME_SUPPORTS_SAVE )
-GAME( 1980, magworm,  centiped, magworm,  magworm, driver_device,  0,        ROT270, "bootleg", "Magic Worm (bootleg of Centipede)", GAME_SUPPORTS_SAVE )
-GAME( 1982, milliped, 0,        milliped, milliped, driver_device, 0,        ROT270, "Atari",   "Millipede", GAME_SUPPORTS_SAVE )
-GAME( 1989, millipdd, milliped, milliped, milliped, driver_device, 0,        ROT270, "hack (Two-Bit Score)", "Millipede Dux (hack)", GAME_SUPPORTS_SAVE )
-GAME( 2002, multiped, 0,        multiped, multiped, centiped_state, multiped, ROT270, "hack (Braze Technologies)", "Multipede (Centipede/Millipede multigame kit)", GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+// Centipede, Millipede, and clones
+GAME( 1980, centiped,  0,        centiped, centiped4,driver_device,  0,        ROT270, "Atari", "Centipede (revision 4)", GAME_SUPPORTS_SAVE ) /* 1 Player Only with Timer Options */
+GAME( 1980, centiped3, centiped, centiped, centiped, driver_device,  0,        ROT270, "Atari", "Centipede (revision 3)", GAME_SUPPORTS_SAVE )
+GAME( 1980, centiped2, centiped, centiped, centiped, driver_device,  0,        ROT270, "Atari", "Centipede (revision 2)", GAME_SUPPORTS_SAVE )
+GAME( 1980, centiped1, centiped, centiped, centiped, driver_device,  0,        ROT270, "Atari", "Centipede (revision 1)", GAME_SUPPORTS_SAVE )
+GAME( 1980, centipdb,  centiped, centipdb, centiped, driver_device,  0,        ROT270, "bootleg", "Centipede (bootleg)", GAME_SUPPORTS_SAVE )
+GAME( 1989, centipdd,  centiped, centiped, centiped, driver_device,  0,        ROT270, "hack (Two-Bit Score)", "Centipede Dux (hack)", GAME_SUPPORTS_SAVE )
+GAME( 1980, caterplr,  centiped, caterplr, caterplr, driver_device,  0,        ROT270, "bootleg (Olympia)", "Caterpillar (bootleg of Centipede)", GAME_SUPPORTS_SAVE )
+GAME( 1980, millpac,   centiped, centipdb, centiped, driver_device,  0,        ROT270, "bootleg? (Valadon Automation)", "Millpac (bootleg of Centipede)", GAME_SUPPORTS_SAVE )
+GAME( 1980, magworm,   centiped, magworm,  magworm,  driver_device,  0,        ROT270, "bootleg (Sidam)", "Magic Worm (bootleg of Centipede, set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1980, magworma,  centiped, magworm,  magworm,  driver_device,  0,        ROT270, "bootleg", "Magic Worm (bootleg of Centipede, set 2)", GAME_SUPPORTS_SAVE | GAME_NOT_WORKING )
+GAME( 1982, milliped,  0,        milliped, milliped, driver_device,  0,        ROT270, "Atari", "Millipede", GAME_SUPPORTS_SAVE )
+GAME( 1989, millipdd,  milliped, milliped, milliped, driver_device,  0,        ROT270, "hack (Two-Bit Score)", "Millipede Dux (hack)", GAME_SUPPORTS_SAVE )
+GAME( 2002, multiped,  0,        multiped, multiped, centiped_state, multiped, ROT270, "hack (Braze Technologies)", "Multipede (Centipede/Millipede multigame kit)", GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
 
-GAME( 1980, warlords, 0,        warlords, warlords, driver_device, 0,        ROT0,   "Atari",   "Warlords", GAME_SUPPORTS_SAVE )
-GAME( 1981, mazeinv,  0,        mazeinv,  mazeinv, driver_device,  0,        ROT270, "Atari",   "Maze Invaders (prototype)", 0 )
+// other Atari games
+GAME( 1980, warlords,  0,        warlords, warlords, driver_device,  0,        ROT0,   "Atari", "Warlords", GAME_SUPPORTS_SAVE )
+GAME( 1981, mazeinv,   0,        mazeinv,  mazeinv,  driver_device,  0,        ROT270, "Atari", "Maze Invaders (prototype)", 0 )
 
-GAME( 1985, bullsdrt, 0,        bullsdrt, bullsdrt, centiped_state, bullsdrt, ROT270, "Shinkai Inc. (Magic Electronics Inc. license)", "Bulls Eye Darts", GAME_WRONG_COLORS | GAME_SUPPORTS_SAVE )
+// other manufacturers
+GAME( 1985, bullsdrt,  0,        bullsdrt, bullsdrt, centiped_state, bullsdrt, ROT270, "Shinkai Inc. (Magic Electronics Inc. license)", "Bulls Eye Darts", GAME_WRONG_COLORS | GAME_SUPPORTS_SAVE )

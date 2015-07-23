@@ -1,25 +1,33 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia
 /***************************************************************************
 
     Double Dribble
 
 ***************************************************************************/
 
+#include "sound/flt_rc.h"
+#include "sound/vlm5030.h"
+
 class ddribble_state : public driver_device
 {
 public:
 	ddribble_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-		m_paletteram(*this, "paletteram"),
 		m_fg_videoram(*this, "fg_videoram"),
 		m_spriteram_1(*this, "spriteram_1"),
 		m_sharedram(*this, "sharedram"),
 		m_bg_videoram(*this, "bg_videoram"),
 		m_spriteram_2(*this, "spriteram_2"),
 		m_snd_sharedram(*this, "snd_sharedram"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_vlm(*this, "vlm"),
+		m_filter1(*this, "filter1"),
+		m_filter2(*this, "filter2"),
+		m_filter3(*this, "filter3"),
+		m_gfxdecode(*this, "gfxdecode") { }
 
 	/* memory pointers */
-	required_shared_ptr<UINT8> m_paletteram;
 	required_shared_ptr<UINT8> m_fg_videoram;
 	required_shared_ptr<UINT8> m_spriteram_1;
 	required_shared_ptr<UINT8> m_sharedram;
@@ -38,9 +46,13 @@ public:
 	int         m_int_enable_1;
 
 	/* devices */
-	device_t *m_filter1;
-	device_t *m_filter2;
-	device_t *m_filter3;
+	required_device<cpu_device> m_maincpu;
+	required_device<vlm5030_device> m_vlm;
+	required_device<filter_rc_device> m_filter1;
+	required_device<filter_rc_device> m_filter2;
+	required_device<filter_rc_device> m_filter3;
+	required_device<gfxdecode_device> m_gfxdecode;
+
 	DECLARE_WRITE8_MEMBER(ddribble_bankswitch_w);
 	DECLARE_READ8_MEMBER(ddribble_sharedram_r);
 	DECLARE_WRITE8_MEMBER(ddribble_sharedram_w);
@@ -59,11 +71,9 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(ddribble);
 	UINT32 screen_update_ddribble(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(ddribble_interrupt_0);
 	INTERRUPT_GEN_MEMBER(ddribble_interrupt_1);
-	void set_pens(  );
 	void draw_sprites(  bitmap_ind16 &bitmap, const rectangle &cliprect, UINT8* source, int lenght, int gfxset, int flipscreen );
-	required_device<cpu_device> m_maincpu;
 };

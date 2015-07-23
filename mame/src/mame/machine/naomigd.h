@@ -1,10 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #ifndef _NAOMIGD_H_
 #define _NAOMIGD_H_
 
 #include "machine/naomibd.h"
 
 #define MCFG_NAOMI_GDROM_BOARD_ADD(_tag, _image_tag, _pic_tag, _eeprom_tag, _irq_cb) \
-	MCFG_NAOMI_BOARD_ADD(_tag, NAOMI_GDROM_BOARD, _eeprom_tag, _irq_cb) \
+	MCFG_NAOMI_BOARD_ADD(_tag, NAOMI_GDROM_BOARD, _eeprom_tag, NULL, _irq_cb) \
 	naomi_gdrom_board::static_set_tags(*device, _image_tag, _pic_tag);
 
 class naomi_gdrom_board : public naomi_board
@@ -13,6 +15,8 @@ public:
 	naomi_gdrom_board(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
 	static void static_set_tags(device_t &device, const char *_image_tag, const char *_pic_tag);
+
+	UINT8 *memory(UINT32 &size) { size = dimm_data_size; return dimm_data; }
 
 protected:
 	virtual void device_start();

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:JJ Stacino
 /////////////////////////////////////////////////////////////////////////
 // HEC2HRP.C  in machine
 /*      Hector 2HR+
@@ -41,7 +43,6 @@
 #include "emu.h"
 #include "imagedev/cassette.h"
 #include "imagedev/printer.h"
-#include "sound/sn76477.h"   /* for sn sound*/
 #include "sound/wave.h"      /* for K7 sound*/
 #include "sound/discrete.h"  /* for 1 Bit sound*/
 #include "machine/upd765.h" /* for floppy disc controller */
@@ -101,85 +102,25 @@ TIMER_CALLBACK_MEMBER(hec2hrp_state::Callback_CK)
 	m_CK_signal++;
 }
 
-void hec2hrp_state::hector_minidisc_init()
+WRITE8_MEMBER( hec2hrp_state::minidisc_control_w )
 {
-	device_t *fdc = machine().device("wd179x");
-	//set density
-	wd17xx_dden_w(fdc, 1);// density select => always 1 (0 ?a plante !)
+	floppy_image_device *floppy = NULL;
 
-	/* FDC Motor Control - Bit 0/1 defines the state of the FDD 0/1 motor */
-	floppy_mon_w(floppy_get_device(machine(), 0), 0); // Moteur floppy A:
-	//floppy_mon_w(floppy_get_device(space.machine(), 1), BIT(data, 7));   // Moteur floppy B:, not implanted on the real machine
+	if (BIT(data, 6)) floppy = m_floppy0->get_device();
+	// bit 7 = drive 2?
 
-	//Set the drive ready !
-	floppy_drive_set_ready_state(floppy_get_device(machine(), 0), FLOPPY_DRIVE_READY, 0);// Disc 0 ready !
+	m_minidisc_fdc->set_floppy(floppy);
 
-}
-
-READ8_MEMBER(hec2hrp_state::hector_179x_register_r)
-{
-int data=0;
-device_t *fdc = machine().device("wd179x");
-
-	switch (offset & 0x0ff)
+	if (floppy)
 	{
-		/* minidisc floppy disc interface */
-		case 0x04:
-			data = wd17xx_status_r(fdc, space, 0);
-			break;
-		case 0x05:
-			data = wd17xx_track_r(fdc, space, 0);
-			break;
-		case 0x06:
-			data = wd17xx_sector_r(fdc, space, 0);
-			break;
-		case 0x07:
-			data = wd17xx_data_r(fdc, space, 0);
-			break;
-		default:
-			break;
+		// don't know where the motor on signal is
+		floppy->mon_w(0);
+		floppy->ss_w(BIT(data, 4));
 	}
 
-	return data;
+	membank("bank2")->set_entry(BIT(data, 5) ? HECTOR_BANK_BASE : HECTOR_BANK_DISC);
 }
-WRITE8_MEMBER(hec2hrp_state::hector_179x_register_w)
-{
-device_t *fdc = machine().device("wd179x");
-switch (offset)
-	{
-		/* minidisc floppy disc interface */
-		case 0x04:
-			wd17xx_command_w(fdc, space, 0, data);
-			break;
-		case 0x05:
-			wd17xx_track_w(fdc, space, 0, data);
-			break;
-		case 0x06:
-			wd17xx_sector_w(fdc, space, 0, data);
-			break;
-		case 0x07:
-			/*write into command register*/
-			wd17xx_data_w(fdc, space, 0, data);
-			break;
-		case 0x08:
-			/*General purpose port (0x08) for the minidisk I/O */
-			{
-			// Rom page bank switching
-			membank("bank2")->set_entry(BIT(data, 5) ? HECTOR_BANK_BASE : HECTOR_BANK_DISC );
 
-			// Set drive number
-			if (BIT(data, 6)) wd17xx_set_drive(fdc, 0);  // Set the correct drive number 0
-			//if (BIT(data, 7)) wd17xx_set_drive(fdc, 1);// Set the correct drive number 1,never here
-
-			// Set side
-			wd17xx_set_side(fdc,BIT(data, 4) ? 1 : 0);// side select
-			}
-			break;
-
-		default:
-		break;
-	}
-}
 WRITE8_MEMBER(hec2hrp_state::hector_switch_bank_w)
 {
 	if (offset==0x00)   {   /* 0x800 et 0x000=> video page, HR*/
@@ -231,12 +172,11 @@ WRITE8_MEMBER(hec2hrp_state::hector_keyboard_w)
 READ8_MEMBER(hec2hrp_state::hector_keyboard_r)
 {
 	UINT8 data = 0xff;
-	static const char *const keynames[] = { "KEY0", "KEY1", "KEY2", "KEY3", "KEY4", "KEY5", "KEY6", "KEY7", "KEY8" };
 
 	if (offset ==7) /* Only when joy reading*/
 	{
 		/* Read special key for analog joystick emulation only (button and pot are analog signal!) and the reset */
-		data=ioport(keynames[8])->read();
+		data=m_keyboard[8]->read();
 
 		if (data & 0x01) /* Reset machine ! (on ESC key)*/
 		{
@@ -255,8 +195,7 @@ READ8_MEMBER(hec2hrp_state::hector_keyboard_r)
 
 				/* floppy md master reset */
 				if (isHectorWithMiniDisc())
-					wd17xx_mr_w(machine().device("wd179x"), 1);
-
+					m_minidisc_fdc->reset();
 			}
 
 			else /* aviable for BR machines */
@@ -295,7 +234,7 @@ READ8_MEMBER(hec2hrp_state::hector_keyboard_r)
 	}
 
 	/* in all case return the request value*/
-	return ioport(keynames[offset])->read();
+	return m_keyboard[offset]->read();
 }
 
 WRITE8_MEMBER(hec2hrp_state::hector_sn_2000_w)
@@ -414,7 +353,7 @@ WRITE8_MEMBER(hec2hrp_state::hector_color_a_w)
 
 WRITE8_MEMBER(hec2hrp_state::hector_color_b_w)
 {
-	device_t *discrete = machine().device("discrete");
+	discrete_device *discrete = machine().device<discrete_device>("discrete");
 	m_hector_color[1] =  data        & 0x07;
 	m_hector_color[3] = (data >> 3)  & 0x07;
 
@@ -422,7 +361,7 @@ WRITE8_MEMBER(hec2hrp_state::hector_color_b_w)
 	if (data & 0x40) m_hector_color[2] |= 8; else m_hector_color[2] &= 7;
 
 	/* Play bit*/
-	discrete_sound_w(discrete, space, NODE_01,  (data & 0x80) ? 0:1 );
+	discrete->write(space, NODE_01,  (data & 0x80) ? 0:1 );
 }
 
 
@@ -773,75 +712,53 @@ void hec2hrp_state::Init_Value_SN76477_Hector()
 void hec2hrp_state::Update_Sound(address_space &space, UINT8 data)
 {
 	/* keep device*/
-	device_t *sn76477 = space.machine().device("sn76477");
-
 	/* MIXER*/
-	sn76477_mixer_a_w(sn76477, ((m_ValMixer & 0x04)==4) ? 1 : 0);
-	sn76477_mixer_b_w(sn76477, ((m_ValMixer & 0x01)==1) ? 1 : 0);
-	sn76477_mixer_c_w(sn76477, ((m_ValMixer & 0x02)==2) ? 1 : 0);/* Revu selon mesure electronique sur HRX*/
+	m_sn->mixer_a_w(((m_ValMixer & 0x04)==4) ? 1 : 0);
+	m_sn->mixer_b_w(((m_ValMixer & 0x01)==1) ? 1 : 0);
+	m_sn->mixer_c_w(((m_ValMixer & 0x02)==2) ? 1 : 0);/* Revu selon mesure electronique sur HRX*/
 
 	/* VCO oscillateur*/
 	if (m_AU[12]==1)
-		sn76477_vco_res_w(      sn76477, m_Pin_Value[18][m_AU[10]]/12.0); /* en non AU11*/
+		m_sn->vco_res_w(m_Pin_Value[18][m_AU[10]]/12.0); /* en non AU11*/
 	else
-		sn76477_vco_res_w(      sn76477, m_Pin_Value[18][m_AU[10]]); /* en non AU11*/
+		m_sn->vco_res_w(m_Pin_Value[18][m_AU[10]]); /* en non AU11*/
 
-	sn76477_vco_cap_w(      sn76477, m_Pin_Value[17][m_AU[2 ]]);
-	sn76477_pitch_voltage_w(sn76477, m_Pin_Value[19][m_AU[15]]);
-	sn76477_vco_voltage_w(  sn76477, m_Pin_Value[16][m_AU[15]]);
-	sn76477_vco_w(          sn76477, m_Pin_Value[22][m_AU[12]]); /* VCO Select Ext/SLF*/
+	m_sn->vco_cap_w(m_Pin_Value[17][m_AU[2 ]]);
+	m_sn->pitch_voltage_w(m_Pin_Value[19][m_AU[15]]);
+	m_sn->vco_voltage_w(m_Pin_Value[16][m_AU[15]]);
+	m_sn->vco_w(m_Pin_Value[22][m_AU[12]]); /* VCO Select Ext/SLF*/
 
 	/* SLF*/
-	sn76477_slf_res_w( sn76477, m_Pin_Value[20][m_AU[ 9]]);/*AU10*/
-	sn76477_slf_cap_w( sn76477, m_Pin_Value[21][m_AU[1 ]]);
+	m_sn->slf_res_w(m_Pin_Value[20][m_AU[ 9]]);/*AU10*/
+	m_sn->slf_cap_w(m_Pin_Value[21][m_AU[1 ]]);
 
 	/* One Shot*/
-	sn76477_one_shot_res_w(sn76477, m_Pin_Value[24][     0]); /* NC*/
-	sn76477_one_shot_cap_w(sn76477, m_Pin_Value[23][m_AU[13]]);
+	m_sn->one_shot_res_w(m_Pin_Value[24][     0]); /* NC*/
+	m_sn->one_shot_cap_w(m_Pin_Value[23][m_AU[13]]);
 
 	/* Ampli value*/
-	sn76477_amplitude_res_w(sn76477, m_Pin_Value[11][m_AU[5]]);
+	m_sn->amplitude_res_w(m_Pin_Value[11][m_AU[5]]);
 
 	/* Attack / Decay*/
-	sn76477_attack_res_w(sn76477, m_Pin_Value[10][m_AU[ 8]]);
-	sn76477_decay_res_w( sn76477, m_Pin_Value[7 ][m_AU[11]]);/*AU9*/
-	sn76477_attack_decay_cap_w(sn76477, m_Pin_Value[8][m_AU[0]]);
+	m_sn->attack_res_w(m_Pin_Value[10][m_AU[ 8]]);
+	m_sn->decay_res_w(m_Pin_Value[7 ][m_AU[11]]);/*AU9*/
+	m_sn->attack_decay_cap_w(m_Pin_Value[8][m_AU[0]]);
 
 	/* Filtre*/
-	sn76477_noise_filter_res_w(sn76477, m_Pin_Value[5][m_AU[4]]);
-	sn76477_noise_filter_cap_w(sn76477, m_Pin_Value[6][m_AU[3]]);
+	m_sn->noise_filter_res_w(m_Pin_Value[5][m_AU[4]]);
+	m_sn->noise_filter_cap_w(m_Pin_Value[6][m_AU[3]]);
 
 	/* Clock Extern Noise*/
-	sn76477_noise_clock_res_w(sn76477, m_Pin_Value[4][0]);   /* fix*/
-	sn76477_feedback_res_w(sn76477, m_Pin_Value[12][0]);     /*fix*/
+	m_sn->noise_clock_res_w(m_Pin_Value[4][0]);   /* fix*/
+	m_sn->feedback_res_w(m_Pin_Value[12][0]);     /*fix*/
 
 	/*  Envelope*/
-	sn76477_envelope_1_w(sn76477, m_Pin_Value[1 ][m_AU[6]]);
-	sn76477_envelope_2_w(sn76477, m_Pin_Value[28][m_AU[7]]);
+	m_sn->envelope_1_w(m_Pin_Value[1 ][m_AU[6]]);
+	m_sn->envelope_2_w(m_Pin_Value[28][m_AU[7]]);
 
 	/* En dernier on lance (ou pas !)*/
-	sn76477_enable_w(sn76477, m_Pin_Value[9][m_AU[14]]);
+	m_sn->enable_w(m_Pin_Value[9][m_AU[14]]);
 }
-
-const sn76477_interface hector_sn76477_interface =
-{
-	RES_K(47),      /*  4  noise_res*/
-	RES_K(330),     /*  5  filter_res*/
-	CAP_P(390),     /*  6  filter_cap*/
-	RES_K(680),     /*  7  decay_res*/
-	CAP_U(47),      /*  8  attack_decay_cap*/
-	RES_K(180),     /* 10  attack_res*/
-	RES_K(33),      /* 11  amplitude_res*/
-	RES_K(100),     /* 12  feedback_res*/
-	2,              /* 16  vco_voltage*/
-	CAP_N(47) ,     /* 17  vco_cap*/
-	RES_K(1000),    /* 18  vco_res*/
-	2,              /* 19  pitch_voltage*/
-	RES_K(180),     /* 20  slf_res*/
-	CAP_U(0.1),     /* 21  slf_cap*/
-	CAP_U(1.00001), /* 23  oneshot_cap*/
-	RES_K(10000)    /* 24  oneshot_res*/
-};
 
 void hec2hrp_state::hector_reset(int hr, int with_D2 )
 {
@@ -872,3 +789,34 @@ void hec2hrp_state::hector_init()
 	/* Sound sn76477*/
 	Init_Value_SN76477_Hector();  /*init R/C value*/
 }
+
+
+/* sound hardware */
+
+static DISCRETE_SOUND_START( hec2hrp )
+	DISCRETE_INPUT_LOGIC(NODE_01)
+	DISCRETE_OUTPUT(NODE_01, 5000)
+DISCRETE_SOUND_END
+
+MACHINE_CONFIG_FRAGMENT( hector_audio )
+	MCFG_SPEAKER_STANDARD_MONO("mono")
+	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
+	MCFG_SOUND_ROUTE(0, "mono", 0.25)  /* Sound level for cassette, as it is in mono => output channel=0*/
+
+	MCFG_SOUND_ADD("sn76477", SN76477, 0)
+	MCFG_SN76477_NOISE_PARAMS(RES_K(47), RES_K(330), CAP_P(390)) // noise + filter
+	MCFG_SN76477_DECAY_RES(RES_K(680))                  // decay_res
+	MCFG_SN76477_ATTACK_PARAMS(CAP_U(47), RES_K(180))   // attack_decay_cap + attack_res
+	MCFG_SN76477_AMP_RES(RES_K(33))                     // amplitude_res
+	MCFG_SN76477_FEEDBACK_RES(RES_K(100))               // feedback_res
+	MCFG_SN76477_VCO_PARAMS(2, CAP_N(47), RES_K(1000))  // VCO volt + cap + res
+	MCFG_SN76477_PITCH_VOLTAGE(2)                       // pitch_voltage
+	MCFG_SN76477_SLF_PARAMS(CAP_U(0.1), RES_K(180))     // slf caps + res
+	MCFG_SN76477_ONESHOT_PARAMS(CAP_U(1.00001), RES_K(10000))   // oneshot caps + res
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.1)
+
+	MCFG_SOUND_ADD("discrete", DISCRETE, 0) /* Son 1bit*/
+	MCFG_DISCRETE_INTF(hec2hrp)
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
+
+MACHINE_CONFIG_END

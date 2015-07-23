@@ -1,9 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert and unknown others
 /***************************************************************************
 TRS80 memory map
 
 0000-2fff ROM                 R   D0-D7
 3000-37ff ROM on Model III        R   D0-D7
-          unused on Model I
+      unused on Model I
 37de      UART status             R/W D0-D7
 37df      UART data           R/W D0-D7
 37e0      interrupt latch address (lnw80 = for the realtime clock)
@@ -14,7 +16,7 @@ TRS80 memory map
 37e5      select disk drive 2         W
 37e7      select disk drive 3         W
 37e0-37e3 floppy motor            W   D0-D3
-          or floppy head select   W   D3
+      or floppy head select   W   D3
 37e8      send a byte to printer          W   D0-D7
 37e8      read printer status             R   D7
 37ec-37ef FDC WD179x              R/W D0-D7
@@ -40,10 +42,10 @@ It is assumed that the TRS80L2 UART setup is identical to the System80, apart fr
 Due to the above, the only working emulated UART is for the Model 3.
 
 Cassette baud rates:    Model I level I - 250 baud
-            Model I level II and all clones - 500 baud
-            Model III/4 - 500 and 1500 baud selectable at boot time
-            - When it says "Cass?" press L for 500 baud, or Enter otherwise.
-            LNW-80 - 500 baud @1.77MHz and 1000 baud @4MHz.
+        Model I level II and all clones - 500 baud
+        Model III/4 - 500 and 1500 baud selectable at boot time
+        - When it says "Cass?" press L for 500 baud, or Enter otherwise.
+        LNW-80 - 500 baud @1.77MHz and 1000 baud @4MHz.
 
 I/O ports
 FF:
@@ -90,29 +92,29 @@ Model 4 - C0-CF = hard drive (optional)
     - 80-8F hires graphics (optional)
 
 About the ht1080z - This was made for schools in Hungary. Each comes with a BASIC extension roms
-        which activated Hungarian features. To activate - start emulation - enter SYSTEM
-        Enter /12288 and the extensions will be installed and you are returned to READY.
-        The ht1080z is identical to the System 80, apart from the character rom.
-        The ht1080z2 has a modified extension rom and character generator.
+    which activated Hungarian features. To activate - start emulation - enter SYSTEM
+    Enter /12288 and the extensions will be installed and you are returned to READY.
+    The ht1080z is identical to the System 80, apart from the character rom.
+    The ht1080z2 has a modified extension rom and character generator.
 
 About the RTC - The time is incremented while ever the cursor is flashing. It is stored in a series
-        of bytes in the computer's work area. The bytes are in a certain order, this is:
-        seconds, minutes, hours, year, day, month. On a model 1, the seconds are stored at
-        0x4041, while on the model 4 it is 0x4217. A reboot always sets the time to zero.
+    of bytes in the computer's work area. The bytes are in a certain order, this is:
+    seconds, minutes, hours, year, day, month. On a model 1, the seconds are stored at
+    0x4041, while on the model 4 it is 0x4217. A reboot always sets the time to zero.
 
 Model 4 memory organisation -
-        Mode 0: ROM=0-37E7 and 37EA-3FFF; Printer=37E8-37E9; Keyboard=3800-3BFF; Video=3C00-3FFF
-        Mode 1: Keyboard and Video as above; 0-3FFF read=ROM and write=RAM
-        Mode 2: Keyboard=F400-F7FF; Video=F800-FFFF; the rest is RAM
-        Mode 3: All RAM
-        In the "maincpu" memory map, the first 64k is given to the ROM, keyboard, printer and video,
-            while the second 64k is RAM that is switched in as needed. The area from 4800-FFFF
-            is considered a "black hole", any writes to there will disappear.
-        The video is organised as 2 banks of 0x400 bytes, except in Mode 2 where it becomes contiguous.
+    Mode 0: ROM=0-37E7 and 37EA-3FFF; Printer=37E8-37E9; Keyboard=3800-3BFF; Video=3C00-3FFF
+    Mode 1: Keyboard and Video as above; 0-3FFF read=ROM and write=RAM
+    Mode 2: Keyboard=F400-F7FF; Video=F800-FFFF; the rest is RAM
+    Mode 3: All RAM
+    In the "maincpu" memory map, the first 64k is given to the ROM, keyboard, printer and video,
+        while the second 64k is RAM that is switched in as needed. The area from 4800-FFFF
+        is considered a "black hole", any writes to there will disappear.
+    The video is organised as 2 banks of 0x400 bytes, except in Mode 2 where it becomes contiguous.
 
 Model 4P - is the same as Model 4 except:
-        - ROM is only 0000-0FFF, while 1000-37FF is given over to RAM
-        - There is no cassette support in hardware.
+    - ROM is only 0000-0FFF, while 1000-37FF is given over to RAM
+    - There is no cassette support in hardware.
 
 ***************************************************************************
 
@@ -134,6 +136,8 @@ There don't seem to be any JV1 boot disks for Model III/4.
 ***************************************************************************/
 
 #include "includes/trs80.h"
+#include "formats/trs80_dsk.h"
+#include "formats/dmk_dsk.h"
 
 
 static ADDRESS_MAP_START( trs80_map, AS_PROGRAM, 8, trs80_state )
@@ -156,10 +160,10 @@ static ADDRESS_MAP_START( model1_map, AS_PROGRAM, 8, trs80_state )
 	AM_RANGE(0x37e4, 0x37e7) AM_WRITE(trs80_cassunit_w)
 	AM_RANGE(0x37e8, 0x37eb) AM_READWRITE(trs80_printer_r, trs80_printer_w)
 	AM_RANGE(0x37ec, 0x37ec) AM_READ(trs80_wd179x_r)
-	AM_RANGE(0x37ec, 0x37ec) AM_DEVWRITE_LEGACY("wd179x", wd17xx_command_w)
-	AM_RANGE(0x37ed, 0x37ed) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_track_r, wd17xx_track_w)
-	AM_RANGE(0x37ee, 0x37ee) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_sector_r, wd17xx_sector_w)
-	AM_RANGE(0x37ef, 0x37ef) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_data_r, wd17xx_data_w)
+	AM_RANGE(0x37ec, 0x37ec) AM_DEVWRITE("fdc", fd1793_t, cmd_w)
+	AM_RANGE(0x37ed, 0x37ed) AM_DEVREADWRITE("fdc", fd1793_t, track_r, track_w)
+	AM_RANGE(0x37ee, 0x37ee) AM_DEVREADWRITE("fdc", fd1793_t, sector_r, sector_w)
+	AM_RANGE(0x37ef, 0x37ef) AM_DEVREADWRITE("fdc", fd1793_t, data_r, data_w)
 	AM_RANGE(0x3800, 0x38ff) AM_MIRROR(0x300) AM_READ(trs80_keyboard_r)
 	AM_RANGE(0x3c00, 0x3fff) AM_READWRITE(trs80_videoram_r, trs80_videoram_w) AM_SHARE("p_videoram")
 	AM_RANGE(0x4000, 0xffff) AM_RAM
@@ -206,10 +210,10 @@ static ADDRESS_MAP_START( model3_io, AS_IO, 8, trs80_state )
 	AM_RANGE(0xeb, 0xeb) AM_READWRITE(trs80m4_eb_r, trs80m4_eb_w)
 	AM_RANGE(0xec, 0xef) AM_READWRITE(trs80m4_ec_r, trs80m4_ec_w)
 	AM_RANGE(0xf0, 0xf0) AM_READ(trs80_wd179x_r)
-	AM_RANGE(0xf0, 0xf0) AM_DEVWRITE_LEGACY("wd179x", wd17xx_command_w)
-	AM_RANGE(0xf1, 0xf1) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_track_r, wd17xx_track_w)
-	AM_RANGE(0xf2, 0xf2) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_sector_r, wd17xx_sector_w)
-	AM_RANGE(0xf3, 0xf3) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_data_r, wd17xx_data_w)
+	AM_RANGE(0xf0, 0xf0) AM_DEVWRITE("fdc", fd1793_t, cmd_w)
+	AM_RANGE(0xf1, 0xf1) AM_DEVREADWRITE("fdc", fd1793_t, track_r, track_w)
+	AM_RANGE(0xf2, 0xf2) AM_DEVREADWRITE("fdc", fd1793_t, sector_r, sector_w)
+	AM_RANGE(0xf3, 0xf3) AM_DEVREADWRITE("fdc", fd1793_t, data_r, data_w)
 	AM_RANGE(0xf4, 0xf4) AM_WRITE(trs80m4_f4_w)
 	AM_RANGE(0xf8, 0xfb) AM_READWRITE(trs80_printer_r, trs80_printer_w)
 	AM_RANGE(0xfc, 0xff) AM_READWRITE(trs80m4_ff_r, trs80m4_ff_w)
@@ -228,10 +232,10 @@ static ADDRESS_MAP_START( model4_io, AS_IO, 8, trs80_state )
 	AM_RANGE(0xeb, 0xeb) AM_READWRITE(trs80m4_eb_r, trs80m4_eb_w)
 	AM_RANGE(0xec, 0xef) AM_READWRITE(trs80m4_ec_r, trs80m4_ec_w)
 	AM_RANGE(0xf0, 0xf0) AM_READ(trs80_wd179x_r)
-	AM_RANGE(0xf0, 0xf0) AM_DEVWRITE_LEGACY("wd179x", wd17xx_command_w)
-	AM_RANGE(0xf1, 0xf1) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_track_r, wd17xx_track_w)
-	AM_RANGE(0xf2, 0xf2) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_sector_r, wd17xx_sector_w)
-	AM_RANGE(0xf3, 0xf3) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_data_r, wd17xx_data_w)
+	AM_RANGE(0xf0, 0xf0) AM_DEVWRITE("fdc", fd1793_t, cmd_w)
+	AM_RANGE(0xf1, 0xf1) AM_DEVREADWRITE("fdc", fd1793_t, track_r, track_w)
+	AM_RANGE(0xf2, 0xf2) AM_DEVREADWRITE("fdc", fd1793_t, sector_r, sector_w)
+	AM_RANGE(0xf3, 0xf3) AM_DEVREADWRITE("fdc", fd1793_t, data_r, data_w)
 	AM_RANGE(0xf4, 0xf4) AM_WRITE(trs80m4_f4_w)
 	AM_RANGE(0xf8, 0xfb) AM_READWRITE(trs80_printer_r, trs80_printer_w)
 	AM_RANGE(0xfc, 0xff) AM_READWRITE(trs80m4_ff_r, trs80m4_ff_w)
@@ -251,10 +255,10 @@ static ADDRESS_MAP_START( model4p_io, AS_IO, 8, trs80_state )
 	AM_RANGE(0xeb, 0xeb) AM_READWRITE(trs80m4_eb_r, trs80m4_eb_w)
 	AM_RANGE(0xec, 0xef) AM_READWRITE(trs80m4_ec_r, trs80m4_ec_w)
 	AM_RANGE(0xf0, 0xf0) AM_READ(trs80_wd179x_r)
-	AM_RANGE(0xf0, 0xf0) AM_DEVWRITE_LEGACY("wd179x", wd17xx_command_w)
-	AM_RANGE(0xf1, 0xf1) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_track_r, wd17xx_track_w)
-	AM_RANGE(0xf2, 0xf2) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_sector_r, wd17xx_sector_w)
-	AM_RANGE(0xf3, 0xf3) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_data_r, wd17xx_data_w)
+	AM_RANGE(0xf0, 0xf0) AM_DEVWRITE("fdc", fd1793_t, cmd_w)
+	AM_RANGE(0xf1, 0xf1) AM_DEVREADWRITE("fdc", fd1793_t, track_r, track_w)
+	AM_RANGE(0xf2, 0xf2) AM_DEVREADWRITE("fdc", fd1793_t, sector_r, sector_w)
+	AM_RANGE(0xf3, 0xf3) AM_DEVREADWRITE("fdc", fd1793_t, data_r, data_w)
 	AM_RANGE(0xf4, 0xf4) AM_WRITE(trs80m4_f4_w)
 	AM_RANGE(0xf8, 0xfb) AM_READWRITE(trs80_printer_r, trs80_printer_w)
 	AM_RANGE(0xfc, 0xff) AM_READWRITE(trs80m4_ff_r, trs80m4_ff_w)
@@ -275,10 +279,10 @@ static ADDRESS_MAP_START( meritum_io, AS_IO, 8, trs80_state )
 	// eg. port F0 should be 5, port F2 should have bit 3 set.
 	//AM_RANGE(0x03, 0x03) unknown
 	AM_RANGE(0xf0, 0xf0) AM_READ(trs80_wd179x_r)
-	AM_RANGE(0xf0, 0xf0) AM_DEVWRITE_LEGACY("wd179x", wd17xx_command_w)
-	AM_RANGE(0xf1, 0xf1) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_track_r, wd17xx_track_w)
-	AM_RANGE(0xf2, 0xf2) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_sector_r, wd17xx_sector_w)
-	AM_RANGE(0xf3, 0xf3) AM_DEVREADWRITE_LEGACY("wd179x", wd17xx_data_r, wd17xx_data_w)
+	AM_RANGE(0xf0, 0xf0) AM_DEVWRITE("fdc", fd1793_t, cmd_w)
+	AM_RANGE(0xf1, 0xf1) AM_DEVREADWRITE("fdc", fd1793_t, track_r, track_w)
+	AM_RANGE(0xf2, 0xf2) AM_DEVREADWRITE("fdc", fd1793_t, sector_r, sector_w)
+	AM_RANGE(0xf3, 0xf3) AM_DEVREADWRITE("fdc", fd1793_t, data_r, data_w)
 	AM_RANGE(0xf4, 0xf4) AM_WRITE(trs80m4_f4_w)
 	AM_RANGE(0xf8, 0xfb) AM_READWRITE(trs80_printer_r, trs80_printer_w)
 	//AM_RANGE(0xfc, 0xfd) unknown
@@ -543,36 +547,15 @@ static GFXDECODE_START(meritum)
 GFXDECODE_END
 
 
-static const cassette_interface trs80l2_cassette_interface =
-{
-	trs80l2_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_PLAY),
-	NULL,
-	NULL
-};
+FLOPPY_FORMATS_MEMBER( trs80_state::floppy_formats )
+	FLOPPY_TRS80_FORMAT,
+	FLOPPY_DMK_FORMAT
+FLOPPY_FORMATS_END
 
-static const ay31015_config trs80_ay31015_config =
-{
-	0.0,
-	0.0,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
+static SLOT_INTERFACE_START( trs80_floppies )
+	SLOT_INTERFACE("sssd", FLOPPY_525_SSSD)
+SLOT_INTERFACE_END
 
-static const floppy_interface trs80_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_DSHD,
-	LEGACY_FLOPPY_OPTIONS_NAME(trs80),
-	NULL,
-	NULL
-};
 
 static MACHINE_CONFIG_START( trs80, trs80_state )       // the original model I, level I, with no extras
 	/* basic machine hardware */
@@ -588,11 +571,10 @@ static MACHINE_CONFIG_START( trs80, trs80_state )       // the original model I,
 	MCFG_SCREEN_SIZE(64*6, 16*12)
 	MCFG_SCREEN_VISIBLE_AREA(0,64*6-1,0,16*12-1)
 	MCFG_SCREEN_UPDATE_DRIVER(trs80_state, screen_update_trs80)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(trs80)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(black_and_white)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", trs80)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -602,7 +584,7 @@ static MACHINE_CONFIG_START( trs80, trs80_state )       // the original model I,
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* devices */
-	MCFG_CASSETTE_ADD( "cassette", default_cassette_interface )
+	MCFG_CASSETTE_ADD( "cassette" )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( model1, trs80 )      // model I, level II
@@ -612,12 +594,33 @@ static MACHINE_CONFIG_DERIVED( model1, trs80 )      // model I, level II
 	MCFG_CPU_PERIODIC_INT_DRIVER(trs80_state, trs80_rtc_interrupt,  40)
 
 	/* devices */
-	MCFG_CASSETTE_MODIFY( "cassette", trs80l2_cassette_interface )
+	MCFG_CASSETTE_MODIFY( "cassette" )
+	MCFG_CASSETTE_FORMATS(trs80l2_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_PLAY)
+
 	MCFG_QUICKLOAD_ADD("quickload", trs80_state, trs80_cmd, "cmd", 0.5)
-	MCFG_FD1793_ADD("wd179x", trs80_wd17xx_interface ) // should be FD1771 or FD1791 but inverted data lines are too tricky to fix now
-	MCFG_LEGACY_FLOPPY_4_DRIVES_ADD(trs80_floppy_interface)
-	MCFG_CENTRONICS_PRINTER_ADD("centronics", standard_centronics)
-	MCFG_AY31015_ADD( "tr1602", trs80_ay31015_config )
+
+	MCFG_FD1793_ADD("fdc", XTAL_1MHz) // todo: should be fd1771
+	MCFG_WD_FDC_INTRQ_CALLBACK(WRITELINE(trs80_state,trs80_fdc_intrq_w))
+
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", trs80_floppies, "sssd", trs80_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", trs80_floppies, "sssd", trs80_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:2", trs80_floppies, "", trs80_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:3", trs80_floppies, "", trs80_state::floppy_formats)
+
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(DEVWRITELINE("cent_status_in", input_buffer_device, write_bit7))
+	MCFG_CENTRONICS_PERROR_HANDLER(DEVWRITELINE("cent_status_in", input_buffer_device, write_bit6))
+	MCFG_CENTRONICS_SELECT_HANDLER(DEVWRITELINE("cent_status_in", input_buffer_device, write_bit5))
+	MCFG_CENTRONICS_FAULT_HANDLER(DEVWRITELINE("cent_status_in", input_buffer_device, write_bit4))
+
+	MCFG_DEVICE_ADD("cent_status_in", INPUT_BUFFER, 0)
+
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", "centronics")
+
+	MCFG_DEVICE_ADD( "tr1602", AY31015, 0 )
+	MCFG_AY31015_RX_CLOCK(0.0)
+	MCFG_AY31015_TX_CLOCK(0.0)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( model3, model1 )
@@ -628,7 +631,8 @@ static MACHINE_CONFIG_DERIVED( model3, model1 )
 
 	MCFG_MACHINE_RESET_OVERRIDE(trs80_state, trs80m4 )
 
-	MCFG_GFXDECODE(trs80m4)
+	MCFG_GFXDECODE_MODIFY("gfxdecode",trs80m4)
+
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(trs80_state, screen_update_trs80m4)
 	MCFG_SCREEN_SIZE(80*8, 240)
@@ -653,7 +657,7 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( ht1080z, sys80 )
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(trs80_state, screen_update_ht1080z)
-	MCFG_GFXDECODE(ht1080z)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", ht1080z)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( lnw80, model1 )
@@ -662,9 +666,11 @@ static MACHINE_CONFIG_DERIVED( lnw80, model1 )
 	MCFG_CPU_IO_MAP( lnw80_io)
 	MCFG_MACHINE_RESET_OVERRIDE(trs80_state, lnw80 )
 
-	MCFG_GFXDECODE(lnw80)
-	MCFG_PALETTE_LENGTH(8)
-	MCFG_PALETTE_INIT_OVERRIDE(trs80_state,lnw80)
+	MCFG_GFXDECODE_MODIFY("gfxdecode",lnw80)
+
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(8)
+	MCFG_PALETTE_INIT_OWNER(trs80_state,lnw80)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_SIZE(80*6, 16*12)
 	MCFG_SCREEN_VISIBLE_AREA(0,80*6-1,0,16*12-1)
@@ -676,7 +682,7 @@ static MACHINE_CONFIG_DERIVED( radionic, model1 )
 	MCFG_SCREEN_SIZE(64*8, 16*16)
 	MCFG_SCREEN_VISIBLE_AREA(0,64*8-1,0,16*16-1)
 	MCFG_SCREEN_UPDATE_DRIVER(trs80_state, screen_update_radionic)
-	MCFG_GFXDECODE(radionic)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", radionic)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( meritum, sys80 )
@@ -685,7 +691,7 @@ static MACHINE_CONFIG_DERIVED( meritum, sys80 )
 	MCFG_CPU_IO_MAP( meritum_io)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(trs80_state, screen_update_meritum)
-	MCFG_GFXDECODE(meritum)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", meritum)
 MACHINE_CONFIG_END
 
 /***************************************************************************

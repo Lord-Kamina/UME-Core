@@ -1,10 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /*********************************************************************
 
     konami.c
 
     Portable Konami cpu emulator
-
-    Copyright Nicola Salmoria and the MAME Team
 
     Based on M6809 cpu core copyright John Butler
 
@@ -65,7 +65,7 @@ March 2013 NPW:
 //**************************************************************************
 
 // turn off 'unreferenced label' errors
-#ifdef __GNUC__
+#if defined(__GNUC__) && __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 2)
 #pragma GCC diagnostic ignored "-Wunused-label"
 #endif
 #ifdef _MSC_VER
@@ -85,7 +85,8 @@ const device_type KONAMI = &device_creator<konami_cpu_device>;
 //-------------------------------------------------
 
 konami_cpu_device::konami_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-		: m6809_base_device(mconfig, "KONAMI", tag, owner, clock, KONAMI, 1)
+		: m6809_base_device(mconfig, "KONAMI CPU", tag, owner, clock, KONAMI, 1, "konami_cpu", __FILE__),
+			m_set_lines(*this)
 {
 }
 
@@ -98,8 +99,8 @@ void konami_cpu_device::device_start()
 {
 	super::device_start();
 
-	// initialize variables
-	m_set_lines = NULL;
+	// resolve callbacks
+	m_set_lines.resolve();
 }
 
 
@@ -119,7 +120,7 @@ offs_t konami_cpu_device::disasm_disassemble(char *buffer, offs_t pc, const UINT
 //  read_operand
 //-------------------------------------------------
 
-inline ATTR_FORCE_INLINE UINT8 konami_cpu_device::read_operand()
+inline UINT8 konami_cpu_device::read_operand()
 {
 	return super::read_operand();
 }
@@ -129,14 +130,14 @@ inline ATTR_FORCE_INLINE UINT8 konami_cpu_device::read_operand()
 //  read_operand
 //-------------------------------------------------
 
-inline ATTR_FORCE_INLINE UINT8 konami_cpu_device::read_operand(int ordinal)
+inline UINT8 konami_cpu_device::read_operand(int ordinal)
 {
 	switch(m_addressing_mode)
 	{
 		case ADDRESSING_MODE_EA:            return read_memory(m_ea.w + ordinal);
 		case ADDRESSING_MODE_IMMEDIATE:     return read_opcode_arg();
 		case ADDRESSING_MODE_REGISTER_D:    return (ordinal & 1) ? m_d.b.l : m_d.b.h;
-		default:                            fatalerror("Unexpected");   return 0x00;
+		default:                            fatalerror("Unexpected");
 	}
 }
 
@@ -145,7 +146,7 @@ inline ATTR_FORCE_INLINE UINT8 konami_cpu_device::read_operand(int ordinal)
 //  write_operand
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void konami_cpu_device::write_operand(UINT8 data)
+inline void konami_cpu_device::write_operand(UINT8 data)
 {
 	super::write_operand(data);
 }
@@ -156,14 +157,14 @@ ATTR_FORCE_INLINE void konami_cpu_device::write_operand(UINT8 data)
 //  write_operand
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void konami_cpu_device::write_operand(int ordinal, UINT8 data)
+inline void konami_cpu_device::write_operand(int ordinal, UINT8 data)
 {
 	switch(m_addressing_mode)
 	{
 		case ADDRESSING_MODE_IMMEDIATE:     /* do nothing */                                break;
 		case ADDRESSING_MODE_EA:            write_memory(m_ea.w + ordinal, data);           break;
 		case ADDRESSING_MODE_REGISTER_D:    *((ordinal & 1) ? &m_d.b.l : &m_d.b.h) = data;  break;
-		default:                            fatalerror("Unexpected");                       break;
+		default:                            fatalerror("Unexpected");
 	}
 }
 
@@ -172,7 +173,7 @@ ATTR_FORCE_INLINE void konami_cpu_device::write_operand(int ordinal, UINT8 data)
 //  ireg
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE UINT16 &konami_cpu_device::ireg()
+inline UINT16 &konami_cpu_device::ireg()
 {
 	switch(m_opcode & 0x70)
 	{
@@ -183,7 +184,8 @@ ATTR_FORCE_INLINE UINT16 &konami_cpu_device::ireg()
 		case 0x70:  return m_pc.w;
 		default:
 			fatalerror("Should not get here");
-			return m_x.w;
+			// never executed
+			//return m_x.w;
 	}
 }
 
@@ -192,7 +194,7 @@ ATTR_FORCE_INLINE UINT16 &konami_cpu_device::ireg()
 //  read_exgtfr_register
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE m6809_base_device::exgtfr_register konami_cpu_device::read_exgtfr_register(UINT8 reg)
+inline m6809_base_device::exgtfr_register konami_cpu_device::read_exgtfr_register(UINT8 reg)
 {
 	exgtfr_register result;
 	result.word_value = 0x00FF;
@@ -215,7 +217,7 @@ ATTR_FORCE_INLINE m6809_base_device::exgtfr_register konami_cpu_device::read_exg
 //  write_exgtfr_register
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void konami_cpu_device::write_exgtfr_register(UINT8 reg, m6809_base_device::exgtfr_register value)
+inline void konami_cpu_device::write_exgtfr_register(UINT8 reg, m6809_base_device::exgtfr_register value)
 {
 	switch(reg & 0x07)
 	{
@@ -285,7 +287,7 @@ template<class T> T konami_cpu_device::safe_shift_left(T value, UINT32 shift)
 //  lmul
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void konami_cpu_device::lmul()
+inline void konami_cpu_device::lmul()
 {
 	PAIR result;
 
@@ -311,7 +313,7 @@ ATTR_FORCE_INLINE void konami_cpu_device::lmul()
 //  divx
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void konami_cpu_device::divx()
+inline void konami_cpu_device::divx()
 {
 	UINT16 result;
 	UINT8 remainder;
@@ -346,8 +348,8 @@ ATTR_FORCE_INLINE void konami_cpu_device::divx()
 
 void konami_cpu_device::set_lines(UINT8 data)
 {
-	if (m_set_lines != NULL)
-		(*m_set_lines)(this, data);
+	if (!m_set_lines.isnull())
+		m_set_lines((offs_t)0, data);
 }
 
 
@@ -355,7 +357,7 @@ void konami_cpu_device::set_lines(UINT8 data)
 //  execute_one - try to execute a single instruction
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void konami_cpu_device::execute_one()
+inline void konami_cpu_device::execute_one()
 {
 	switch(pop_state())
 	{
@@ -375,15 +377,4 @@ void konami_cpu_device::execute_run()
 	{
 		execute_one();
 	} while(m_icount > 0);
-}
-
-
-//-------------------------------------------------
-//  konami_configure_set_lines
-//-------------------------------------------------
-
-void konami_configure_set_lines(device_t *device, konami_set_lines_func func)
-{
-	konami_cpu_device *cpu = dynamic_cast<konami_cpu_device*>(device);
-	cpu->configure_set_lines(func);
 }

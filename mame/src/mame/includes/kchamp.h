@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi
 /*************************************************************************
 
     Karate Champ
@@ -15,7 +17,10 @@ public:
 		m_spriteram(*this, "spriteram"),
 		m_audiocpu(*this, "audiocpu"),
 		m_maincpu(*this, "maincpu"),
-		m_msm(*this, "msm") { }
+		m_msm(*this, "msm"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
+		m_decrypted_opcodes(*this, "decrypted_opcodes") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
@@ -49,7 +54,7 @@ public:
 	TILE_GET_INFO_MEMBER(get_bg_tile_info);
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(kchamp);
 	DECLARE_MACHINE_START(kchampvs);
 	DECLARE_MACHINE_START(kchamp);
 	UINT32 screen_update_kchampvs(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
@@ -58,8 +63,11 @@ public:
 	INTERRUPT_GEN_MEMBER(sound_int);
 	void kchamp_draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect );
 	void kchampvs_draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect );
-	UINT8 *decrypt_code();
+	void decrypt_code();
 	DECLARE_WRITE_LINE_MEMBER(msmint);
 	required_device<cpu_device> m_maincpu;
 	optional_device<msm5205_device> m_msm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+	optional_shared_ptr<UINT8> m_decrypted_opcodes;
 };

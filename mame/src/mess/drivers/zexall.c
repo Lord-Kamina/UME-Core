@@ -1,7 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Jonathan Gevaryahu, Robbbert
 /******************************************************************************
 *
 *  Self Contained zexall 'Z80 instruction exerciser' test driver
-*  By Jonathan Gevaryahu AKA Lord Nightmare
 *  Zexall originally written by Frank Cringle for ZX Spectrum
 *  Modularized Spectrum-independent Zexall binary supplied by Blargg
 *  Serial interface binary/preloader at 0x0000-0x00FF written by Kevin 'kevtris' Horton
@@ -11,7 +12,7 @@
 Ram 0000-FFFF (preloaded with binary)
 Special calls take place for three ram values (this interface was designed by kevtris):
 FFFD - 'ack' - shared ram with output device; z80 reads from here and considers the byte at FFFF read if this value incremented
-FFFE - 'req' - shared ram with output device; z80 writes an incrementing value to FFFE to indicate that there is a byte waiting at FFFF and hence requesting the output device on the other end do something about it, until FFFD is incremented by the output device to acknowledge reciept
+FFFE - 'req' - shared ram with output device; z80 writes an incrementing value to FFFE to indicate that there is a byte waiting at FFFF and hence requesting the output device on the other end do something about it, until FFFD is incremented by the output device to acknowledge receipt
 FFFF - 'data' - shared ram with output device; z80 writes the data to be sent to output device here
 One i/o port is used:
 0001 - bit 0 controls whether interrupt timer is enabled (1) or not (0), this is a holdover from a project of kevtris' and can be ignored.
@@ -23,32 +24,34 @@ One i/o port is used:
 #include "cpu/z80/z80.h"
 #include "machine/terminal.h"
 
+#define TERMINAL_TAG "terminal"
 
 class zexall_state : public driver_device
 {
 public:
 	zexall_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_maincpu(*this, "maincpu"),
-			m_terminal(*this, TERMINAL_TAG)
-	,
-		m_main_ram(*this, "main_ram"){ }
+		m_maincpu(*this, "maincpu"),
+		m_terminal(*this, TERMINAL_TAG),
+		m_main_ram(*this, "main_ram")
+	{
+	}
 
-	required_device<cpu_device> m_maincpu;
-	required_device<generic_terminal_device> m_terminal;
 	DECLARE_READ8_MEMBER( zexall_output_ack_r );
 	DECLARE_READ8_MEMBER( zexall_output_req_r );
 	DECLARE_READ8_MEMBER( zexall_output_data_r );
 	DECLARE_WRITE8_MEMBER( zexall_output_ack_w );
 	DECLARE_WRITE8_MEMBER( zexall_output_req_w );
 	DECLARE_WRITE8_MEMBER( zexall_output_data_w );
+	DECLARE_DRIVER_INIT(zexall);
+private:
+	required_device<cpu_device> m_maincpu;
+	required_device<generic_terminal_device> m_terminal;
 	required_shared_ptr<UINT8> m_main_ram;
-	UINT8 m_data[8]; // unused; to suppress the scalar initializer warning
 	UINT8 m_out_data; // byte written to 0xFFFF
 	UINT8 m_out_req; // byte written to 0xFFFE
 	UINT8 m_out_req_last; // old value at 0xFFFE before the most recent write
 	UINT8 m_out_ack; // byte written to 0xFFFC
-	DECLARE_DRIVER_INIT(zexall);
 	virtual void machine_reset();
 };
 
@@ -136,11 +139,6 @@ INPUT_PORTS_END
  Machine Drivers
 ******************************************************************************/
 
-static GENERIC_TERMINAL_INTERFACE( zexall_terminal_intf )
-{
-	DEVCB_NULL
-};
-
 static MACHINE_CONFIG_START( zexall, zexall_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_3_579545MHz*10)
@@ -149,7 +147,7 @@ static MACHINE_CONFIG_START( zexall, zexall_state )
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
 
 	/* video hardware */
-	MCFG_GENERIC_TERMINAL_ADD(TERMINAL_TAG, zexall_terminal_intf)
+	MCFG_DEVICE_ADD(TERMINAL_TAG, GENERIC_TERMINAL, 0)
 MACHINE_CONFIG_END
 
 
@@ -160,7 +158,7 @@ MACHINE_CONFIG_END
 
 ROM_START(zexall)
 	ROM_REGION(0x22ff, "romcode", 0)
-	ROM_LOAD("zex.bin", 0x0000, 0x2289, CRC(77E0A1DF) SHA1(CC8F84724E3837783816D92A6DFB8E5975232C66))
+	ROM_LOAD("zex.bin", 0x0000, 0x2289, CRC(77e0a1df) SHA1(cc8f84724e3837783816d92a6dfb8e5975232c66))
 ROM_END
 
 

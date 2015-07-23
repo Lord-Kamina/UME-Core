@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Incredible Technologies/Strata system
@@ -88,8 +90,6 @@
 ***************************************************************************/
 
 #include "emu.h"
-#include "video/tms34061.h"
-#include "video/tlc34076.h"
 #include "cpu/m6809/m6809.h"
 #include "includes/itech8.h"
 
@@ -111,18 +111,18 @@
  *
  *************************************/
 
-#define BLITTER_ADDRHI          blitter_data[0]
-#define BLITTER_ADDRLO          blitter_data[1]
-#define BLITTER_FLAGS           blitter_data[2]
-#define BLITTER_STATUS          blitter_data[3]
-#define BLITTER_WIDTH           blitter_data[4]
-#define BLITTER_HEIGHT          blitter_data[5]
-#define BLITTER_MASK            blitter_data[6]
-#define BLITTER_OUTPUT          blitter_data[7]
-#define BLITTER_XSTART          blitter_data[8]
-#define BLITTER_YCOUNT          blitter_data[9]
-#define BLITTER_XSTOP           blitter_data[10]
-#define BLITTER_YSKIP           blitter_data[11]
+#define BLITTER_ADDRHI          m_blitter_data[0]
+#define BLITTER_ADDRLO          m_blitter_data[1]
+#define BLITTER_FLAGS           m_blitter_data[2]
+#define BLITTER_STATUS          m_blitter_data[3]
+#define BLITTER_WIDTH           m_blitter_data[4]
+#define BLITTER_HEIGHT          m_blitter_data[5]
+#define BLITTER_MASK            m_blitter_data[6]
+#define BLITTER_OUTPUT          m_blitter_data[7]
+#define BLITTER_XSTART          m_blitter_data[8]
+#define BLITTER_YCOUNT          m_blitter_data[9]
+#define BLITTER_XSTOP           m_blitter_data[10]
+#define BLITTER_YSKIP           m_blitter_data[11]
 
 #define BLITFLAG_SHIFT          0x01
 #define BLITFLAG_XFLIP          0x02
@@ -134,42 +134,14 @@
 
 /*************************************
  *
- *  TMS34061 interfacing
- *
- *************************************/
-
-static void generate_interrupt(running_machine &machine, int state_num)
-{
-	itech8_state *state = machine.driver_data<itech8_state>();
-	state->itech8_update_interrupts(-1, state_num, -1);
-
-	if (FULL_LOGGING && state_num) logerror("------------ DISPLAY INT (%d) --------------\n", machine.primary_screen->vpos());
-}
-
-
-static const struct tms34061_interface tms34061intf =
-{
-	"screen",               /* the screen we are acting on */
-	8,                      /* VRAM address is (row << rowshift) | col */
-	0x40000,                /* size of video RAM */
-	generate_interrupt      /* interrupt gen callback */
-};
-
-
-
-/*************************************
- *
  *  Video start
  *
  *************************************/
 
 void itech8_state::video_start()
 {
-	/* initialize TMS34061 emulation */
-	tms34061_start(machine(), &tms34061intf);
-
 	/* get the TMS34061 display state */
-	tms34061_get_display_state(&m_tms_state);
+	m_tms34061->get_display_state();
 
 	/* reset statics */
 	m_page_select = 0xc0;
@@ -177,6 +149,14 @@ void itech8_state::video_start()
 	/* fetch the GROM base */
 	m_grom_base = memregion("grom")->base();
 	m_grom_size = memregion("grom")->bytes();
+	
+	save_item(NAME(m_blitter_data));
+	save_item(NAME(m_blit_in_progress));
+	save_item(NAME(m_page_select));
+	save_item(NAME(m_fetch_offset));
+	save_item(NAME(m_fetch_rle_count));
+	save_item(NAME(m_fetch_rle_value));
+	save_item(NAME(m_fetch_rle_literal));
 }
 
 
@@ -187,7 +167,7 @@ void itech8_state::video_start()
  *
  *************************************/
 
-WRITE8_MEMBER(itech8_state::itech8_palette_w)
+WRITE8_MEMBER(itech8_state::palette_w)
 {
 	m_tlc34076->write(space, offset/2, data);
 }
@@ -200,10 +180,10 @@ WRITE8_MEMBER(itech8_state::itech8_palette_w)
  *
  *************************************/
 
-WRITE8_MEMBER(itech8_state::itech8_page_w)
+WRITE8_MEMBER(itech8_state::page_w)
 {
-	machine().primary_screen->update_partial(machine().primary_screen->vpos());
-	logerror("%04x:display_page = %02X (%d)\n", space.device().safe_pc(), data, machine().primary_screen->vpos());
+	m_screen->update_partial(m_screen->vpos());
+	logerror("%04x:display_page = %02X (%d)\n", space.device().safe_pc(), data, m_screen->vpos());
 	m_page_select = data;
 }
 
@@ -283,16 +263,14 @@ inline void itech8_state::consume_rle(int count)
 
 void itech8_state::perform_blit(address_space &space)
 {
-	struct tms34061_display &tms_state = m_tms_state;
-	UINT8 *blitter_data = m_blitter_data;
-	offs_t addr = m_tms_state.regs[TMS34061_XYADDRESS] | ((tms_state.regs[TMS34061_XYOFFSET] & 0x300) << 8);
+	offs_t addr = m_tms34061->m_display.regs[TMS34061_XYADDRESS] | ((m_tms34061->m_display.regs[TMS34061_XYOFFSET] & 0x300) << 8);
 	UINT8 shift = (BLITTER_FLAGS & BLITFLAG_SHIFT) ? 4 : 0;
 	int transparent = (BLITTER_FLAGS & BLITFLAG_TRANSPARENT);
 	int ydir = (BLITTER_FLAGS & BLITFLAG_YFLIP) ? -1 : 1;
 	int xdir = (BLITTER_FLAGS & BLITFLAG_XFLIP) ? -1 : 1;
 	int xflip = (BLITTER_FLAGS & BLITFLAG_XFLIP);
 	int rle = (BLITTER_FLAGS & BLITFLAG_RLE);
-	int color = tms34061_latch_r(space, 0);
+	int color = m_tms34061->latch_r(space, 0);
 	int width = BLITTER_WIDTH;
 	int height = BLITTER_HEIGHT;
 	UINT8 transmaskhi, transmasklo;
@@ -303,9 +281,9 @@ void itech8_state::perform_blit(address_space &space)
 	/* debugging */
 	if (FULL_LOGGING)
 		logerror("Blit: scan=%d  src=%06x @ (%05x) for %dx%d ... flags=%02x\n",
-				space.machine().primary_screen->vpos(),
+				m_screen->vpos(),
 				(m_grom_bank << 16) | (BLITTER_ADDRHI << 8) | BLITTER_ADDRLO,
-				tms_state.regs[TMS34061_XYADDRESS] | ((tms_state.regs[TMS34061_XYOFFSET] & 0x300) << 8),
+				m_tms34061->m_display.regs[TMS34061_XYADDRESS] | ((m_tms34061->m_display.regs[TMS34061_XYOFFSET] & 0x300) << 8),
 				BLITTER_WIDTH, BLITTER_HEIGHT, BLITTER_FLAGS);
 
 	/* initialize the fetcher */
@@ -380,16 +358,16 @@ void itech8_state::perform_blit(address_space &space)
 			/* draw upper pixel */
 			if (!transparent || (pix & transmaskhi))
 			{
-				tms_state.vram[addr] = (tms_state.vram[addr] & (0x0f << shift)) | ((pix & 0xf0) >> shift);
-				tms_state.latchram[addr] = (tms_state.latchram[addr] & (0x0f << shift)) | ((color & 0xf0) >> shift);
+				m_tms34061->m_display.vram[addr] = (m_tms34061->m_display.vram[addr] & (0x0f << shift)) | ((pix & 0xf0) >> shift);
+				m_tms34061->m_display.latchram[addr] = (m_tms34061->m_display.latchram[addr] & (0x0f << shift)) | ((color & 0xf0) >> shift);
 			}
 
 			/* draw lower pixel */
 			if (!transparent || (pix & transmasklo))
 			{
 				offs_t addr1 = addr + shift/4;
-				tms_state.vram[addr1] = (tms_state.vram[addr1] & (0xf0 >> shift)) | ((pix & 0x0f) << shift);
-				tms_state.latchram[addr1] = (tms_state.latchram[addr1] & (0xf0 >> shift)) | ((color & 0x0f) << shift);
+				m_tms34061->m_display.vram[addr1] = (m_tms34061->m_display.vram[addr1] & (0xf0 >> shift)) | ((pix & 0x0f) << shift);
+				m_tms34061->m_display.latchram[addr1] = (m_tms34061->m_display.latchram[addr1] & (0xf0 >> shift)) | ((color & 0x0f) << shift);
 			}
 
 			/* advance to the next byte */
@@ -423,9 +401,9 @@ TIMER_CALLBACK_MEMBER(itech8_state::blitter_done)
 {
 	/* turn off blitting and generate an interrupt */
 	m_blit_in_progress = 0;
-	itech8_update_interrupts(-1, -1, 1);
+	update_interrupts(-1, -1, 1);
 
-	if (FULL_LOGGING) logerror("------------ BLIT DONE (%d) --------------\n", machine().primary_screen->vpos());
+	if (FULL_LOGGING) logerror("------------ BLIT DONE (%d) --------------\n", m_screen->vpos());
 }
 
 
@@ -436,7 +414,7 @@ TIMER_CALLBACK_MEMBER(itech8_state::blitter_done)
  *
  *************************************/
 
-READ8_MEMBER(itech8_state::itech8_blitter_r)
+READ8_MEMBER(itech8_state::blitter_r)
 {
 	int result = m_blitter_data[offset / 2];
 	static const char *const portnames[] = { "AN_C", "AN_D", "AN_E", "AN_F" };
@@ -450,7 +428,7 @@ READ8_MEMBER(itech8_state::itech8_blitter_r)
 	/* a read from offset 3 clears the interrupt and returns the status */
 	if (offset == 3)
 	{
-		itech8_update_interrupts(-1, -1, 0);
+		update_interrupts(-1, -1, 0);
 		if (m_blit_in_progress)
 			result |= 0x80;
 		else
@@ -465,14 +443,11 @@ READ8_MEMBER(itech8_state::itech8_blitter_r)
 }
 
 
-WRITE8_MEMBER(itech8_state::itech8_blitter_w)
+WRITE8_MEMBER(itech8_state::blitter_w)
 {
-	UINT8 *blitter_data = m_blitter_data;
-	struct tms34061_display &tms_state = m_tms_state;
-
 	/* low bit seems to be ignored */
 	offset /= 2;
-	blitter_data[offset] = data;
+	m_blitter_data[offset] = data;
 
 	/* a write to offset 3 starts things going */
 	if (offset == 3)
@@ -481,19 +456,19 @@ WRITE8_MEMBER(itech8_state::itech8_blitter_w)
 		if (BLIT_LOGGING)
 		{
 			logerror("Blit: XY=%1X%04X SRC=%02X%02X%02X SIZE=%3dx%3d FLAGS=%02x",
-						(tms_state.regs[TMS34061_XYOFFSET] >> 8) & 0x0f, tms_state.regs[TMS34061_XYADDRESS],
-						m_grom_bank, blitter_data[0], blitter_data[1],
-						blitter_data[4], blitter_data[5],
-						blitter_data[2]);
+						(m_tms34061->m_display.regs[TMS34061_XYOFFSET] >> 8) & 0x0f, m_tms34061->m_display.regs[TMS34061_XYADDRESS],
+						m_grom_bank, m_blitter_data[0], m_blitter_data[1],
+						m_blitter_data[4], m_blitter_data[5],
+						m_blitter_data[2]);
 			logerror("   %02X %02X %02X [%02X] %02X %02X %02X [%02X]-%02X %02X %02X %02X [%02X %02X %02X %02X]\n",
-						blitter_data[0], blitter_data[1],
-						blitter_data[2], blitter_data[3],
-						blitter_data[4], blitter_data[5],
-						blitter_data[6], blitter_data[7],
-						blitter_data[8], blitter_data[9],
-						blitter_data[10], blitter_data[11],
-						blitter_data[12], blitter_data[13],
-						blitter_data[14], blitter_data[15]);
+						m_blitter_data[0], m_blitter_data[1],
+						m_blitter_data[2], m_blitter_data[3],
+						m_blitter_data[4], m_blitter_data[5],
+						m_blitter_data[6], m_blitter_data[7],
+						m_blitter_data[8], m_blitter_data[9],
+						m_blitter_data[10], m_blitter_data[11],
+						m_blitter_data[12], m_blitter_data[13],
+						m_blitter_data[14], m_blitter_data[15]);
 		}
 
 		/* perform the blit */
@@ -501,7 +476,7 @@ WRITE8_MEMBER(itech8_state::itech8_blitter_w)
 		m_blit_in_progress = 1;
 
 		/* set a timer to go off when we're done */
-		machine().scheduler().timer_set(attotime::from_hz(12000000/4) * (BLITTER_WIDTH * BLITTER_HEIGHT + 12), timer_expired_delegate(FUNC(itech8_state::blitter_done),this));
+		m_blitter_done_timer->adjust(attotime::from_hz(12000000/4) * (BLITTER_WIDTH * BLITTER_HEIGHT + 12));
 	}
 
 	/* debugging */
@@ -516,7 +491,7 @@ WRITE8_MEMBER(itech8_state::itech8_blitter_w)
  *
  *************************************/
 
-WRITE8_MEMBER(itech8_state::itech8_tms34061_w)
+WRITE8_MEMBER(itech8_state::tms34061_w)
 {
 	int func = (offset >> 9) & 7;
 	int col = offset & 0xff;
@@ -527,11 +502,11 @@ WRITE8_MEMBER(itech8_state::itech8_tms34061_w)
 		col ^= 2;
 
 	/* Row address (RA0-RA8) is not dependent on the offset */
-	tms34061_w(space, col, 0xff, func, data);
+	m_tms34061->write(space, col, 0xff, func, data);
 }
 
 
-READ8_MEMBER(itech8_state::itech8_tms34061_r)
+READ8_MEMBER(itech8_state::tms34061_r)
 {
 	int func = (offset >> 9) & 7;
 	int col = offset & 0xff;
@@ -542,7 +517,7 @@ READ8_MEMBER(itech8_state::itech8_tms34061_r)
 		col ^= 2;
 
 	/* Row address (RA0-RA8) is not dependent on the offset */
-	return tms34061_r(space, col, 0xff, func);
+	return m_tms34061->read(space, col, 0xff, func);
 }
 
 
@@ -563,30 +538,29 @@ WRITE8_MEMBER(itech8_state::grmatch_palette_w)
 WRITE8_MEMBER(itech8_state::grmatch_xscroll_w)
 {
 	/* update the X scroll value */
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	m_grmatch_xscroll = data;
 }
 
 
 TIMER_DEVICE_CALLBACK_MEMBER(itech8_state::grmatch_palette_update)
 {
-	struct tms34061_display &tms_state = m_tms_state;
 	/* if the high bit is set, we are supposed to latch the palette values */
 	if (m_grmatch_palcontrol & 0x80)
 	{
 		/* the TMS34070s latch at the start of the frame, based on the first few bytes */
-		UINT32 page_offset = (tms_state.dispstart & 0x0ffff) | m_grmatch_xscroll;
+		UINT32 page_offset = (m_tms34061->m_display.dispstart & 0x0ffff) | m_grmatch_xscroll;
 		int page, x;
 
 		/* iterate over both pages */
 		for (page = 0; page < 2; page++)
 		{
-			const UINT8 *base = &tms_state.vram[(page * 0x20000 + page_offset) & 0x3ffff];
+			const UINT8 *base = &m_tms34061->m_display.vram[(page * 0x20000 + page_offset) & 0x3ffff];
 			for (x = 0; x < 16; x++)
 			{
 				UINT8 data0 = base[x * 2 + 0];
 				UINT8 data1 = base[x * 2 + 1];
-				m_grmatch_palette[page][x] = MAKE_RGB(pal4bit(data0 >> 0), pal4bit(data1 >> 4), pal4bit(data1 >> 0));
+				m_grmatch_palette[page][x] = rgb_t(pal4bit(data0 >> 0), pal4bit(data1 >> 4), pal4bit(data1 >> 0));
 			}
 		}
 	}
@@ -600,31 +574,30 @@ TIMER_DEVICE_CALLBACK_MEMBER(itech8_state::grmatch_palette_update)
  *
  *************************************/
 
-UINT32 itech8_state::screen_update_itech8_2layer(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+UINT32 itech8_state::screen_update_2layer(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	struct tms34061_display &tms_state = m_tms_state;
 	UINT32 page_offset;
 	int x, y;
 	const rgb_t *pens = m_tlc34076->get_pens();
 
 	/* first get the current display state */
-	tms34061_get_display_state(&tms_state);
+	m_tms34061->get_display_state();
 
 	/* if we're blanked, just fill with black */
-	if (tms_state.blanked)
+	if (m_tms34061->m_display.blanked)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(rgb_t::black, cliprect);
 		return 0;
 	}
 
 	/* there are two layers: */
 	/*    top layer @ 0x00000 is only 4bpp, colors come from the first 16 palettes */
 	/* bottom layer @ 0x20000 is full 8bpp */
-	page_offset = tms_state.dispstart & 0x0ffff;
+	page_offset = m_tms34061->m_display.dispstart & 0x0ffff;
 	for (y = cliprect.min_y; y <= cliprect.max_y; y++)
 	{
-		UINT8 *base0 = &tms_state.vram[(0x00000 + page_offset + y * 256) & 0x3ffff];
-		UINT8 *base2 = &tms_state.vram[(0x20000 + page_offset + y * 256) & 0x3ffff];
+		UINT8 *base0 = &m_tms34061->m_display.vram[(0x00000 + page_offset + y * 256) & 0x3ffff];
+		UINT8 *base2 = &m_tms34061->m_display.vram[(0x20000 + page_offset + y * 256) & 0x3ffff];
 		UINT32 *dest = &bitmap.pix32(y);
 
 		for (x = cliprect.min_x; x <= cliprect.max_x; x++)
@@ -637,19 +610,18 @@ UINT32 itech8_state::screen_update_itech8_2layer(screen_device &screen, bitmap_r
 }
 
 
-UINT32 itech8_state::screen_update_itech8_grmatch(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+UINT32 itech8_state::screen_update_grmatch(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	struct tms34061_display &tms_state = m_tms_state;
 	UINT32 page_offset;
 	int x, y;
 
 	/* first get the current display state */
-	tms34061_get_display_state(&tms_state);
+	m_tms34061->get_display_state();
 
 	/* if we're blanked, just fill with black */
-	if (tms_state.blanked)
+	if (m_tms34061->m_display.blanked)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(rgb_t::black, cliprect);
 		return 0;
 	}
 
@@ -658,11 +630,11 @@ UINT32 itech8_state::screen_update_itech8_grmatch(screen_device &screen, bitmap_
 	/* bottom layer @ 0x20000 is 4bpp, colors come from TMS34070, enabled via palette control */
 	/* 4bpp pixels are packed 2 to a byte */
 	/* xscroll is set via a separate register */
-	page_offset = (tms_state.dispstart & 0x0ffff) | m_grmatch_xscroll;
+	page_offset = (m_tms34061->m_display.dispstart & 0x0ffff) | m_grmatch_xscroll;
 	for (y = cliprect.min_y; y <= cliprect.max_y; y++)
 	{
-		UINT8 *base0 = &tms_state.vram[0x00000 + ((page_offset + y * 256) & 0xffff)];
-		UINT8 *base2 = &tms_state.vram[0x20000 + ((page_offset + y * 256) & 0xffff)];
+		UINT8 *base0 = &m_tms34061->m_display.vram[0x00000 + ((page_offset + y * 256) & 0xffff)];
+		UINT8 *base2 = &m_tms34061->m_display.vram[0x20000 + ((page_offset + y * 256) & 0xffff)];
 		UINT32 *dest = &bitmap.pix32(y);
 
 		for (x = cliprect.min_x & ~1; x <= cliprect.max_x; x += 2)
@@ -685,29 +657,28 @@ UINT32 itech8_state::screen_update_itech8_grmatch(screen_device &screen, bitmap_
 }
 
 
-UINT32 itech8_state::screen_update_itech8_2page(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+UINT32 itech8_state::screen_update_2page(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	struct tms34061_display &tms_state = m_tms_state;
 	UINT32 page_offset;
 	int x, y;
 	const rgb_t *pens = m_tlc34076->get_pens();
 
 	/* first get the current display state */
-	tms34061_get_display_state(&tms_state);
+	m_tms34061->get_display_state();
 
 	/* if we're blanked, just fill with black */
-	if (tms_state.blanked)
+	if (m_tms34061->m_display.blanked)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(rgb_t::black, cliprect);
 		return 0;
 	}
 
 	/* there are two pages, each of which is a full 8bpp */
 	/* page index is selected by the top bit of the page_select register */
-	page_offset = ((m_page_select & 0x80) << 10) | (tms_state.dispstart & 0x0ffff);
+	page_offset = ((m_page_select & 0x80) << 10) | (m_tms34061->m_display.dispstart & 0x0ffff);
 	for (y = cliprect.min_y; y <= cliprect.max_y; y++)
 	{
-		UINT8 *base = &tms_state.vram[(page_offset + y * 256) & 0x3ffff];
+		UINT8 *base = &m_tms34061->m_display.vram[(page_offset + y * 256) & 0x3ffff];
 		UINT32 *dest = &bitmap.pix32(y);
 
 		for (x = cliprect.min_x; x <= cliprect.max_x; x++)
@@ -717,20 +688,19 @@ UINT32 itech8_state::screen_update_itech8_2page(screen_device &screen, bitmap_rg
 }
 
 
-UINT32 itech8_state::screen_update_itech8_2page_large(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+UINT32 itech8_state::screen_update_2page_large(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	struct tms34061_display &tms_state = m_tms_state;
 	UINT32 page_offset;
 	int x, y;
 	const rgb_t *pens = m_tlc34076->get_pens();
 
 	/* first get the current display state */
-	tms34061_get_display_state(&tms_state);
+	m_tms34061->get_display_state();
 
 	/* if we're blanked, just fill with black */
-	if (tms_state.blanked)
+	if (m_tms34061->m_display.blanked)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(rgb_t::black, cliprect);
 		return 0;
 	}
 
@@ -738,11 +708,11 @@ UINT32 itech8_state::screen_update_itech8_2page_large(screen_device &screen, bit
 	/* the low 4 bits come from the bitmap directly */
 	/* the upper 4 bits were latched on each write into a separate bitmap */
 	/* page index is selected by the top bit of the page_select register */
-	page_offset = ((~m_page_select & 0x80) << 10) | (tms_state.dispstart & 0x0ffff);
+	page_offset = ((~m_page_select & 0x80) << 10) | (m_tms34061->m_display.dispstart & 0x0ffff);
 	for (y = cliprect.min_y; y <= cliprect.max_y; y++)
 	{
-		UINT8 *base = &tms_state.vram[(page_offset + y * 256) & 0x3ffff];
-		UINT8 *latch = &tms_state.latchram[(page_offset + y * 256) & 0x3ffff];
+		UINT8 *base = &m_tms34061->m_display.vram[(page_offset + y * 256) & 0x3ffff];
+		UINT8 *latch = &m_tms34061->m_display.latchram[(page_offset + y * 256) & 0x3ffff];
 		UINT32 *dest = &bitmap.pix32(y);
 
 		for (x = cliprect.min_x & ~1; x <= cliprect.max_x; x += 2)

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*********************************************************************
 
     unicode.h
@@ -10,37 +12,6 @@
     specific for these Unicode encodings.  Specifically, there are
     functions that convert UTF-8 and UTF-16 char clusters to and from
     singular 32-bit Unicode chars.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -64,26 +35,42 @@
 #define UTF16_CHAR_MAX  2
 
 /* these are UTF-8 encoded strings for common characters */
-#define UTF8_NBSP           "\xc2\xa0"          /* non-breaking space */
-#define UTF8_MULTIPLY       "\xc3\x97"          /* multiplication symbol */
-#define UTF8_DEGREES        "\xc2\xb0"          /* degrees symbol */
+#define UTF8_NBSP               "\xc2\xa0"          /* non-breaking space */
 
-#define a_RING              "\xc3\xa5"          /* small a with a ring */
-#define a_UMLAUT            "\xc3\xa4"          /* small a with an umlaut */
-#define o_UMLAUT            "\xc3\xb6"          /* small o with an umlaut */
-#define u_UMLAUT            "\xc3\xbc"          /* small u with an umlaut */
-#define e_ACUTE             "\xc3\xa9"          /* small e with an acute */
+#define UTF8_MULTIPLY           "\xc3\x97"          /* multiplication sign */
+#define UTF8_DIVIDE             "\xc3\xb7"          /* division sign */
+#define UTF8_SQUAREROOT         "\xe2\x88\x9a"      /* square root symbol */
+#define UTF8_PLUSMINUS          "\xc2\xb1"          /* plusminus symbol */
 
-#define A_RING              "\xc3\x85"          /* capital A with a ring */
-#define A_UMLAUT            "\xc3\x84"          /* capital A with an umlaut */
-#define O_UMLAUT            "\xc3\x96"          /* capital O with an umlaut */
-#define U_UMLAUT            "\xc3\x9c"          /* capital U with an umlaut */
-#define E_ACUTE             "\xc3\x89"          /* capital E with an acute */
+#define UTF8_POW_2              "\xc2\xb2"          /* superscript 2 */
+#define UTF8_POW_X              "\xcb\xa3"          /* superscript x */
+#define UTF8_POW_Y              "\xca\xb8"          /* superscript y */
+#define UTF8_PRIME              "\xca\xb9"          /* prime symbol */
+#define UTF8_DEGREES            "\xc2\xb0"          /* degrees symbol */
 
-#define UTF8_LEFT           "\xe2\x86\x90"      /* cursor left */
-#define UTF8_RIGHT          "\xe2\x86\x92"      /* cursor right */
-#define UTF8_UP             "\xe2\x86\x91"      /* cursor up */
-#define UTF8_DOWN           "\xe2\x86\x93"      /* cursor down */
+#define UTF8_SMALL_PI           "\xcf\x80"          /* Greek small letter pi */
+#define UTF8_CAPITAL_SIGMA      "\xce\xa3"          /* Greek capital letter sigma */
+#define UTF8_CAPITAL_DELTA      "\xce\x94"          /* Greek capital letter delta */
+
+#define UTF8_MACRON             "\xc2\xaf"          /* macron symbol */
+#define UTF8_NONSPACE_MACRON    "\xcc\x84"          /* nonspace macron, use after another char */
+
+#define a_RING                  "\xc3\xa5"          /* small a with a ring */
+#define a_UMLAUT                "\xc3\xa4"          /* small a with an umlaut */
+#define o_UMLAUT                "\xc3\xb6"          /* small o with an umlaut */
+#define u_UMLAUT                "\xc3\xbc"          /* small u with an umlaut */
+#define e_ACUTE                 "\xc3\xa9"          /* small e with an acute */
+
+#define A_RING                  "\xc3\x85"          /* capital A with a ring */
+#define A_UMLAUT                "\xc3\x84"          /* capital A with an umlaut */
+#define O_UMLAUT                "\xc3\x96"          /* capital O with an umlaut */
+#define U_UMLAUT                "\xc3\x9c"          /* capital U with an umlaut */
+#define E_ACUTE                 "\xc3\x89"          /* capital E with an acute */
+
+#define UTF8_LEFT               "\xe2\x86\x90"      /* cursor left */
+#define UTF8_RIGHT              "\xe2\x86\x92"      /* cursor right */
+#define UTF8_UP                 "\xe2\x86\x91"      /* cursor up */
+#define UTF8_DOWN               "\xe2\x86\x93"      /* cursor down */
 
 
 

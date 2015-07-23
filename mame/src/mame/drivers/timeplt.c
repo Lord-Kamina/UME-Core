@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Time Pilot
@@ -105,16 +107,6 @@ WRITE8_MEMBER(timeplt_state::chkun_sound_w)
 		m_tc8830f->reset();
 }
 
-static const ay8910_interface chkun_ay2_interface =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(timeplt_state,chkun_sound_w),
-	DEVCB_NULL
-};
-
 CUSTOM_INPUT_MEMBER(timeplt_state::chkun_hopper_status_r)
 {
 	// temp workaround, needs hopper
@@ -141,7 +133,7 @@ static ADDRESS_MAP_START( timeplt_main_map, AS_PROGRAM, 8, timeplt_state )
 	AM_RANGE(0xc200, 0xc200) AM_MIRROR(0x0cff) AM_WRITE(watchdog_reset_w)
 	AM_RANGE(0xc300, 0xc300) AM_MIRROR(0x0cf1) AM_WRITE(timeplt_nmi_enable_w)
 	AM_RANGE(0xc302, 0xc302) AM_MIRROR(0x0cf1) AM_WRITE(timeplt_flipscreen_w)
-	AM_RANGE(0xc304, 0xc304) AM_MIRROR(0x0cf1) AM_WRITE_LEGACY(timeplt_sh_irqtrigger_w)
+	AM_RANGE(0xc304, 0xc304) AM_MIRROR(0x0cf1) AM_DEVWRITE("timeplt_audio", timeplt_audio_device, sh_irqtrigger_w)
 	AM_RANGE(0xc30a, 0xc30c) AM_MIRROR(0x0cf1) AM_WRITE(timeplt_coin_counter_w)
 	AM_RANGE(0xc000, 0xc000) AM_MIRROR(0x0cff) AM_READ(timeplt_scanline_r)
 	AM_RANGE(0xc200, 0xc200) AM_MIRROR(0x0cff) AM_READ_PORT("DSW1")
@@ -163,7 +155,7 @@ static ADDRESS_MAP_START( psurge_main_map, AS_PROGRAM, 8, timeplt_state )
 	AM_RANGE(0xc000, 0xc000) AM_MIRROR(0x0cff) AM_WRITE(soundlatch_byte_w)
 	AM_RANGE(0xc200, 0xc200) AM_MIRROR(0x0cff) AM_WRITE(watchdog_reset_w)
 	AM_RANGE(0xc302, 0xc302) AM_MIRROR(0x0cf1) AM_WRITE(timeplt_flipscreen_w)
-	AM_RANGE(0xc304, 0xc304) AM_MIRROR(0x0cf1) AM_WRITE_LEGACY(timeplt_sh_irqtrigger_w)
+	AM_RANGE(0xc304, 0xc304) AM_MIRROR(0x0cf1) AM_DEVWRITE("timeplt_audio", timeplt_audio_device, sh_irqtrigger_w)
 	AM_RANGE(0xc30a, 0xc30c) AM_MIRROR(0x0cf1) AM_WRITE(timeplt_coin_counter_w)
 	AM_RANGE(0xc000, 0xc000) AM_MIRROR(0x0cff) AM_READ(timeplt_scanline_r)
 	AM_RANGE(0xc200, 0xc200) AM_MIRROR(0x0cff) AM_READ_PORT("DSW1")
@@ -186,7 +178,7 @@ static ADDRESS_MAP_START( chkun_main_map, AS_PROGRAM, 8, timeplt_state )
 	AM_RANGE(0xc200, 0xc200) AM_MIRROR(0x0cff) AM_WRITE(watchdog_reset_w)
 	AM_RANGE(0xc300, 0xc300) AM_MIRROR(0x0cf1) AM_WRITE(timeplt_nmi_enable_w)
 	AM_RANGE(0xc302, 0xc302) AM_MIRROR(0x0cf1) AM_WRITE(timeplt_flipscreen_w)
-	AM_RANGE(0xc304, 0xc304) AM_MIRROR(0x0cf1) AM_WRITE_LEGACY(timeplt_sh_irqtrigger_w)
+	AM_RANGE(0xc304, 0xc304) AM_MIRROR(0x0cf1) AM_DEVWRITE("timeplt_audio", timeplt_audio_device, sh_irqtrigger_w)
 	AM_RANGE(0xc30a, 0xc30c) AM_MIRROR(0x0cf1) AM_WRITE(timeplt_coin_counter_w)
 	AM_RANGE(0xc000, 0xc000) AM_MIRROR(0x0cff) AM_READ(timeplt_scanline_r)
 	AM_RANGE(0xc200, 0xc200) AM_MIRROR(0x0cff) AM_READ_PORT("DSW1")
@@ -468,16 +460,17 @@ static MACHINE_CONFIG_START( timeplt, timeplt_state )
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", timeplt_state,  timeplt_interrupt)
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_SCANLINE)
-
 	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_SCANLINE)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(timeplt_state, screen_update_timeplt)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(timeplt)
-	MCFG_PALETTE_LENGTH(32*4+64*4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", timeplt)
+	MCFG_PALETTE_ADD("palette", 32*4+64*4)
+	MCFG_PALETTE_INIT_OWNER(timeplt_state, timeplt)
 
 	/* sound hardware */
 	MCFG_FRAGMENT_ADD(timeplt_sound)
@@ -494,7 +487,7 @@ MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( bikkuric, timeplt )
 
-	MCFG_GFXDECODE(chkun)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", chkun)
 
 	/* basic machine hardware */
 	MCFG_CPU_MODIFY("maincpu")
@@ -505,11 +498,11 @@ MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( chkun, bikkuric )
 
-	MCFG_GFXDECODE(chkun)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", chkun)
 
 	/* sound hardware */
 	MCFG_SOUND_MODIFY("ay2")
-	MCFG_SOUND_CONFIG(chkun_ay2_interface)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(timeplt_state, chkun_sound_w))
 
 	MCFG_TC8830F_ADD("tc8830f", XTAL_512kHz)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
@@ -706,7 +699,8 @@ GAME( 1982, timeplt,  0,       timeplt, timeplt, driver_device, 0, ROT90,  "Kona
 GAME( 1982, timepltc, timeplt, timeplt, timeplt, driver_device, 0, ROT90,  "Konami (Centuri license)", "Time Pilot (Centuri)", GAME_SUPPORTS_SAVE )
 GAME( 1982, timeplta, timeplt, timeplt, timeplt, driver_device, 0, ROT90,  "Konami (Atari license)", "Time Pilot (Atari)", GAME_SUPPORTS_SAVE )
 GAME( 1982, spaceplt, timeplt, timeplt, timeplt, driver_device, 0, ROT90,  "bootleg", "Space Pilot", GAME_SUPPORTS_SAVE )
+
 GAME( 1988, psurge,   0,       psurge,  psurge, driver_device,  0, ROT270, "Vision Electronics", "Power Surge", GAME_SUPPORTS_SAVE )
-// ROM says manufactured by Peni Soft for these two ... no, I'm not going to add THAT -.-"
-GAME( 1988, chkun,    0,       chkun,   chkun, driver_device,   0, ROT90,  "<unknown>", "Chance Kun (Japan)", GAME_SUPPORTS_SAVE | GAME_IMPERFECT_SOUND )
-GAME( 1987, bikkuric, 0,       bikkuric,bikkuric, driver_device,0, ROT90,  "<unknown>", "Bikkuri Card (Japan)", GAME_SUPPORTS_SAVE )
+
+GAME( 1988, chkun,    0,       chkun,   chkun, driver_device,   0, ROT90,  "Peni", "Chance Kun (Japan)", GAME_SUPPORTS_SAVE | GAME_IMPERFECT_SOUND )
+GAME( 1987, bikkuric, 0,       bikkuric,bikkuric, driver_device,0, ROT90,  "Peni", "Bikkuri Card (Japan)", GAME_SUPPORTS_SAVE )

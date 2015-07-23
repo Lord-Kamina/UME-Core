@@ -1,37 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     General sprite handling helpers
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -113,8 +84,8 @@ class sprite_device : public device_t
 
 protected:
 	// construction/destruction - only for subclasses
-	sprite_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, int dirty_granularity = 3)
-		: device_t(mconfig, type, name, tag, owner, 0),
+	sprite_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, const char *shortname, const char *file, int dirty_granularity = 3)
+		: device_t(mconfig, type, name, tag, owner, 0, shortname, file),
 			m_xorigin(0),
 			m_yorigin(0),
 			m_spriteram(NULL),
@@ -142,7 +113,10 @@ public:
 	static void static_set_origin(device_t &device, int xorigin, int yorigin) { static_set_xorigin(device, xorigin); static_set_yorigin(device, yorigin); }
 
 	// configuration
+	void set_spriteram(_SpriteRAMType *base, UINT32 bytes) { m_spriteram = base; m_spriteram_bytes = bytes; m_buffer.resize(m_spriteram_bytes / sizeof(_SpriteRAMType)); }
 	void set_origin(INT32 xorigin = 0, INT32 yorigin = 0) { m_xorigin = xorigin; m_yorigin = yorigin; }
+	void set_xorigin(INT32 xorigin) { m_xorigin = xorigin; }
+	void set_yorigin(INT32 yorigin) { m_yorigin = yorigin; }
 
 	// buffering
 	void copy_to_buffer() { memcpy(m_buffer, m_spriteram, m_spriteram_bytes); }
@@ -196,18 +170,13 @@ protected:
 	{
 		// find spriteram
 		memory_share *spriteram = owner()->memshare(tag());
-		if (spriteram == NULL)
-			throw emu_fatalerror("Unable to find shared spriteram with tag '%s'\n", tag());
+		if (spriteram != NULL)
+		{
+			set_spriteram(reinterpret_cast<_SpriteRAMType *>(spriteram->ptr()), spriteram->bytes());
 
-		// set up pointers
-		m_spriteram = reinterpret_cast<_SpriteRAMType *>(spriteram->ptr());
-		m_spriteram_bytes = spriteram->bytes();
-
-		// allocate the double buffer to match the RAM size
-		m_buffer.resize(m_spriteram_bytes / sizeof(_SpriteRAMType));
-
-		// save states
-		save_item(NAME(m_buffer));
+			// save states
+			save_item(NAME(m_buffer));
+		}
 	}
 
 	// subclass overrides
@@ -225,7 +194,7 @@ private:
 	// memory pointers and buffers
 	_SpriteRAMType *                m_spriteram;            // pointer to spriteram pointer
 	INT32                           m_spriteram_bytes;      // size of sprite RAM in bytes
-	dynamic_array<_SpriteRAMType>   m_buffer;               // buffered spriteram for those that use it
+	std::vector<_SpriteRAMType>          m_buffer;               // buffered spriteram for those that use it
 
 	// bitmaps
 	_BitmapType                     m_bitmap;               // live bitmap

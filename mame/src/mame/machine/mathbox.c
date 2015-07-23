@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Eric Smith
 /*
  * mathbox.c: math box simulation (Battlezone/Red Baron/Tempest)
  *
@@ -38,7 +40,7 @@
 const device_type MATHBOX = &device_creator<mathbox_device>;
 
 mathbox_device::mathbox_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MATHBOX, "MATHBOX", tag, owner, clock)
+	: device_t(mconfig, MATHBOX, "Atari MATHBOX", tag, owner, clock, "mathbox", __FILE__)
 {
 }
 

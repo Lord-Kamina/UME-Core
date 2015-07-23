@@ -1,19 +1,16 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /***************************************************************************
 
   apple2.c
 
   Machine file to handle emulation of the Apple II series.
 
-  TODO:  Verify correctness of C08X switches.
-            - need to do double-read before write-enable RAM
-
 ***************************************************************************/
 
 #include "emu.h"
 #include "cpu/m6502/m6502.h"
 #include "includes/apple2.h"
-#include "machine/a2bus.h"
-#include "machine/ay3600.h"
 #include "machine/applefdc.h"
 #include "machine/sonydriv.h"
 #include "machine/appldriv.h"
@@ -347,11 +344,62 @@ READ8_MEMBER(apple2_state::apple2_c080_r)
 	if(!space.debugger_access())
 	{
 		device_a2bus_card_interface *slotdevice;
+		int slot;
 
 		offset &= 0x7F;
+		slot = offset / 0x10;
+
+		if ((m_machinetype == APPLE_IIC) || (m_machinetype == APPLE_IICPLUS) || (m_machinetype == LASER128))
+		{
+			if (slot == 1)
+			{
+				offset &= 0xf;
+				if (offset >= 8 && offset <= 0xb)
+				{
+					return m_acia1->read(space, offset-8);
+				}
+			}
+			else if (slot == 2)
+			{
+				offset &= 0xf;
+				if (offset >= 8 && offset <= 0xb)
+				{
+					return m_acia2->read(space, offset-8);
+				}
+			}
+		}
+
+		if ((m_machinetype == APPLE_IICPLUS) && (slot == 6))
+		{
+			offset &= 0xf;
+			return m_iicpiwm->read(offset);
+		}
+
+		if ((m_machinetype == LASER128) && (slot == 5))
+		{
+			offset &= 0xf;
+			UINT8 retval = m_exp_regs[offset];
+
+			if (offset == 3)
+			{
+				retval = m_exp_ram[m_exp_liveptr&m_exp_addrmask];
+				m_exp_liveptr++;
+				m_exp_regs[0] = m_exp_liveptr & 0xff;
+				m_exp_regs[1] = (m_exp_liveptr>>8) & 0xff;
+				m_exp_regs[2] = ((m_exp_liveptr>>16) & 0xff) | m_exp_bankhior;
+			}
+
+			return retval;
+		}
+
+		if ((m_machinetype == LASER128) && (slot == 6))
+		{
+			offset &= 0xf;
+			return m_laserudc->read(offset);
+		}
 
 		/* now identify the device */
-		slotdevice = m_a2bus->get_a2bus_card(offset / 0x10);
+		slotdevice = m_a2bus->get_a2bus_card(slot);
 
 		/* and if we can, read from the slot */
 		if (slotdevice != NULL)
@@ -367,11 +415,95 @@ READ8_MEMBER(apple2_state::apple2_c080_r)
 WRITE8_MEMBER(apple2_state::apple2_c080_w)
 {
 	device_a2bus_card_interface *slotdevice;
+	int slot;
 
 	offset &= 0x7F;
+	slot = offset / 0x10;
+
+	if ((m_machinetype == APPLE_IIC) || (m_machinetype == APPLE_IICPLUS) || (m_machinetype == LASER128))
+	{
+		if (slot == 1)
+		{
+			offset &= 0xf;
+			if (offset >= 8 && offset <= 0xb)
+			{
+				m_acia1->write(space, offset-8, data);
+				return;
+			}
+		}
+		else if (slot == 2)
+		{
+			offset &= 0xf;
+			if (offset >= 8 && offset <= 0xb)
+			{
+				m_acia2->write(space, offset-8, data);
+				return;
+			}
+		}
+	}
+
+	if ((m_machinetype == APPLE_IICPLUS) && (slot == 6))
+	{
+		offset &= 0xf;
+		m_iicpiwm->write(offset, data);
+		return;
+	}
+
+	if ((m_machinetype == LASER128) && (slot == 5))
+	{
+		switch (offset & 0xf)
+		{
+			case 0:
+				m_exp_wptr &= ~0xff;
+				m_exp_wptr |= data;
+				m_exp_regs[0] = m_exp_wptr & 0xff;
+				m_exp_regs[1] = (m_exp_wptr>>8) & 0xff;
+				m_exp_regs[2] = ((m_exp_wptr>>16) & 0xff) | m_exp_bankhior;
+				m_exp_liveptr = m_exp_wptr;
+				break;
+
+			case 1:
+				m_exp_wptr &= ~0xff00;
+				m_exp_wptr |= (data<<8);
+				m_exp_regs[0] = m_exp_wptr & 0xff;
+				m_exp_regs[1] = (m_exp_wptr>>8) & 0xff;
+				m_exp_regs[2] = ((m_exp_wptr>>16) & 0xff) | m_exp_bankhior;
+				m_exp_liveptr = m_exp_wptr;
+				break;
+
+			case 2:
+				m_exp_wptr &= ~0xff0000;
+				m_exp_wptr |= (data<<16);
+				m_exp_regs[0] = m_exp_wptr & 0xff;
+				m_exp_regs[1] = (m_exp_wptr>>8) & 0xff;
+				m_exp_regs[2] = ((m_exp_wptr>>16) & 0xff) | m_exp_bankhior;
+				m_exp_liveptr = m_exp_wptr;
+				break;
+
+			case 3:
+	//            printf("Write %02x to RAM[%x]\n", data, m_liveptr);
+				m_exp_ram[(m_exp_liveptr&m_exp_addrmask)] = data;
+				m_exp_liveptr++;
+				m_exp_regs[0] = m_exp_liveptr & 0xff;
+				m_exp_regs[1] = (m_exp_liveptr>>8) & 0xff;
+				m_exp_regs[2] = ((m_exp_liveptr>>16) & 0xff) | m_exp_bankhior;
+				break;
+
+			default:
+				m_exp_regs[offset] = data;
+				break;
+		}
+	}
+
+	if ((m_machinetype == LASER128) && (slot == 6))
+	{
+		offset &= 0xf;
+		m_laserudc->write(space, offset, data);
+		return;
+	}
 
 	/* now identify the device */
-	slotdevice = m_a2bus->get_a2bus_card(offset / 0x10);
+	slotdevice = m_a2bus->get_a2bus_card(slot);
 
 	/* and if we can, write to the slot */
 	if (slotdevice != NULL)
@@ -409,7 +541,7 @@ READ8_MEMBER(apple2_state::apple2_c1xx_r )
 
 	if (slotdevice != NULL)
 	{
-		if (slotdevice->take_c800())
+		if ((slotdevice->take_c800()) && (!space.debugger_access()))
 		{
 //          printf("c1xx_r: taking cnxx_slot to %d\n", slotnum);
 			m_a2_cnxx_slot = slotnum;
@@ -424,7 +556,8 @@ READ8_MEMBER(apple2_state::apple2_c1xx_r )
 	}
 
 	// else fall through to floating bus
-	return apple2_getfloatingbusvalue();
+	// never executed
+	//return apple2_getfloatingbusvalue();
 }
 
 WRITE8_MEMBER(apple2_state::apple2_c1xx_w )
@@ -458,7 +591,7 @@ READ8_MEMBER(apple2_state::apple2_c3xx_r )
 	// is a card installed in this slot?
 	if (slotdevice != NULL)
 	{
-		if (slotdevice->take_c800())
+		if ((slotdevice->take_c800()) && (!space.debugger_access()))
 		{
 //          printf("c3xx_r: taking cnxx_slot to %d\n", slotnum);
 			m_a2_cnxx_slot = slotnum;
@@ -472,7 +605,8 @@ READ8_MEMBER(apple2_state::apple2_c3xx_r )
 	}
 
 	// else fall through to floating bus
-	return apple2_getfloatingbusvalue();
+	// never executed
+	//return apple2_getfloatingbusvalue();
 }
 
 WRITE8_MEMBER(apple2_state::apple2_c3xx_w )
@@ -485,7 +619,7 @@ WRITE8_MEMBER(apple2_state::apple2_c3xx_w )
 
 	if (slotdevice != NULL)
 	{
-		if (slotdevice->take_c800())
+		if ((slotdevice->take_c800()) && (!space.debugger_access()))
 		{
 //          printf("c3xx_w: taking cnxx_slot to %d\n", slotnum);
 			m_a2_cnxx_slot = slotnum;
@@ -511,7 +645,7 @@ READ8_MEMBER(apple2_state::apple2_c4xx_r )
 	// is a card installed in this slot?
 	if (slotdevice != NULL)
 	{
-		if (slotdevice->take_c800() && (m_a2_cnxx_slot != slotnum))
+		if (slotdevice->take_c800() && (m_a2_cnxx_slot != slotnum) && (!space.debugger_access()))
 		{
 			m_a2_cnxx_slot = slotnum;
 			apple2_update_memory();
@@ -524,7 +658,8 @@ READ8_MEMBER(apple2_state::apple2_c4xx_r )
 	}
 
 	// else fall through to floating bus
-	return apple2_getfloatingbusvalue();
+	// never executed
+	//return apple2_getfloatingbusvalue();
 }
 
 WRITE8_MEMBER ( apple2_state::apple2_c4xx_w )
@@ -537,7 +672,7 @@ WRITE8_MEMBER ( apple2_state::apple2_c4xx_w )
 
 	if (slotdevice != NULL)
 	{
-		if (slotdevice->take_c800())
+		if ((slotdevice->take_c800()) && (!space.debugger_access()))
 		{
 //          printf("c4xx_w: taking cnxx_slot to %d\n", slotnum);
 			m_a2_cnxx_slot = slotnum;
@@ -795,6 +930,7 @@ static void apple2_mem_Cx00(running_machine &machine, offs_t begin, offs_t end, 
 static void apple2_mem_C300(running_machine &machine, offs_t begin, offs_t end, apple2_meminfo *meminfo)
 {
 	apple2_state *state = machine.driver_data<apple2_state>();
+
 	if (((state->m_flags & (VAR_INTCXROM|VAR_SLOTC3ROM)) != VAR_SLOTC3ROM) && !(state->m_flags_mask & VAR_SLOTC3ROM))
 	{
 		meminfo->read_mem       = (begin & 0x0FFF) | (state->m_flags & VAR_ROMSWITCH ? 0x4000 : 0x0000) | APPLE2_MEM_ROM;
@@ -849,7 +985,7 @@ static void apple2_mem_D000(running_machine &machine, offs_t begin, offs_t end, 
 {
 	apple2_state *state = machine.driver_data<apple2_state>();
 
-	if (state->m_inh_slot == INH_SLOT_INVALID)
+	if (state->m_inh_slot == -1)
 	{
 		if (state->m_flags & VAR_LCRAM)
 		{
@@ -895,7 +1031,7 @@ static void apple2_mem_E000(running_machine &machine, offs_t begin, offs_t end, 
 {
 	apple2_state *state = machine.driver_data<apple2_state>();
 
-	if (state->m_inh_slot == INH_SLOT_INVALID)
+	if (state->m_inh_slot == -1)
 	{
 		if (state->m_flags & VAR_LCRAM)
 		{
@@ -1141,6 +1277,7 @@ void apple2_state::machine_reset()
 {
 	int need_intcxrom;
 
+	m_reset_flag = 0;
 	m_rambase = m_ram->pointer();
 	apple2_refresh_delegates();
 
@@ -1153,11 +1290,9 @@ void apple2_state::machine_reset()
 		|| !strncmp(machine().system().name, "apple2g", 7);
 	apple2_setvar(need_intcxrom ? VAR_INTCXROM : 0, ~0);
 
-	// ROM 0 cannot boot unless language card bank 2 is write-enabled (but read ROM) on startup
-	if (!strncmp(machine().system().name, "apple2g", 7))
-	{
-		apple2_setvar(VAR_LCWRITE|VAR_LCRAM2, VAR_LCWRITE | VAR_LCRAM | VAR_LCRAM2);
-	}
+	// IIgs ROM 0 cannot boot unless language card bank 2 is write-enabled (but read ROM) on startup
+	// Peter Ferrie reports this is also the default on the IIe/IIc at least
+	apple2_setvar(VAR_LCWRITE|VAR_LCRAM2, VAR_LCWRITE | VAR_LCRAM | VAR_LCRAM2);
 
 	m_a2_speaker_state = 0;
 
@@ -1165,9 +1300,17 @@ void apple2_state::machine_reset()
 
 	m_joystick_x1_time = m_joystick_y1_time = 0;
 	m_joystick_x2_time = m_joystick_y2_time = 0;
+
+	memset(m_exp_regs, 0, sizeof(UINT8) * 0x10);
+	m_exp_wptr = m_exp_liveptr = 0;
+
 }
 
-
+int apple2_state::a2_no_ctrl_reset()
+{
+	return (((m_kbrepeat != NULL) && (m_resetdip == NULL)) ||
+			((m_resetdip != NULL) && !m_resetdip->read()));
+}
 
 /* -----------------------------------------------------------------------
  * Apple II interrupt; used to force partial updates
@@ -1178,7 +1321,25 @@ TIMER_DEVICE_CALLBACK_MEMBER(apple2_state::apple2_interrupt)
 	int scanline = param;
 
 	if((scanline % 8) == 0)
-		machine().primary_screen->update_partial(machine().primary_screen->vpos());
+		machine().first_screen()->update_partial(machine().first_screen()->vpos());
+	if ((m_kbspecial->read() & 0x80) &&
+		(a2_no_ctrl_reset() || (m_kbspecial->read() & 0x08)))
+	{
+			if (!m_reset_flag)
+			{
+				m_reset_flag = 1;
+				/* using PULSE_LINE does not allow us to press and hold key */
+				m_maincpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+			}
+			return;
+	}
+
+	if (m_reset_flag)
+	{
+		m_reset_flag = 0;
+		m_maincpu->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+		machine().schedule_soft_reset();
+	}
 }
 
 
@@ -1249,7 +1410,7 @@ READ8_MEMBER ( apple2_state::apple2_auxram0000_r )
 	{
 		return m_auxslotdevice->read_auxram(offset);
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return 0xff;
 	}
@@ -1264,7 +1425,7 @@ READ8_MEMBER ( apple2_state::apple2_auxram0200_r )
 	{
 		return m_auxslotdevice->read_auxram(offset+0x200);
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return 0xff;
 	}
@@ -1279,7 +1440,7 @@ READ8_MEMBER ( apple2_state::apple2_auxram0400_r )
 	{
 		return m_auxslotdevice->read_auxram(offset+0x400);
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return 0xff;
 	}
@@ -1294,7 +1455,7 @@ READ8_MEMBER ( apple2_state::apple2_auxram0800_r )
 	{
 		return m_auxslotdevice->read_auxram(offset+0x800);
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return 0xff;
 	}
@@ -1309,7 +1470,7 @@ READ8_MEMBER ( apple2_state::apple2_auxram2000_r )
 	{
 		return m_auxslotdevice->read_auxram(offset+0x2000);
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return 0xff;
 	}
@@ -1324,7 +1485,7 @@ READ8_MEMBER ( apple2_state::apple2_auxram4000_r )
 	{
 		return m_auxslotdevice->read_auxram(offset+0x4000);
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return 0xff;
 	}
@@ -1339,7 +1500,7 @@ READ8_MEMBER ( apple2_state::apple2_auxramc000_r )
 	{
 		return m_auxslotdevice->read_auxram(offset+0xc000);
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return 0xff;
 	}
@@ -1354,7 +1515,7 @@ READ8_MEMBER ( apple2_state::apple2_auxramd000_r )
 	{
 		return m_auxslotdevice->read_auxram(offset+0xd000);
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return 0xff;
 	}
@@ -1369,7 +1530,7 @@ READ8_MEMBER ( apple2_state::apple2_auxrame000_r )
 	{
 		return m_auxslotdevice->read_auxram(offset+0xe000);
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return 0xff;
 	}
@@ -1439,7 +1600,7 @@ WRITE8_MEMBER ( apple2_state::apple2_auxram0000_w )
 		m_auxslotdevice->write_auxram(offset, data);
 		return;
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return;
 	}
@@ -1455,7 +1616,7 @@ WRITE8_MEMBER ( apple2_state::apple2_auxram0200_w )
 		m_auxslotdevice->write_auxram(offset+0x200, data);
 		return;
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return;
 	}
@@ -1471,7 +1632,7 @@ WRITE8_MEMBER ( apple2_state::apple2_auxram0400_w )
 		m_auxslotdevice->write_auxram(offset+0x400, data);
 		return;
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return;
 	}
@@ -1487,7 +1648,7 @@ WRITE8_MEMBER ( apple2_state::apple2_auxram0800_w )
 		m_auxslotdevice->write_auxram(offset+0x800, data);
 		return;
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return;
 	}
@@ -1503,7 +1664,7 @@ WRITE8_MEMBER ( apple2_state::apple2_auxram2000_w )
 		m_auxslotdevice->write_auxram(offset+0x2000, data);
 		return;
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return;
 	}
@@ -1519,7 +1680,7 @@ WRITE8_MEMBER ( apple2_state::apple2_auxram4000_w )
 		m_auxslotdevice->write_auxram(offset+0x4000, data);
 		return;
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return;
 	}
@@ -1535,7 +1696,7 @@ WRITE8_MEMBER ( apple2_state::apple2_auxramc000_w )
 		m_auxslotdevice->write_auxram(offset+0xc000, data);
 		return;
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return;
 	}
@@ -1551,7 +1712,7 @@ WRITE8_MEMBER ( apple2_state::apple2_auxramd000_w )
 		m_auxslotdevice->write_auxram(offset+0xd000, data);
 		return;
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return;
 	}
@@ -1567,7 +1728,7 @@ WRITE8_MEMBER ( apple2_state::apple2_auxrame000_w )
 		m_auxslotdevice->write_auxram(offset+0xe000, data);
 		return;
 	}
-	else if (m_machinetype == APPLE_IIE)
+	else if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		return;
 	}
@@ -1588,7 +1749,7 @@ READ8_MEMBER ( apple2_state::apple2_c00x_r )
 	{
 		/* Read the keyboard data and strobe */
 		g_profiler.start(PROFILER_C00X);
-		result = AY3600_keydata_strobe_r(space.machine());
+		result = m_transchar | m_strobe;
 		g_profiler.stop();
 	}
 
@@ -1645,7 +1806,7 @@ READ8_MEMBER( apple2_state::apple2_c01x_r )
 		LOG(("a2 softswitch_r: %04x\n", offset + 0xc010));
 		switch (offset)
 		{
-			case 0x00:          result |= AY3600_anykey_clearstrobe_r(space.machine());     break;
+			case 0x00:          result |= m_transchar | m_strobe;  m_strobe = 0;  break;
 			case 0x01:          result |= (m_flags & VAR_LCRAM2)        ? 0x80 : 0x00;  break;
 			case 0x02:          result |= (m_flags & VAR_LCRAM)     ? 0x80 : 0x00;  break;
 			case 0x03:          result |= (m_flags & VAR_RAMRD)     ? 0x80 : 0x00;  break;
@@ -1654,7 +1815,7 @@ READ8_MEMBER( apple2_state::apple2_c01x_r )
 			case 0x06:          result |= (m_flags & VAR_ALTZP)     ? 0x80 : 0x00;  break;
 			case 0x07:          result |= (m_flags & VAR_SLOTC3ROM) ? 0x80 : 0x00;  break;
 			case 0x08:          result |= (m_flags & VAR_80STORE)   ? 0x80 : 0x00;  break;
-			case 0x09:          result |= !space.machine().primary_screen->vblank()     ? 0x80 : 0x00;  break;
+			case 0x09:          result |= !space.machine().first_screen()->vblank()     ? 0x80 : 0x00;  break;
 			case 0x0A:          result |= (m_flags & VAR_TEXT)      ? 0x80 : 0x00;  break;
 			case 0x0B:          result |= (m_flags & VAR_MIXED)     ? 0x80 : 0x00;  break;
 			case 0x0C:          result |= (m_flags & VAR_PAGE2)     ? 0x80 : 0x00;  break;
@@ -1677,9 +1838,9 @@ READ8_MEMBER( apple2_state::apple2_c01x_r )
 
 WRITE8_MEMBER( apple2_state::apple2_c01x_w )
 {
-	/* Clear the keyboard strobe - ignore the returned results */
+	/* Clear the keyboard strobe */
 	g_profiler.start(PROFILER_C01X);
-	AY3600_anykey_clearstrobe_r(machine());
+	m_strobe = 0;
 	g_profiler.stop();
 }
 
@@ -1728,14 +1889,7 @@ READ8_MEMBER ( apple2_state::apple2_c03x_r )
 		{
 			speaker_sound_device *speaker = space.machine().device<speaker_sound_device>("a2speaker");
 
-			if (m_a2_speaker_state == 1)
-			{
-				m_a2_speaker_state = 0;
-			}
-			else
-			{
-				m_a2_speaker_state = 1;
-			}
+			m_a2_speaker_state ^= 1;
 			speaker->level_w(m_a2_speaker_state);
 		}
 	}
@@ -1770,12 +1924,10 @@ READ8_MEMBER ( apple2_state::apple2_c05x_r )
 			if (offset == 0xa)  // RAM
 			{
 				apple2_setvar(VAR_TK2000RAM, ~0);
-				printf("TK2000: RAM (PC %x)\n", m_maincpu->pc());
 			}
 			else if (offset == 0xb) // ROM
 			{
 				apple2_setvar(0, ~VAR_TK2000RAM);
-				printf("TK2000: ROM (PC %x)\n", m_maincpu->pc());
 			}
 		}
 
@@ -1830,15 +1982,15 @@ READ8_MEMBER ( apple2_state::apple2_c06x_r )
 				break;
 			case 0x01:
 				/* Open-Apple/Joystick button 0 */
-				result = apple2_pressed_specialkey(SPECIALKEY_BUTTON0);
+				result = apple2_pressed_specialkey(0x10);
 				break;
 			case 0x02:
 				/* Closed-Apple/Joystick button 1 */
-				result = apple2_pressed_specialkey(SPECIALKEY_BUTTON1);
+				result = apple2_pressed_specialkey(0x20);
 				break;
 			case 0x03:
 				/* Joystick button 2. Later revision motherboards connected this to SHIFT also */
-				result = apple2_pressed_specialkey(SPECIALKEY_BUTTON2);
+				result = apple2_pressed_specialkey(0x40);
 				break;
 			case 0x04:
 				/* X Joystick 1 axis */
@@ -2075,7 +2227,7 @@ const applefdc_interface apple2_fdc_interface =
 
 void apple2_state::apple2_init_common()
 {
-	m_inh_slot = INH_SLOT_INVALID;
+	m_inh_slot = -1;
 	m_flags = 0;
 	m_fdc_diskreg = 0;
 
@@ -2086,12 +2238,10 @@ void apple2_state::apple2_init_common()
 	m_slot_ram = (m_slot_length > 0) ? &m_rom[m_rom_length] : NULL;
 
 	m_auxslotdevice = NULL;
-	if (m_machinetype == APPLE_IIE)
+	if (m_machinetype == APPLE_IIE || m_machinetype == TK3000)
 	{
 		m_auxslotdevice = m_a2eauxslot->get_a2eauxslot_card();
 	}
-
-	AY3600_init(machine());
 
 	/* state save registers */
 	save_item(NAME(m_flags));
@@ -2113,24 +2263,11 @@ void apple2_state::apple2_init_common()
 	apple2_refresh_delegates();
 }
 
-
-
-MACHINE_START_MEMBER(apple2_state,apple2)
+void apple2_state::apple2eplus_init_common(void *apple2cp_ce00_ram)
 {
 	apple2_memmap_config mem_cfg;
-	void *apple2cp_ce00_ram = NULL;
 
 	m_flags_mask = 0;
-
-	/* there appears to be some hidden RAM that is swapped in on the Apple
-	 * IIc plus; I have not found any official documentation but the BIOS
-	 * clearly uses this area as writeable memory */
-	if (!strcmp(machine().system().name, "apple2cp")) {
-		apple2cp_ce00_ram = auto_alloc_array(machine(), UINT8, 0x200);
-		memset(apple2cp_ce00_ram, 0, sizeof(UINT8) * 0x200);
-	}
-
-	m_machinetype = APPLE_IIEPLUS;
 
 	apple2_init_common();
 
@@ -2142,20 +2279,40 @@ MACHINE_START_MEMBER(apple2_state,apple2)
 	apple2_setup_memory(&mem_cfg);
 }
 
-MACHINE_START_MEMBER(apple2_state,apple2e)
+MACHINE_START_MEMBER(apple2_state,apple2c)
 {
-	apple2_memmap_config mem_cfg;
-	void *apple2cp_ce00_ram = NULL;
+	m_machinetype = APPLE_IIC;
 
-	m_flags_mask = 0;
+	apple2eplus_init_common((void *)NULL);
+}
+
+MACHINE_START_MEMBER(apple2_state,tk3000)
+{
+	m_machinetype = TK3000; // enhanced IIe clone with Z80 keyboard scanner subcpu
+
+	apple2eplus_init_common((void *)NULL);
+}
+
+MACHINE_START_MEMBER(apple2_state,apple2cp)
+{
+	void *apple2cp_ce00_ram;
 
 	/* there appears to be some hidden RAM that is swapped in on the Apple
 	 * IIc plus; I have not found any official documentation but the BIOS
 	 * clearly uses this area as writeable memory */
-	if (!strcmp(machine().system().name, "apple2cp")) {
-		apple2cp_ce00_ram = auto_alloc_array(machine(), UINT8, 0x200);
-		memset(apple2cp_ce00_ram, 0, sizeof(UINT8) * 0x200);
-	}
+	apple2cp_ce00_ram = auto_alloc_array(machine(), UINT8, 0x200);
+	memset(apple2cp_ce00_ram, 0, sizeof(UINT8) * 0x200);
+
+	m_machinetype = APPLE_IICPLUS;
+
+	apple2eplus_init_common(apple2cp_ce00_ram);
+}
+
+MACHINE_START_MEMBER(apple2_state,apple2e)
+{
+	apple2_memmap_config mem_cfg;
+
+	m_flags_mask = 0;
 
 	m_machinetype = APPLE_IIE;
 
@@ -2165,7 +2322,7 @@ MACHINE_START_MEMBER(apple2_state,apple2e)
 	memset(&mem_cfg, 0, sizeof(mem_cfg));
 	mem_cfg.first_bank = 1;
 	mem_cfg.memmap = apple2_memmap_entries;
-	mem_cfg.auxmem = (UINT8*)apple2cp_ce00_ram;
+	mem_cfg.auxmem = (UINT8*)NULL;
 	apple2_setup_memory(&mem_cfg);
 }
 
@@ -2177,6 +2334,20 @@ MACHINE_START_MEMBER(apple2_state,laser128)
 	m_machinetype = LASER128;
 
 	apple2_init_common();
+
+	// 1 MB of expansion RAM in slot 5
+	m_exp_ram = auto_alloc_array(machine(), UINT8, 1024*1024);
+	memset(m_exp_ram, 0xff, 1024*1024);
+
+	m_exp_bankhior = 0xf0;
+	m_exp_addrmask = 0xfffff;
+
+	// save memory expansion vars
+	save_item(NAME(m_exp_regs));
+	save_item(NAME(m_exp_wptr));
+	save_item(NAME(m_exp_liveptr));
+	save_item(NAME(m_exp_bankhior));
+	save_item(NAME(m_exp_addrmask));
 
 	/* setup memory */
 	memset(&mem_cfg, 0, sizeof(mem_cfg));
@@ -2215,6 +2386,26 @@ MACHINE_START_MEMBER(apple2_state,space84)
 	m_flags_mask = VAR_INTCXROM|VAR_SLOTC3ROM;
 
 	m_machinetype = SPACE84;
+
+	apple2_init_common();
+
+	/* setup memory */
+	memset(&mem_cfg, 0, sizeof(mem_cfg));
+	mem_cfg.first_bank = 1;
+	mem_cfg.memmap = apple2_memmap_entries;
+	mem_cfg.auxmem = (UINT8*)apple2cp_ce00_ram;
+	apple2_setup_memory(&mem_cfg);
+}
+
+MACHINE_START_MEMBER(apple2_state,laba2p)
+{
+	apple2_memmap_config mem_cfg;
+	void *apple2cp_ce00_ram = NULL;
+
+	// II and II+ have no internal ROM or internal slot 3 h/w, so don't allow these states
+	m_flags_mask = VAR_INTCXROM|VAR_SLOTC3ROM;
+
+	m_machinetype = LABA2P;
 
 	apple2_init_common();
 
@@ -2319,4 +2510,123 @@ void apple2_state::apple2_refresh_delegates()
 	write_delegates_d000[1] = write8_delegate(FUNC(apple2_state::apple2_mainramd000_w), this);
 	write_delegates_e000[0] = write8_delegate(FUNC(apple2_state::apple2_auxrame000_w), this);
 	write_delegates_e000[1] = write8_delegate(FUNC(apple2_state::apple2_mainrame000_w), this);
+}
+
+READ_LINE_MEMBER(apple2_state::ay3600_shift_r)
+{
+	// either shift key
+	if (m_kbspecial->read() & 0x06)
+	{
+		return ASSERT_LINE;
+	}
+
+	return CLEAR_LINE;
+}
+
+READ_LINE_MEMBER(apple2_state::ay3600_control_r)
+{
+	if (m_kbspecial->read() & 0x08)
+	{
+		return ASSERT_LINE;
+	}
+
+	return CLEAR_LINE;
+}
+
+static const UINT8 a2_key_remap[0x32][4] =
+{
+/*    norm shft ctrl both */
+	{ 0x33,0x23,0x33,0x23 },    /* 3 #     00     */
+	{ 0x34,0x24,0x34,0x24 },    /* 4 $     01     */
+	{ 0x35,0x25,0x35,0x25 },    /* 5 %     02     */
+	{ 0x36,0x5e,0x35,0x53 },    /* 6 ^     03     */
+	{ 0x37,0x26,0x37,0x26 },    /* 7 &     04     */
+	{ 0x38,0x2a,0x38,0x2a },    /* 8 *     05     */
+	{ 0x39,0x28,0x39,0x28 },    /* 9 (     06     */
+	{ 0x30,0x29,0x30,0x29 },    /* 0 )     07     */
+	{ 0x3b,0x3a,0x3b,0x3a },    /* ; :     08     */
+	{ 0x2d,0x5f,0x2d,0x1f },    /* - _     09     */
+	{ 0x51,0x51,0x11,0x11 },    /* q Q     0a     */
+	{ 0x57,0x57,0x17,0x17 },    /* w W     0b     */
+	{ 0x45,0x45,0x05,0x05 },    /* e E     0c     */
+	{ 0x52,0x52,0x12,0x12 },    /* r R     0d     */
+	{ 0x54,0x54,0x14,0x14 },    /* t T     0e     */
+	{ 0x59,0x59,0x19,0x19 },    /* y Y     0f     */
+	{ 0x55,0x55,0x15,0x15 },    /* u U     10     */
+	{ 0x49,0x49,0x09,0x09 },    /* i I     11     */
+	{ 0x4f,0x4f,0x0f,0x0f },    /* o O     12     */
+	{ 0x50,0x50,0x10,0x10 },    /* p P     13     */
+	{ 0x44,0x44,0x04,0x04 },    /* d D     14     */
+	{ 0x46,0x46,0x06,0x06 },    /* f F     15     */
+	{ 0x47,0x47,0x07,0x07 },    /* g G     16     */
+	{ 0x48,0x48,0x08,0x08 },    /* h H     17     */
+	{ 0x4a,0x4a,0x0a,0x0a },    /* j J     18     */
+	{ 0x4b,0x4b,0x0b,0x0b },    /* k K     19     */
+	{ 0x4c,0x4c,0x0c,0x0c },    /* l L     1a     */
+	{ 0x3d,0x2b,0x3d,0x2b },    /* = +     1b     */
+	{ 0x08,0x08,0x08,0x08 },    /* Left    1c     */
+	{ 0x15,0x15,0x15,0x15 },    /* Right   1d     */
+	{ 0x5a,0x5a,0x1a,0x1a },    /* z Z     1e     */
+	{ 0x58,0x58,0x18,0x18 },    /* x X     1f     */
+	{ 0x43,0x43,0x03,0x03 },    /* c C     20     */
+	{ 0x56,0x56,0x16,0x16 },    /* v V     21     */
+	{ 0x42,0x42,0x02,0x02 },    /* b B     22     */
+	{ 0x4e,0x4e,0x0e,0x0e },    /* n N     23     */
+	{ 0x4d,0x4d,0x0d,0x0d },    /* m M     24     */
+	{ 0x2c,0x3c,0x2c,0x3c },    /* , <     25     */
+	{ 0x2e,0x3e,0x2e,0x3e },    /* . >     26     */
+	{ 0x2f,0x3f,0x2f,0x3f },    /* / ?     27     */
+	{ 0x53,0x53,0x13,0x13 },    /* s S     28     */
+	{ 0x32,0x40,0x32,0x00 },    /* 2 @     29     */
+	{ 0x31,0x21,0x31,0x31 },    /* 1 !     2a     */
+	{ 0x9b,0x9b,0x9b,0x9b },    /* Escape  2b     */
+	{ 0x41,0x41,0x01,0x01 },    /* a A     2c     */
+	{ 0x20,0x20,0x20,0x20 },    /* Space   2d     */
+	{ 0x00,0x00,0x00,0x00 },    /* 0x2e unused    */
+	{ 0x00,0x00,0x00,0x00 },    /* 0x2f unused    */
+	{ 0x00,0x00,0x00,0x00 },    /* 0x30 unused    */
+	{ 0x0d,0x0d,0x0d,0x0d },    /* Enter   31     */
+};
+
+WRITE_LINE_MEMBER(apple2_state::ay3600_data_ready_w)
+{
+	if (state == ASSERT_LINE)
+	{
+		int mod = 0;
+		m_lastchar = m_ay3600->b_r();
+
+		mod = (m_kbspecial->read() & 0x06) ? 0x01 : 0x00;
+		mod |= (m_kbspecial->read() & 0x08) ? 0x02 : 0x00;
+
+		m_transchar = a2_key_remap[m_lastchar&0x3f][mod];
+
+		if (m_transchar != 0)
+		{
+			m_strobe = 0x80;
+//          printf("new char = %04x (%02x)\n", m_lastchar&0x3f, m_transchar);
+		}
+	}
+}
+
+WRITE_LINE_MEMBER(apple2_state::ay3600_iie_data_ready_w)
+{
+	if (state == ASSERT_LINE)
+	{
+		UINT8 *decode = m_kbdrom->base();
+		UINT16 trans;
+
+		m_lastchar = m_ay3600->b_r();
+
+		trans = m_lastchar & ~(0x1c0);  // clear the 3600's control/shift stuff
+		trans |= (m_lastchar & 0x100)>>2;   // bring the 0x100 bit down to the 0x40 place
+		trans <<= 2;                    // 4 entries per key
+		trans |= (m_kbspecial->read() & 0x06) ? 0x00 : 0x01;    // shift is bit 1 (active low)
+		trans |= (m_kbspecial->read() & 0x08) ? 0x00 : 0x02;    // control is bit 2 (active low)
+		trans |= (m_kbspecial->read() & 0x01) ? 0x0000 : 0x0200;    // caps lock is bit 9 (active low)
+
+		m_transchar = decode[trans];
+		m_strobe = 0x80;
+
+//      printf("new char = %04x (%02x)\n", m_lastchar, m_transchar);
+	}
 }

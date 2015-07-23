@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 
 
 
@@ -26,14 +28,14 @@ public:
 	int m_chipnum; // used to decide where we write the palette
 
 	static void set_chipnum(device_t &device, int chipnum);
-
+	static void static_set_palette_tag(device_t &device, const char *tag);
 
 	DECLARE_READ16_MEMBER(galpani3_regs1_r);
 	DECLARE_WRITE16_MEMBER(galpani3_regs1_go_w);
 
 
 	void gp3_do_rle(UINT32 address, UINT16*framebuffer, UINT8* rledata);
-	void set_color_555_gp3(running_machine &machine, pen_t color, int rshift, int gshift, int bshift, UINT16 data);
+	void set_color_555_gp3(pen_t color, int rshift, int gshift, int bshift, UINT16 data);
 
 	UINT16 m_framebuffer_bgcol;
 	UINT16 m_framebuffer_scrolly;
@@ -85,9 +87,11 @@ protected:
 	virtual void device_reset();
 
 private:
-
-
+	required_device<palette_device> m_palette;
 };
 
 
 extern const device_type KANEKO_GRAP2;
+
+#define MCFG_KANEKO_GRAP2_PALETTE(_palette_tag) \
+	kaneko_grap2_device::static_set_palette_tag(*device, "^" _palette_tag);

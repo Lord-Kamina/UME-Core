@@ -1,12 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Aaron Giles
 /***************************************************************************
 
     mame.c
 
     Controls execution of the core MAME system.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
-
 ****************************************************************************
 
     Since there has been confusion in the past over the order of
@@ -55,7 +53,7 @@
 
             - calls config_load_settings() [config.c] to load the configuration file
             - calls nvram_load [machine/generic.c] to load NVRAM
-            - calls ui_display_startup_screens() [ui.c] to display the the startup screens
+            - calls ui_display_startup_screens() [ui.c] to display the startup screens
             - begins resource tracking (level 2)
             - calls soft_reset() [mame.c] to reset all systems
 
@@ -79,79 +77,113 @@
 #include "debugger.h"
 #include "render.h"
 #include "cheat.h"
-#include "ui.h"
+#include "ui/ui.h"
 #include "uiinput.h"
 #include "crsshair.h"
 #include "validity.h"
 #include "debug/debugcon.h"
-
 #include <time.h>
 
+//**************************************************************************
+//  MACHINE MANAGER
+//**************************************************************************
+
+machine_manager* machine_manager::m_manager = NULL;
+
+osd_interface &machine_manager::osd() const
+{
+	return m_osd;
+}
+
+
+machine_manager* machine_manager::instance(emu_options &options,osd_interface &osd)
+{
+	if(!m_manager)
+	{
+		m_manager = global_alloc(machine_manager(options,osd));
+	}
+	return m_manager;
+}
+
+machine_manager* machine_manager::instance()
+{
+	return m_manager;
+}
+
+//-------------------------------------------------
+//  machine_manager - constructor
+//-------------------------------------------------
+
+machine_manager::machine_manager(emu_options &options,osd_interface &osd)
+		: m_osd(osd),
+		m_options(options),
+		m_web(options),
+		m_new_driver_pending(NULL),
+		m_machine(NULL)
+{
+}
+
+
+//-------------------------------------------------
+//  ~machine_manager - destructor
+//-------------------------------------------------
+
+machine_manager::~machine_manager()
+{
+	m_manager = NULL;
+}
 
 
 /***************************************************************************
     GLOBAL VARIABLES
 ***************************************************************************/
 
-/* started empty? */
-static bool started_empty;
+//-------------------------------------------------
+//  mame_schedule_new_driver - schedule a new game to
+//  be loaded
+//-------------------------------------------------
 
-static bool print_verbose = false;
-
-static running_machine *global_machine;
-
-/* output channels */
-static output_delegate output_cb[OUTPUT_CHANNEL_COUNT] =
+void machine_manager::schedule_new_driver(const game_driver &driver)
 {
-	output_delegate(FUNC(mame_file_output_callback), stderr),   // OUTPUT_CHANNEL_ERROR
-	output_delegate(FUNC(mame_file_output_callback), stderr),   // OUTPUT_CHANNEL_WARNING
-	output_delegate(FUNC(mame_file_output_callback), stdout),   // OUTPUT_CHANNEL_INFO
-#ifdef MAME_DEBUG
-	output_delegate(FUNC(mame_file_output_callback), stdout),   // OUTPUT_CHANNEL_DEBUG
-#else
-	output_delegate(FUNC(mame_null_output_callback), stdout),   // OUTPUT_CHANNEL_DEBUG
-#endif
-	output_delegate(FUNC(mame_file_output_callback), stdout),   // OUTPUT_CHANNEL_VERBOSE
-	output_delegate(FUNC(mame_file_output_callback), stdout)    // OUTPUT_CHANNEL_LOG
-};
-
+	m_new_driver_pending = &driver;
+}
 
 
 /***************************************************************************
     CORE IMPLEMENTATION
 ***************************************************************************/
-
-/*-------------------------------------------------
-    mame_is_valid_machine - return true if the
-    given machine is valid
--------------------------------------------------*/
-
-int mame_is_valid_machine(running_machine &machine)
+void machine_manager::update_machine()
 {
-	return (&machine == global_machine);
+	m_lua.set_machine(m_machine);
+	m_web.set_machine(m_machine);
+	if (m_machine!=NULL) m_web.push_message("update_machine");
 }
 
-
 /*-------------------------------------------------
-    mame_execute - run the core emulation
+    execute - run the core emulation
 -------------------------------------------------*/
 
-int mame_execute(emu_options &options, osd_interface &osd)
+int machine_manager::execute()
 {
+	bool started_empty = false;
+
 	bool firstgame = true;
 	bool firstrun = true;
-
-	// extract the verbose printing option
-	if (options.verbose())
-		print_verbose = true;
 
 	// loop across multiple hard resets
 	bool exit_pending = false;
 	int error = MAMERR_NONE;
+
+	m_lua.initialize();
+	if (m_options.console()) {
+		m_lua.start_console();
+	}
 	while (error == MAMERR_NONE && !exit_pending)
 	{
+		m_new_driver_pending = NULL;
+
 		// if no driver, use the internal empty driver
-		const game_driver *system = options.system();
+		const game_driver *system = m_options.system();
 		if (system == NULL)
 		{
 			system = &GAME_NAME(___empty);
@@ -162,196 +194,65 @@ int mame_execute(emu_options &options, osd_interface &osd)
 		firstgame = false;
 
 		// parse any INI files as the first thing
-		if (options.read_config())
+		if (m_options.read_config())
 		{
-			options.revert(OPTION_PRIORITY_INI);
-			astring errors;
-			options.parse_standard_inis(errors);
+			m_options.revert(OPTION_PRIORITY_INI);
+			std::string errors;
+			m_options.parse_standard_inis(errors);
 		}
+
 		// otherwise, perform validity checks before anything else
 		if (system != NULL)
 		{
-			validity_checker valid(options);
+			validity_checker valid(m_options);
 			valid.check_shared_source(*system);
 		}
 
 		// create the machine configuration
-		machine_config config(*system, options);
+		machine_config config(*system, m_options);
 
 		// create the machine structure and driver
-		running_machine machine(config, osd, started_empty);
+		running_machine machine(config, *this);
 
-		ui_show_mouse(machine.system().flags & GAME_CLICKABLE_ARTWORK);
-
-		// looooong term: remove this
-		global_machine = &machine;
+		set_machine(&machine);
 
 		// run the machine
 		error = machine.run(firstrun);
 		firstrun = false;
 
 		// check the state of the machine
-		if (machine.new_driver_pending())
+		if (m_new_driver_pending)
 		{
-			options.set_system_name(machine.new_driver_name());
+			std::string old_system_name(m_options.system_name());
+			bool new_system = (old_system_name.compare(m_new_driver_pending->name)!=0);
+			// first: if we scheduled a new system, remove device options of the old system
+			// notice that, if we relaunch the same system, there is no effect on the emulation
+			if (new_system)
+				m_options.remove_device_options();
+			// second: set up new system name (and the related device options)
+			m_options.set_system_name(m_new_driver_pending->name);
+			// third: if we scheduled a new system, take also care of ramsize options
+			if (new_system)
+			{
+				std::string error_string;
+				m_options.set_value(OPTION_RAMSIZE, "", OPTION_PRIORITY_CMDLINE, error_string);
+			}
 			firstrun = true;
 		}
-		if (machine.exit_pending())
+		else
+		{
+			if (machine.exit_pending()) m_options.set_system_name("");
+		}
+
+		if (machine.exit_pending() && (!started_empty || (system == &GAME_NAME(___empty))))
 			exit_pending = true;
 
 		// machine will go away when we exit scope
-		global_machine = NULL;
+		set_machine(NULL);
 	}
-
 	// return an error
 	return error;
 }
-
-
-/***************************************************************************
-    OUTPUT MANAGEMENT
-***************************************************************************/
-
-/*-------------------------------------------------
-    mame_set_output_channel - configure an output
-    channel
--------------------------------------------------*/
-
-output_delegate mame_set_output_channel(output_channel channel, output_delegate callback)
-{
-	assert(channel < OUTPUT_CHANNEL_COUNT);
-	assert(!callback.isnull());
-
-	/* return the originals if requested */
-	output_delegate prevcb = output_cb[channel];
-
-	/* set the new ones */
-	output_cb[channel] = callback;
-	return prevcb;
-}
-
-
-/*-------------------------------------------------
-    mame_file_output_callback - default callback
-    for file output
--------------------------------------------------*/
-
-void mame_file_output_callback(FILE *param, const char *format, va_list argptr)
-{
-	vfprintf(param, format, argptr);
-}
-
-
-/*-------------------------------------------------
-    mame_null_output_callback - default callback
-    for no output
--------------------------------------------------*/
-
-void mame_null_output_callback(FILE *param, const char *format, va_list argptr)
-{
-}
-
-
-/*-------------------------------------------------
-    mame_printf_error - output an error to the
-    appropriate callback
--------------------------------------------------*/
-
-void mame_printf_error(const char *format, ...)
-{
-	va_list argptr;
-
-	/* do the output */
-	va_start(argptr, format);
-	output_cb[OUTPUT_CHANNEL_ERROR](format, argptr);
-	va_end(argptr);
-}
-
-
-/*-------------------------------------------------
-    mame_printf_warning - output a warning to the
-    appropriate callback
--------------------------------------------------*/
-
-void mame_printf_warning(const char *format, ...)
-{
-	va_list argptr;
-
-	/* do the output */
-	va_start(argptr, format);
-	output_cb[OUTPUT_CHANNEL_WARNING](format, argptr);
-	va_end(argptr);
-}
-
-
-/*-------------------------------------------------
-    mame_printf_info - output info text to the
-    appropriate callback
--------------------------------------------------*/
-
-void mame_printf_info(const char *format, ...)
-{
-	va_list argptr;
-
-	/* do the output */
-	va_start(argptr, format);
-	output_cb[OUTPUT_CHANNEL_INFO](format, argptr);
-	va_end(argptr);
-}
-
-
-/*-------------------------------------------------
-    mame_printf_verbose - output verbose text to
-    the appropriate callback
--------------------------------------------------*/
-
-void mame_printf_verbose(const char *format, ...)
-{
-	va_list argptr;
-
-	/* if we're not verbose, skip it */
-	if (!print_verbose)
-		return;
-
-	/* do the output */
-	va_start(argptr, format);
-	output_cb[OUTPUT_CHANNEL_VERBOSE](format, argptr);
-	va_end(argptr);
-}
-
-
-/*-------------------------------------------------
-    mame_printf_debug - output debug text to the
-    appropriate callback
--------------------------------------------------*/
-
-void mame_printf_debug(const char *format, ...)
-{
-	va_list argptr;
-
-	/* do the output */
-	va_start(argptr, format);
-	output_cb[OUTPUT_CHANNEL_DEBUG](format, argptr);
-	va_end(argptr);
-}
-
-
-/*-------------------------------------------------
-    mame_printf_log - output log text to the
-    appropriate callback
--------------------------------------------------*/
-
-#ifdef UNUSED_FUNCTION
-void mame_printf_log(const char *format, ...)
-{
-	va_list argptr;
-
-	/* do the output */
-	va_start(argptr, format);
-	output_cb[OUTPUT_CHANNEL_LOG])(format, argptr);
-	va_end(argptr);
-}
-#endif
 
 
 /***************************************************************************
@@ -364,23 +265,35 @@ void mame_printf_log(const char *format, ...)
 
 void CLIB_DECL popmessage(const char *format, ...)
 {
+	if (machine_manager::instance()==NULL || machine_manager::instance()->machine() == NULL) return;
+
 	// if the format is NULL, it is a signal to clear the popmessage
 	if (format == NULL)
-		ui_popup_time(0, " ");
+		machine_manager::instance()->machine()->ui().popup_time(0, " ");
 
 	// otherwise, generate the buffer and call the UI to display the message
 	else
 	{
-		astring temp;
+		std::string temp;
 		va_list arg;
 
 		// dump to the buffer
 		va_start(arg, format);
-		temp.vprintf(format, arg);
+		strvprintf(temp,format, arg);
 		va_end(arg);
 
 		// pop it in the UI
-		ui_popup_time(temp.len() / 40 + 2, "%s", temp.cstr());
+		machine_manager::instance()->machine()->ui().popup_time(temp.length() / 40 + 2, "%s", temp.c_str());
+
+		/*
+		// also write to error.log
+		logerror("popmessage: %s\n", temp.c_str());
+
+#ifdef MAME_DEBUG
+		// and to command-line in a DEBUG build
+		osd_printf_info("popmessage: %s\n", temp.c_str());
+#endif
+		*/
 	}
 }
 
@@ -406,6 +319,6 @@ void CLIB_DECL logerror(const char *format, ...)
 
 void CLIB_DECL vlogerror(const char *format, va_list arg)
 {
-	if (global_machine != NULL)
-		global_machine->vlogerror(format, arg);
+	if (machine_manager::instance()!=NULL && machine_manager::instance()->machine() != NULL)
+		machine_manager::instance()->machine()->vlogerror(format, arg);
 }

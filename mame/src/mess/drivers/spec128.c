@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Kevin Thacker
 /***************************************************************************
 
     NOTE: ****** Specbusy: press N, R, or E to boot *************
@@ -152,19 +154,11 @@ resulting mess can be seen in the F4 viewer display.
 #include "cpu/z80/z80.h"
 #include "includes/spectrum.h"
 #include "imagedev/snapquik.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/cassette.h"
 #include "sound/ay8910.h"
 #include "sound/speaker.h"
 #include "formats/tzx_cas.h"
 #include "machine/ram.h"
-
-static const ay8910_interface spectrum_ay_interface =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL
-};
 
 /****************************************************************************************************/
 /* Spectrum 128 specific functions */
@@ -180,6 +174,9 @@ WRITE8_MEMBER(spectrum_state::spectrum_128_port_7ffd_w)
 	if (m_port_7ffd_data & 0x20)
 			return;
 
+	if ((m_port_7ffd_data ^ data) & 0x08)
+		spectrum_UpdateScreenBitmap();
+
 	/* store new state */
 	m_port_7ffd_data = data;
 
@@ -190,42 +187,32 @@ WRITE8_MEMBER(spectrum_state::spectrum_128_port_7ffd_w)
 void spectrum_state::spectrum_128_update_memory()
 {
 	UINT8 *messram = m_ram->pointer();
-	unsigned char *ChosenROM;
-	int ROMSelection;
-
-	if (m_port_7ffd_data & 8)
-	{
-		m_screen_location = messram + (7<<14);
-	}
-	else
-	{
-		m_screen_location = messram + (5<<14);
-	}
 
 	/* select ram at 0x0c000-0x0ffff */
+	int ram_page = m_port_7ffd_data & 0x07;
+	unsigned char *ram_data = messram + (ram_page<<14);
+	membank("bank4")->set_base(ram_data);
+
+	if (BIT(m_port_7ffd_data, 3))
+		m_screen_location = messram + (7<<14);
+	else
+		m_screen_location = messram + (5<<14);
+
+	if (!m_cart->exists())
 	{
-		int ram_page;
-		unsigned char *ram_data;
+		/* ROM switching */
+		int ROMSelection = BIT(m_port_7ffd_data, 4);
 
-		ram_page = m_port_7ffd_data & 0x07;
-		ram_data = messram + (ram_page<<14);
+		/* rom 0 is 128K rom, rom 1 is 48 BASIC */
+		unsigned char *ChosenROM = memregion("maincpu")->base() + 0x010000 + (ROMSelection << 14);
 
-		membank("bank4")->set_base(ram_data);
+		membank("bank1")->set_base(ChosenROM);
 	}
-
-	/* ROM switching */
-	ROMSelection = ((m_port_7ffd_data>>4) & 0x01);
-
-	/* rom 0 is 128K rom, rom 1 is 48 BASIC */
-
-	ChosenROM = memregion("maincpu")->base() + 0x010000 + (ROMSelection<<14);
-
-	membank("bank1")->set_base(ChosenROM);
 }
 
 READ8_MEMBER( spectrum_state::spectrum_128_ula_r )
 {
-	int vpos = machine().primary_screen->vpos();
+	int vpos = machine().first_screen()->vpos();
 
 	return vpos<193 ? m_screen_location[0x1800|(vpos&0xf8)<<2]:0xff;
 }
@@ -235,7 +222,7 @@ static ADDRESS_MAP_START (spectrum_128_io, AS_IO, 8, spectrum_state )
 	AM_RANGE(0x001f, 0x001f) AM_READ(spectrum_port_1f_r) AM_MIRROR(0xff00)
 	AM_RANGE(0x007f, 0x007f) AM_READ(spectrum_port_7f_r) AM_MIRROR(0xff00)
 	AM_RANGE(0x00df, 0x00df) AM_READ(spectrum_port_df_r) AM_MIRROR(0xff00)
-	AM_RANGE(0x4000, 0x4000) AM_WRITE(spectrum_128_port_7ffd_w) AM_MIRROR(0x3ffd)
+	AM_RANGE(0x0000, 0x0000) AM_WRITE(spectrum_128_port_7ffd_w) AM_MIRROR(0x7ffd)   // (A15 | A1) == 0, note: reading from this port does write to it by value from data bus
 	AM_RANGE(0x8000, 0x8000) AM_DEVWRITE("ay8912", ay8910_device, data_w) AM_MIRROR(0x3ffd)
 	AM_RANGE(0xc000, 0xc000) AM_DEVREADWRITE("ay8912", ay8910_device, data_r, address_w) AM_MIRROR(0x3ffd)
 	AM_RANGE(0x0001, 0x0001) AM_READ(spectrum_128_ula_r) AM_MIRROR(0xfffe)
@@ -298,21 +285,17 @@ MACHINE_CONFIG_DERIVED( spectrum_128, spectrum )
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", spectrum_state,  spec_interrupt)
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
 
-
 	MCFG_MACHINE_RESET_OVERRIDE(spectrum_state, spectrum_128 )
 
 	/* video hardware */
 	MCFG_SCREEN_MODIFY("screen")
-	MCFG_PALETTE_LENGTH(16)
-	MCFG_PALETTE_INIT_OVERRIDE(spectrum_state, spectrum )
 	MCFG_SCREEN_RAW_PARAMS(X1_128_SINCLAIR / 2.5f, 456, 0, 352,  311, 0, 296)
 
 	MCFG_VIDEO_START_OVERRIDE(spectrum_state, spectrum_128 )
-	MCFG_GFXDECODE(spec128)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", spec128)
 
 	/* sound hardware */
 	MCFG_SOUND_ADD("ay8912", AY8912, 1773400)
-	MCFG_SOUND_CONFIG(spectrum_ay_interface)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* internal ram */
@@ -338,7 +321,6 @@ ROM_START(spec128)
 	ROM_SYSTEM_BIOS( 1, "sp", "Spanish" )
 	ROMX_LOAD("zx128s0.rom",0x10000,0x4000, CRC(453d86b2) SHA1(968937b1c750f0ef6205f01c6db4148da4cca4e3), ROM_BIOS(2))
 	ROMX_LOAD("zx128s1.rom",0x14000,0x4000, CRC(6010e796) SHA1(bea3f397cc705eafee995ea629f4a82550562f90), ROM_BIOS(2))
-	ROM_CART_LOAD("cart", 0x10000, 0x4000, ROM_NOCLEAR | ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START(specpls2)
@@ -357,14 +339,12 @@ ROM_START(specpls2)
 	ROMX_LOAD("plus2c-1.rom",0x14000,0x4000, CRC(fd8552b6) SHA1(5ffcf79f2154ba2cf42cc1d9cb4be93cb5043e73), ROM_BIOS(4))
 	ROM_SYSTEM_BIOS( 4, "namco", "ZX Spectrum +2c (Namco)" )
 	ROMX_LOAD("pl2namco.rom",0x10000,0x8000, CRC(72a54e75) SHA1(311400157df689450dadc3620f4c4afa960b05ad), ROM_BIOS(5))
-	ROM_CART_LOAD("cart", 0x10000, 0x4000, ROM_NOCLEAR | ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START(hc128)
 	ROM_REGION(0x18000,"maincpu",0)
 	ROM_LOAD("zx128_0.rom",0x10000,0x4000, CRC(e76799d2) SHA1(4f4b11ec22326280bdb96e3baf9db4b4cb1d02c5))
 	ROM_LOAD("hc128.rom",  0x14000,0x4000, CRC(0241e960) SHA1(cea0d14391b9e571460a816088a1c00ecb24afa3))
-	ROM_CART_LOAD("cart", 0x10000, 0x4000, ROM_NOCLEAR | ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START(hc2000)
@@ -375,7 +355,6 @@ ROM_START(hc2000)
 	ROM_SYSTEM_BIOS( 1, "v2", "Version 2" )
 	ROMX_LOAD("zx128_0.rom",0x10000,0x4000, CRC(e76799d2) SHA1(4f4b11ec22326280bdb96e3baf9db4b4cb1d02c5), ROM_BIOS(2))
 	ROMX_LOAD("hc2000.v2",  0x14000,0x4000, CRC(65d90464) SHA1(5e2096e6460ff2120c8ada97579fdf82c1199c09), ROM_BIOS(2))
-	ROM_CART_LOAD("cart", 0x10000, 0x4000, ROM_NOCLEAR | ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 /*    YEAR  NAME      PARENT    COMPAT  MACHINE     INPUT       INIT    COMPANY     FULLNAME */

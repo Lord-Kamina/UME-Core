@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Karl Stenerud
 /* ======================================================================== */
 /* ========================= LICENSING & COPYRIGHT ======================== */
 /* ======================================================================== */
@@ -8,15 +10,6 @@
  * A portable Motorola M680x0 processor emulation engine.
  * Copyright Karl Stenerud.  All rights reserved.
  *
- * This code may be freely used for non-commercial purposes as long as this
- * copyright notice remains unaltered in the source code and any binary files
- * containing this code in compiled form.
- *
- * All other licensing terms must be negotiated with the author
- * (Karl Stenerud).
- *
- * The latest version of this code can be obtained at:
- * http://kstenerud.cjb.net
  */
 
 
@@ -1718,6 +1711,32 @@ static void d68020_extb_32(void)
 	sprintf(g_dasm_str, "extb.l  D%d; (2+)", g_cpu_ir&7);
 }
 
+static void d68881_ftrap(void)
+{
+	UINT16 w2, w3;
+	UINT32 l2;
+
+	LIMIT_CPU_TYPES(M68020_PLUS);
+	w2 = read_imm_16();
+
+	switch (g_cpu_ir & 0x7)
+	{
+		case 2: // word operand
+			w3 = read_imm_16();
+			sprintf(g_dasm_str, "ftrap%s.w   $%04x", g_cpcc[w2 & 0x3f], w3);
+			break;
+
+		case 3: // long word operand
+			l2 = read_imm_32();
+			sprintf(g_dasm_str, "ftrap%s.l   $%08x", g_cpcc[w2 & 0x3f], l2);
+			break;
+
+		case 4: // no operand
+			sprintf(g_dasm_str, "ftrap%s", g_cpcc[w2 & 0x3f]);
+			break;
+	}
+}
+
 static void d68040_fpu(void)
 {
 	char float_data_format[8][3] =
@@ -3353,6 +3372,23 @@ static void d68851_p001(void)
 	sprintf(g_dasm_str, "MMU 001 group");
 }
 
+// fbcc is 68040 and 68881
+static void d68040_fbcc_16()
+{
+	LIMIT_CPU_TYPES(M68030_PLUS);
+	UINT32 temp_pc = g_cpu_pc;
+	INT16 disp = make_int_16(read_imm_16());
+	sprintf(g_dasm_str, "fb%-s   $%x", g_cpcc[g_cpu_ir & 0x3f], temp_pc + disp);
+}
+
+static void d68040_fbcc_32()
+{
+	LIMIT_CPU_TYPES(M68030_PLUS);
+	UINT32 temp_pc = g_cpu_pc;
+	UINT32 disp = read_imm_32();
+	sprintf(g_dasm_str, "fb%-s   $%x", g_cpcc[g_cpu_ir & 0x3f], temp_pc + disp);
+}
+
 /* ======================================================================== */
 /* ======================= INSTRUCTION TABLE BUILDER ====================== */
 /* ======================================================================== */
@@ -3439,6 +3475,7 @@ static const opcode_struct g_opcode_info[] =
 	{d68020_bfins        , 0xffc0, 0xefc0, 0xa78},
 	{d68020_bfset        , 0xffc0, 0xeec0, 0xa78},
 	{d68020_bftst        , 0xffc0, 0xe8c0, 0xa7b},
+	{d68881_ftrap        , 0xfff8, 0xf278, 0x000},
 	{d68010_bkpt         , 0xfff8, 0x4848, 0x000},
 	{d68000_bra_8        , 0xff00, 0x6000, 0x000},
 	{d68000_bra_16       , 0xffff, 0x6000, 0x000},
@@ -3680,6 +3717,8 @@ static const opcode_struct g_opcode_info[] =
 	{d68851_pbcc32       , 0xffc0, 0xf0c0, 0x000},
 	{d68851_pdbcc        , 0xfff8, 0xf048, 0x000},
 	{d68851_p001         , 0xffc0, 0xf040, 0x000},
+	{d68040_fbcc_16      , 0xffc0, 0xf280, 0x000},
+	{d68040_fbcc_32      , 0xffc0, 0xf2c0, 0x000},
 	{0, 0, 0, 0}
 };
 
@@ -3821,7 +3860,7 @@ static unsigned int m68k_disassemble(char* str_buff, unsigned int pc, unsigned i
 		case M68K_CPU_TYPE_68LC040:
 			g_cpu_type = TYPE_68040;
 			break;
-		case M68K_CPU_TYPE_68340:
+		case M68K_CPU_TYPE_FSCPU32:
 			g_cpu_type = TYPE_68340;
 			break;
 		case M68K_CPU_TYPE_COLDFIRE:
@@ -4014,11 +4053,15 @@ unsigned int m68k_is_valid_instruction(unsigned int instruction, unsigned int cp
 				return 0;
 			if(g_instruction_table[instruction] == d68020_unpk_mm)
 				return 0;
+			if(g_instruction_table[instruction] == d68040_fbcc_16)
+				return 0;
+			if(g_instruction_table[instruction] == d68040_fbcc_32)
+				return 0;
 		case M68K_CPU_TYPE_68EC020:
 		case M68K_CPU_TYPE_68020:
 		case M68K_CPU_TYPE_68030:
 		case M68K_CPU_TYPE_68EC030:
-		case M68K_CPU_TYPE_68340:
+		case M68K_CPU_TYPE_FSCPU32:
 		case M68K_CPU_TYPE_COLDFIRE:
 			if(g_instruction_table[instruction] == d68040_cinv)
 				return 0;
@@ -4101,7 +4144,7 @@ CPU_DISASSEMBLE( m68040 )
 
 CPU_DISASSEMBLE( m68340 )
 {
-	return m68k_disassemble_raw(buffer, pc, oprom, opram, M68K_CPU_TYPE_68340);
+	return m68k_disassemble_raw(buffer, pc, oprom, opram, M68K_CPU_TYPE_FSCPU32);
 }
 
 CPU_DISASSEMBLE( coldfire )

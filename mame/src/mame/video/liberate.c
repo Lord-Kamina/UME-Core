@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /*******************************************************************************
 
     Todo:
@@ -202,18 +204,22 @@ WRITE8_MEMBER(liberate_state::prosport_bg_vram_w)
 
 VIDEO_START_MEMBER(liberate_state,prosoccr)
 {
-	m_back_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(liberate_state::get_back_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::back_scan),this), 16, 16, 32, 32);
-	m_fix_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(liberate_state::get_fix_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::fix_scan),this), 8, 8, 32, 32);
+	m_back_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(liberate_state::get_back_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::back_scan),this), 16, 16, 32, 32);
+	m_fix_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(liberate_state::get_fix_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::fix_scan),this), 8, 8, 32, 32);
 
 	m_fix_tilemap->set_transparent_pen(0);
 
+	m_fg_gfx = memregion("fg_gfx")->base();
 	m_charram = auto_alloc_array(machine(), UINT8, 0x1800 * 2);
+
+	save_pointer(NAME(m_charram), 0x1800 * 2);
+	save_pointer(NAME(m_fg_gfx), 0x6000);
 }
 
 VIDEO_START_MEMBER(liberate_state,boomrang)
 {
-	m_back_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(liberate_state::get_back_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::back_scan),this), 16, 16, 32, 32);
-	m_fix_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(liberate_state::get_fix_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::fix_scan),this), 8, 8, 32, 32);
+	m_back_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(liberate_state::get_back_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::back_scan),this), 16, 16, 32, 32);
+	m_fix_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(liberate_state::get_fix_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::fix_scan),this), 8, 8, 32, 32);
 
 	m_back_tilemap->set_transmask(0, 0x0001, 0x007e); /* Bottom 1 pen/Top 7 pens */
 	m_fix_tilemap->set_transparent_pen(0);
@@ -221,16 +227,16 @@ VIDEO_START_MEMBER(liberate_state,boomrang)
 
 VIDEO_START_MEMBER(liberate_state,liberate)
 {
-	m_back_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(liberate_state::get_back_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::back_scan),this), 16, 16, 32, 32);
-	m_fix_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(liberate_state::get_fix_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::fix_scan),this), 8, 8, 32, 32);
+	m_back_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(liberate_state::get_back_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::back_scan),this), 16, 16, 32, 32);
+	m_fix_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(liberate_state::get_fix_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::fix_scan),this), 8, 8, 32, 32);
 
 	m_fix_tilemap->set_transparent_pen(0);
 }
 
 VIDEO_START_MEMBER(liberate_state,prosport)
 {
-	m_back_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(liberate_state::prosport_get_back_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::back_scan),this), 16, 16, 32, 32);
-	m_fix_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(liberate_state::get_fix_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::fix_scan),this), 8, 8, 32, 32);
+	m_back_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(liberate_state::prosport_get_back_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::back_scan),this), 16, 16, 32, 32);
+	m_fix_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(liberate_state::get_fix_tile_info),this), tilemap_mapper_delegate(FUNC(liberate_state::fix_scan),this), 8, 8, 32, 32);
 
 	m_fix_tilemap->set_transparent_pen(0);
 }
@@ -242,7 +248,7 @@ WRITE8_MEMBER(liberate_state::prosport_paletteram_w)
 	m_paletteram[offset] = data;
 
 	/* RGB output is inverted */
-	palette_set_color_rgb(machine(), offset, pal3bit(~data >> 0), pal3bit(~data >> 3), pal2bit(~data >> 6));
+	m_palette->set_pen_color(offset, pal3bit(~data >> 0), pal3bit(~data >> 3), pal2bit(~data >> 6));
 }
 
 PALETTE_INIT_MEMBER(liberate_state,liberate)
@@ -271,9 +277,9 @@ PALETTE_INIT_MEMBER(liberate_state,liberate)
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
 		color_prom++;
-		palette_set_color(machine(),i,MAKE_RGB(r,g,b));
+		palette.set_pen_color(i,rgb_t(r,g,b));
 	}
-	palette_set_color(machine(),32,MAKE_RGB(0,0,0)); /* Allocate black for when no background is displayed */
+	palette.set_pen_color(32,rgb_t(0,0,0)); /* Allocate black for when no background is displayed */
 }
 
 /***************************************************************************/
@@ -332,13 +338,13 @@ void liberate_state::liberate_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 				sy2 = sy + 16;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					code,
 					color,
 					fx,fy,
 					sx,sy,0);
 		if (multi)
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					code+1,
 					color,
 					fx,fy,
@@ -396,13 +402,13 @@ void liberate_state::prosport_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 			sy2 = sy + 16;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[gfx_region],
+		m_gfxdecode->gfx(gfx_region)->transpen(bitmap,cliprect,
 				code,
 				color,
 				fx,fy,
 				sx,sy,0);
 		if (multi)
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[gfx_region],
+			m_gfxdecode->gfx(gfx_region)->transpen(bitmap,cliprect,
 				code2,
 				color,
 				fx,fy,
@@ -456,13 +462,13 @@ void liberate_state::boomrang_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 			sy2 = sy + 16;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				code,
 				color,
 				fx,fy,
 				sx,sy,0);
 		if (multi)
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				code2,
 				color,
 				fx,fy,
@@ -486,7 +492,7 @@ void liberate_state::prosoccr_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 		fx = spriteram[offs + 0] & 4;
 		fy = spriteram[offs + 0] & 2;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				code,
 				0,
 				fx,fy,
@@ -504,9 +510,9 @@ UINT32 liberate_state::screen_update_prosoccr(screen_device &screen, bitmap_ind1
 	if (m_background_disable)
 		bitmap.fill(32, cliprect);
 	else
-		m_back_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_back_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
-	m_fix_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fix_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	prosoccr_draw_sprites(bitmap, cliprect);
 
 	return 0;
@@ -529,7 +535,7 @@ UINT32 liberate_state::screen_update_prosport(screen_device &screen, bitmap_ind1
 	m_back_tilemap->set_scrolly(0, scrolly);
 	m_back_tilemap->set_scrollx(0, -scrollx);
 
-	m_back_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_back_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 //  popmessage("%d %02x %02x %02x %02x %02x %02x %02x %02x",scrollx,deco16_io_ram[0],deco16_io_ram[1],deco16_io_ram[2],deco16_io_ram[3]
 //  ,deco16_io_ram[4],deco16_io_ram[5],deco16_io_ram[6],deco16_io_ram[7]);
@@ -546,7 +552,7 @@ UINT32 liberate_state::screen_update_prosport(screen_device &screen, bitmap_ind1
 		my = (offs) % 32;
 		mx = (offs) / 32;
 
-		drawgfx_transpen(bitmap, cliprect,machine().gfx[gfx_region],
+		m_gfxdecode->gfx(gfx_region)->transpen(bitmap,cliprect,
 				tile, 1, 0, 0, 248 - 8 * mx, 8 * my, 0);
 	}
 
@@ -563,14 +569,14 @@ UINT32 liberate_state::screen_update_boomrang(screen_device &screen, bitmap_ind1
 	if (m_background_disable)
 		bitmap.fill(32, cliprect);
 	else
-		m_back_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+		m_back_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
 
 	boomrang_draw_sprites(bitmap,cliprect,8);
 	if (!m_background_disable)
-		m_back_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
+		m_back_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
 
 	boomrang_draw_sprites(bitmap, cliprect, 0);
-	m_fix_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fix_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -582,9 +588,9 @@ UINT32 liberate_state::screen_update_liberate(screen_device &screen, bitmap_ind1
 	if (m_background_disable)
 		bitmap.fill(32, cliprect);
 	else
-		m_back_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_back_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	liberate_draw_sprites(bitmap, cliprect);
-	m_fix_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fix_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

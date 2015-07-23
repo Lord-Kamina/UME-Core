@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 
 #include "emu.h"
 #include "naomim1.h"
@@ -11,19 +13,18 @@ DEVICE_ADDRESS_MAP_START(submap, 16, naomi_m1_board)
 ADDRESS_MAP_END
 
 naomi_m1_board::naomi_m1_board(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: naomi_board(mconfig, NAOMI_M1_BOARD, "NAOMI-M1-BOARD", tag, owner, clock)
+	: naomi_board(mconfig, NAOMI_M1_BOARD, "Sega NAOMI M1 Board", tag, owner, clock, "naomi_m1_board", __FILE__)
 {
-	key_tag = 0;
-}
-
-void naomi_m1_board::static_set_tags(device_t &device, const char *_key_tag)
-{
-	naomi_m1_board &dev = downcast<naomi_m1_board &>(device);
-	dev.key_tag = _key_tag;
 }
 
 READ16_MEMBER(naomi_m1_board::actel_id_r)
 {
+	if (rombdid_tag && memregion(rombdid_tag) != NULL)
+	{
+		const UINT8 *bdid = memregion(rombdid_tag)->base();
+		return bdid[0] | (bdid[1] << 8);
+	}
+
 	return 0x0000;
 }
 
@@ -31,12 +32,15 @@ void naomi_m1_board::device_start()
 {
 	naomi_board::device_start();
 
-#if USE_NAOMICRYPT
-	key = get_naomi_key(machine());
-#else
-	const UINT8 *key_data = memregion(key_tag)->base();
-	key = (key_data[0] << 24) | (key_data[1] << 16) | (key_data[2] << 8) | key_data[3];
-#endif
+	std::string skey = parameter("key").c_str();
+	if(!skey.empty())
+		key = strtoll(skey.c_str(), 0, 16);
+	else
+	{
+		logerror("%s: Warning: key not provided\n", tag());
+		key = 0;
+	}
+
 	buffer = auto_alloc_array(machine(), UINT8, BUFFER_SIZE);
 
 	save_pointer(NAME(buffer), BUFFER_SIZE);

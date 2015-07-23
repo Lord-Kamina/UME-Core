@@ -1,36 +1,5 @@
-/***************************************************************************
-
-    Copyright Olivier Galibert
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
-
-****************************************************************************/
-
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 /*********************************************************************
 
     formats/upd765_dsk.h
@@ -39,7 +8,7 @@
 
 *********************************************************************/
 
-#include "emu.h"
+#include "emu.h" // emu_fatalerror
 #include "formats/upd765_dsk.h"
 
 upd765_format::upd765_format(const format *_formats)
@@ -49,13 +18,13 @@ upd765_format::upd765_format(const format *_formats)
 
 int upd765_format::find_size(io_generic *io, UINT32 form_factor)
 {
-	int size = io_generic_size(io);
+	UINT64 size = io_generic_size(io);
 	for(int i=0; formats[i].form_factor; i++) {
 		const format &f = formats[i];
 		if(form_factor != floppy_image::FF_UNKNOWN && form_factor != f.form_factor)
 			continue;
 
-		if(size == compute_track_size(f) * f.track_count * f.head_count)
+		if(size == (UINT64) compute_track_size(f) * f.track_count * f.head_count)
 			return i;
 	}
 	return -1;
@@ -83,7 +52,7 @@ int upd765_format::compute_track_size(const format &f) const
 	return track_size;
 }
 
-void upd765_format::build_sector_description(const format &f, UINT8 *sectdata, desc_s *sectors) const
+void upd765_format::build_sector_description(const format &f, UINT8 *sectdata, desc_s *sectors, int track, int head) const
 {
 	if(f.sector_base_id == -1) {
 		for(int i=0; i<f.sector_count; i++) {
@@ -241,10 +210,10 @@ bool upd765_format::load(io_generic *io, UINT32 form_factor, floppy_image *image
 
 	UINT8 sectdata[40*512];
 	desc_s sectors[40];
-	build_sector_description(f, sectdata, sectors);
 
 	for(int track=0; track < f.track_count; track++)
 		for(int head=0; head < f.head_count; head++) {
+			build_sector_description(f, sectdata, sectors, track, head);
 			io_generic_read(io, sectdata, (track*f.head_count + head)*track_size, track_size);
 			generate_track(desc, track, head, sectors, f.sector_count, total_size, image);
 		}
@@ -267,7 +236,7 @@ bool upd765_format::save(io_generic *io, floppy_image *image)
 
 	// Allocate the storage for the list of testable formats for a
 	// given cell size
-	int *candidates = global_alloc_array(int, formats_count);
+	std::vector<int> candidates;
 
 	// Format we're finally choosing
 	int chosen_candidate = -1;
@@ -277,16 +246,16 @@ bool upd765_format::save(io_generic *io, floppy_image *image)
 	for(;;) {
 		// Build the list of all formats for the immediatly superior cell size
 		int cur_cell_size = 0;
-		int candidates_count = 0;
+		candidates.clear();
 		for(int i=0; i != formats_count; i++) {
 			if(image->get_form_factor() == floppy_image::FF_UNKNOWN ||
 				image->get_form_factor() == formats[i].form_factor) {
 				if(formats[i].cell_size == cur_cell_size)
-					candidates[candidates_count++] = i;
+					candidates.push_back(i);
 				else if((!cur_cell_size || formats[i].cell_size < cur_cell_size) &&
 						formats[i].cell_size > min_cell_size) {
-					candidates[0] = i;
-					candidates_count = 1;
+					candidates.clear();
+					candidates.push_back(i);
 					cur_cell_size = formats[i].cell_size;
 				}
 			}
@@ -296,21 +265,21 @@ bool upd765_format::save(io_generic *io, floppy_image *image)
 
 		// No candidates with a cell size bigger than the previously
 		// tested one, we're done
-		if(!candidates_count)
+		if(candidates.empty())
 			break;
 
 		// Filter with track 0 head 0
-		check_compatibility(image, candidates, candidates_count);
+		check_compatibility(image, candidates);
 
 		// Nobody matches, try with the next cell size
-		if(!candidates_count)
+		if(candidates.empty())
 			continue;
 
 		// We have a match at that cell size, we just need to find the
 		// best one given the geometry
 
 		// If there's only one, we're done
-		if(candidates_count == 1) {
+		if(candidates.size() == 1) {
 			chosen_candidate = candidates[0];
 			break;
 		}
@@ -319,7 +288,7 @@ bool upd765_format::save(io_generic *io, floppy_image *image)
 		int tracks, heads;
 		image->get_actual_geometry(tracks, heads);
 		chosen_candidate = candidates[0];
-		for(int i=1; i != candidates_count; i++) {
+		for(unsigned int i=1; i != candidates.size(); i++) {
 			const format &cc = formats[chosen_candidate];
 			const format &cn = formats[candidates[i]];
 
@@ -364,10 +333,10 @@ bool upd765_format::save(io_generic *io, floppy_image *image)
 
 	UINT8 sectdata[40*512];
 	desc_s sectors[40];
-	build_sector_description(f, sectdata, sectors);
 
 	for(int track=0; track < f.track_count; track++)
 		for(int head=0; head < f.head_count; head++) {
+			build_sector_description(f, sectdata, sectors, track, head);
 			extract_sectors(image, f, sectors, track, head);
 			io_generic_write(io, sectdata, (track*f.head_count + head)*track_size, track_size);
 		}
@@ -375,7 +344,7 @@ bool upd765_format::save(io_generic *io, floppy_image *image)
 	return true;
 }
 
-void upd765_format::check_compatibility(floppy_image *image, int *candidates, int &candidates_count)
+void upd765_format::check_compatibility(floppy_image *image, std::vector<int> &candidates)
 {
 	UINT8 bitstream[500000/8];
 	UINT8 sectdata[50000];
@@ -396,8 +365,8 @@ void upd765_format::check_compatibility(floppy_image *image, int *candidates, in
 	}
 
 	// Check compatibility with every candidate, copy in-place
-	int *ok_cands = candidates;
-	for(int i=0; i != candidates_count; i++) {
+	int *ok_cands = &candidates[0];
+	for(unsigned int i=0; i != candidates.size(); i++) {
 		const format &f = formats[candidates[i]];
 		int ns = 0;
 		for(int j=0; j<256; j++)
@@ -425,7 +394,7 @@ void upd765_format::check_compatibility(floppy_image *image, int *candidates, in
 	fail:
 		;
 	}
-	candidates_count = ok_cands - candidates;
+	candidates.resize(ok_cands - &candidates[0]);
 }
 
 

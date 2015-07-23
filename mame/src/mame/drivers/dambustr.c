@@ -1,9 +1,13 @@
+// license:GPL-2.0+
+// copyright-holders:Norbert Kehrer
 /***************************************************************************
 
 Dambusters
 (c) 1981 South West Research Ltd. (Bristol, UK)
 
 Reverse-engineering and MAME Driver by Norbert Kehrer (August 2006)
+
+NOTE:  Eventually to be merged into GALAXIAN.C
 
 2008-08
 Dip locations verified with manual
@@ -51,14 +55,16 @@ Stephh's notes (based on the games Z80 code and some tests) :
 #include "cpu/z80/z80.h"
 #include "audio/galaxian.h"
 #include "includes/galaxold.h"
-#include "machine/7474.h"
 
 
 class dambustr_state : public galaxold_state
 {
 public:
 	dambustr_state(const machine_config &mconfig, device_type type, const char *tag)
-		: galaxold_state(mconfig, type, tag) { }
+		: galaxold_state(mconfig, type, tag),
+		m_custom(*this, "cust") { }
+
+	required_device<galaxian_sound_device> m_custom;
 
 	int m_noise_data;
 	DECLARE_WRITE8_MEMBER(dambustr_noise_enable_w);
@@ -70,10 +76,9 @@ public:
 /* FIXME: Really needed? - Should be handled by either interface */
 WRITE8_MEMBER(dambustr_state::dambustr_noise_enable_w)
 {
-	device_t *device = machine().device(GAL_AUDIO);
 	if (data != m_noise_data) {
 		m_noise_data = data;
-		galaxian_noise_enable_w(device, space, offset, data);
+		m_custom->noise_enable_w(space, offset, data);
 	}
 }
 
@@ -96,14 +101,14 @@ static ADDRESS_MAP_START( dambustr_map, AS_PROGRAM, 8, dambustr_state )
 
 	AM_RANGE(0xe000, 0xe000) AM_READ_PORT("IN0")
 	AM_RANGE(0xe002, 0xe003) AM_WRITE(galaxold_coin_counter_w)
-	AM_RANGE(0xe004, 0xe007) AM_DEVWRITE_LEGACY(GAL_AUDIO, galaxian_lfo_freq_w)
+	AM_RANGE(0xe004, 0xe007) AM_DEVWRITE("cust", galaxian_sound_device, lfo_freq_w)
 
 	AM_RANGE(0xe800, 0xefff) AM_READ_PORT("IN1")
-	AM_RANGE(0xe800, 0xe802) AM_DEVWRITE_LEGACY(GAL_AUDIO, galaxian_background_enable_w)
+	AM_RANGE(0xe800, 0xe802) AM_DEVWRITE("cust", galaxian_sound_device, background_enable_w)
 	AM_RANGE(0xe803, 0xe803) AM_WRITE(dambustr_noise_enable_w)
-	AM_RANGE(0xe804, 0xe804) AM_DEVWRITE_LEGACY(GAL_AUDIO, galaxian_shoot_enable_w) // probably louder than normal shot
-	AM_RANGE(0xe805, 0xe805) AM_DEVWRITE_LEGACY(GAL_AUDIO, galaxian_shoot_enable_w) // normal shot (like Galaxian)
-	AM_RANGE(0xe806, 0xe807) AM_DEVWRITE_LEGACY(GAL_AUDIO, galaxian_vol_w)
+	AM_RANGE(0xe804, 0xe804) AM_DEVWRITE("cust", galaxian_sound_device, fire_enable_w) // probably louder than normal shot
+	AM_RANGE(0xe805, 0xe805) AM_DEVWRITE("cust", galaxian_sound_device, fire_enable_w) // normal shot (like Galaxian)
+	AM_RANGE(0xe806, 0xe807) AM_DEVWRITE("cust", galaxian_sound_device, vol_w)
 
 	AM_RANGE(0xf000, 0xf7ff) AM_READ_PORT("DSW")
 	AM_RANGE(0xf001, 0xf001) AM_WRITE(galaxold_nmi_enable_w)
@@ -111,7 +116,7 @@ static ADDRESS_MAP_START( dambustr_map, AS_PROGRAM, 8, dambustr_state )
 	AM_RANGE(0xf006, 0xf006) AM_WRITE(galaxold_flip_screen_x_w)
 	AM_RANGE(0xf007, 0xf007) AM_WRITE(galaxold_flip_screen_y_w)
 
-	AM_RANGE(0xf800, 0xf800) AM_DEVWRITE_LEGACY(GAL_AUDIO, galaxian_pitch_w)
+	AM_RANGE(0xf800, 0xf800) AM_DEVWRITE("cust", galaxian_sound_device, pitch_w)
 	AM_RANGE(0xf800, 0xffff) AM_READ(watchdog_reset_r)
 ADDRESS_MAP_END
 
@@ -251,8 +256,11 @@ static MACHINE_CONFIG_START( dambustr, dambustr_state )
 
 	MCFG_MACHINE_RESET_OVERRIDE(dambustr_state,galaxold)
 
-	MCFG_7474_ADD("7474_9m_1", WRITELINE(dambustr_state,galaxold_7474_9m_1_callback), NOOP)
-	MCFG_7474_ADD("7474_9m_2", NOOP, WRITELINE(dambustr_state,galaxold_7474_9m_2_q_callback))
+	MCFG_DEVICE_ADD("7474_9m_1", TTL7474, 0)
+	MCFG_7474_OUTPUT_CB(WRITELINE(dambustr_state,galaxold_7474_9m_1_callback))
+
+	MCFG_DEVICE_ADD("7474_9m_2", TTL7474, 0)
+	MCFG_7474_COMP_OUTPUT_CB(WRITELINE(dambustr_state,galaxold_7474_9m_2_q_callback))
 
 	MCFG_TIMER_DRIVER_ADD("int_timer", dambustr_state, galaxold_interrupt_timer)
 
@@ -262,11 +270,12 @@ static MACHINE_CONFIG_START( dambustr, dambustr_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(dambustr_state, screen_update_dambustr)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(dambustr)
-	MCFG_PALETTE_LENGTH(32+2+64+8)      /* 32 for the characters, 2 for the bullets, 64 for the stars, 8 for the background */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", dambustr)
+	MCFG_PALETTE_ADD("palette", 32+2+64+8)      /* 32 for the characters, 2 for the bullets, 64 for the stars, 8 for the background */
 
-	MCFG_PALETTE_INIT_OVERRIDE(dambustr_state,dambustr)
+	MCFG_PALETTE_INIT_OWNER(dambustr_state,dambustr)
 	MCFG_VIDEO_START_OVERRIDE(dambustr_state,dambustr)
 
 	/* sound hardware */

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                             -= Jaleco Mega System 1 =-
@@ -346,14 +348,14 @@ TILEMAP_MAPPER_MEMBER(megasys1_state::megasys1_scan_16x16)
 
 TILE_GET_INFO_MEMBER(megasys1_state::megasys1_get_scroll_tile_info_8x8)
 {
-	int tmap = (FPTR)param;
+	int tmap = (FPTR)tilemap.user_data();
 	UINT16 code = m_scrollram[tmap][tile_index];
 	SET_TILE_INFO_MEMBER(tmap, (code & 0xfff) * m_8x8_scroll_factor[tmap], code >> (16 - m_bits_per_color_code), 0);
 }
 
 TILE_GET_INFO_MEMBER(megasys1_state::megasys1_get_scroll_tile_info_16x16)
 {
-	int tmap = (FPTR)param;
+	int tmap = (FPTR)tilemap.user_data();
 	UINT16 code = m_scrollram[tmap][tile_index/4];
 	SET_TILE_INFO_MEMBER(tmap, (code & 0xfff) * m_16x16_scroll_factor[tmap] + (tile_index & 3), code >> (16 - m_bits_per_color_code), 0);
 }
@@ -365,23 +367,23 @@ void megasys1_state::create_tilemaps()
 	for (layer = 0; layer < 3; layer++)
 	{
 		/* 16x16 tilemaps */
-		m_tilemap[layer][0][0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_16x16),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_16x16),this),
+		m_tilemap[layer][0][0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_16x16),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_16x16),this),
 									8,8, TILES_PER_PAGE_X * 16, TILES_PER_PAGE_Y * 2);
-		m_tilemap[layer][0][1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_16x16),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_16x16),this),
+		m_tilemap[layer][0][1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_16x16),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_16x16),this),
 									8,8, TILES_PER_PAGE_X * 8, TILES_PER_PAGE_Y * 4);
-		m_tilemap[layer][0][2] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_16x16),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_16x16),this),
+		m_tilemap[layer][0][2] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_16x16),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_16x16),this),
 									8,8, TILES_PER_PAGE_X * 4, TILES_PER_PAGE_Y * 8);
-		m_tilemap[layer][0][3] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_16x16),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_16x16),this),
+		m_tilemap[layer][0][3] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_16x16),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_16x16),this),
 									8,8, TILES_PER_PAGE_X * 2, TILES_PER_PAGE_Y * 16);
 
 		/* 8x8 tilemaps */
-		m_tilemap[layer][1][0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_8x8),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_8x8),this),
+		m_tilemap[layer][1][0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_8x8),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_8x8),this),
 									8,8, TILES_PER_PAGE_X * 8, TILES_PER_PAGE_Y * 1);
-		m_tilemap[layer][1][1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_8x8),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_8x8),this),
+		m_tilemap[layer][1][1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_8x8),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_8x8),this),
 									8,8, TILES_PER_PAGE_X * 4, TILES_PER_PAGE_Y * 2);
-		m_tilemap[layer][1][2] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_8x8),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_8x8),this),
+		m_tilemap[layer][1][2] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_8x8),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_8x8),this),
 									8,8, TILES_PER_PAGE_X * 4, TILES_PER_PAGE_Y * 2);
-		m_tilemap[layer][1][3] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_8x8),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_8x8),this),
+		m_tilemap[layer][1][3] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(megasys1_state::megasys1_get_scroll_tile_info_8x8),this), tilemap_mapper_delegate(FUNC(megasys1_state::megasys1_scan_8x8),this),
 									8,8, TILES_PER_PAGE_X * 2, TILES_PER_PAGE_Y * 4);
 
 		/* set user data and transparency */
@@ -447,7 +449,49 @@ WRITE16_MEMBER(megasys1_state::megasys1_vregs_A_w)
 
 }
 
+/* Used by monkelf */
+WRITE16_MEMBER(megasys1_state::megasys1_vregs_monkelf_w)
+{
+	UINT16 new_data = COMBINE_DATA(&m_vregs[offset]);
 
+	switch (offset)
+	{
+		case 0x000/2   :    m_active_layers = new_data; break;
+
+		case 0x008/2+0 :    m_scrollx[2] = new_data;    break;
+		case 0x008/2+1 :    m_scrolly[2] = new_data;    break;
+		case 0x008/2+2 :    megasys1_set_vreg_flag(2, new_data);        break;
+
+		// code in routine $280 does this. protection?
+		case 0x200/2+0 :    m_scrollx[0] = new_data - (((new_data & 0x0f) > 0x0d) ? 0x10 : 0); break;
+		case 0x200/2+1 :    m_scrolly[0] = new_data;    break;
+		case 0x200/2+2 :    megasys1_set_vreg_flag(0, new_data);        break;
+
+		// code in routine $280 does this. protection?
+		case 0x208/2+0 :    m_scrollx[1] = new_data - (((new_data & 0x0f) > 0x0b) ? 0x10 : 0); break;
+		case 0x208/2+1 :    m_scrolly[1] = new_data;    break;
+		case 0x208/2+2 :    megasys1_set_vreg_flag(1, new_data);        break;
+
+		case 0x100/2   :    m_sprite_flag = new_data;       break;
+
+		case 0x300/2   :    m_screen_flag = new_data;
+							if (m_audiocpu)
+							{
+								if (new_data & 0x10)
+									m_audiocpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+								else
+									m_audiocpu->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+							}
+							break;
+
+		case 0x308/2   :    soundlatch_word_w(space,0,new_data,0xffff);
+							m_audiocpu->set_input_line(4, HOLD_LINE);
+							break;
+
+		default      :  SHOW_WRITE_ERROR("vreg %04X <- %04X",offset*2,data);
+	}
+
+}
 
 
 /* Used by MS1-C only */
@@ -555,7 +599,7 @@ WRITE16_MEMBER(megasys1_state::megasys1_vregs_D_w)
     0C      Y position
     0E      Code                                            */
 
-void megasys1_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
+void megasys1_state::draw_sprites(screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect)
 {
 	int color,code,sx,sy,flipx,flipy,attr,sprite,offs,color_mask;
 
@@ -597,13 +641,12 @@ void megasys1_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect
 				code  = spritedata[0x0E/2] + objectdata[0x06/2];
 				color = (attr & color_mask);
 
-				pdrawgfx_transpen(bitmap,cliprect,
-						machine().gfx[3],
+				m_gfxdecode->gfx(3)->prio_transpen(bitmap,cliprect,
 						(code & 0xfff ) + ((m_sprite_bank & 1) << 12),
 						color,
 						flipx, flipy,
 						sx, sy,
-						machine().priority_bitmap,
+						screen.priority(),
 						(attr & 0x08) ? 0x0c : 0x0a,15);
 			}   /* sprite */
 		}   /* offs */
@@ -638,13 +681,12 @@ void megasys1_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect
 				sx = 240-sx;        sy = 240-sy;
 			}
 
-			pdrawgfx_transpen(bitmap,cliprect,
-					machine().gfx[2],
+			m_gfxdecode->gfx(2)->prio_transpen(bitmap,cliprect,
 					code,
 					color,
 					flipx, flipy,
 					sx, sy,
-					machine().priority_bitmap,
+					screen.priority(),
 					(attr & 0x08) ? 0x0c : 0x0a,15);
 		}   /* sprite */
 	}   /* Z hw */
@@ -686,10 +728,6 @@ struct priority
 
 static const struct priority priorities[] =
 {
-	{   "64street",
-		{ 0x04132,0x03142,0x14032,0x04132,0xfffff,0x04132,0xfffff,0xfffff,
-			0xfffff,0xfffff,0xfffff,0xfffff,0xfffff,0xfffff,0xfffff,0xfffff }
-	},
 	{   "chimerab",
 		{ 0x14032,0x04132,0x14032,0x04132,0xfffff,0xfffff,0xfffff,0xfffff,
 			0xfffff,0xfffff,0x01324,0xfffff,0xfffff,0xfffff,0xfffff,0xfffff }
@@ -741,8 +779,7 @@ static const struct priority priorities[] =
     the bottom layer's opaque pens, but above its transparent
     pens.
 */
-
-PALETTE_INIT_MEMBER(megasys1_state,megasys1)
+void megasys1_state::megasys1_priority_create()
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int pri_code, offset, i, order;
@@ -902,6 +939,11 @@ PALETTE_INIT_MEMBER(megasys1_state,megasys1)
 
 }
 
+PALETTE_INIT_MEMBER(megasys1_state,megasys1)
+{
+	megasys1_priority_create();
+}
+
 
 
 
@@ -959,7 +1001,7 @@ UINT32 megasys1_state::screen_update_megasys1(screen_device &screen, bitmap_ind1
 		}
 	}
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	flag = TILEMAP_DRAW_OPAQUE;
 	primask = 0;
@@ -976,7 +1018,7 @@ UINT32 megasys1_state::screen_update_megasys1(screen_device &screen, bitmap_ind1
 			case 2:
 				if ( (m_tmap[layer]) && (active_layers & (1 << layer) ) )
 				{
-					m_tmap[layer]->draw(bitmap, cliprect, flag,primask);
+					m_tmap[layer]->draw(screen, bitmap, cliprect, flag,primask);
 					flag = 0;
 				}
 				break;
@@ -1002,7 +1044,7 @@ UINT32 megasys1_state::screen_update_megasys1(screen_device &screen, bitmap_ind1
 	}
 
 	if (active_layers & 0x08)
-		draw_sprites(bitmap,cliprect);
+		draw_sprites(screen,bitmap,cliprect);
 	return 0;
 }
 

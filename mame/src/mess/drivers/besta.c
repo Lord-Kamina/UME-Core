@@ -1,6 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Sergey Svishchev
 /***************************************************************************
 
-  Besta-88 and Besta-90 engineering workstations.
+    Besta-88 and Besta-90 engineering workstations.
 
     Derived (OEMd?) from Force Computers' SYS68K series.
 
@@ -9,9 +11,6 @@
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
 #include "machine/terminal.h"
-#if 0
-#include "machine/68561mpcc.h"
-#endif
 
 #define VERBOSE_DBG 1       /* general debug messages */
 
@@ -20,10 +19,12 @@
 		if(VERBOSE_DBG>=N) \
 		{ \
 			if( M ) \
-				logerror("%11.6f: %-24s",machine.time().as_double(),(char*)M ); \
+				logerror("%11.6f at %s: %-24s",machine().time().as_double(),machine().describe_context(),(char*)M ); \
 			logerror A; \
 		} \
 	} while (0)
+
+#define TERMINAL_TAG "terminal"
 
 class besta_state : public driver_device
 {
@@ -32,7 +33,9 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_terminal(*this, TERMINAL_TAG),
-		m_p_ram(*this, "p_ram") { }
+		m_p_ram(*this, "p_ram")
+	{
+	}
 
 	DECLARE_READ8_MEMBER( mpcc_reg_r );
 	DECLARE_WRITE8_MEMBER( mpcc_reg_w );
@@ -47,15 +50,13 @@ public:
 	required_shared_ptr<UINT32> m_p_ram;
 };
 
-#if 1
 READ8_MEMBER( besta_state::mpcc_reg_r )
 {
-	running_machine &machine = space.machine();
 	UINT8 ret;
 
 	if (!(offset == 0 && !m_mpcc_regs[0])) {
 	DBG_LOG(1,"mpcc_reg_r",("(%d) = %02X at %s\n", offset,
-		(offset > 31 ? -1 : m_mpcc_regs[offset]), machine.describe_context()));
+		(offset > 31 ? -1 : m_mpcc_regs[offset]), machine().describe_context()));
 	}
 
 	switch (offset) {
@@ -72,18 +73,19 @@ READ8_MEMBER( besta_state::mpcc_reg_r )
 
 WRITE8_MEMBER( besta_state::mpcc_reg_w )
 {
-	running_machine &machine = space.machine();
-	device_t *devconf = space.machine().device(TERMINAL_TAG);
+	device_t *devconf = machine().device(TERMINAL_TAG);
 
-	DBG_LOG(1,"mpcc_reg_w",("(%d) <- %02X at %s\n", offset, data, machine.describe_context()));
+	DBG_LOG(1,"mpcc_reg_w",("(%d) <- %02X at %s\n", offset, data, machine().describe_context()));
 
 	switch (offset) {
 		case 2:
 			m_term_data = data;
+			break;
 		case 10:
-			dynamic_cast<generic_terminal_device *>(devconf)->write(*devconf->machine().memory().first_space(), 0, data);
+			dynamic_cast<generic_terminal_device *>(devconf)->write(*machine().memory().first_space(), 0, data);
 		default:
-			m_mpcc_regs[offset] = data; break;
+			m_mpcc_regs[offset] = data;
+			break;
 	}
 }
 
@@ -91,7 +93,6 @@ WRITE8_MEMBER( besta_state::kbd_put )
 {
 	mpcc_reg_w(space, (offs_t)2, data, mem_mask);
 }
-#endif
 
 static ADDRESS_MAP_START(besta_mem, AS_PROGRAM, 32, besta_state)
 	AM_RANGE(0x00000000, 0x001fffff) AM_RAM AM_SHARE("p_ram")       // local bus DRAM, 4MB
@@ -118,17 +119,11 @@ void besta_state::machine_reset()
 	UINT8* user1 = memregion("user1")->base();
 
 	memcpy((UINT8*)m_p_ram.target(),user1,0x10000); // not really what happens but...
-	memset(m_mpcc_regs, sizeof(m_mpcc_regs), 0);    // should initialize to defined values
+	memset(m_mpcc_regs, 0, sizeof(m_mpcc_regs));    // should initialize to defined values
 	m_mpcc_regs[8] = 0x80;              // always ready to transmit
 
 	m_maincpu->reset();
 }
-
-static GENERIC_TERMINAL_INTERFACE( terminal_intf )
-{
-	DEVCB_DRIVER_MEMBER(besta_state, kbd_put)
-};
-
 
 /* CP31 processor board */
 static MACHINE_CONFIG_START( besta, besta_state )
@@ -136,10 +131,8 @@ static MACHINE_CONFIG_START( besta, besta_state )
 	MCFG_CPU_ADD("maincpu", M68030, 2*16670000)
 	MCFG_CPU_PROGRAM_MAP(besta_mem)
 
-#if 0
-	MCFG_MPCC68561_ADD("mpcc", XTAL_25MHz, line_cb_t());    // confirm internal oscillator frequency
-#endif
-	MCFG_GENERIC_TERMINAL_ADD(TERMINAL_TAG, terminal_intf)
+	MCFG_DEVICE_ADD(TERMINAL_TAG, GENERIC_TERMINAL, 0)
+	MCFG_GENERIC_TERMINAL_KEYBOARD_CB(WRITE8(besta_state, kbd_put))
 MACHINE_CONFIG_END
 
 /* ROM definition */

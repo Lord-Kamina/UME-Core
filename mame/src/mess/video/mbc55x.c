@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phill Harvey-Smith
 /*
     video/mbc55x.c
 
@@ -71,14 +73,15 @@ give the leftmost column of the rectangle, the next four give the next column, a
 #define DEBUG_LINES     1
 #define DEBUG_VSYNC     2
 
-#define DEBUG_SET(flags)    ((mstate->m_debug_video & (flags))==(flags))
+#define DEBUG_SET(flags)    ((m_debug_video & (flags))==(flags))
 
 static void video_debug(running_machine &machine, int ref, int params, const char *param[])
 {
 	mbc55x_state *mstate = machine.driver_data<mbc55x_state>();
 	if(params>0)
 	{
-		sscanf(param[0],"%d",&mstate->m_debug_video);
+		int temp;
+		sscanf(param[0],"%d",&temp); mstate->m_debug_video = temp;;
 	}
 	else
 	{
@@ -87,14 +90,13 @@ static void video_debug(running_machine &machine, int ref, int params, const cha
 	}
 }
 
-static MC6845_UPDATE_ROW( vid_update_row )
+MC6845_UPDATE_ROW( mbc55x_state::crtc_update_row )
 {
-	mbc55x_state *mstate = device->machine().driver_data<mbc55x_state>();
-	const rgb_t *palette = palette_entry_list_raw(bitmap.palette());
+	const rgb_t *palette = m_palette->palette()->entry_list_raw();
 
-	UINT8   *ram    = &mstate->m_ram->pointer()[0];
-	UINT8   *red    = &mstate->m_video_mem[RED_PLANE_OFFSET];
-	UINT8   *blue   = &mstate->m_video_mem[BLUE_PLANE_OFFSET];
+	UINT8   *ram    = &m_ram->pointer()[0];
+	UINT8   *red    = &m_video_mem[RED_PLANE_OFFSET];
+	UINT8   *blue   = &m_video_mem[BLUE_PLANE_OFFSET];
 	UINT8   *green;
 	int     offset;
 	UINT8   rpx,gpx,bpx;
@@ -106,7 +108,7 @@ static MC6845_UPDATE_ROW( vid_update_row )
 	UINT8   shifts;
 	UINT8   colour;
 
-	switch(mstate->m_vram_page)
+	switch(m_vram_page)
 	{
 		case 4  : green=&ram[0x08000]; break;
 		case 5  : green=&ram[0x1C000]; break;
@@ -158,26 +160,11 @@ WRITE_LINE_MEMBER( mbc55x_state::vid_vsync_changed )
 {
 }
 
-MC6845_INTERFACE( mb55x_mc6845_intf )
-{
-	SCREEN_TAG,                     /* screen number */
-	false,                          /* show border area */
-	8,                              /* numbers of pixels per video memory address */
-	NULL,                           /* begin_update */
-	vid_update_row,                 /* update_row */
-	NULL,                           /* end_update */
-	DEVCB_NULL,                     /* on_de_changed */
-	DEVCB_NULL,                     /* on_cur_changed */
-	DEVCB_DRIVER_LINE_MEMBER(mbc55x_state, vid_hsync_changed),  /* on_hsync_changed */
-	DEVCB_DRIVER_LINE_MEMBER(mbc55x_state, vid_vsync_changed),  /* on_vsync_changed */
-	NULL
-};
-
 void mbc55x_state::video_start()
 {
 	m_debug_video=0;
 
-	logerror("VIDEO_START\n");
+	logerror("video_start\n");
 
 	if (machine().debug_flags & DEBUG_FLAG_ENABLED)
 	{
@@ -195,5 +182,5 @@ void mbc55x_state::video_reset()
 
 void mbc55x_state::screen_eof_mbc55x(screen_device &screen, bool state)
 {
-//  logerror("SCREEN_VBLANK( mbc55x )\n");
+//  logerror("screen_eof_mbc55x\n");
 }

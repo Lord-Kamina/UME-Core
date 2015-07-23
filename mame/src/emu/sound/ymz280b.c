@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*
 
  Yamaha YMZ280B driver
@@ -22,6 +24,8 @@
   - Is memory handling 100% correct? At the moment, Konami firebeat.c is the only
     hardware currently emulated that uses external handlers.
     It also happens to be the only one using 16-bit PCM.
+
+    Some other drivers (eg. bishi.c, bfm_sc4/5.c) also use ROM readback.
 
 */
 
@@ -85,14 +89,14 @@ void ymz280b_device::update_irq_state()
 		m_irq_state = 1;
 		if (!m_irq_handler.isnull())
 			m_irq_handler(1);
-		else logerror("YMZ280B: IRQ generated, but no callback specified!");
+		else logerror("YMZ280B: IRQ generated, but no callback specified!\n");
 	}
 	else if (!irq_bits && m_irq_state)
 	{
 		m_irq_state = 0;
 		if (!m_irq_handler.isnull())
 			m_irq_handler(0);
-		else logerror("YMZ280B: IRQ generated, but no callback specified!");
+		else logerror("YMZ280B: IRQ generated, but no callback specified!\n");
 	}
 }
 
@@ -218,9 +222,7 @@ int ymz280b_device::generate_adpcm(struct YMZ280BVoice *voice, INT16 *buffer, in
 			position++;
 			if (position >= voice->stop)
 			{
-				if (!samples)
-					samples |= 0x10000;
-
+				voice->ended = true;
 				break;
 			}
 		}
@@ -272,9 +274,7 @@ int ymz280b_device::generate_adpcm(struct YMZ280BVoice *voice, INT16 *buffer, in
 			}
 			if (position >= voice->stop)
 			{
-				if (!samples)
-					samples |= 0x10000;
-
+				voice->ended = true;
 				break;
 			}
 		}
@@ -318,9 +318,7 @@ int ymz280b_device::generate_pcm8(struct YMZ280BVoice *voice, INT16 *buffer, int
 			position += 2;
 			if (position >= voice->stop)
 			{
-				if (!samples)
-					samples |= 0x10000;
-
+				voice->ended = true;
 				break;
 			}
 		}
@@ -348,9 +346,7 @@ int ymz280b_device::generate_pcm8(struct YMZ280BVoice *voice, INT16 *buffer, int
 			}
 			if (position >= voice->stop)
 			{
-				if (!samples)
-					samples |= 0x10000;
-
+				voice->ended = true;
 				break;
 			}
 		}
@@ -392,9 +388,7 @@ int ymz280b_device::generate_pcm16(struct YMZ280BVoice *voice, INT16 *buffer, in
 			position += 4;
 			if (position >= voice->stop)
 			{
-				if (!samples)
-					samples |= 0x10000;
-
+				voice->ended = true;
 				break;
 			}
 		}
@@ -422,9 +416,7 @@ int ymz280b_device::generate_pcm16(struct YMZ280BVoice *voice, INT16 *buffer, in
 			}
 			if (position >= voice->stop)
 			{
-				if (!samples)
-					samples |= 0x10000;
-
+				voice->ended = true;
 				break;
 			}
 		}
@@ -510,13 +502,14 @@ void ymz280b_device::sound_stream_update(sound_stream &stream, stream_sample_t *
 			default:    samples_left = 0; memset(m_scratch, 0, new_samples * sizeof(m_scratch[0])); break;
 		}
 
-		/* if there are leftovers, ramp back to 0 */
-		if (samples_left)
+		if (samples_left || voice->ended)
 		{
-			/* note: samples_left bit 16 is set if the voice was finished at the same time the function ended */
-			int base = new_samples - (samples_left & 0xffff);
+			voice->ended = false;
+
+			/* if there are leftovers, ramp back to 0 */
+			int base = new_samples - samples_left;
 			int i, t = (base == 0) ? curr : m_scratch[base - 1];
-			for (i = 0; i < (samples_left & 0xffff); i++)
+			for (i = 0; i < samples_left; i++)
 			{
 				if (t < 0) t = -((-t * 15) >> 4);
 				else if (t > 0) t = (t * 15) >> 4;
@@ -588,7 +581,7 @@ void ymz280b_device::device_start()
 
 	/* initialize the rest of the structure */
 	m_master_clock = (double)clock() / 384.0;
-	m_mem_base = *region();
+	m_mem_base = region()->base();
 	m_mem_size = region()->bytes();
 	m_irq_handler.resolve();
 
@@ -619,6 +612,7 @@ void ymz280b_device::device_start()
 	for (int j = 0; j < 8; j++)
 	{
 		save_item(NAME(m_voice[j].playing), j);
+		save_item(NAME(m_voice[j].ended), j);
 		save_item(NAME(m_voice[j].keyon), j);
 		save_item(NAME(m_voice[j].looping), j);
 		save_item(NAME(m_voice[j].mode), j);
@@ -823,6 +817,8 @@ void ymz280b_device::write_to_register(int data)
 
 			case 0x86:      /* ROM readback / RAM write (low) -> update latch */
 				m_ext_mem_address = m_ext_mem_address_hi | m_ext_mem_address_mid | data;
+				if (m_ext_mem_enable)
+					m_ext_readlatch = ymz280b_read_memory(m_ext_mem_address);
 				break;
 
 			case 0x87:      /* RAM write */
@@ -941,7 +937,7 @@ WRITE8_MEMBER( ymz280b_device::write )
 const device_type YMZ280B = &device_creator<ymz280b_device>;
 
 ymz280b_device::ymz280b_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, YMZ280B, "YMZ280B", tag, owner, clock),
+	: device_t(mconfig, YMZ280B, "YMZ280B", tag, owner, clock, "ymz280b", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_current_register(0),
 		m_status_register(0),

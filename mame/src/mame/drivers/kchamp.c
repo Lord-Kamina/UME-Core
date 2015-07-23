@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi
 /***************************************************************************
 
 Karate Champ - (c) 1984 Data East
@@ -111,6 +113,10 @@ static ADDRESS_MAP_START( kchampvs_map, AS_PROGRAM, 8, kchamp_state )
 	AM_RANGE(0xd800, 0xd8ff) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0xd900, 0xdfff) AM_RAM
 	AM_RANGE(0xe000, 0xffff) AM_ROM
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 8, kchamp_state )
+	AM_RANGE(0x0000, 0xffff) AM_ROM AM_SHARE("decrypted_opcodes")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( kchampvs_io_map, AS_IO, 8, kchamp_state )
@@ -360,12 +366,6 @@ WRITE_LINE_MEMBER(kchamp_state::msmint)
 	}
 }
 
-static const msm5205_interface msm_interface =
-{
-	DEVCB_DRIVER_LINE_MEMBER(kchamp_state,msmint),         /* interrupt function */
-	MSM5205_S96_4B  /* 1 / 96 = 3906.25Hz playback */
-};
-
 /********************
 * 1 Player Version  *
 ********************/
@@ -404,6 +404,7 @@ static MACHINE_CONFIG_START( kchampvs, kchamp_state )
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_12MHz/4)    /* verified on pcb */
 	MCFG_CPU_PROGRAM_MAP(kchampvs_map)
 	MCFG_CPU_IO_MAP(kchampvs_io_map)
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", kchamp_state,  kc_interrupt)
 
 	MCFG_CPU_ADD("audiocpu", Z80, XTAL_12MHz/4)    /* verified on pcb */
@@ -420,9 +421,11 @@ static MACHINE_CONFIG_START( kchampvs, kchamp_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(kchamp_state, screen_update_kchampvs)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(kchamp)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", kchamp)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(kchamp_state, kchamp)
 
 
 	/* sound hardware */
@@ -435,7 +438,8 @@ static MACHINE_CONFIG_START( kchampvs, kchamp_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
 
 	MCFG_SOUND_ADD("msm", MSM5205, 375000)  /* verified on pcb, discrete circuit clock */
-	MCFG_SOUND_CONFIG(msm_interface)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(kchamp_state, msmint))         /* interrupt function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S96_4B)  /* 1 / 96 = 3906.25Hz playback */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -467,9 +471,11 @@ static MACHINE_CONFIG_START( kchamp, kchamp_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(kchamp_state, screen_update_kchamp)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(kchamp)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", kchamp)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(kchamp_state, kchamp)
 
 
 	/* sound hardware */
@@ -700,26 +706,19 @@ ROM_START( karatevs )
 ROM_END
 
 
-UINT8 *kchamp_state::decrypt_code()
+void kchamp_state::decrypt_code()
 {
-	address_space &space = m_maincpu->space(AS_PROGRAM);
-	UINT8 *decrypted = auto_alloc_array(machine(), UINT8, 0x10000);
 	UINT8 *rom = memregion("maincpu")->base();
-	int A;
-
-	space.set_decrypted_region(0x0000, 0xffff, decrypted);
-
-	for (A = 0; A < 0x10000; A++)
-		decrypted[A] = (rom[A] & 0x55) | ((rom[A] & 0x88) >> 2) | ((rom[A] & 0x22) << 2);
-
-	return decrypted;
+	for (int A = 0; A < 0x10000; A++)
+		m_decrypted_opcodes[A] = (rom[A] & 0x55) | ((rom[A] & 0x88) >> 2) | ((rom[A] & 0x22) << 2);
 }
 
 
 DRIVER_INIT_MEMBER(kchamp_state,kchampvs)
 {
+	decrypt_code();
+
 	UINT8 *rom = memregion("maincpu")->base();
-	UINT8 *decrypted = decrypt_code();
 	int A;
 
 	/*
@@ -731,14 +730,14 @@ DRIVER_INIT_MEMBER(kchamp_state,kchampvs)
 	    turns the encryption on, but this doesn't explain the
 	    encrypted address for the jump.
 	 */
-	decrypted[0] = rom[0];  /* this is a jump */
+	m_decrypted_opcodes[0] = rom[0];  /* this is a jump */
 	A = rom[1] + 256 * rom[2];
-	decrypted[A] = rom[A];  /* fix opcode on first jump address (again, a jump) */
+	m_decrypted_opcodes[A] = rom[A];  /* fix opcode on first jump address (again, a jump) */
 	rom[A+1] ^= 0xee;       /* fix address of the second jump */
 	A = rom[A+1] + 256 * rom[A+2];
-	decrypted[A] = rom[A];  /* fix third opcode (ld a,$xx) */
+	m_decrypted_opcodes[A] = rom[A];  /* fix third opcode (ld a,$xx) */
 	A += 2;
-	decrypted[A] = rom[A];  /* fix fourth opcode (ld ($xxxx),a */
+	m_decrypted_opcodes[A] = rom[A];  /* fix fourth opcode (ld ($xxxx),a */
 	/* and from here on, opcodes are encrypted */
 
 	m_counter = 0;

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*** m6805: Portable 6805 emulator ******************************************/
 
 #pragma once
@@ -24,7 +26,7 @@ class m6805_base_device : public cpu_device
 {
 public:
 	// construction/destruction
-	m6805_base_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock, const device_type type, const char *name, UINT32 addr_width);
+	m6805_base_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock, const device_type type, const char *name, UINT32 addr_width, const char *shortname, const char *source);
 
 protected:
 	// device-level overrides
@@ -49,7 +51,7 @@ protected:
 	virtual offs_t disasm_disassemble(char *buffer, offs_t pc, const UINT8 *oprom, const UINT8 *opram, UINT32 options);
 
 	// device_state_interface overrides
-	virtual void state_string_export(const device_state_entry &entry, astring &string);
+	virtual void state_string_export(const device_state_entry &entry, std::string &str);
 
 private:
 	// opcode/condition tables
@@ -293,7 +295,7 @@ class m6805_device : public m6805_base_device
 public:
 	// construction/destruction
 	m6805_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-		: m6805_base_device(mconfig, tag, owner, clock, M6805, "M6805", 12) { }
+		: m6805_base_device(mconfig, tag, owner, clock, M6805, "M6805", 12, "m6805", __FILE__) { }
 
 protected:
 	virtual void execute_set_input(int inputnum, int state);
@@ -306,7 +308,7 @@ class m68hc05eg_device : public m6805_base_device
 public:
 	// construction/destruction
 	m68hc05eg_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-		: m6805_base_device(mconfig, tag, owner, clock, M68HC05EG, "M68HC05EG", 13) { }
+		: m6805_base_device(mconfig, tag, owner, clock, M68HC05EG, "M68HC05EG", 13, "m68hc05eg", __FILE__) { }
 
 protected:
 	// device-level overrides
@@ -324,7 +326,7 @@ class m68705_device : public m6805_base_device
 public:
 	// construction/destruction
 	m68705_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-		: m6805_base_device(mconfig, tag, owner, clock, M68705, "M68705", 12) { }
+		: m6805_base_device(mconfig, tag, owner, clock, M68705, "M68705", 12, "m68705", __FILE__) { }
 
 protected:
 	// device-level overrides
@@ -342,7 +344,7 @@ class hd63705_device : public m6805_base_device
 public:
 	// construction/destruction
 	hd63705_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-		: m6805_base_device(mconfig, tag, owner, clock, HD63705, "HD63705", 16) { }
+		: m6805_base_device(mconfig, tag, owner, clock, HD63705, "HD63705", 16, "hd63705", __FILE__) { }
 
 protected:
 	// device-level overrides

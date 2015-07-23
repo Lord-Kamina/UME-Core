@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     Driver for Midway V-Unit games
@@ -56,7 +58,7 @@ TIMER_CALLBACK_MEMBER(midvunit_state::scanline_timer_cb)
 	if (scanline != -1)
 	{
 		m_maincpu->set_input_line(0, ASSERT_LINE);
-		m_scanline_timer->adjust(machine().primary_screen->time_until_pos(scanline + 1), scanline);
+		m_scanline_timer->adjust(m_screen->time_until_pos(scanline + 1), scanline);
 		timer_set(attotime::from_hz(25000000), TIMER_SCANLINE, -1);
 	}
 	else
@@ -74,10 +76,15 @@ void midvunit_state::video_start()
 	save_item(NAME(m_dma_data));
 	save_item(NAME(m_dma_data_index));
 	save_item(NAME(m_page_control));
-	save_item(NAME(m_video_changed));
+
+	m_video_changed = TRUE;
+	machine().save().register_postload(save_prepost_delegate(FUNC(midvunit_state::postload), this));
 }
 
-
+void midvunit_state::postload()
+{
+	m_video_changed = TRUE;
+}
 
 /*************************************
  *
@@ -118,7 +125,7 @@ void midvunit_renderer::render_flat(INT32 scanline, const extent_t &extent, cons
 
 void midvunit_renderer::render_tex(INT32 scanline, const extent_t &extent, const midvunit_object_data &objectdata, int threadid)
 {
-	UINT16 pixdata = objectdata.pixdata & 0xff00;
+	UINT16 pixdata = objectdata.pixdata;
 	const UINT8 *texbase = objectdata.texbase;
 	int xstep = objectdata.dither + 1;
 	UINT16 *dest = objectdata.destbase + scanline * 512;
@@ -146,7 +153,7 @@ void midvunit_renderer::render_tex(INT32 scanline, const extent_t &extent, const
 	/* general case; render every pixel */
 	for (x = startx; x < stopx; x += xstep)
 	{
-		dest[x] = pixdata | texbase[((v >> 8) & 0xff00) + (u >> 16)];
+		dest[x] = pixdata + texbase[((v >> 8) & 0xff00) + (u >> 16)];
 		u += dudx;
 		v += dvdx;
 	}
@@ -155,7 +162,7 @@ void midvunit_renderer::render_tex(INT32 scanline, const extent_t &extent, const
 
 void midvunit_renderer::render_textrans(INT32 scanline, const extent_t &extent, const midvunit_object_data &objectdata, int threadid)
 {
-	UINT16 pixdata = objectdata.pixdata & 0xff00;
+	UINT16 pixdata = objectdata.pixdata;
 	const UINT8 *texbase = objectdata.texbase;
 	int xstep = objectdata.dither + 1;
 	UINT16 *dest = objectdata.destbase + scanline * 512;
@@ -185,7 +192,7 @@ void midvunit_renderer::render_textrans(INT32 scanline, const extent_t &extent, 
 	{
 		UINT8 pix = texbase[((v >> 8) & 0xff00) + (u >> 16)];
 		if (pix != 0)
-			dest[x] = pixdata | pix;
+			dest[x] = pixdata + pix;
 		u += dudx;
 		v += dvdx;
 	}
@@ -304,16 +311,22 @@ void midvunit_renderer::process_dma_queue()
 	/* make the vertices inclusive of right/bottom points */
 	make_vertices_inclusive(vert);
 
-	/* handle flat-shaded quads here */
+	/* set the palette base */
+	UINT16 pixdata = m_state.m_dma_data[1];
+
 	render_delegate callback;
 	bool textured = ((m_state.m_dma_data[0] & 0x300) == 0x100);
-	if (!textured)
-		callback = render_delegate(FUNC(midvunit_renderer::render_flat), this);
 
+	/* handle flat-shaded quads here */
+	if (!textured)
+	{
+		callback = render_delegate(FUNC(midvunit_renderer::render_flat), this);
+		pixdata += (m_state.m_dma_data[0] & 0x00ff);
+	}
 	/* handle textured quads here */
 	else
 	{
-		/* if textured, add the texture info */
+		/* add the texture info */
 		vert[0].p[0] = (float)(m_state.m_dma_data[10] & 0xff) * 65536.0f + 32768.0f;
 		vert[0].p[1] = (float)(m_state.m_dma_data[10] >> 8) * 65536.0f + 32768.0f;
 		vert[1].p[0] = (float)(m_state.m_dma_data[11] & 0xff) * 65536.0f + 32768.0f;
@@ -325,30 +338,37 @@ void midvunit_renderer::process_dma_queue()
 
 		/* handle non-masked, non-transparent quads */
 		if ((m_state.m_dma_data[0] & 0xc00) == 0x000)
+		{
 			callback = render_delegate(FUNC(midvunit_renderer::render_tex), this);
-
+		}
 		/* handle non-masked, transparent quads */
 		else if ((m_state.m_dma_data[0] & 0xc00) == 0x800)
+		{
 			callback = render_delegate(FUNC(midvunit_renderer::render_textrans), this);
-
+		}
 		/* handle masked, transparent quads */
 		else if ((m_state.m_dma_data[0] & 0xc00) == 0xc00)
+		{
 			callback = render_delegate(FUNC(midvunit_renderer::render_textransmask), this);
-
-		/* handle masked, non-transparent quads */
+			pixdata += (m_state.m_dma_data[0] & 0x00ff);
+		}
+		/* handle masked, non-transparent quads (invalid?) */
 		else
+		{
 			callback = render_delegate(FUNC(midvunit_renderer::render_flat), this);
+			pixdata += (m_state.m_dma_data[0] & 0x00ff);
+		}
 	}
 
 	/* set up the object data for this triangle */
 	midvunit_object_data &objectdata = object_data_alloc();
 	objectdata.destbase = &m_state.m_videoram[(m_state.m_page_control & 4) ? 0x40000 : 0x00000];
 	objectdata.texbase = (UINT8 *)m_state.m_textureram.target() + (m_state.m_dma_data[14] * 256);
-	objectdata.pixdata = m_state.m_dma_data[1] | (m_state.m_dma_data[0] & 0x00ff);
+	objectdata.pixdata = pixdata;
 	objectdata.dither = ((m_state.m_dma_data[0] & 0x2000) != 0);
 
 	/* render as a quad */
-	render_polygon<4>(machine().primary_screen->visible_area(), callback, textured ? 2 : 0, vert);
+	render_polygon<4>(m_state.m_screen->visible_area(), callback, textured ? 2 : 0, vert);
 }
 
 
@@ -403,7 +423,7 @@ WRITE32_MEMBER(midvunit_state::midvunit_page_control_w)
 		m_video_changed = TRUE;
 		if (LOG_DMA && machine().input().code_pressed(KEYCODE_L))
 			logerror("##########################################################\n");
-		machine().primary_screen->update_partial(machine().primary_screen->vpos() - 1);
+		m_screen->update_partial(m_screen->vpos() - 1);
 	}
 	m_page_control = data;
 }
@@ -431,7 +451,7 @@ WRITE32_MEMBER(midvunit_state::midvunit_video_control_w)
 
 	/* update the scanline timer */
 	if (offset == 0)
-		m_scanline_timer->adjust(machine().primary_screen->time_until_pos((data & 0x1ff) + 1, 0), data & 0x1ff);
+		m_scanline_timer->adjust(m_screen->time_until_pos((data & 0x1ff) + 1, 0), data & 0x1ff);
 
 	/* if something changed, update our parameters */
 	if (old != m_video_regs[offset] && m_video_regs[6] != 0 && m_video_regs[11] != 0)
@@ -443,14 +463,14 @@ WRITE32_MEMBER(midvunit_state::midvunit_video_control_w)
 		visarea.max_x = (m_video_regs[6] + m_video_regs[2] - m_video_regs[5]) % m_video_regs[6];
 		visarea.min_y = 0;
 		visarea.max_y = (m_video_regs[11] + m_video_regs[7] - m_video_regs[10]) % m_video_regs[11];
-		machine().primary_screen->configure(m_video_regs[6], m_video_regs[11], visarea, HZ_TO_ATTOSECONDS(MIDVUNIT_VIDEO_CLOCK / 2) * m_video_regs[6] * m_video_regs[11]);
+		m_screen->configure(m_video_regs[6], m_video_regs[11], visarea, HZ_TO_ATTOSECONDS(MIDVUNIT_VIDEO_CLOCK / 2) * m_video_regs[6] * m_video_regs[11]);
 	}
 }
 
 
 READ32_MEMBER(midvunit_state::midvunit_scanline_r)
 {
-	return machine().primary_screen->vpos();
+	return m_screen->vpos();
 }
 
 
@@ -494,7 +514,7 @@ WRITE32_MEMBER(midvunit_state::midvunit_paletteram_w)
 
 	COMBINE_DATA(&m_generic_paletteram_32[offset]);
 	newword = m_generic_paletteram_32[offset];
-	palette_set_color_rgb(machine(), offset, pal5bit(newword >> 10), pal5bit(newword >> 5), pal5bit(newword >> 0));
+	m_palette->set_pen_color(offset, pal5bit(newword >> 10), pal5bit(newword >> 5), pal5bit(newword >> 0));
 }
 
 

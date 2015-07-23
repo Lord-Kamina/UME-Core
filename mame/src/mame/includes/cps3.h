@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Andreas Naive, Tomasz Slanina, ElSemi
 /***************************************************************************
 
     Capcom CPS-3 Hardware
@@ -5,12 +7,19 @@
 ****************************************************************************/
 
 #include "machine/intelfsh.h"
+#include "cpu/sh2/sh2.h"
+#include "audio/cps3.h"
+
 
 class cps3_state : public driver_device
 {
 public:
 	cps3_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
+		m_cps3sound(*this, "cps3sound"),
 		m_mainram(*this, "mainram"),
 		m_spriteram(*this, "spriteram"),
 		m_colourram(*this, "colourram"),
@@ -20,7 +29,14 @@ public:
 		m_tilemap50_regs_base(*this, "tmap50_regs"),
 		m_fullscreenzoom(*this, "fullscreenzoom"),
 		m_0xc0000000_ram(*this, "0xc0000000_ram"),
-		m_maincpu(*this, "maincpu") { }
+		m_decrypted_gamerom(*this, "decrypted_gamerom"),
+		m_0xc0000000_ram_decrypted(*this, "0xc0000000_ram_decrypted")
+	{ }
+
+	required_device<sh2_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+	required_device<cps3_sound_device> m_cps3sound;
 
 	required_shared_ptr<UINT32> m_mainram;
 	required_shared_ptr<UINT32> m_spriteram;
@@ -31,13 +47,12 @@ public:
 	required_shared_ptr<UINT32> m_tilemap50_regs_base;
 	required_shared_ptr<UINT32> m_fullscreenzoom;
 	required_shared_ptr<UINT32> m_0xc0000000_ram;
+	required_shared_ptr<UINT32> m_decrypted_gamerom;
+	required_shared_ptr<UINT32> m_0xc0000000_ram_decrypted;
 
 	fujitsu_29f016a_device *m_simm[7][8];
-	UINT32* m_decrypted_bios;
-	UINT32* m_decrypted_gamerom;
 	UINT32 m_cram_gfxflash_bank;
 	UINT32* m_nops;
-	UINT32* m_0xc0000000_ram_decrypted;
 	UINT32* m_char_ram;
 	UINT32* m_eeprom;
 	UINT32 m_ss_pal_base;
@@ -68,6 +83,7 @@ public:
 	unsigned short m_lastb;
 	unsigned short m_lastb2;
 	UINT8* m_user5region;
+
 	DECLARE_READ32_MEMBER(cps3_ssram_r);
 	DECLARE_WRITE32_MEMBER(cps3_ssram_w);
 	DECLARE_WRITE32_MEMBER(cps3_0xc0000000_ram_w);
@@ -96,13 +112,14 @@ public:
 	DECLARE_WRITE32_MEMBER(cps3_unk_vidregs_w);
 	DECLARE_READ32_MEMBER(cps3_colourram_r);
 	DECLARE_WRITE32_MEMBER(cps3_colourram_w);
-	DECLARE_DIRECT_UPDATE_MEMBER(cps3_direct_handler);
 	DECLARE_DRIVER_INIT(sfiii3);
 	DECLARE_DRIVER_INIT(sfiii);
 	DECLARE_DRIVER_INIT(redearth);
 	DECLARE_DRIVER_INIT(jojo);
 	DECLARE_DRIVER_INIT(jojoba);
 	DECLARE_DRIVER_INIT(sfiii2);
+	DECLARE_DRIVER_INIT(cps3boot);
+	SH2_DMA_KLUDGE_CB(dma_callback);
 	virtual void machine_reset();
 	virtual void video_start();
 	UINT32 screen_update_cps3(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
@@ -112,7 +129,8 @@ public:
 	UINT16 rotxor(UINT16 val, UINT16 xorval);
 	UINT32 cps3_mask(UINT32 address, UINT32 key1, UINT32 key2);
 	void cps3_decrypt_bios();
-	void init_common(UINT32 key1, UINT32 key2, int altEncryption);
+	void init_common(void);
+	void init_crypt(UINT32 key1, UINT32 key2, int altEncryption);
 	void cps3_set_mame_colours(int colournum, UINT16 data, UINT32 fadeval);
 	void cps3_draw_tilemapsprite_line(int tmnum, int drawline, bitmap_rgb32 &bitmap, const rectangle &cliprect );
 	UINT32 cps3_flashmain_r(address_space &space, int which, UINT32 offset, UINT32 mem_mask);
@@ -124,61 +142,7 @@ public:
 	void cps3_process_character_dma(UINT32 address);
 	void copy_from_nvram();
 	inline void cps3_drawgfxzoom(bitmap_rgb32 &dest_bmp, const rectangle &clip, gfx_element *gfx,
-									unsigned int code, unsigned int color, int flipx, int flipy, int sx, int sy,
-									int transparency, int transparent_color,
-									int scalex, int scaley, bitmap_ind8 *pri_buffer, UINT32 pri_mask);
-
-	required_device<cpu_device> m_maincpu;
+		unsigned int code, unsigned int color, int flipx, int flipy, int sx, int sy,
+		int transparency, int transparent_color,
+		int scalex, int scaley, bitmap_ind8 *pri_buffer, UINT32 pri_mask);
 };
-
-
-/*----------- defined in audio/cps3.c -----------*/
-
-#define CPS3_VOICES (16)
-
-//**************************************************************************
-//  TYPE DEFINITIONS
-//**************************************************************************
-
-struct cps3_voice
-{
-	cps3_voice() :
-		pos(0),
-		frac(0)
-	{
-		memset(regs, 0, sizeof(UINT32)*8);
-	}
-
-	UINT32 regs[8];
-	UINT32 pos;
-	UINT16 frac;
-};
-
-// ======================> cps3_sound_device
-
-class cps3_sound_device : public device_t,
-							public device_sound_interface
-{
-public:
-	cps3_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	~cps3_sound_device() { }
-
-protected:
-	// device-level overrides
-	virtual void device_start();
-
-	// sound stream update overrides
-	virtual void sound_stream_update(sound_stream &stream, stream_sample_t **inputs, stream_sample_t **outputs, int samples);
-
-public:
-	DECLARE_WRITE32_MEMBER( cps3_sound_w );
-	DECLARE_READ32_MEMBER( cps3_sound_r );
-
-private:
-	sound_stream *m_stream;
-	cps3_voice m_voice[CPS3_VOICES];
-	UINT16     m_key;
-	INT8*      m_base;
-};
-
-extern const device_type CPS3;

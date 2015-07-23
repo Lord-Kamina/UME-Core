@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Angelo Salese, R. Belmont
 /***************************************************************************
 
   machine/stvcd.c - Sega Saturn and ST-V CD-ROM handling
@@ -95,6 +97,11 @@ int saturn_state::get_track_index(UINT32 fad)
 	return 1;
 }
 
+int saturn_state::sega_cdrom_get_adr_control(cdrom_file *file, int track)
+{
+	return BITSWAP8(cdrom_get_adr_control(file, cur_track),3,2,1,0,7,6,5,4);
+}
+
 void saturn_state::cr_standard_return(UINT16 cur_status)
 {
 	if ((cd_stat & 0x0f00) == CD_STAT_SEEK)
@@ -103,7 +110,7 @@ void saturn_state::cr_standard_return(UINT16 cur_status)
 		UINT8 seek_track = cdrom_get_track(cdrom, cd_fad_seek-150);
 
 		cr1 = cur_status | (playtype << 7) | 0x00 | (cdda_repeat_count & 0xf);
-		cr2 =  (seek_track == 0xff) ? 0xffff : ((cdrom_get_adr_control(cdrom, seek_track)<<8) | seek_track);
+		cr2 =  (seek_track == 0xff) ? 0xffff : ((sega_cdrom_get_adr_control(cdrom, seek_track)<<8) | seek_track);
 		cr3 = (get_track_index(cd_fad_seek)<<8) | (cd_fad_seek>>16); //index & 0xff00
 		cr4 = cd_fad_seek;
 	}
@@ -114,7 +121,7 @@ void saturn_state::cr_standard_return(UINT16 cur_status)
 		- Whizz: wpset 0x608f030,4,w,wpdata==0x100&&pc!=0x6040006
 		*/
 		cr1 = cur_status | (playtype << 7) | 0x00 | (cdda_repeat_count & 0xf); //options << 4 | repeat & 0xf
-		cr2 = (cur_track == 0xff) ? 0xffff : (cdrom_get_adr_control(cdrom, cur_track)<<8 | cur_track); // TODO: fix current track
+		cr2 = (cur_track == 0xff) ? 0xffff : ((sega_cdrom_get_adr_control(cdrom, cur_track)<<8) | (cdrom_get_track(cdrom, cd_curfad-150)+1));
 		cr3 = (get_track_index(cd_curfad)<<8) | (cd_curfad>>16); //index & 0xff00
 		cr4 = cd_curfad;
 	}
@@ -197,7 +204,7 @@ void saturn_state::cd_exec_command( void )
 					break;
 
 				default:
-					mame_printf_error("CD: Unknown request to Get Session Info %x\n", cr1 & 0xff);
+					osd_printf_error("CD: Unknown request to Get Session Info %x\n", cr1 & 0xff);
 					cr1 = cd_stat;
 					cr2 = 0;
 					cr3 = 0;
@@ -855,7 +862,11 @@ void saturn_state::cd_exec_command( void )
 					//printf("Partition %08x %04x\n",bufnum,cr4);
 				}
 
-				hirqreg |= (CMOK|DRDY);
+				//printf("%04x\n",cr4);
+				if(cr4 == 0)
+					hirqreg |= (CMOK);
+				else
+					hirqreg |= (CMOK|DRDY);					
 				status_type = 1;
 			}
 			break;
@@ -1422,9 +1433,7 @@ void saturn_state::stvcd_reset( void )
 	cd_stat |= CD_STAT_PERI;
 	cur_track = 0xff;
 
-	if (curdir != (direntryT *)NULL)
-		auto_free(machine(), curdir);
-	curdir = (direntryT *)NULL;     // no directory yet
+	curdir.clear();
 
 	xfertype = XFERTYPE_INVALID;
 	xfertype32 = XFERTYPE32_INVALID;
@@ -1903,6 +1912,7 @@ void saturn_state::cd_writeWord(UINT32 addr, UINT16 data)
 		cr1 = data;
 		cd_stat &= ~CD_STAT_PERI;
 		cmd_pending |= 1;
+		sh1_timer->adjust(attotime::never);
 		break;
 	case 0x001c:
 	case 0x001e:
@@ -1986,7 +1996,7 @@ READ32_MEMBER( saturn_state::stvcd_r )
 			}
 			else
 			{
-				mame_printf_error("CD: Unknown data buffer read @ mask = %08x\n", mem_mask);
+				osd_printf_error("CD: Unknown data buffer read @ mask = %08x\n", mem_mask);
 			}
 
 			break;
@@ -2110,7 +2120,7 @@ void saturn_state::read_new_dir(UINT32 fileno)
 			// easy to fix, but make sure we *need* to first
 			if (curroot.length > MAX_DIR_SIZE)
 			{
-				mame_printf_error("ERROR: root directory too big (%d)\n", curroot.length);
+				osd_printf_error("ERROR: root directory too big (%d)\n", curroot.length);
 			}
 
 			// done with all that, read the root directory now
@@ -2121,7 +2131,7 @@ void saturn_state::read_new_dir(UINT32 fileno)
 	{
 		if (curdir[fileno].length > MAX_DIR_SIZE)
 		{
-			mame_printf_error("ERROR: new directory too big (%d)!\n", curdir[fileno].length);
+			osd_printf_error("ERROR: new directory too big (%d)!\n", curdir[fileno].length);
 		}
 		make_dir_current(curdir[fileno].firstfad);
 	}
@@ -2132,11 +2142,10 @@ void saturn_state::make_dir_current(UINT32 fad)
 {
 	int i;
 	UINT32 nextent, numentries;
-	UINT8 *sect;
+	dynamic_buffer sect(MAX_DIR_SIZE);
 	direntryT *curentry;
 
-	sect = (UINT8 *)malloc(MAX_DIR_SIZE);
-	memset(sect, 0, MAX_DIR_SIZE);
+	memset(&sect[0], 0, MAX_DIR_SIZE);
 	if(sectlenin != 2048)
 		popmessage("Sector Length %d, contact MAMEdev (1)",sectlenin);
 
@@ -2160,13 +2169,8 @@ void saturn_state::make_dir_current(UINT32 fad)
 		}
 	}
 
-	if (curdir != (direntryT *)NULL)
-	{
-		auto_free(machine(), curdir);
-	}
-
-	curdir = auto_alloc_array(machine(), direntryT, numentries);
-	curentry = curdir;
+	curdir.resize(numentries);
+	curentry = &curdir[0];
 	numfiles = numentries;
 
 	nextent = 0;
@@ -2230,17 +2234,11 @@ void saturn_state::make_dir_current(UINT32 fad)
 			i = numfiles;
 		}
 	}
-
-	free(sect);
 }
 
 void saturn_state::stvcd_exit( void )
 {
-	if (curdir != (direntryT *)NULL)
-	{
-		auto_free(machine(), curdir);
-		curdir = (direntryT *)NULL;
-	}
+	curdir.clear();
 
 	if (cdrom)
 	{
@@ -2285,6 +2283,8 @@ void saturn_state::cd_readTOC(void)
 	{
 		if (cdrom)
 		{
+			//tocbuf[tocptr] = sega_cdrom_get_adr_control(cdrom, i);
+			//HACK: ddsom does not enter ingame with the line above!
 			tocbuf[tocptr] = cdrom_get_adr_control(cdrom, i)<<4 | 0x01;
 		}
 		else

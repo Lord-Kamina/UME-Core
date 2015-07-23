@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         Bashkiria-2M video driver by Miodrag Milanovic
@@ -46,13 +48,13 @@ UINT32 b2m_state::screen_update_b2m(screen_device &screen, bitmap_ind16 &bitmap,
 }
 
 static const rgb_t b2m_palette[4] = {
-	MAKE_RGB(0x00, 0x00, 0x00), // 0
-	MAKE_RGB(0x00, 0x00, 0x00), // 1
-	MAKE_RGB(0x00, 0x00, 0x00), // 2
-	MAKE_RGB(0x00, 0x00, 0x00), // 3
+	rgb_t(0x00, 0x00, 0x00), // 0
+	rgb_t(0x00, 0x00, 0x00), // 1
+	rgb_t(0x00, 0x00, 0x00), // 2
+	rgb_t(0x00, 0x00, 0x00), // 3
 };
 
-void b2m_state::palette_init()
+PALETTE_INIT_MEMBER(b2m_state, b2m)
 {
-	palette_set_colors(machine(), 0, b2m_palette, ARRAY_LENGTH(b2m_palette));
+	palette.set_pen_colors(0, b2m_palette, ARRAY_LENGTH(b2m_palette));
 }

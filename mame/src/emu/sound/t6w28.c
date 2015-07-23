@@ -1,9 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /***************************************************************************
 
   t6w28.c (based on sn74696.c)
 
   The t6w28 sound core is used in the SNK NeoGeo Pocket. It is a stereo
-  sound chip based on 2 partial sn76498a cores.
+  sound chip based on 2 partial sn76489a cores.
 
   The block diagram for this chip is as follows:
 
@@ -294,7 +296,7 @@ void t6w28_device::device_start()
 	int i;
 
 	m_sample_rate = clock() / 16;
-	m_channel = machine().sound().stream_alloc(*this, 0, 2, m_sample_rate, this);
+	m_channel = machine().sound().stream_alloc(*this, 0, 2, m_sample_rate);
 
 	for (i = 0;i < 8;i++) m_volume[i] = 0;
 
@@ -348,7 +350,7 @@ void t6w28_device::set_enable(bool enable)
 const device_type T6W28 = &device_creator<t6w28_device>;
 
 t6w28_device::t6w28_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, T6W28, "T6W28", tag, owner, clock),
+	: device_t(mconfig, T6W28, "T6W28", tag, owner, clock, "t6w28", __FILE__),
 		device_sound_interface(mconfig, *this)
 {
 }

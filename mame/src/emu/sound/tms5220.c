@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Frank Palazzolo, Aaron Giles, Jonathan Gevaryahu, Raphael Nabet, Couriersud, Michael Zapf
 /**********************************************************************************************
 
      TMS5200/5220 simulator
@@ -23,7 +25,7 @@
      US patent 4,335,277 describes the complete 52xx chip
      Special Thanks to Larry Brantingham for answering questions regarding the chip details
 
-   TMS5200/TMS5220/TMS5220C:
+   TMS5200/TMS5220/TMS5220C/CD2501E/CD2501ECD:
 
                  +-----------------+
         D7(d0)   |  1           28 |  /RS
@@ -120,6 +122,7 @@ Patent notes (important timing info for interpolation):
     01      7 0#3 4 5 6 7 0#3 4 5 6 7 0#3 4 5
     10      7 0#5 6 7 0#5 6 7 0#5 6 7 0#5 6 7
     11      7 0#7 0#7 0#7 0#7 0#7 0#7 0#7 0#7
+    Based on the behavior tested on the CD2501ECD this is assumed to be the same for that chip as well.
 
 Most of the following is based on figure 8c of 4,331,836, which is the
   TMS5100/TMC0280 patent, but the same information applies to the TMS52xx
@@ -155,7 +158,7 @@ Interpolation is inhibited (i.e. interpolation at IP frames will not happen
 
 
 ****Documentation of chip commands:***
-    x0x0xbcc : on 5200/5220: NOP (does nothing); on 5220C: Select frame length by cc, and b selects whether every frame is preceded by 2 bits to select the frame length (instead of using the value set by cc); the default (and after a reset command) is as if '0x00' was written, i.e. for frame length (200 samples) and 0 for whether the preceding 2 bits are enabled (off)
+    x0x0xbcc : on 5200/5220: NOP (does nothing); on 5220C and CD2501ECD: Select frame length by cc, and b selects whether every frame is preceded by 2 bits to select the frame length (instead of using the value set by cc); the default (and after a reset command) is as if '0x00' was written, i.e. for frame length (200 samples) and 0 for whether the preceding 2 bits are enabled (off)
 
     x001xxxx: READ BYTE (RDBY) Sends eight read bit commands (M0 high M1 low) to VSM and reads the resulting bits serially into a temporary register, which becomes readable as the next byte read from the tms52xx once ready goes active. Note the bit order of the byte read from the TMS52xx is BACKWARDS as compared to the actual data order as in the rom on the VSM chips; the read byte command of the tms5100 reads the bits in the 'correct' order. This was IMHO a rather silly design decision of TI. (I (LN) asked Larry Brantingham about this but he wasn't involved with the TMS52xx chips, just the 5100); There's ASCII data in the TI 99/4 speech module VSMs which has the bit order reversed on purpose because of this!
     TALK STATUS must be CLEAR for this command to work; otherwise it is treated as a NOP.
@@ -175,10 +178,7 @@ Interpolation is inhibited (i.e. interpolation at IP frames will not happen
 
 
     Other chip differences:
-    The 5220 is 'noisier' when playing unvoiced frames than the 5220C is; I (LN) think the 5220C may use a different energy table (or use one value lower in the normal energy table) than the 5220 does, possibly only when playing unvoiced frames, but I can't prove this without a decap; the 5220C's PROMOUT pin (for dumping the lpc tables as played) is non-functional due to a changed design or a die bug (or may need special timing to know exactly when to read it, different than the 5200 and 5220 which are both easily readable).
-    In addition, the NOP commands on the FIFO interface have been changed on the 5220C and data passed in the low bits has a meaning regarding frame length, see above.
-
-    It is also possible but inconclusive that the chirp table was changed; The LPC tables between the 5220 and 5220C are MOSTLY the same of not completely so, but as mentioned above the energy table has some sort of difference.
+    The 5220C (and CD2501ECD maybe?) are quieter due to a better dac arrangement on die which allows less crossover between bits, based on the decap differences.
 
 
 ***MAME Driver specific notes:***
@@ -219,6 +219,9 @@ upgraded to add it by hacking on a 'Squawk & Talk' pinball speech board
     Home computer: TI 99/4 PHP1500 Speech module (along with two VSM
 serial chips); Street Electronics Corp.'s Apple II 'Echo 2' Speech
 synthesizer (early cards only)
+
+CD2501ECD: (1983)
+    Home computer: TI 99/8 (prototypes only)
 
 TMS5220: (mostly on things made between 1981 and 1984-1985)
     Arcade: Bally/Midway's 'NFL Football'; Atari's 'Star Wars',
@@ -265,8 +268,7 @@ static INT16 clip_analog(INT16 cliptemp);
 
 /* Other hacks */
 /* HACK?: if defined, outputs the low 4 bits of the lattice filter to the i/o
- * or clip logic, even though the real hardware doesn't do this...
- * ...actually the tms5220c might legitamately do this! */
+ * or clip logic, even though the real hardware doesn't do this, partially verified by decap */
 #undef ALLOW_4_LSB
 
 
@@ -317,13 +319,17 @@ static INT16 clip_analog(INT16 cliptemp);
 #define TMS5220_IS_5220C    (4)
 #define TMS5220_IS_5200     (5)
 #define TMS5220_IS_5220     (6)
+#define TMS5220_IS_CD2501ECD (7)
 
-#define TMS5220_IS_TMC0285  TMS5220_IS_5200
+#define TMS5220_IS_CD2501E  TMS5220_IS_5200
 
-static const UINT8 reload_table[4] = { 0, 2, 4, 6 }; //sample count reload for 5220c only; 5200 and 5220 always reload with 0; keep in mind this is loaded on IP=0 PC=12 subcycle=1 so it immediately will increment after one sample, effectively being 1,3,5,7 as in the comments above.
+#define TMS5220_HAS_RATE_CONTROL ((m_variant == TMS5220_IS_5220C) || (m_variant == TMS5220_IS_CD2501ECD))
+#define TMS5220_IS_52xx ((m_variant == TMS5220_IS_5220C) || (m_variant == TMS5220_IS_5200) || (m_variant == TMS5220_IS_5220) || (m_variant == TMS5220_IS_CD2501ECD))
+
+static const UINT8 reload_table[4] = { 0, 2, 4, 6 }; //sample count reload for 5220c and cd2501ecd only; 5200 and 5220 always reload with 0; keep in mind this is loaded on IP=0 PC=12 subcycle=1 so it immediately will increment after one sample, effectively being 1,3,5,7 as in the comments above.
 
 // Pull in the ROM tables
-#include "tms5110r.c"
+#include "tms5110r.inc"
 
 
 void tms5220_device::set_variant(int variant)
@@ -331,7 +337,8 @@ void tms5220_device::set_variant(int variant)
 	switch (variant)
 	{
 		case TMS5220_IS_5200:
-			m_coeff = &tms5200_coeff;
+		case TMS5220_IS_CD2501ECD:
+			m_coeff = &T0285_2501E_coeff;
 			break;
 		case TMS5220_IS_5220C:
 		case TMS5220_IS_5220:
@@ -386,7 +393,7 @@ void tms5220_device::register_for_save_states()
 	save_item(NAME(m_PC));
 	save_item(NAME(m_IP));
 	save_item(NAME(m_inhibit));
-	save_item(NAME(m_tms5220c_rate));
+	save_item(NAME(m_c_variant_rate));
 	save_item(NAME(m_pitch_count));
 
 	save_item(NAME(m_u));
@@ -401,6 +408,12 @@ void tms5220_device::register_for_save_states()
 	save_item(NAME(m_digital_select));
 
 	save_item(NAME(m_io_ready));
+
+	save_item(NAME(m_true_timing));
+
+	save_item(NAME(m_rs_ws));
+	save_item(NAME(m_read_latch));
+	save_item(NAME(m_write_latch));
 }
 
 
@@ -464,7 +477,7 @@ void tms5220_device::data_write(int data)
 #ifdef DEBUG_FIFO
 			logerror("data_write: Added byte to FIFO (current count=%2d)\n", m_fifo_count);
 #endif
-			update_status_and_ints();
+			update_fifo_status_and_ints();
 			if ((m_talk_status == 0) && (m_buffer_low == 0)) // we just unset buffer low with that last write, and talk status *was* zero...
 			{
 			int i;
@@ -475,7 +488,7 @@ void tms5220_device::data_write(int data)
 				// TODO: the 3 lines below (and others) are needed for victory to not fail its selftest due to a sample ending too late, may require additional investigation
 				m_subcycle = m_subc_reload;
 				m_PC = 0;
-				m_IP = reload_table[m_tms5220c_rate&0x3]; // is this correct? should this be always 7 instead, so that the new frame is loaded quickly?
+				m_IP = reload_table[m_c_variant_rate&0x3]; // is this correct? should this be always 7 instead, so that the new frame is loaded quickly?
 				m_new_frame_energy_idx = 0;
 				m_new_frame_pitch_idx = 0;
 				for (i = 0; i < 4; i++)
@@ -504,7 +517,7 @@ void tms5220_device::data_write(int data)
 
 /**********************************************************************************************
 
-     update_status_and_ints -- check to see if the various flags should be on or off
+     update_fifo_status_and_ints -- check to see if the various flags should be on or off
      Description of flags, and their position in the status register:
       From the data sheet:
         bit D0(bit 7) = TS - Talk Status is active (high) when the VSP is processing speech data.
@@ -525,10 +538,10 @@ void tms5220_device::data_write(int data)
 
 ***********************************************************************************************/
 
-void tms5220_device::update_status_and_ints()
+void tms5220_device::update_fifo_status_and_ints()
 {
-	/* update flags and set ints if needed */
-
+	/* update 52xx fifo flags and set ints if needed */
+	if (!TMS5220_IS_52xx) return; // bail out if not a 52xx chip
 	update_ready_state();
 
 	/* BL is set if neither byte 9 nor 8 of the fifo are in use; this
@@ -595,7 +608,7 @@ int tms5220_device::extract_bits(int count)
 				m_fifo[m_fifo_head] = 0; // zero the newly depleted fifo head byte
 				m_fifo_head = (m_fifo_head + 1) % FIFO_SIZE;
 				m_fifo_bits_taken = 0;
-				update_status_and_ints();
+				update_fifo_status_and_ints();
 			}
 		}
 	}
@@ -755,7 +768,7 @@ void tms5220_device::process(INT16 *buffer, unsigned int size)
 			// end HACK
 
 			/* appropriately override the interp count if needed; this will be incremented after the frame parse! */
-			m_IP = reload_table[m_tms5220c_rate&0x3];
+			m_IP = reload_table[m_c_variant_rate&0x3];
 
 #ifdef PERFECT_INTERPOLATION_HACK
 			/* remember previous frame energy, pitch, and coefficients */
@@ -787,7 +800,7 @@ void tms5220_device::process(INT16 *buffer, unsigned int size)
 				{
 					m_talk_status = m_speak_external = 0;
 					set_interrupt_state(1);
-					update_status_and_ints();
+					update_fifo_status_and_ints();
 				}
 
 			/* in all cases where interpolation would be inhibited, set the inhibit flag; otherwise clear it.
@@ -907,9 +920,9 @@ void tms5220_device::process(INT16 *buffer, unsigned int size)
 			 * disabled, forcing all samples beyond 51d to be == 51d
 			 */
 			if (m_pitch_count >= 51)
-				m_excitation_data = m_coeff->chirptable[51];
+				m_excitation_data = (INT8)m_coeff->chirptable[51];
 			else /*m_pitch_count < 51*/
-				m_excitation_data = m_coeff->chirptable[m_pitch_count];
+				m_excitation_data = (INT8)m_coeff->chirptable[m_pitch_count];
 		}
 
 		// Update LFSR *20* times every sample (once per T cycle), like patent shows
@@ -1165,10 +1178,10 @@ void tms5220_device::process_command(unsigned char cmd)
 			}
 			break;
 
-		case 0x00: case 0x20: /* set rate (tms5220c only), otherwise NOP */
-			if (m_variant == TMS5220_IS_5220C)
+		case 0x00: case 0x20: /* set rate (tms5220c and cd2501ecd only), otherwise NOP */
+			if (TMS5220_HAS_RATE_CONTROL)
 			{
-				m_tms5220c_rate = cmd&0x0F;
+				m_c_variant_rate = cmd&0x0F;
 			}
 		break;
 
@@ -1209,7 +1222,7 @@ void tms5220_device::process_command(unsigned char cmd)
 			// TODO: similar to the victory case described above, but for VSM speech
 			m_subcycle = m_subc_reload;
 			m_PC = 0;
-			m_IP = reload_table[m_tms5220c_rate&0x3];
+			m_IP = reload_table[m_c_variant_rate&0x3];
 			m_new_frame_energy_idx = 0;
 			m_new_frame_pitch_idx = 0;
 			int i;
@@ -1240,7 +1253,7 @@ void tms5220_device::process_command(unsigned char cmd)
 	}
 
 	/* update the buffer low state */
-	update_status_and_ints();
+	update_fifo_status_and_ints();
 }
 
 /******************************************************************************************
@@ -1257,7 +1270,7 @@ void tms5220_device::parse_frame()
 
 	/* if the chip is a tms5220C, and the rate mode is set to that each frame (0x04 bit set)
 	has a 2 bit rate preceding it, grab two bits here and store them as the rate; */
-	if ((m_variant == TMS5220_IS_5220C) && (m_tms5220c_rate & 0x04))
+	if ((TMS5220_HAS_RATE_CONTROL) && (m_c_variant_rate & 0x04))
 	{
 		indx = extract_bits(2);
 #ifdef DEBUG_PARSE_FRAME_DUMP
@@ -1267,9 +1280,9 @@ void tms5220_device::parse_frame()
 		m_IP = reload_table[indx];
 	}
 	else // non-5220C and 5220C in fixed rate mode
-	m_IP = reload_table[m_tms5220c_rate&0x3];
+	m_IP = reload_table[m_c_variant_rate&0x3];
 
-	update_status_and_ints();
+	update_fifo_status_and_ints();
 	if (!m_talk_status) goto ranout;
 
 	// attempt to extract the energy index
@@ -1278,7 +1291,7 @@ void tms5220_device::parse_frame()
 	printbits(m_new_frame_energy_idx,m_coeff->energy_bits);
 	fprintf(stderr," ");
 #endif
-	update_status_and_ints();
+	update_fifo_status_and_ints();
 	if (!m_talk_status) goto ranout;
 	// if the energy index is 0 or 15, we're done
 	if ((m_new_frame_energy_idx == 0) || (m_new_frame_energy_idx == 15))
@@ -1298,7 +1311,7 @@ void tms5220_device::parse_frame()
 	printbits(m_new_frame_pitch_idx,m_coeff->pitch_bits);
 	fprintf(stderr," ");
 #endif
-	update_status_and_ints();
+	update_fifo_status_and_ints();
 	if (!m_talk_status) goto ranout;
 	// if this is a repeat frame, just do nothing, it will reuse the old coefficients
 	if (rep_flag)
@@ -1312,7 +1325,7 @@ void tms5220_device::parse_frame()
 		printbits(m_new_frame_k_idx[i],m_coeff->kbits[i]);
 		fprintf(stderr," ");
 #endif
-		update_status_and_ints();
+		update_fifo_status_and_ints();
 		if (!m_talk_status) goto ranout;
 	}
 
@@ -1331,7 +1344,7 @@ void tms5220_device::parse_frame()
 		printbits(m_new_frame_k_idx[i],m_coeff->kbits[i]);
 		fprintf(stderr," ");
 #endif
-		update_status_and_ints();
+		update_fifo_status_and_ints();
 		if (!m_talk_status) goto ranout;
 	}
 #ifdef VERBOSE
@@ -1357,6 +1370,7 @@ void tms5220_device::parse_frame()
 
 void tms5220_device::set_interrupt_state(int state)
 {
+	if (!TMS5220_IS_52xx) return; // bail out if not a 52xx chip, since there's no int pin
 #ifdef DEBUG_PIN_READS
 	logerror("irq pin set to state %d\n", state);
 #endif
@@ -1382,12 +1396,6 @@ void tms5220_device::update_ready_state()
 	m_ready_pin = state;
 }
 
-
-/**********************************************************************************************
-
-     DEVICE_START( tms5220 ) -- allocate buffers and reset the 5220
-
-***********************************************************************************************/
 
 //-------------------------------------------------
 //  device_start - device-specific startup
@@ -1442,10 +1450,10 @@ void tms5220c_device::device_start()
 //  device_start - device-specific startup
 //-------------------------------------------------
 
-void tmc0285_device::device_start()
+void cd2501e_device::device_start()
 {
 	tms5220_device::device_start();
-	set_variant(TMS5220_IS_TMC0285);
+	set_variant(TMS5220_IS_CD2501E);
 }
 
 //-------------------------------------------------
@@ -1458,6 +1466,15 @@ void tms5200_device::device_start()
 	set_variant(TMS5220_IS_5200);
 }
 
+//-------------------------------------------------
+//  device_start - device-specific startup
+//-------------------------------------------------
+
+void cd2501ecd_device::device_start()
+{
+	tms5220_device::device_start();
+	set_variant(TMS5220_IS_CD2501ECD);
+}
 
 //-------------------------------------------------
 //  device_reset - device-specific reset
@@ -1484,7 +1501,7 @@ void tms5220_device::device_reset()
 	m_old_frame_energy_idx = m_old_frame_pitch_idx = 0;
 	memset(m_old_frame_k_idx, 0, sizeof(m_old_frame_k_idx));
 #endif
-	m_new_frame_energy_idx = m_current_energy = m_target_energy = 0;
+	m_new_frame_energy_idx = m_current_energy = m_target_energy = m_previous_energy = 0;
 	m_new_frame_pitch_idx = m_current_pitch = m_target_pitch = 0;
 	memset(m_new_frame_k_idx, 0, sizeof(m_new_frame_k_idx));
 	memset(m_current_k, 0, sizeof(m_current_k));
@@ -1492,18 +1509,25 @@ void tms5220_device::device_reset()
 
 	/* initialize the sample generators */
 	m_inhibit = 1;
-	m_subcycle = m_tms5220c_rate = m_pitch_count = m_PC = 0;
+	m_subcycle = m_c_variant_rate = m_pitch_count = m_PC = 0;
 	m_subc_reload = FORCE_SUBC_RELOAD;
 	m_OLDE = m_OLDP = 1;
-	m_IP = reload_table[m_tms5220c_rate&0x3];
+	m_IP = reload_table[m_c_variant_rate&0x3];
 	m_RNG = 0x1FFF;
 	memset(m_u, 0, sizeof(m_u));
 	memset(m_x, 0, sizeof(m_x));
+	m_schedule_dummy_read = 0;
 
 	if (m_speechrom)
+	{
 		m_speechrom->load_address(0);
-
-	m_schedule_dummy_read = TRUE;
+		// MZ: Do the dummy read immediately. The previous line will cause a
+		// shift in the address pointer in the VSM. When the next command is a
+		// load_address, no dummy read will occur, hence the address will be
+		// falsely shifted.
+		m_speechrom->read(1);
+		m_schedule_dummy_read = FALSE;
+	}
 }
 
 /**********************************************************************************************
@@ -1569,7 +1593,7 @@ WRITE_LINE_MEMBER( tms5220_device::rsq_w )
 		m_rs_ws = new_val;
 		if (new_val == 0)
 		{
-			if (m_variant == TMS5220_IS_5220C)
+			if (TMS5220_HAS_RATE_CONTROL) // correct for 5220c, ? for cd2501ecd
 				reset();
 #ifdef DEBUG_RS_WS
 			else
@@ -1621,7 +1645,7 @@ WRITE_LINE_MEMBER( tms5220_device::wsq_w )
 		m_rs_ws = new_val;
 		if (new_val == 0)
 		{
-			if (m_variant == TMS5220_IS_5220C)
+			if (TMS5220_HAS_RATE_CONTROL) // correct for 5220c, ? for cd2501ecd
 				reset();
 #ifdef DEBUG_RS_WS
 			else
@@ -1657,7 +1681,7 @@ WRITE_LINE_MEMBER( tms5220_device::wsq_w )
 			RDBY: between 60 and 140 cycles
 			RB: ? cycles (80?)
 			RST: between 60 and 140 cycles
-			SET RATE (5220C only): ? cycles (probably ~16)
+			SET RATE (5220C and CD2501ECD only): ? cycles (probably ~16)
 			*/
 			// TODO: actually HANDLE the timing differences! currently just assuming always 16 cycles
 			m_timer_io_ready->adjust(attotime::from_hz(clock()/16), 1); // this should take around 10-16 (closer to ~15) cycles to complete for fifo writes, TODO: but actually depends on what command is written if in command mode
@@ -1826,7 +1850,7 @@ void tms5220_device::set_frequency(int frequency)
 const device_type TMS5220C = &device_creator<tms5220c_device>;
 
 tms5220c_device::tms5220c_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: tms5220_device(mconfig, TMS5220C, "TMS5220C", tag, owner, clock)
+	: tms5220_device(mconfig, TMS5220C, "TMS5220C", tag, owner, clock, "tms5220c", __FILE__)
 {
 }
 
@@ -1834,7 +1858,7 @@ tms5220c_device::tms5220c_device(const machine_config &mconfig, const char *tag,
 const device_type TMS5220 = &device_creator<tms5220_device>;
 
 tms5220_device::tms5220_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, TMS5220, "TMS5220", tag, owner, clock),
+	: device_t(mconfig, TMS5220, "TMS5220", tag, owner, clock, "tms5220", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_irq_handler(*this),
 		m_readyq_handler(*this),
@@ -1842,8 +1866,8 @@ tms5220_device::tms5220_device(const machine_config &mconfig, const char *tag, d
 {
 }
 
-tms5220_device::tms5220_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, type, name, tag, owner, clock),
+tms5220_device::tms5220_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source)
+	: device_t(mconfig, type, name, tag, owner, clock, shortname, source),
 		device_sound_interface(mconfig, *this),
 		m_irq_handler(*this),
 		m_readyq_handler(*this),
@@ -1862,10 +1886,10 @@ void tms5220_device::device_config_complete()
 }
 
 
-const device_type TMC0285 = &device_creator<tmc0285_device>;
+const device_type CD2501E = &device_creator<cd2501e_device>;
 
-tmc0285_device::tmc0285_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: tms5220_device(mconfig, TMC0285, "TMC0285", tag, owner, clock)
+cd2501e_device::cd2501e_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
+	: tms5220_device(mconfig, CD2501E, "CD2501E", tag, owner, clock, "cd2501e", __FILE__)
 {
 }
 
@@ -1873,6 +1897,14 @@ tmc0285_device::tmc0285_device(const machine_config &mconfig, const char *tag, d
 const device_type TMS5200 = &device_creator<tms5200_device>;
 
 tms5200_device::tms5200_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: tms5220_device(mconfig, TMS5200, "TMS5200", tag, owner, clock)
+	: tms5220_device(mconfig, TMS5200, "TMS5200", tag, owner, clock, "tms5200", __FILE__)
+{
+}
+
+
+const device_type CD2501ECD = &device_creator<cd2501ecd_device>;
+
+cd2501ecd_device::cd2501ecd_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
+	: tms5220_device(mconfig, CD2501ECD, "CD2501ECD", tag, owner, clock, "cd2501ecd", __FILE__)
 {
 }

@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /*******************************************************************************
 
     Irem M107 games:
 
-    Fire Barrel                             (c) 1993 Irem Corporation
+    Air Assault / Fire Barrel               (c) 1993 Irem Corporation
     Dream Soccer '94                        (c) 1994 Data East Corporation
     Kick for the Goal                       (c) 1994 Jaleco
     World PK Soccer                         (c) 1995 Jaleco
@@ -25,6 +27,7 @@ confirmed for m107 games as well.
 
 #include "emu.h"
 #include "cpu/nec/nec.h"
+#include "cpu/nec/v25.h"
 #include "includes/m107.h"
 #include "includes/iremipt.h"
 #include "machine/irem_cpu.h"
@@ -32,9 +35,9 @@ confirmed for m107 games as well.
 #include "sound/iremga20.h"
 
 
-#define M107_IRQ_0 ((state->m_irq_vectorbase+0)/4)  /* VBL interrupt */
-#define M107_IRQ_1 ((state->m_irq_vectorbase+4)/4)  /* ??? */
-#define M107_IRQ_2 ((state->m_irq_vectorbase+8)/4)  /* Raster interrupt */
+#define M107_IRQ_0 ((m_irq_vectorbase+0)/4)  /* VBL interrupt */
+#define M107_IRQ_1 ((m_irq_vectorbase+4)/4)  /* ??? */
+#define M107_IRQ_2 ((m_irq_vectorbase+8)/4)  /* Raster interrupt */
 #define M107_IRQ_3 ((m_irq_vectorbase+12)/4) /* Sound cpu interrupt */
 
 
@@ -42,34 +45,33 @@ confirmed for m107 games as well.
 
 void m107_state::machine_start()
 {
-	// TODO: state save registrations
+	save_item(NAME(m_sound_status));
 }
 
 /*****************************************************************************/
 
-TIMER_DEVICE_CALLBACK_MEMBER(m107_state::m107_scanline_interrupt)
+TIMER_DEVICE_CALLBACK_MEMBER(m107_state::scanline_interrupt)
 {
 	int scanline = param;
-	m107_state *state = machine().driver_data<m107_state>();
 
 	/* raster interrupt */
 	if (scanline == m_raster_irq_position)
 	{
-		machine().primary_screen->update_partial(scanline);
-		state->m_maincpu->set_input_line_and_vector(0, HOLD_LINE, M107_IRQ_2);
+		m_screen->update_partial(scanline);
+		m_maincpu->set_input_line_and_vector(0, HOLD_LINE, M107_IRQ_2);
 	}
 
 	/* VBLANK interrupt */
-	else if (scanline == machine().primary_screen->visible_area().max_y + 1)
+	else if (scanline == m_screen->visible_area().max_y + 1)
 	{
-		machine().primary_screen->update_partial(scanline);
-		state->m_maincpu->set_input_line_and_vector(0, HOLD_LINE, M107_IRQ_0);
+		m_screen->update_partial(scanline);
+		m_maincpu->set_input_line_and_vector(0, HOLD_LINE, M107_IRQ_0);
 	}
 }
 
 /*****************************************************************************/
 
-WRITE16_MEMBER(m107_state::m107_coincounter_w)
+WRITE16_MEMBER(m107_state::coincounter_w)
 {
 	if (ACCESSING_BITS_0_7)
 	{
@@ -78,7 +80,7 @@ WRITE16_MEMBER(m107_state::m107_coincounter_w)
 	}
 }
 
-WRITE16_MEMBER(m107_state::m107_bankswitch_w)
+WRITE16_MEMBER(m107_state::bankswitch_w)
 {
 	if (ACCESSING_BITS_0_7)
 	{
@@ -88,36 +90,36 @@ WRITE16_MEMBER(m107_state::m107_bankswitch_w)
 	}
 }
 
-WRITE16_MEMBER(m107_state::m107_soundlatch_w)
+WRITE16_MEMBER(m107_state::soundlatch_w)
 {
 	m_soundcpu->set_input_line(NEC_INPUT_LINE_INTP1, ASSERT_LINE);
 	soundlatch_byte_w(space, 0, data & 0xff);
 //      logerror("soundlatch_byte_w %02x\n",data);
 }
 
-READ16_MEMBER(m107_state::m107_sound_status_r)
+READ16_MEMBER(m107_state::sound_status_r)
 {
 	return m_sound_status;
 }
 
-READ16_MEMBER(m107_state::m107_soundlatch_r)
+READ16_MEMBER(m107_state::soundlatch_r)
 {
 	m_soundcpu->set_input_line(NEC_INPUT_LINE_INTP1, CLEAR_LINE);
 	return soundlatch_byte_r(space, offset) | 0xff00;
 }
 
-WRITE16_MEMBER(m107_state::m107_sound_irq_ack_w)
+WRITE16_MEMBER(m107_state::sound_irq_ack_w)
 {
 	m_soundcpu->set_input_line(NEC_INPUT_LINE_INTP1, CLEAR_LINE);
 }
 
-WRITE16_MEMBER(m107_state::m107_sound_status_w)
+WRITE16_MEMBER(m107_state::sound_status_w)
 {
 	COMBINE_DATA(&m_sound_status);
 	m_maincpu->set_input_line_and_vector(0, HOLD_LINE, M107_IRQ_3);
 }
 
-WRITE16_MEMBER(m107_state::m107_sound_reset_w)
+WRITE16_MEMBER(m107_state::sound_reset_w)
 {
 	m_soundcpu->set_input_line(INPUT_LINE_RESET, (data) ? CLEAR_LINE : ASSERT_LINE);
 }
@@ -127,10 +129,10 @@ WRITE16_MEMBER(m107_state::m107_sound_reset_w)
 static ADDRESS_MAP_START( main_map, AS_PROGRAM, 16, m107_state )
 	AM_RANGE(0x00000, 0x9ffff) AM_ROM
 	AM_RANGE(0xa0000, 0xbffff) AM_ROMBANK("bank1")
-	AM_RANGE(0xd0000, 0xdffff) AM_RAM_WRITE(m107_vram_w) AM_SHARE("vram_data")
+	AM_RANGE(0xd0000, 0xdffff) AM_RAM_WRITE(vram_w) AM_SHARE("vram_data")
 	AM_RANGE(0xe0000, 0xeffff) AM_RAM /* System ram */
 	AM_RANGE(0xf8000, 0xf8fff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0xf9000, 0xf9fff) AM_RAM_WRITE(paletteram_xBBBBBGGGGGRRRRR_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0xf9000, 0xf9fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM AM_REGION("maincpu", 0x7fff0)
 ADDRESS_MAP_END
 
@@ -139,15 +141,15 @@ static ADDRESS_MAP_START( main_portmap, AS_IO, 16, m107_state )
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("COINS_DSW3")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
 	AM_RANGE(0x06, 0x07) AM_READ_PORT("P3_P4")
-	AM_RANGE(0x08, 0x09) AM_READ(m107_sound_status_r)   /* answer from sound CPU */
-	AM_RANGE(0x00, 0x01) AM_WRITE(m107_soundlatch_w)
-	AM_RANGE(0x02, 0x03) AM_WRITE(m107_coincounter_w)
+	AM_RANGE(0x08, 0x09) AM_READ(sound_status_r)   /* answer from sound CPU */
+	AM_RANGE(0x00, 0x01) AM_WRITE(soundlatch_w)
+	AM_RANGE(0x02, 0x03) AM_WRITE(coincounter_w)
 	AM_RANGE(0x04, 0x05) AM_WRITENOP /* ??? 0008 */
-	AM_RANGE(0x80, 0x9f) AM_WRITE(m107_control_w)
+	AM_RANGE(0x80, 0x9f) AM_WRITE(control_w)
 	AM_RANGE(0xa0, 0xaf) AM_WRITENOP /* Written with 0's in interrupt */
-	AM_RANGE(0xb0, 0xb1) AM_WRITE(m107_spritebuffer_w)
+	AM_RANGE(0xb0, 0xb1) AM_WRITE(spritebuffer_w)
 	AM_RANGE(0xc0, 0xc3) AM_READNOP /* Only wpksoc: ticket related? */
-	AM_RANGE(0xc0, 0xc1) AM_WRITE(m107_sound_reset_w)
+	AM_RANGE(0xc0, 0xc1) AM_WRITE(sound_reset_w)
 ADDRESS_MAP_END
 
 /* same as M107 but with an extra i/o board */
@@ -182,8 +184,8 @@ static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 16, m107_state )
 	AM_RANGE(0xa0000, 0xa3fff) AM_RAM
 	AM_RANGE(0xa8000, 0xa803f) AM_DEVREADWRITE8("irem", iremga20_device, irem_ga20_r, irem_ga20_w, 0x00ff)
 	AM_RANGE(0xa8040, 0xa8043) AM_DEVREADWRITE8("ymsnd", ym2151_device, read, write, 0x00ff)
-	AM_RANGE(0xa8044, 0xa8045) AM_READWRITE(m107_soundlatch_r, m107_sound_irq_ack_w)
-	AM_RANGE(0xa8046, 0xa8047) AM_WRITE(m107_sound_status_w)
+	AM_RANGE(0xa8044, 0xa8045) AM_READWRITE(soundlatch_r, sound_irq_ack_w)
+	AM_RANGE(0xa8046, 0xa8047) AM_WRITE(sound_status_w)
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM AM_REGION("soundcpu", 0x1fff0)
 ADDRESS_MAP_END
 
@@ -753,8 +755,6 @@ GFXDECODE_END
 
 /***************************************************************************/
 
-static const nec_config firebarr_config ={ rtypeleo_decryption_table, };
-
 static MACHINE_CONFIG_START( firebarr, m107_state )
 
 	/* basic machine hardware */
@@ -764,10 +764,10 @@ static MACHINE_CONFIG_START( firebarr, m107_state )
 
 	MCFG_CPU_ADD("soundcpu", V35, 14318000)
 	MCFG_CPU_PROGRAM_MAP(sound_map)
-	MCFG_CPU_CONFIG(firebarr_config)
+	MCFG_V25_CONFIG(rtypeleo_decryption_table)
 
 
-	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", m107_state, m107_scanline_interrupt, "screen", 0, 1)
+	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", m107_state, scanline_interrupt, "screen", 0, 1)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -775,10 +775,12 @@ static MACHINE_CONFIG_START( firebarr, m107_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(512, 256)
 	MCFG_SCREEN_VISIBLE_AREA(80, 511-112, 8, 247) /* 320 x 240 */
-	MCFG_SCREEN_UPDATE_DRIVER(m107_state, screen_update_m107)
+	MCFG_SCREEN_UPDATE_DRIVER(m107_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(firebarr)
-	MCFG_PALETTE_LENGTH(2048)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", firebarr)
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
 
 
 	/* sound hardware */
@@ -794,7 +796,6 @@ static MACHINE_CONFIG_START( firebarr, m107_state )
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
 
-static const nec_config dsoccr94_config ={ dsoccr94_decryption_table, };
 static MACHINE_CONFIG_DERIVED( dsoccr94, firebarr )
 
 	/* basic machine hardware */
@@ -802,58 +803,94 @@ static MACHINE_CONFIG_DERIVED( dsoccr94, firebarr )
 	MCFG_CPU_CLOCK(20000000/2)  /* NEC V33, Could be 28MHz clock? */
 
 	MCFG_CPU_MODIFY("soundcpu")
-	MCFG_CPU_CONFIG(dsoccr94_config)
+	MCFG_V25_CONFIG(dsoccr94_decryption_table)
 
 	/* video hardware */
-	MCFG_GFXDECODE(m107)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", m107)
 MACHINE_CONFIG_END
 
 
-static const nec_config wpksoc_config ={ leagueman_decryption_table, };
 static MACHINE_CONFIG_DERIVED( wpksoc, firebarr )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(wpksoc_map)
 	MCFG_CPU_IO_MAP(wpksoc_io_map)
 
 	MCFG_CPU_MODIFY("soundcpu")
-	MCFG_CPU_CONFIG(wpksoc_config)
+	MCFG_V25_CONFIG(leagueman_decryption_table)
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( airass, firebarr )
+	MCFG_GFXDECODE_MODIFY("gfxdecode", m107)
+
+	MCFG_CPU_MODIFY("soundcpu")
+	MCFG_V25_CONFIG(gunforce_decryption_table)
 MACHINE_CONFIG_END
 
 /***************************************************************************/
 
-ROM_START( firebarr )
+
+ROM_START( airass )
 	ROM_REGION( 0x100000, "maincpu", 0 )
-	ROM_LOAD16_BYTE( "f4-a-h0-c.9d", 0x000001, 0x40000, CRC(2aa5676e) SHA1(7f51c462c58b63fa4f34ec9dd2ee69c932ebf718) )
-	ROM_LOAD16_BYTE( "f4-a-l0-c.9f", 0x000000, 0x40000, CRC(42f75d59) SHA1(eba3a02874d608ecb8c93160c8f0b4c8bb8061d2) )
-	ROM_LOAD16_BYTE( "f4-a-h1-c.9e", 0x080001, 0x20000, CRC(bb7f6968) SHA1(366747672aac939454d9915cda5277b0438f063b) )
-	ROM_LOAD16_BYTE( "f4-a-l1-c.9h", 0x080000, 0x20000, CRC(9d57edd6) SHA1(16122829b61aa3aee88aeb6634831e8cf95eaee0) )
+	ROM_LOAD16_BYTE( "f4-a-h0-etc.h0", 0x000001, 0x40000, CRC(038f2cbd) SHA1(79db9f4cc96d32ae9b9526111078bdb87f5711ce) ) /* IC59 */
+	ROM_LOAD16_BYTE( "f4-a-l0-etc.l0", 0x000000, 0x40000, CRC(d3eb7842) SHA1(4f8c48f6d42ff222d28397e747fafddb025f21b1) ) /* IC61 */
+	ROM_LOAD16_BYTE( "f4-a-h1-ss.h1",  0x080001, 0x20000, CRC(4cb1c9ae) SHA1(9e372f9a6e21a80fce1ce94290ba638f0659f056) ) /* IC60 */
+	ROM_LOAD16_BYTE( "f4-a-l1-ss.l1",  0x080000, 0x20000, CRC(1ddd192d) SHA1(5805d33bd73d2c2c1529420d29582df1c43b62c2) ) /* IC62 */
 
 	ROM_REGION( 0x20000, "soundcpu", 0 )
-	ROM_LOAD16_BYTE( "f4-b-sh0-b", 0x00001, 0x10000, CRC(30a8e232) SHA1(d4695aed35a1aa796b2872e58a6014e8b28bc154) )
-	ROM_LOAD16_BYTE( "f4-b-sl0-b", 0x00000, 0x10000, CRC(204b5f1f) SHA1(f0386500773cd7cca93f0e8e740db29182320c70) )
+	ROM_LOAD16_BYTE( "f4-b-sh0-c.sh0", 0x00001, 0x10000, CRC(31c05c0d) SHA1(9e4d4cd35cf4d725c26836610f0bf36a40fb1617) ) /* IC31 */
+	ROM_LOAD16_BYTE( "f4-b-sl0-c.sl0", 0x00000, 0x10000, CRC(60a0d33a) SHA1(11668b44ff4d85b6f23278c5eb6a142e129dec38) ) /* IC37 */
 
 	ROM_REGION( 0x200000, "gfx1", 0 )   /* chars */
-	ROM_LOAD16_BYTE( "f4-c00", 0x000000, 0x80000, CRC(50cab384) SHA1(66e88a1dfa943e0d49c2e186ac2f6cbf5cfe0864) )
-	ROM_LOAD16_BYTE( "f4-c10", 0x000001, 0x80000, CRC(330c6df2) SHA1(f199d959385398adb6b86ec8ec5de8b40899597c) )
-	ROM_LOAD16_BYTE( "f4-c01", 0x100000, 0x80000, CRC(12a698c8) SHA1(74d21768bac70e8cb7e1a6737f758f33869b6af9) )
-	ROM_LOAD16_BYTE( "f4-c11", 0x100001, 0x80000, CRC(3f9add18) SHA1(840339a1f33d68c555e42618dd436788639b1edf) )
+	ROM_LOAD16_BYTE( "w45.c00", 0x000000, 0x100000, CRC(2aab419e) SHA1(bc55d3d52ae9d89b9f2b38493d3fce2710a95837) ) /* IC29 */
+	ROM_LOAD16_BYTE( "w46.c10", 0x000001, 0x100000, CRC(d6e5c910) SHA1(40bcf895a7379aa3c65cc58c0b5dbec5e391ab6c) ) /* IC28 */
 
 	ROM_REGION( 0x400000, "gfx2", 0 )   /* sprites */
-	ROM_LOAD16_BYTE( "f4-000", 0x000000, 0x80000, CRC(920deee9) SHA1(6341eeccdad97fde5337f32f317ddc94f6b8d07a) )
-	ROM_LOAD16_BYTE( "f4-001", 0x000001, 0x80000, CRC(e5725eaf) SHA1(c884d69742484a7c07eb0c7882a33d90b240529e) )
-	ROM_LOAD16_BYTE( "f4-010", 0x100000, 0x80000, CRC(3505d185) SHA1(1330c18eaadb3e23d6205f3912015cb9ca5f3590) )
-	ROM_LOAD16_BYTE( "f4-011", 0x100001, 0x80000, CRC(1912682f) SHA1(d0234877aabf94df7f6a6091e38247954725e1f3) )
-	ROM_LOAD16_BYTE( "f4-020", 0x200000, 0x80000, CRC(ec130b8e) SHA1(6a4562f3e39d02f97f3b917e4a51f48b6f43a4c8) )
-	ROM_LOAD16_BYTE( "f4-021", 0x200001, 0x80000, CRC(8dd384dc) SHA1(dee79d0d48762b98c20c88ba6617de5e939f596d) )
-	ROM_LOAD16_BYTE( "f4-030", 0x300000, 0x80000, CRC(7e7b30cd) SHA1(eca9d2a5d9f9deebb565456018126bc37a1de1d8) )
-	ROM_LOAD16_BYTE( "f4-031", 0x300001, 0x80000, CRC(83ac56c5) SHA1(47e1063c71d5570fecf8591c2cb7c74fd45199f5) )
+	ROM_LOAD( "w47.000", 0x000000, 0x100000, CRC(72e1a253) SHA1(ac7e28eadb365dbb6e2246ae4a9b9ae9bcb6ccee) ) /* IC11 */
+	ROM_LOAD( "w48.010", 0x100000, 0x100000, CRC(1746b7f6) SHA1(b0faa60516e656dfce19bc1f2d72281342adc8a4) ) /* IC12 */
+	ROM_LOAD( "w49.020", 0x200000, 0x100000, CRC(17b5caf2) SHA1(df38f9a625226c96ac921182ef975e598d9bc245) ) /* IC13 */
+	ROM_LOAD( "w50.030", 0x300000, 0x100000, CRC(63e4bec3) SHA1(252b4493e1bc368021389e65295036523c401ad4) ) /* IC14 */
 
 	ROM_REGION( 0x40000, "user1", 0 )   /* sprite tables */
-	ROM_LOAD16_BYTE( "f4-b-drh", 0x000001, 0x20000, CRC(12001372) SHA1(a5346d8a741cd1a93aa289562bb56d2fc40c1bbb) )
-	ROM_LOAD16_BYTE( "f4-b-drl", 0x000000, 0x20000, CRC(08cb7533) SHA1(9e0d8f8498bddfa1c6135abbab4465e9eeb033fe) )
+	ROM_LOAD16_BYTE( "f4-b-drh-.drh", 0x000001, 0x20000, CRC(12001372) SHA1(a5346d8a741cd1a93aa289562bb56d2fc40c1bbb) ) /* IC10 */
+	ROM_LOAD16_BYTE( "f4-b-drl-.drl", 0x000000, 0x20000, CRC(08cb7533) SHA1(9e0d8f8498bddfa1c6135abbab4465e9eeb033fe) ) /* IC1  */
 
 	ROM_REGION( 0x80000, "irem", 0 )    /* ADPCM samples */
-	ROM_LOAD( "f4-b-da0", 0x000000, 0x80000, CRC(7a493e2e) SHA1(f6a8bacbe25760c86bdd8e8bb6d052ff15718eef) )
+	ROM_LOAD( "w96.da0", 0x000000, 0x80000, CRC(7a493e2e) SHA1(f6a8bacbe25760c86bdd8e8bb6d052ff15718eef) ) /* IC24 */
+ROM_END
+
+ROM_START( firebarr )
+	ROM_REGION( 0x100000, "maincpu", 0 )
+	ROM_LOAD16_BYTE( "f4-a-h0-c.h0", 0x000001, 0x40000, CRC(2aa5676e) SHA1(7f51c462c58b63fa4f34ec9dd2ee69c932ebf718) ) /* IC59 @ 9d */
+	ROM_LOAD16_BYTE( "f4-a-l0-c.l0", 0x000000, 0x40000, CRC(42f75d59) SHA1(eba3a02874d608ecb8c93160c8f0b4c8bb8061d2) ) /* IC61 @ 9f */
+	ROM_LOAD16_BYTE( "f4-a-h1-c.h1", 0x080001, 0x20000, CRC(bb7f6968) SHA1(366747672aac939454d9915cda5277b0438f063b) ) /* IC60 @ 9e */
+	ROM_LOAD16_BYTE( "f4-a-l1-c.l1", 0x080000, 0x20000, CRC(9d57edd6) SHA1(16122829b61aa3aee88aeb6634831e8cf95eaee0) ) /* IC62 @ 9h */
+
+	ROM_REGION( 0x20000, "soundcpu", 0 )
+	ROM_LOAD16_BYTE( "f4-b-sh0-b.sh0", 0x00001, 0x10000, CRC(30a8e232) SHA1(d4695aed35a1aa796b2872e58a6014e8b28bc154) ) /* IC31 */
+	ROM_LOAD16_BYTE( "f4-b-sl0-b.sl0", 0x00000, 0x10000, CRC(204b5f1f) SHA1(f0386500773cd7cca93f0e8e740db29182320c70) ) /* IC37 */
+
+	ROM_REGION( 0x200000, "gfx1", 0 )   /* chars */
+	ROM_LOAD16_BYTE( "f4-c00.c00", 0x000000, 0x80000, CRC(50cab384) SHA1(66e88a1dfa943e0d49c2e186ac2f6cbf5cfe0864) ) /* IC29 */
+	ROM_LOAD16_BYTE( "f4-c10.c10", 0x000001, 0x80000, CRC(330c6df2) SHA1(f199d959385398adb6b86ec8ec5de8b40899597c) ) /* IC28 */
+	ROM_LOAD16_BYTE( "f4-c01.c01", 0x100000, 0x80000, CRC(12a698c8) SHA1(74d21768bac70e8cb7e1a6737f758f33869b6af9) ) /* IC21 */
+	ROM_LOAD16_BYTE( "f4-c11.c11", 0x100001, 0x80000, CRC(3f9add18) SHA1(840339a1f33d68c555e42618dd436788639b1edf) ) /* IC20 */
+
+	ROM_REGION( 0x400000, "gfx2", 0 )   /* sprites */
+	ROM_LOAD16_BYTE( "f4-000.000", 0x000000, 0x80000, CRC(920deee9) SHA1(6341eeccdad97fde5337f32f317ddc94f6b8d07a) ) /* IC11 */
+	ROM_LOAD16_BYTE( "f4-001.001", 0x000001, 0x80000, CRC(e5725eaf) SHA1(c884d69742484a7c07eb0c7882a33d90b240529e) ) /* IC2  */
+	ROM_LOAD16_BYTE( "f4-010.010", 0x100000, 0x80000, CRC(3505d185) SHA1(1330c18eaadb3e23d6205f3912015cb9ca5f3590) ) /* IC12 */
+	ROM_LOAD16_BYTE( "f4-011.011", 0x100001, 0x80000, CRC(1912682f) SHA1(d0234877aabf94df7f6a6091e38247954725e1f3) ) /* IC3  */
+	ROM_LOAD16_BYTE( "f4-020.020", 0x200000, 0x80000, CRC(ec130b8e) SHA1(6a4562f3e39d02f97f3b917e4a51f48b6f43a4c8) ) /* IC13 */
+	ROM_LOAD16_BYTE( "f4-021.021", 0x200001, 0x80000, CRC(8dd384dc) SHA1(dee79d0d48762b98c20c88ba6617de5e939f596d) ) /* IC4  */
+	ROM_LOAD16_BYTE( "f4-030.030", 0x300000, 0x80000, CRC(7e7b30cd) SHA1(eca9d2a5d9f9deebb565456018126bc37a1de1d8) ) /* IC14 */
+	ROM_LOAD16_BYTE( "f4-031.031", 0x300001, 0x80000, CRC(83ac56c5) SHA1(47e1063c71d5570fecf8591c2cb7c74fd45199f5) ) /* IC5  */
+
+	ROM_REGION( 0x40000, "user1", 0 )   /* sprite tables */
+	ROM_LOAD16_BYTE( "f4-b-drh-.drh", 0x000001, 0x20000, CRC(12001372) SHA1(a5346d8a741cd1a93aa289562bb56d2fc40c1bbb) ) /* IC10 */
+	ROM_LOAD16_BYTE( "f4-b-drl-.drl", 0x000000, 0x20000, CRC(08cb7533) SHA1(9e0d8f8498bddfa1c6135abbab4465e9eeb033fe) ) /* IC1  */
+
+	ROM_REGION( 0x80000, "irem", 0 )    /* ADPCM samples */
+	ROM_LOAD( "f4-b-da0.da0", 0x000000, 0x80000, CRC(7a493e2e) SHA1(f6a8bacbe25760c86bdd8e8bb6d052ff15718eef) ) /* IC24 (== w96.da0 from Air Assault) */
 ROM_END
 
 ROM_START( dsoccr94 )
@@ -882,6 +919,34 @@ ROM_START( dsoccr94 )
 	ROM_REGION( 0x100000, "irem", 0 )    /* ADPCM samples */
 	ROM_LOAD( "ds_da0.ic24", 0x000000, 0x100000, CRC(67fc52fd) SHA1(5771e948115af8fe4a6d3f448c03a2a9b42b6f20) )
 ROM_END
+
+ROM_START( dsoccr94k )
+	ROM_REGION( 0x100000, "maincpu", 0 )
+	ROM_LOAD16_BYTE( "ic59_h0.bin",    0x000001, 0x040000, CRC(7b26d8a3) SHA1(03b4a5f0c7bd72bee24065feb22b837b373d936c) )
+	ROM_LOAD16_BYTE( "ic61_l0.bin",    0x000000, 0x040000, CRC(b13f0ff4) SHA1(01d4241019abb16364090b2d00b93864d228ab98) )
+	ROM_LOAD16_BYTE( "ic60_h1.bin",    0x080001, 0x040000, CRC(6109041b) SHA1(063898a88f8a6a9f1510aa55e53a39f037b02903) )
+	ROM_LOAD16_BYTE( "ic62_l1.bin",    0x080000, 0x040000, CRC(97a01f6b) SHA1(e188e28f880f5f3f4d7b49eca639d643989b1468) )
+
+	ROM_REGION( 0x20000, "soundcpu", 0 )
+	ROM_LOAD16_BYTE( "a3-sh0-c-0.ic31", 0x00001, 0x10000, CRC(23fe6ffc) SHA1(896377961cafc19e44d9d889f9fbfdbaedd556da) )
+	ROM_LOAD16_BYTE( "a3-sl0-c-0.ic37", 0x00000, 0x10000, CRC(768132e5) SHA1(1bb64516eb58d3b246f08e1c07f091e78085689f) )
+
+	ROM_REGION( 0x400000, "gfx1", 0 )   /* chars */
+	ROM_LOAD16_BYTE( "ds_c00.ic29", 0x000000, 0x100000, CRC(2d31d418) SHA1(6cd0e362bc2e3f2b20d96ee97a04bff46ee3016a) ) /* MASK ROMs with no "official" rom label */
+	ROM_LOAD16_BYTE( "ds_c10.ic28", 0x000001, 0x100000, CRC(57f7bcd3) SHA1(a38e7cdfdea72d882fba414cae391ba09443e73c) )
+	ROM_LOAD16_BYTE( "ds_c01.ic21", 0x200000, 0x100000, CRC(9d31a464) SHA1(1e38ac296f64d77fabfc0d5f7921a9b7a8424875) )
+	ROM_LOAD16_BYTE( "ds_c11.ic20", 0x200001, 0x100000, CRC(a372e79f) SHA1(6b0889cfc2970028832566e25257927ddc461ea6) )
+
+	ROM_REGION( 0x400000, "gfx2", 0 )   /* sprites */
+	ROM_LOAD( "ds_000.ic11", 0x000000, 0x100000, CRC(366b3e29) SHA1(cb016dcbdc6e8ea56c28c00135263666b07df991) ) /* MASK ROMs with no "official" rom label */
+	ROM_LOAD( "ds_010.ic12", 0x100000, 0x100000, CRC(28a4cc40) SHA1(7f4e1ef995eaadf1945ee22ab3270cb8a21c601d) )
+	ROM_LOAD( "ds_020.ic13", 0x200000, 0x100000, CRC(5a310f7f) SHA1(21969e4247c8328d27118d00604096deaf6700af) )
+	ROM_LOAD( "ds_030.ic14", 0x300000, 0x100000, CRC(328b1f45) SHA1(4cbbd4d9be4fc151d426175bdbd35d8481bf2966) )
+
+	ROM_REGION( 0x100000, "irem", 0 )    /* ADPCM samples */
+	ROM_LOAD( "ds_da0.ic24", 0x000000, 0x100000, CRC(67fc52fd) SHA1(5771e948115af8fe4a6d3f448c03a2a9b42b6f20) )
+ROM_END
+
 
 ROM_START( wpksoc )
 	ROM_REGION( 0x100000, "maincpu", 0 )
@@ -961,7 +1026,7 @@ DRIVER_INIT_MEMBER(m107_state,dsoccr94)
 	UINT8 *ROM = memregion("maincpu")->base();
 
 	membank("bank1")->configure_entries(0, 4, &ROM[0x80000], 0x20000);
-	m_maincpu->space(AS_IO).install_write_handler(0x06, 0x07, write16_delegate(FUNC(m107_state::m107_bankswitch_w),this));
+	m_maincpu->space(AS_IO).install_write_handler(0x06, 0x07, write16_delegate(FUNC(m107_state::bankswitch_w),this));
 
 	m_irq_vectorbase = 0x80;
 	m_spritesystem = 0;
@@ -975,8 +1040,11 @@ DRIVER_INIT_MEMBER(m107_state,wpksoc)
 
 /***************************************************************************/
 
-GAME( 1993, firebarr,      0, firebarr, firebarr, m107_state, firebarr, ROT270, "Irem", "Fire Barrel (Japan)", GAME_NO_COCKTAIL )
-// Air Assault : World version of Fire Barrel, seen on location at the London Trocadero
-GAME( 1994, dsoccr94,      0, dsoccr94, dsoccr94, m107_state, dsoccr94, ROT0,   "Irem (Data East Corporation license)", "Dream Soccer '94 (World, M107 hardware)", GAME_NO_COCKTAIL )
-GAME( 1995, wpksoc,        0, wpksoc,   wpksoc, m107_state,   wpksoc,   ROT0,   "Jaleco", "World PK Soccer", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL | GAME_MECHANICAL )
-GAME( 1994, kftgoal,  wpksoc, wpksoc,   wpksoc, m107_state,   wpksoc,   ROT0,   "Jaleco", "Kick for the Goal", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL | GAME_MECHANICAL )
+GAME( 1993, airass,        0,             airass,   firebarr, m107_state, firebarr, ROT270, "Irem", "Air Assault (World)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE ) // possible location test, but sound code is newer than Japan version
+GAME( 1993, firebarr,      airass,        firebarr, firebarr, m107_state, firebarr, ROT270, "Irem", "Fire Barrel (Japan)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1994, dsoccr94,      0,        dsoccr94, dsoccr94, m107_state, dsoccr94, ROT0,   "Irem (Data East Corporation license)", "Dream Soccer '94 (World, M107 hardware)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1994, dsoccr94k,     dsoccr94, dsoccr94, dsoccr94, m107_state, dsoccr94, ROT0,   "Irem (Data East Corporation license)", "Dream Soccer '94 (Korea, M107 hardware)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE ) // default team selected is Korea, so likely a Korean set
+
+GAME( 1995, wpksoc,        0,        wpksoc,   wpksoc, m107_state,   wpksoc,   ROT0,   "Jaleco", "World PK Soccer", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL | GAME_MECHANICAL | GAME_SUPPORTS_SAVE )
+GAME( 1994, kftgoal,       wpksoc,   wpksoc,   wpksoc, m107_state,   wpksoc,   ROT0,   "Jaleco", "Kick for the Goal", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL | GAME_MECHANICAL | GAME_SUPPORTS_SAVE )

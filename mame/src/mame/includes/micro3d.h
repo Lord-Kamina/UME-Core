@@ -1,16 +1,44 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /*************************************************************************
 
      Microprose Games 3D hardware
 
 *************************************************************************/
 
-#include "devlegcy.h"
 #include "cpu/tms34010/tms34010.h"
+#include "cpu/mcs51/mcs51.h"
+#include "sound/upd7759.h"
+#include "machine/mc68681.h"
 
 
 #define HOST_MONITOR_DISPLAY        0
 #define VGB_MONITOR_DISPLAY         0
 #define DRMATH_MONITOR_DISPLAY      0
+
+
+struct micro3d_vtx
+{
+	INT32 x, y, z;
+};
+
+enum planes
+{
+		CLIP_Z_MIN,
+		CLIP_Z_MAX,
+		CLIP_X_MIN,
+		CLIP_X_MAX,
+		CLIP_Y_MIN,
+		CLIP_Y_MAX
+};
+
+enum dac_registers {
+	VCF,
+	VCQ,
+	VCA,
+	PAN
+};
+
 
 class micro3d_state : public driver_device
 {
@@ -23,16 +51,28 @@ public:
 
 	micro3d_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-		m_shared_ram(*this, "shared_ram"),
-		m_mac_sram(*this, "mac_sram"),
-		m_micro3d_sprite_vram(*this, "sprite_vram"),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
+		m_upd7759(*this, "upd7759"),
 		m_drmath(*this, "drmath"),
-		m_vgb(*this, "vgb") { }
+		m_vgb(*this, "vgb"),
+		m_palette(*this, "palette"),
+		m_duart68681(*this, "duart68681"),
+		m_generic_paletteram_16(*this, "paletteram"),
+		m_shared_ram(*this, "shared_ram"),
+		m_mac_sram(*this, "mac_sram"),
+		m_sprite_vram(*this, "sprite_vram") { }
+
+	required_device<cpu_device> m_maincpu;
+	required_device<i8051_device> m_audiocpu;
+	required_device<upd7759_device> m_upd7759;
+	required_device<cpu_device> m_drmath;
+	required_device<tms34010_device> m_vgb;
+	required_device<palette_device> m_palette;
+	required_device<mc68681_device> m_duart68681;
+	required_shared_ptr<UINT16> m_generic_paletteram_16;
 
 	required_shared_ptr<UINT16> m_shared_ram;
-	device_t            *m_duart68681;
 	UINT8               m_m68681_tx0;
 
 	/* Sound */
@@ -60,7 +100,7 @@ public:
 	UINT32              m_mac_inst;
 
 	/* 2D video */
-	required_shared_ptr<UINT16> m_micro3d_sprite_vram;
+	required_shared_ptr<UINT16> m_sprite_vram;
 	UINT16              m_creg;
 	UINT16              m_xfer3dk;
 
@@ -90,8 +130,6 @@ public:
 	DECLARE_READ16_MEMBER(micro3d_ti_uart_r);
 	DECLARE_WRITE32_MEMBER(micro3d_scc_w);
 	DECLARE_READ32_MEMBER(micro3d_scc_r);
-	DECLARE_READ16_MEMBER(micro3d_tms_host_r);
-	DECLARE_WRITE16_MEMBER(micro3d_tms_host_w);
 	DECLARE_WRITE32_MEMBER(micro3d_mac1_w);
 	DECLARE_READ32_MEMBER(micro3d_mac2_r);
 	DECLARE_WRITE32_MEMBER(micro3d_mac2_w);
@@ -129,41 +167,58 @@ public:
 	DECLARE_WRITE8_MEMBER(micro3d_upd7759_w);
 	DECLARE_WRITE8_MEMBER(data_from_i8031);
 	DECLARE_READ8_MEMBER(data_to_i8031);
-	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_audiocpu;
-	required_device<cpu_device> m_drmath;
-	required_device<cpu_device> m_vgb;
+	DECLARE_WRITE_LINE_MEMBER(duart_irq_handler);
+	DECLARE_READ8_MEMBER(duart_input_r);
+	DECLARE_WRITE8_MEMBER(duart_output_w);
+	DECLARE_WRITE_LINE_MEMBER(duart_txb);
+	DECLARE_WRITE_LINE_MEMBER(tms_interrupt);
+	TMS340X0_SCANLINE_IND16_CB_MEMBER(scanline_update);
+
+	/* 3D graphics */
+	int inside(micro3d_vtx *v, enum planes plane);
+	micro3d_vtx intersect(micro3d_vtx *v1, micro3d_vtx *v2, enum planes plane);
+	inline void write_span(UINT32 y, UINT32 x);
+	void draw_line(UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2);
+	void rasterise_spans(UINT32 min_y, UINT32 max_y, UINT32 attr);
+	int clip_triangle(micro3d_vtx *v, micro3d_vtx *vout, int num_vertices, enum planes plane);
+	void draw_triangles(UINT32 attr);
+
 
 protected:
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
 };
 
-struct micro3d_vtx
-{
-	INT32 x, y, z;
-};
-
-
-/*----------- defined in machine/micro3d.c -----------*/
-
-void micro3d_duart_irq_handler(device_t *device, int state, UINT8 vector);
-UINT8 micro3d_duart_input_r(device_t *device);
-void micro3d_duart_output_w(device_t *device, UINT8 data);
-void micro3d_duart_tx(device_t *device, int channel, UINT8 data);
-
 /*----------- defined in audio/micro3d.c -----------*/
 
-void micro3d_noise_sh_w(running_machine &machine, UINT8 data);
+struct biquad
+{
+	double a0, a1, a2;      /* Numerator coefficients */
+	double b0, b1, b2;      /* Denominator coefficients */
+};
+
+struct lp_filter
+{
+	float *history;
+	float *coef;
+	double fs;
+	biquad ProtoCoef[2];
+};
+
+struct m3d_filter_state
+{
+	double      capval;
+	double      exponent;
+};
 
 class micro3d_sound_device : public device_t,
 									public device_sound_interface
 {
 public:
 	micro3d_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	~micro3d_sound_device() { global_free(m_token); }
+	~micro3d_sound_device() {}
 
-	// access to legacy token
-	void *token() const { assert(m_token != NULL); return m_token; }
+	void noise_sh_w(UINT8 data);
+
 protected:
 	// device-level overrides
 	virtual void device_config_complete();
@@ -174,11 +229,26 @@ protected:
 	virtual void sound_stream_update(sound_stream &stream, stream_sample_t **inputs, stream_sample_t **outputs, int samples);
 private:
 	// internal state
-	void *m_token;
+//	union
+//	{
+//		struct
+//		{
+//			UINT8 m_vcf;
+//			UINT8 m_vcq;
+//			UINT8 m_vca;
+//			UINT8 m_pan;
+//		};
+		UINT8 m_dac[4];
+//	};
+
+	float               m_gain;
+	UINT32              m_noise_shift;
+	UINT8               m_noise_value;
+	UINT8               m_noise_subcount;
+
+	m3d_filter_state    m_noise_filters[4];
+	lp_filter           m_filter;
+	sound_stream        *m_stream;
 };
 
 extern const device_type MICRO3D;
-
-/*----------- defined in video/micro3d.c -----------*/
-void micro3d_tms_interrupt(device_t *device, int state);
-void micro3d_scanline_update(screen_device &screen, bitmap_ind16 &bitmap, int scanline, const tms34010_display_params *params);

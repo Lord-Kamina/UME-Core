@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Juergen Buchmueller
 /***************************************************************************
 
     Meadows S2650 driver
@@ -116,11 +118,7 @@
 
 ***************************************************************************/
 
-#include "emu.h"
-#include "cpu/s2650/s2650.h"
 #include "includes/meadows.h"
-#include "sound/dac.h"
-#include "sound/samples.h"
 
 #include "deadeye.lh"
 #include "gypsyjug.lh"
@@ -138,21 +136,21 @@
 
 READ8_MEMBER(meadows_state::hsync_chain_r)
 {
-	UINT8 val = machine().primary_screen->hpos();
+	UINT8 val = m_screen->hpos();
 	return BITSWAP8(val,0,1,2,3,4,5,6,7);
 }
 
 
 READ8_MEMBER(meadows_state::vsync_chain_hi_r)
 {
-	UINT8 val = machine().primary_screen->vpos();
+	UINT8 val = m_screen->vpos();
 	return ((val >> 1) & 0x08) | ((val >> 3) & 0x04) | ((val >> 5) & 0x02) | (val >> 7);
 }
 
 
 READ8_MEMBER(meadows_state::vsync_chain_lo_r)
 {
-	UINT8 val = machine().primary_screen->vpos();
+	UINT8 val = m_screen->vpos();
 	return val & 0x0f;
 }
 
@@ -214,7 +212,7 @@ INTERRUPT_GEN_MEMBER(meadows_state::meadows_interrupt)
 {
 	/* fake something toggling the sense input line of the S2650 */
 	m_main_sense_state ^= 1;
-	device.execute().set_input_line(1, m_main_sense_state ? ASSERT_LINE : CLEAR_LINE);
+	m_maincpu->write_sense(m_main_sense_state ? ASSERT_LINE : CLEAR_LINE);
 }
 
 
@@ -244,7 +242,7 @@ WRITE8_MEMBER(meadows_state::audio_hardware_w)
 	switch (offset & 3)
 	{
 		case 0: /* DAC */
-			meadows_sh_dac_w(machine(), data ^ 0xff);
+			meadows_sh_dac_w(data ^ 0xff);
 			break;
 
 		case 1: /* counter clk 5 MHz / 256 */
@@ -252,7 +250,7 @@ WRITE8_MEMBER(meadows_state::audio_hardware_w)
 				break;
 			logerror("audio_w ctr1 preset $%x amp %d\n", data & 15, data >> 4);
 			m_0c01 = data;
-			meadows_sh_update(machine());
+			meadows_sh_update();
 			break;
 
 		case 2: /* counter clk 5 MHz / 32 (/ 2 or / 4) */
@@ -260,7 +258,7 @@ WRITE8_MEMBER(meadows_state::audio_hardware_w)
 				break;
 			logerror("audio_w ctr2 preset $%02x\n", data);
 			m_0c02 = data;
-			meadows_sh_update(machine());
+			meadows_sh_update();
 			break;
 
 		case 3: /* audio enable */
@@ -268,7 +266,7 @@ WRITE8_MEMBER(meadows_state::audio_hardware_w)
 				break;
 			logerror("audio_w enable ctr2/2:%d ctr2:%d dac:%d ctr1:%d\n", data&1, (data>>1)&1, (data>>2)&1, (data>>3)&1);
 			m_0c03 = data;
-			meadows_sh_update(machine());
+			meadows_sh_update();
 			break;
 	}
 }
@@ -310,22 +308,9 @@ INTERRUPT_GEN_MEMBER(meadows_state::audio_interrupt)
 {
 	/* fake something toggling the sense input line of the S2650 */
 	m_audio_sense_state ^= 1;
-	device.execute().set_input_line(1, m_audio_sense_state ? ASSERT_LINE : CLEAR_LINE);
+	m_audiocpu->write_sense(m_audio_sense_state ? ASSERT_LINE : CLEAR_LINE);
 }
 
-
-
-/*************************************
- *
- *  Palette init
- *
- *************************************/
-
-void meadows_state::palette_init()
-{
-	palette_set_color(machine(), 0, RGB_BLACK);
-	palette_set_color(machine(), 1, RGB_WHITE);
-}
 
 
 /*************************************
@@ -615,23 +600,6 @@ static const char *const bowl3d_sample_names[] =
 	0
 };
 
-
-static const samples_interface meadows_samples_interface =
-{
-	2,
-	NULL,
-	meadows_sh_start
-};
-
-
-static const samples_interface bowl3d_samples_interface =
-{
-	1,
-	bowl3d_sample_names
-};
-
-
-
 /*************************************
  *
  *  Machine drivers
@@ -657,9 +625,10 @@ static MACHINE_CONFIG_START( meadows, meadows_state )
 	MCFG_SCREEN_SIZE(32*8, 30*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(meadows_state, screen_update_meadows)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(meadows)
-	MCFG_PALETTE_LENGTH(2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", meadows)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	/* audio hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -667,7 +636,9 @@ static MACHINE_CONFIG_START( meadows, meadows_state )
 	MCFG_DAC_ADD("dac")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
-	MCFG_SAMPLES_ADD("samples", meadows_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(2)
+	MCFG_SAMPLES_START_CB(meadows_state, meadows_sh_start)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -686,9 +657,10 @@ static MACHINE_CONFIG_START( minferno, meadows_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 1*8, 24*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(meadows_state, screen_update_meadows)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(minferno)
-	MCFG_PALETTE_LENGTH(2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", minferno)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	/* audio hardware */
 	// TODO
@@ -714,9 +686,10 @@ static MACHINE_CONFIG_START( bowl3d, meadows_state )
 	MCFG_SCREEN_SIZE(32*8, 30*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(meadows_state, screen_update_meadows)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(meadows)
-	MCFG_PALETTE_LENGTH(2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", meadows)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	/* audio hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -724,10 +697,14 @@ static MACHINE_CONFIG_START( bowl3d, meadows_state )
 	MCFG_DAC_ADD("dac")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
-	MCFG_SAMPLES_ADD("samples", meadows_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(2)
+	MCFG_SAMPLES_START_CB(meadows_state, meadows_sh_start)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
-	MCFG_SAMPLES_ADD("samples2", bowl3d_samples_interface)
+	MCFG_SOUND_ADD("samples2", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(1)
+	MCFG_SAMPLES_NAMES(bowl3d_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 

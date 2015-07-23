@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, Miodrag Milanovic
 /*********************************************************************
 
     snapquik.h
@@ -17,7 +19,7 @@ const device_type SNAPSHOT = &device_creator<snapshot_image_device>;
 //-------------------------------------------------
 
 snapshot_image_device::snapshot_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, SNAPSHOT, "Snapshot", tag, owner, clock),
+	: device_t(mconfig, SNAPSHOT, "Snapshot", tag, owner, clock, "snapshot_image", __FILE__),
 		device_image_interface(mconfig, *this),
 		m_interface(NULL),
 		m_delay_attoseconds(0)
@@ -52,21 +54,13 @@ void snapshot_image_device::device_config_complete()
 }
 
 /*-------------------------------------------------
-    TIMER_CALLBACK(process_snapshot_or_quickload)
+    TIMER_CALLBACK_MEMBER(process_snapshot_or_quickload)
 -------------------------------------------------*/
 
-static TIMER_CALLBACK(process_snapshot_or_quickload)
-{
-	reinterpret_cast<snapshot_image_device *>(ptr)->timer_callback();
-}
-
-void snapshot_image_device::timer_callback()
+TIMER_CALLBACK_MEMBER(snapshot_image_device::process_snapshot_or_quickload)
 {
 	/* invoke the load */
 	m_load(*this, filetype(), length());
-
-	/* unload the device */
-	unload();
 }
 
 //-------------------------------------------------
@@ -76,7 +70,7 @@ void snapshot_image_device::timer_callback()
 void snapshot_image_device::device_start()
 {
 	/* allocate a timer */
-	m_timer = machine().scheduler().timer_alloc(FUNC(process_snapshot_or_quickload), (void *)this);
+	m_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(snapshot_image_device::process_snapshot_or_quickload),this));
 }
 
 /*-------------------------------------------------

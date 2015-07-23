@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     screen.c
 
     Core MAME screen device.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -73,7 +44,7 @@ UINT32 screen_device::m_id_counter = 0;
 //-------------------------------------------------
 
 screen_device::screen_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, SCREEN, "Video Screen", tag, owner, clock),
+	: device_t(mconfig, SCREEN, "Video Screen", tag, owner, clock, "screen", __FILE__),
 		m_type(SCREEN_TYPE_RASTER),
 		m_oldstyle_vblank_supplied(false),
 		m_refresh(0),
@@ -82,6 +53,8 @@ screen_device::screen_device(const machine_config &mconfig, const char *tag, dev
 		m_yoffset(0.0f),
 		m_xscale(1.0f),
 		m_yscale(1.0f),
+		m_palette(*this),
+		m_video_attributes(0),
 		m_container(NULL),
 		m_width(100),
 		m_height(100),
@@ -137,6 +110,7 @@ void screen_device::static_set_type(device_t &device, screen_type_enum type)
 void screen_device::static_set_raw(device_t &device, UINT32 pixclock, UINT16 htotal, UINT16 hbend, UINT16 hbstart, UINT16 vtotal, UINT16 vbend, UINT16 vbstart)
 {
 	screen_device &screen = downcast<screen_device &>(device);
+	screen.m_clock = pixclock;
 	screen.m_refresh = HZ_TO_ATTOSECONDS(pixclock) * htotal * vtotal;
 	screen.m_vblank = screen.m_refresh / vtotal * (vtotal - (vbstart - vbend));
 	screen.m_width = htotal;
@@ -210,7 +184,7 @@ void screen_device::static_set_default_position(device_t &device, double xscale,
 
 
 //-------------------------------------------------
-//  static_set_screen_update - set the legacy
+//  static_set_screen_update - set the legacy(?)
 //  screen update callback in the device
 //  configuration
 //-------------------------------------------------
@@ -242,6 +216,27 @@ void screen_device::static_set_screen_vblank(device_t &device, screen_vblank_del
 
 
 //-------------------------------------------------
+//  static_set_palette - set the screen palette
+//  configuration
+//-------------------------------------------------
+
+void screen_device::static_set_palette(device_t &device, const char *tag)
+{
+	downcast<screen_device &>(device).m_palette.set_tag(tag);
+}
+
+
+//-------------------------------------------------
+//  static_set_video_attributes - set the screen
+//  video attributes
+//-------------------------------------------------
+
+void screen_device::static_set_video_attributes(device_t &device, UINT32 flags)
+{
+	screen_device &screen = downcast<screen_device &>(device);
+	screen.m_video_attributes = flags;
+}
+//-------------------------------------------------
 //  device_validity_check - verify device
 //  configuration
 //-------------------------------------------------
@@ -250,22 +245,28 @@ void screen_device::device_validity_check(validity_checker &valid) const
 {
 	// sanity check dimensions
 	if (m_width <= 0 || m_height <= 0)
-		mame_printf_error("Invalid display dimensions\n");
+		osd_printf_error("Invalid display dimensions\n");
 
 	// sanity check display area
 	if (m_type != SCREEN_TYPE_VECTOR)
 	{
 		if (m_visarea.empty() || m_visarea.max_x >= m_width || m_visarea.max_y >= m_height)
-			mame_printf_error("Invalid display area\n");
+			osd_printf_error("Invalid display area\n");
 
 		// sanity check screen formats
 		if (m_screen_update_ind16.isnull() && m_screen_update_rgb32.isnull())
-			mame_printf_error("Missing SCREEN_UPDATE function\n");
+			osd_printf_error("Missing SCREEN_UPDATE function\n");
 	}
 
 	// check for zero frame rate
 	if (m_refresh == 0)
-		mame_printf_error("Invalid (zero) refresh rate\n");
+		osd_printf_error("Invalid (zero) refresh rate\n");
+
+	texture_format texformat = !m_screen_update_ind16.isnull() ? TEXFORMAT_PALETTE16 : TEXFORMAT_RGB32;
+	if (m_palette == NULL && texformat == TEXFORMAT_PALETTE16)
+		osd_printf_error("Screen does not have palette defined\n");
+	if (m_palette != NULL && texformat == TEXFORMAT_RGB32)
+		osd_printf_warning("Screen does not need palette defined\n");
 }
 
 
@@ -280,13 +281,19 @@ void screen_device::device_start()
 	m_screen_update_rgb32.bind_relative_to(*owner());
 	m_screen_vblank.bind_relative_to(*owner());
 
+	// if we have a palette and it's not started, wait for it
+	if (m_palette != NULL && !m_palette->started())
+		throw device_missing_dependencies();
+
 	// configure bitmap formats and allocate screen bitmaps
 	texture_format texformat = !m_screen_update_ind16.isnull() ? TEXFORMAT_PALETTE16 : TEXFORMAT_RGB32;
+
 	for (int index = 0; index < ARRAY_LENGTH(m_bitmap); index++)
 	{
 		m_bitmap[index].set_format(format(), texformat);
 		register_screen_bitmap(m_bitmap[index]);
 	}
+	register_screen_bitmap(m_priority);
 
 	// allocate raw textures
 	m_texture[0] = machine().render().texture_alloc();
@@ -311,7 +318,7 @@ void screen_device::device_start()
 	m_scanline0_timer = timer_alloc(TID_SCANLINE0);
 
 	// allocate a timer to generate per-scanline updates
-	if ((machine().config().m_video_attributes & VIDEO_UPDATE_SCANLINE) != 0)
+	if ((m_video_attributes & VIDEO_UPDATE_SCANLINE) != 0)
 		m_scanline_timer = timer_alloc(TID_SCANLINE);
 
 	// configure the screen with the default parameters
@@ -322,7 +329,7 @@ void screen_device::device_start()
 	m_vblank_end_time = attotime(0, m_vblank_period);
 
 	// start the timer to generate per-scanline updates
-	if ((machine().config().m_video_attributes & VIDEO_UPDATE_SCANLINE) != 0)
+	if ((m_video_attributes & VIDEO_UPDATE_SCANLINE) != 0)
 		m_scanline_timer->adjust(time_until_pos(0));
 
 	// create burn-in bitmap
@@ -402,7 +409,7 @@ void screen_device::device_timer(emu_timer &timer, device_timer_id id, int param
 			vblank_end();
 			break;
 
-		// first visible scanline
+		// first scanline
 		case TID_SCANLINE0:
 			reset_partial_updates();
 			break;
@@ -453,22 +460,33 @@ void screen_device::configure(int width, int height, const rectangle &visarea, a
 	m_scantime = frame_period / height;
 	m_pixeltime = frame_period / (height * width);
 
-	// if there has been no VBLANK time specified in the MACHINE_DRIVER, compute it now
-	// from the visible area, otherwise just used the supplied value
-	if (m_vblank == 0 && !m_oldstyle_vblank_supplied)
-		m_vblank_period = m_scantime * (height - visarea.height());
-	else
+	// if an old style VBLANK_TIME was specified in the MACHINE_CONFIG,
+	// use it; otherwise calculate the VBLANK period from the visible area
+	if (m_oldstyle_vblank_supplied)
+	{
 		m_vblank_period = m_vblank;
+		logerror("%s: Deprecated legacy Old Style screen configured (MCFG_SCREEN_VBLANK_TIME), please use MCFG_SCREEN_RAW_PARAMS instead.\n",this->tag());
+	}
+	else
+		m_vblank_period = m_scantime * (height - visarea.height());
 
-	// if we are on scanline 0 already, reset the update timer immediately
-	// otherwise, defer until the next scanline 0
+	// we are now fully configured with the new parameters
+	// and can safely call time_until_pos(), etc.
+
+	// if the frame period was reduced so that we are now past the end of the frame,
+	// call the VBLANK start timer now; otherwise, adjust it for the future
+	attoseconds_t delta = (machine().time() - m_vblank_start_time).as_attoseconds();
+	if (delta >= m_frame_period)
+		vblank_begin();
+	else
+		m_vblank_begin_timer->adjust(time_until_vblank_start());
+
+	// if we are on scanline 0 already, call the scanline 0 timer
+	// by hand now; otherwise, adjust it for the future
 	if (vpos() == 0)
-		m_scanline0_timer->adjust(attotime::zero);
+		reset_partial_updates();
 	else
 		m_scanline0_timer->adjust(time_until_pos(0));
-
-	// start the VBLANK timer
-	m_vblank_begin_timer->adjust(time_until_vblank_start());
 
 	// adjust speed if necessary
 	machine().video().update_refresh_speed();
@@ -496,7 +514,7 @@ void screen_device::reset_origin(int beamy, int beamx)
 
 	// if we are resetting relative to (visarea.max_y + 1, 0) == VBLANK start,
 	// call the VBLANK start timer now; otherwise, adjust it for the future
-	if (beamy == m_visarea.max_y + 1 && beamx == 0)
+	if (beamy == ((m_visarea.max_y + 1) % m_height) && beamx == 0)
 		vblank_begin();
 	else
 		m_vblank_begin_timer->adjust(time_until_vblank_start());
@@ -523,6 +541,11 @@ void screen_device::realloc_screen_bitmaps()
 		item->m_bitmap.resize(effwidth, effheight);
 
 	// re-set up textures
+	if (m_palette != NULL)
+	{
+		m_bitmap[0].set_palette(m_palette->palette());
+		m_bitmap[1].set_palette(m_palette->palette());
+	}
 	m_texture[0]->set_bitmap(m_bitmap[0], m_visarea, m_bitmap[0].texformat());
 	m_texture[1]->set_bitmap(m_bitmap[1], m_visarea, m_bitmap[1].texformat());
 }
@@ -554,7 +577,7 @@ bool screen_device::update_partial(int scanline)
 	LOG_PARTIAL_UPDATES(("Partial: update_partial(%s, %d): ", tag(), scanline));
 
 	// these two checks only apply if we're allowed to skip frames
-	if (!(machine().config().m_video_attributes & VIDEO_ALWAYS_UPDATE))
+	if (!(m_video_attributes & VIDEO_ALWAYS_UPDATE))
 	{
 		// if skipping this frame, bail
 		if (machine().video().skip_this_frame())
@@ -571,49 +594,49 @@ bool screen_device::update_partial(int scanline)
 		}
 	}
 
-	// skip if less than the lowest so far
+	// skip if we already rendered this line
 	if (scanline < m_last_partial_scan)
 	{
-		LOG_PARTIAL_UPDATES(("skipped because less than previous\n"));
-		return FALSE;
+		LOG_PARTIAL_UPDATES(("skipped because line was already rendered\n"));
+		return false;
 	}
 
-	// set the start/end scanlines
+	// set the range of scanlines to render
 	rectangle clip = m_visarea;
 	if (m_last_partial_scan > clip.min_y)
 		clip.min_y = m_last_partial_scan;
 	if (scanline < clip.max_y)
 		clip.max_y = scanline;
 
-	// render if necessary
-	bool result = false;
-	if (clip.min_y <= clip.max_y)
+	// skip if entirely outside of visible area
+	if (clip.min_y > clip.max_y)
 	{
-		UINT32 flags = UPDATE_HAS_NOT_CHANGED;
-
-		g_profiler.start(PROFILER_VIDEO);
-		LOG_PARTIAL_UPDATES(("updating %d-%d\n", clip.min_y, clip.max_y));
-
-		flags = 0;
-		screen_bitmap &curbitmap = m_bitmap[m_curbitmap];
-		switch (curbitmap.format())
-		{
-			default:
-			case BITMAP_FORMAT_IND16:   flags = m_screen_update_ind16(*this, curbitmap.as_ind16(), clip);   break;
-			case BITMAP_FORMAT_RGB32:   flags = m_screen_update_rgb32(*this, curbitmap.as_rgb32(), clip);   break;
-		}
-
-		m_partial_updates_this_frame++;
-		g_profiler.stop();
-
-		// if we modified the bitmap, we have to commit
-		m_changed |= ~flags & UPDATE_HAS_NOT_CHANGED;
-		result = true;
+		LOG_PARTIAL_UPDATES(("skipped because outside of visible area\n"));
+		return false;
 	}
+
+	// otherwise, render
+	LOG_PARTIAL_UPDATES(("updating %d-%d\n", clip.min_y, clip.max_y));
+	g_profiler.start(PROFILER_VIDEO);
+
+	UINT32 flags = UPDATE_HAS_NOT_CHANGED;
+	screen_bitmap &curbitmap = m_bitmap[m_curbitmap];
+	switch (curbitmap.format())
+	{
+		default:
+		case BITMAP_FORMAT_IND16:   flags = m_screen_update_ind16(*this, curbitmap.as_ind16(), clip);   break;
+		case BITMAP_FORMAT_RGB32:   flags = m_screen_update_rgb32(*this, curbitmap.as_rgb32(), clip);   break;
+	}
+
+	m_partial_updates_this_frame++;
+	g_profiler.stop();
+
+	// if we modified the bitmap, we have to commit
+	m_changed |= ~flags & UPDATE_HAS_NOT_CHANGED;
 
 	// remember where we left off
 	m_last_partial_scan = scanline + 1;
-	return result;
+	return true;
 }
 
 
@@ -781,18 +804,8 @@ void screen_device::register_screen_bitmap(bitmap_t &bitmap)
 
 	// if allocating now, just do it
 	bitmap.allocate(width(), height());
-	bitmap.set_palette(machine().palette);
-}
-
-
-//-------------------------------------------------
-//  vblank_port_read - custom port handler to
-//  return a VBLANK state
-//-------------------------------------------------
-
-int screen_device::vblank_port_read()
-{
-	return vblank() ? -1 : 0;
+	if (m_palette != NULL)
+		bitmap.set_palette(m_palette->palette());
 }
 
 
@@ -808,7 +821,7 @@ void screen_device::vblank_begin()
 	m_vblank_end_time = m_vblank_start_time + attotime(0, m_vblank_period);
 
 	// if this is the primary screen and we need to update now
-	if (this == machine().primary_screen && !(machine().config().m_video_attributes & VIDEO_UPDATE_AFTER_VBLANK))
+	if (this == machine().first_screen() && !(m_video_attributes & VIDEO_UPDATE_AFTER_VBLANK))
 		machine().video().frame_update();
 
 	// call the screen specific callbacks
@@ -820,7 +833,7 @@ void screen_device::vblank_begin()
 	// reset the VBLANK start timer for the next frame
 	m_vblank_begin_timer->adjust(time_until_vblank_start());
 
-	// if no VBLANK period, call the VBLANK end callback immedietely, otherwise reset the timer
+	// if no VBLANK period, call the VBLANK end callback immediately, otherwise reset the timer
 	if (m_vblank_period == 0)
 		vblank_end();
 	else
@@ -842,7 +855,7 @@ void screen_device::vblank_end()
 		m_screen_vblank(*this, false);
 
 	// if this is the primary screen and we need to update now
-	if (this == machine().primary_screen && (machine().config().m_video_attributes & VIDEO_UPDATE_AFTER_VBLANK))
+	if (this == machine().first_screen() && (m_video_attributes & VIDEO_UPDATE_AFTER_VBLANK))
 		machine().video().frame_update();
 
 	// increment the frame number counter
@@ -861,7 +874,7 @@ bool screen_device::update_quads()
 	if (machine().render().is_live(*this))
 	{
 		// only update if empty and not a vector game; otherwise assume the driver did it directly
-		if (m_type != SCREEN_TYPE_VECTOR && (machine().config().m_video_attributes & VIDEO_SELF_RENDER) == 0)
+		if (m_type != SCREEN_TYPE_VECTOR && (m_video_attributes & VIDEO_SELF_RENDER) == 0)
 		{
 			// if we're not skipping the frame and if the screen actually changed, then update the texture
 			if (!machine().video().skip_this_frame() && m_changed)
@@ -873,7 +886,7 @@ bool screen_device::update_quads()
 
 			// create an empty container with a single quad
 			m_container->empty();
-			m_container->add_quad(0.0f, 0.0f, 1.0f, 1.0f, MAKE_ARGB(0xff,0xff,0xff,0xff), m_texture[m_curtexture], PRIMFLAG_BLENDMODE(BLENDMODE_NONE) | PRIMFLAG_SCREENTEX(1));
+			m_container->add_quad(0.0f, 0.0f, 1.0f, 1.0f, rgb_t(0xff,0xff,0xff,0xff), m_texture[m_curtexture], PRIMFLAG_BLENDMODE(BLENDMODE_NONE) | PRIMFLAG_SCREENTEX(1));
 		}
 	}
 
@@ -920,11 +933,11 @@ void screen_device::update_burnin()
 			{
 				UINT64 *dst = &m_burnin.pix64(y);
 				const UINT16 *src = &srcbitmap.pix16(srcy >> 16);
-				const rgb_t *palette = palette_entry_list_adjusted(machine().palette);
+				const rgb_t *palette = m_palette->palette()->entry_list_adjusted();
 				for (x = 0, srcx = xstart; x < dstwidth; x++, srcx += xstep)
 				{
 					rgb_t pixel = palette[src[srcx >> 16]];
-					dst[x] += RGB_GREEN(pixel) + RGB_RED(pixel) + RGB_BLUE(pixel);
+					dst[x] += pixel.g() + pixel.r() + pixel.b();
 				}
 			}
 			break;
@@ -941,7 +954,7 @@ void screen_device::update_burnin()
 				for (x = 0, srcx = xstart; x < dstwidth; x++, srcx += xstep)
 				{
 					rgb_t pixel = src[srcx >> 16];
-					dst[x] += RGB_GREEN(pixel) + RGB_RED(pixel) + RGB_BLUE(pixel);
+					dst[x] += pixel.g() + pixel.r() + pixel.b();
 				}
 			}
 			break;
@@ -999,7 +1012,7 @@ void screen_device::finalize_burnin()
 		for (int x = 0, srcx = 0; x < dstwidth; x++, srcx += xstep)
 		{
 			int brightness = (UINT64)(maxval - src[srcx >> 16]) * 255 / (maxval - minval);
-			dst[x] = MAKE_ARGB(0xff, brightness, brightness, brightness);
+			dst[x] = rgb_t(0xff, brightness, brightness, brightness);
 		}
 	}
 
@@ -1036,17 +1049,17 @@ void screen_device::finalize_burnin()
 void screen_device::load_effect_overlay(const char *filename)
 {
 	// ensure that there is a .png extension
-	astring fullname(filename);
-	int extension = fullname.rchr(0, '.');
+	std::string fullname(filename);
+	int extension = fullname.find_last_of('.');
 	if (extension != -1)
-		fullname.del(extension, -1);
-	fullname.cat(".png");
+		fullname.erase(extension, -1);
+	fullname.append(".png");
 
 	// load the file
 	emu_file file(machine().options().art_path(), OPEN_FLAG_READ);
-	render_load_png(m_screen_overlay_bitmap, file, NULL, fullname);
+	render_load_png(m_screen_overlay_bitmap, file, NULL, fullname.c_str());
 	if (m_screen_overlay_bitmap.valid())
 		m_container->set_overlay(&m_screen_overlay_bitmap);
 	else
-		mame_printf_warning("Unable to load effect PNG file '%s'\n", fullname.cstr());
+		osd_printf_warning("Unable to load effect PNG file '%s'\n", fullname.c_str());
 }

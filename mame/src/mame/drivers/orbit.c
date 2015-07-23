@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
 Atari Orbit Driver
@@ -48,7 +50,7 @@ TIMER_CALLBACK_MEMBER(orbit_state::irq_off)
 INTERRUPT_GEN_MEMBER(orbit_state::orbit_interrupt)
 {
 	device.execute().set_input_line(0, ASSERT_LINE);
-	machine().scheduler().timer_set(machine().primary_screen->time_until_vblank_end(), timer_expired_delegate(FUNC(orbit_state::irq_off),this));
+	machine().scheduler().timer_set(m_screen->time_until_vblank_end(), timer_expired_delegate(FUNC(orbit_state::irq_off),this));
 }
 
 
@@ -72,7 +74,7 @@ void orbit_state::update_misc_flags(address_space &space, UINT8 val)
 	/* BIT6 => HYPER LED    */
 	/* BIT7 => WARNING SND  */
 
-	discrete_sound_w(m_discrete, space, ORBIT_WARNING_EN, BIT(m_misc_flags, 7));
+	m_discrete->write(space, ORBIT_WARNING_EN, BIT(m_misc_flags, 7));
 
 	set_led_status(machine(), 0, BIT(m_misc_flags, 3));
 	set_led_status(machine(), 1, BIT(m_misc_flags, 6));
@@ -300,16 +302,17 @@ static MACHINE_CONFIG_START( orbit, orbit_state )
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK*2, 384*2, 0, 256*2, 261*2, 0, 240*2)
 	MCFG_SCREEN_UPDATE_DRIVER(orbit_state, screen_update_orbit)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(orbit)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(black_and_white)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", orbit)
+
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(orbit)
+	MCFG_DISCRETE_INTF(orbit)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END

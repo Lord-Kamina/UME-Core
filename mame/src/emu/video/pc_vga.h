@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, Peter Trauner, Angelo Salese
 /***************************************************************************
 
     pc_vga.h
@@ -12,7 +14,22 @@
 MACHINE_CONFIG_EXTERN( pcvideo_vga );
 MACHINE_CONFIG_EXTERN( pcvideo_trident_vga );
 MACHINE_CONFIG_EXTERN( pcvideo_gamtor_vga );
-MACHINE_CONFIG_EXTERN( pcvideo_cirrus_vga );
+MACHINE_CONFIG_EXTERN( pcvideo_s3_vga );
+
+enum
+{
+	SCREEN_OFF = 0,
+	TEXT_MODE,
+	VGA_MODE,
+	EGA_MODE,
+	CGA_MODE,
+	MONO_MODE,
+	RGB8_MODE,
+	RGB15_MODE,
+	RGB16_MODE,
+	RGB24_MODE,
+	RGB32_MODE
+};
 
 // ======================> vga_device
 
@@ -23,9 +40,9 @@ class vga_device :  public device_t
 public:
 	// construction/destruction
 	vga_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	vga_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	vga_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 
-
+	virtual void zero();
 	virtual UINT32 screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 
 	virtual READ8_MEMBER(port_03b0_r);
@@ -62,12 +79,32 @@ protected:
 	void attribute_reg_write(UINT8 index, UINT8 data);
 	void gc_reg_write(UINT8 index,UINT8 data);
 	virtual UINT16 offset();
-private:
-	inline UINT8 rotate_right(UINT8 val);
-	inline UINT8 vga_logical_op(UINT8 data, UINT8 plane, UINT8 mask);
 	inline UINT8 vga_latch_write(int offs, UINT8 data);
+	inline UINT8 rotate_right(UINT8 val) { return (val >> vga.gc.rotate_count) | (val << (8 - vga.gc.rotate_count)); }
+	inline UINT8 vga_logical_op(UINT8 data, UINT8 plane, UINT8 mask)
+	{
+		UINT8 res = 0;
 
-protected:
+		switch(vga.gc.logical_op & 3)
+		{
+			case 0: /* NONE */
+				res = (data & mask) | (vga.gc.latch[plane] & ~mask);
+				break;
+			case 1: /* AND */
+				res = (data | ~mask) & (vga.gc.latch[plane]);
+				break;
+			case 2: /* OR */
+				res = (data & mask) | (vga.gc.latch[plane]);
+				break;
+			case 3: /* XOR */
+				res = (data & mask) ^ (vga.gc.latch[plane]);
+				break;
+		}
+
+		return res;
+	}
+
+
 	struct
 	{
 		read8_delegate read_dipswitch;
@@ -78,7 +115,7 @@ protected:
 			int crtc_regcount;
 		} svga_intf;
 
-		UINT8 *memory;
+		dynamic_buffer memory;
 		UINT32 pens[16]; /* the current 16 pens */
 
 		UINT8 miscellaneous_output;
@@ -133,13 +170,15 @@ protected:
 	/**/    UINT8 dw;
 	/**/    UINT8 div4;
 	/**/    UINT8 underline_loc;
-	/**/    UINT8 vert_blank_end;
+	/**/    UINT16 vert_blank_end;
 			UINT8 sync_en;
 	/**/    UINT8 aw;
 	/**/    UINT8 div2;
 	/**/    UINT8 sldiv;
 	/**/    UINT8 map14;
 	/**/    UINT8 map13;
+	/**/    UINT8 irq_clear;
+	/**/    UINT8 irq_disable;
 		} crtc;
 
 		struct
@@ -169,6 +208,7 @@ protected:
 			UINT8 index, data[0x15]; int state;
 			UINT8 prot_bit;
 			UINT8 pel_shift;
+			UINT8 pel_shift_latch;
 		} attribute;
 
 
@@ -189,6 +229,8 @@ protected:
 	} vga;
 
 	emu_timer *m_vblank_timer;
+	required_device<palette_device> m_palette;
+	required_device<screen_device> m_screen;
 };
 
 
@@ -201,8 +243,9 @@ class svga_device :  public vga_device
 {
 public:
 	// construction/destruction
-	svga_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	svga_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 
+	virtual void zero();
 	virtual UINT32 screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 protected:
 	void svga_vh_rgb8(bitmap_rgb32 &bitmap, const rectangle &cliprect);
@@ -230,10 +273,10 @@ private:
 class ibm8514a_device :  public device_t
 {
 public:
-	ibm8514a_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	ibm8514a_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 	ibm8514a_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
-	void set_vga(const char* tag) { m_vga_tag.cpy(tag); }
+	void set_vga(const char* tag) { m_vga_tag.assign(tag); }
 	void set_vga_owner() { m_vga = dynamic_cast<vga_device*>(owner()); }
 
 	void enabled();
@@ -338,6 +381,8 @@ public:
 protected:
 	virtual void device_start();
 	virtual void device_config_complete();
+	vga_device* m_vga;  // for pass-through
+	std::string m_vga_tag;  // pass-through device tag
 private:
 	void ibm8514_draw_vector(UINT8 len, UINT8 dir, bool draw);
 	void ibm8514_wait_draw_ssv();
@@ -347,8 +392,6 @@ private:
 	void ibm8514_write_bg(UINT32 offset);
 	void ibm8514_write(UINT32 offset, UINT32 src);
 
-	vga_device* m_vga;  // for pass-through
-	astring m_vga_tag;  // pass-through device tag
 	//UINT8* m_vram;  // the original 8514/A has it's own VRAM, but most VGA+8514 combination cards will have
 					// only one set of VRAM, so this will only be needed in standalone 8514/A cards
 	//UINT32 m_vramsize;
@@ -369,7 +412,7 @@ extern const device_type IBM8514A;
 class mach8_device :  public ibm8514a_device
 {
 public:
-	mach8_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	mach8_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 	mach8_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
 	READ16_MEMBER(mach8_ec0_r);
@@ -396,6 +439,8 @@ public:
 	READ16_MEMBER(mach8_sourcey_r);
 	WRITE16_MEMBER(mach8_ext_leftscissor_w);
 	WRITE16_MEMBER(mach8_ext_topscissor_w);
+	READ16_MEMBER(mach8_clksel_r) { return mach8.clksel; }
+
 protected:
 	virtual void device_start();
 	struct
@@ -403,6 +448,7 @@ protected:
 		UINT16 scratch0;
 		UINT16 scratch1;
 		UINT16 linedraw;
+		UINT16 clksel;
 	} mach8;
 };
 
@@ -463,33 +509,6 @@ private:
 // device type definition
 extern const device_type TSENG_VGA;
 
-// ======================> trident_vga_device
-
-class trident_vga_device :  public svga_device
-{
-public:
-	// construction/destruction
-	trident_vga_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-
-	virtual READ8_MEMBER(port_03c0_r);
-	virtual WRITE8_MEMBER(port_03c0_w);
-	virtual READ8_MEMBER(port_03d0_r);
-	virtual WRITE8_MEMBER(port_03d0_w);
-	virtual READ8_MEMBER(mem_r);
-	virtual WRITE8_MEMBER(mem_w);
-
-protected:
-
-private:
-	UINT8 trident_seq_reg_read(UINT8 index);
-	void trident_seq_reg_write(UINT8 index, UINT8 data);
-
-};
-
-
-// device type definition
-extern const device_type TRIDENT_VGA;
-
 
 // ======================> ati_vga_device
 
@@ -498,7 +517,7 @@ class ati_vga_device :  public svga_device
 public:
 	// construction/destruction
 	ati_vga_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	ati_vga_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	ati_vga_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 
 	virtual READ8_MEMBER(mem_r);
 	virtual WRITE8_MEMBER(mem_w);
@@ -520,6 +539,7 @@ private:
 	{
 		UINT8 ext_reg[64];
 		UINT8 ext_reg_select;
+		UINT8 vga_chip_id;
 	} ati;
 	mach8_device* m_8514;
 };
@@ -535,7 +555,7 @@ class s3_vga_device :  public ati_vga_device
 public:
 	// construction/destruction
 	s3_vga_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	s3_vga_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	s3_vga_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 
 	virtual READ8_MEMBER(port_03b0_r);
 	virtual WRITE8_MEMBER(port_03b0_w);
@@ -554,6 +574,7 @@ public:
 protected:
 	// device-level overrides
 	virtual void device_start();
+	virtual void device_reset();
 	struct
 	{
 		UINT8 memory_config;
@@ -571,6 +592,16 @@ protected:
 		UINT8 id_low;
 		UINT8 revision;
 		UINT8 id_cr30;
+		UINT32 strapping;  // power-on strapping bits
+		UINT8 sr10;   // MCLK PLL
+		UINT8 sr11;   // MCLK PLL
+		UINT8 sr12;   // DCLK PLL
+		UINT8 sr13;   // DCLK PLL
+		UINT8 sr15;   // CLKSYN control 2
+		UINT8 sr17;   // CLKSYN test
+		UINT8 clk_pll_r;  // individual DCLK PLL values
+		UINT8 clk_pll_m;
+		UINT8 clk_pll_n;
 
 		// data for memory-mapped I/O
 		UINT16 mmio_9ae8;
@@ -596,6 +627,8 @@ private:
 	UINT8 s3_crtc_reg_read(UINT8 index);
 	void s3_define_video_mode(void);
 	void s3_crtc_reg_write(UINT8 index, UINT8 data);
+	UINT8 s3_seq_reg_read(UINT8 index);
+	void s3_seq_reg_write(UINT8 index, UINT8 data);
 	ibm8514a_device* m_8514;
 };
 
@@ -628,42 +661,6 @@ private:
 // device type definition
 extern const device_type GAMTOR_VGA;
 
-// ======================> cirrus_vga_device
-
-class cirrus_vga_device :  public svga_device
-{
-public:
-	// construction/destruction
-	cirrus_vga_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-
-	virtual READ8_MEMBER(port_03c0_r);
-	virtual WRITE8_MEMBER(port_03c0_w);
-	virtual READ8_MEMBER(port_03b0_r);
-	virtual WRITE8_MEMBER(port_03b0_w);
-	virtual READ8_MEMBER(port_03d0_r);
-	virtual WRITE8_MEMBER(port_03d0_w);
-	virtual READ8_MEMBER(mem_r);
-	virtual WRITE8_MEMBER(mem_w);
-protected:
-	// device-level overrides
-	virtual void device_start();
-	virtual UINT16 offset();
-
-	UINT8 gc_mode_ext;
-	UINT8 gc_bank_0;
-	UINT8 gc_bank_1;
-private:
-	void cirrus_define_video_mode();
-	UINT8 cirrus_seq_reg_read(UINT8 index);
-	void cirrus_seq_reg_write(UINT8 index, UINT8 data);
-	UINT8 cirrus_gc_reg_read(UINT8 index);
-	void cirrus_gc_reg_write(UINT8 index, UINT8 data);
-	UINT8 cirrus_crtc_reg_read(UINT8 index);
-	void cirrus_crtc_reg_write(UINT8 index, UINT8 data);
-};
-
-// device type definition
-extern const device_type CIRRUS_VGA;
 /*
   pega notes (paradise)
   build in amstrad pc1640

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /***************************************************************************
 
     Play Mechanix / Right Hand Tech "VP100" and "VP101" platforms
@@ -15,7 +17,7 @@
 
 #include "emu.h"
 #include "cpu/mips/mips3.h"
-#include "machine/idectrl.h"
+#include "machine/ataintf.h"
 
 
 class vp10x_state : public driver_device
@@ -34,7 +36,7 @@ public:
 protected:
 
 	// devices
-	required_device<cpu_device> m_maincpu;
+	required_device<mips3_device> m_maincpu;
 
 	// driver_device overrides
 	virtual void video_start();
@@ -74,16 +76,12 @@ ADDRESS_MAP_END
 static INPUT_PORTS_START( vp101 )
 INPUT_PORTS_END
 
-static const mips3_config r5000_config =
-{
-	32768,              /* code cache size */
-	32768,              /* data cache size */
-	100000000           /* system (bus) clock */
-};
 
 static MACHINE_CONFIG_START( vp101, vp10x_state )
 	MCFG_CPU_ADD("maincpu", R5000LE, 300000000) /* actually VR5500 with added NEC VR-series custom instructions */
-	MCFG_CPU_CONFIG(r5000_config)
+	MCFG_MIPS3_ICACHE_SIZE(32768)
+	MCFG_MIPS3_DCACHE_SIZE(32768)
+	MCFG_MIPS3_SYSTEM_CLOCK(100000000)
 	MCFG_CPU_PROGRAM_MAP(main_map)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -92,7 +90,9 @@ static MACHINE_CONFIG_START( vp101, vp10x_state )
 	MCFG_SCREEN_UPDATE_DRIVER(vp10x_state, screen_update)
 	MCFG_SCREEN_SIZE(320, 240)
 	MCFG_SCREEN_VISIBLE_AREA(0, 319, 0, 239)
-	MCFG_PALETTE_LENGTH(32768)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_PALETTE_ADD("palette", 32768)
 MACHINE_CONFIG_END
 
 
@@ -103,7 +103,7 @@ ROM_START(jnero)
 	ROM_REGION(0x80000, "pic", 0)       /* PIC18c422 program - read-protected, need dumped */
 	ROM_LOAD( "8722a-1206.bin", 0x000000, 0x80000, NO_DUMP )
 
-	DISK_REGION( "ide" )
+	DISK_REGION( "ata:0:hdd:image" )
 	DISK_IMAGE_READONLY("jn010108", 0, SHA1(4f3e9c6349c9be59213df1236dba7d79e7cd704e) )
 ROM_END
 
@@ -115,7 +115,7 @@ ROM_START(specfrce)
 	ROM_REGION(0x80000, "pic", 0)       /* PIC18c422 I/P program - read-protected, need dumped */
 	ROM_LOAD( "special_forces_et_u7_rev1.2.u7", 0x000000, 0x80000, NO_DUMP )
 
-	DISK_REGION( "ide" )
+	DISK_REGION( "ata:0:hdd:image" )
 	DISK_IMAGE_READONLY("sf010101", 0, SHA1(59b5e3d8e1d5537204233598830be2066aad0556) )
 ROM_END
 

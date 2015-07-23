@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     r3000.c
@@ -122,8 +124,8 @@ const device_type R3081 = &device_creator<r3081_device>;
 //  r3000_device - constructor
 //-------------------------------------------------
 
-r3000_device::r3000_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, chip_type chiptype)
-	: cpu_device(mconfig, type, name, tag, owner, clock),
+r3000_device::r3000_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, chip_type chiptype, const char *shortname, const char *source)
+	: cpu_device(mconfig, type, name, tag, owner, clock, shortname, source),
 		m_program_config_be("program", ENDIANNESS_BIG, 32, 29),
 		m_program_config_le("program", ENDIANNESS_LITTLE, 32, 29),
 		m_program(NULL),
@@ -168,7 +170,7 @@ r3000_device::~r3000_device()
 //-------------------------------------------------
 
 r3041_device::r3041_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: r3000_device(mconfig, R3041, "R3041", tag, owner, clock, CHIP_TYPE_R3041) { }
+	: r3000_device(mconfig, R3041, "R3041", tag, owner, clock, CHIP_TYPE_R3041, "r3041", __FILE__) { }
 
 
 //-------------------------------------------------
@@ -176,7 +178,7 @@ r3041_device::r3041_device(const machine_config &mconfig, const char *tag, devic
 //-------------------------------------------------
 
 r3051_device::r3051_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: r3000_device(mconfig, R3051, "R3051", tag, owner, clock, CHIP_TYPE_R3051) { }
+	: r3000_device(mconfig, R3051, "R3051", tag, owner, clock, CHIP_TYPE_R3051, "r3051", __FILE__) { }
 
 
 //-------------------------------------------------
@@ -184,7 +186,7 @@ r3051_device::r3051_device(const machine_config &mconfig, const char *tag, devic
 //-------------------------------------------------
 
 r3052_device::r3052_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: r3000_device(mconfig, R3052, "R3052", tag, owner, clock, CHIP_TYPE_R3052) { }
+	: r3000_device(mconfig, R3052, "R3052", tag, owner, clock, CHIP_TYPE_R3052, "r3052", __FILE__) { }
 
 
 //-------------------------------------------------
@@ -192,7 +194,7 @@ r3052_device::r3052_device(const machine_config &mconfig, const char *tag, devic
 //-------------------------------------------------
 
 r3071_device::r3071_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: r3000_device(mconfig, R3071, "R3071", tag, owner, clock, CHIP_TYPE_R3071) { }
+	: r3000_device(mconfig, R3071, "R3071", tag, owner, clock, CHIP_TYPE_R3071, "r3071", __FILE__) { }
 
 
 //-------------------------------------------------
@@ -200,7 +202,7 @@ r3071_device::r3071_device(const machine_config &mconfig, const char *tag, devic
 //-------------------------------------------------
 
 r3081_device::r3081_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: r3000_device(mconfig, R3081, "R3081", tag, owner, clock, CHIP_TYPE_R3081) { }
+	: r3000_device(mconfig, R3081, "R3081", tag, owner, clock, CHIP_TYPE_R3081, "r3081", __FILE__) { }
 
 
 //-------------------------------------------------
@@ -252,10 +254,10 @@ void r3000_device::device_start()
 	}
 
 	// allocate cache memory
-	m_icache = auto_alloc_array(machine(), UINT32, m_icache_size/4);
-	m_dcache = auto_alloc_array(machine(), UINT32, m_dcache_size/4);
+	m_icache.resize(m_icache_size/4);
+	m_dcache.resize(m_dcache_size/4);
 
-	m_cache = m_dcache;
+	m_cache = &m_dcache[0];
 	m_cache_size = m_dcache_size;
 
 	// set up memory handlers
@@ -352,8 +354,8 @@ void r3000_device::device_start()
 	save_item(NAME(m_ppc));
 	save_item(NAME(m_op));
 	save_item(NAME(m_interrupt_cycles));
-	save_pointer(NAME(m_icache), m_icache_size/4);
-	save_pointer(NAME(m_dcache), m_dcache_size/4);
+	save_item(NAME(m_icache));
+	save_item(NAME(m_dcache));
 }
 
 
@@ -415,7 +417,6 @@ void r3000_device::state_import(const device_state_entry &entry)
 
 		default:
 			fatalerror("r3000_device::state_import called for unexpected value\n");
-			break;
 	}
 }
 
@@ -433,7 +434,6 @@ void r3000_device::state_export(const device_state_entry &entry)
 
 		default:
 			fatalerror("r3000_device::state_export called for unexpected value\n");
-			break;
 	}
 }
 
@@ -443,7 +443,7 @@ void r3000_device::state_export(const device_state_entry &entry)
 //  for the debugger
 //-------------------------------------------------
 
-void r3000_device::state_string_export(const device_state_entry &entry, astring &string)
+void r3000_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
@@ -498,7 +498,7 @@ offs_t r3000_device::disasm_disassemble(char *buffer, offs_t pc, const UINT8 *op
 
 inline UINT32 r3000_device::readop(offs_t pc)
 {
-	return m_direct->read_decrypted_dword(pc);
+	return m_direct->read_dword(pc);
 }
 
 UINT8 r3000_device::readmem(offs_t offset)
@@ -712,9 +712,9 @@ inline void r3000_device::set_cop0_reg(int idx, UINT32 val)
 		if (diff & SR_SwC)
 		{
 			if (val & SR_SwC)
-				m_cache = m_icache, m_cache_size = m_icache_size;
+				m_cache = &m_icache[0], m_cache_size = m_icache_size;
 			else
-				m_cache = m_dcache, m_cache_size = m_dcache_size;
+				m_cache = &m_dcache[0], m_cache_size = m_dcache_size;
 		}
 		m_cpr[0][idx] = val;
 

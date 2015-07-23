@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Frank Palazzolo
 /****************************************************************************
 
     Blockade/Comotion/Blasto/Hustle Memory MAP
@@ -87,7 +89,7 @@ WRITE8_MEMBER(blockade_state::blockade_coin_latch_w)
 {
 	if (data & 0x80)
 	{
-		if (BLOCKADE_LOG) mame_printf_debug("Reset Coin Latch\n");
+		if (BLOCKADE_LOG) osd_printf_debug("Reset Coin Latch\n");
 		if (m_just_been_reset)
 		{
 			m_just_been_reset = 0;
@@ -99,11 +101,11 @@ WRITE8_MEMBER(blockade_state::blockade_coin_latch_w)
 
 	if (data & 0x20)
 	{
-		if (BLOCKADE_LOG) mame_printf_debug("Pin 19 High\n");
+		if (BLOCKADE_LOG) osd_printf_debug("Pin 19 High\n");
 	}
 	else
 	{
-		if (BLOCKADE_LOG) mame_printf_debug("Pin 19 Low\n");
+		if (BLOCKADE_LOG) osd_printf_debug("Pin 19 Low\n");
 	}
 
 	return;
@@ -437,12 +439,6 @@ static GFXDECODE_START( blasto )
 	GFXDECODE_ENTRY( "gfx1", 0x0000, blasto_layout,   0, 1 )
 GFXDECODE_END
 
-void blockade_state::palette_init()
-{
-	palette_set_color(machine(),0,MAKE_RGB(0x00,0x00,0x00)); /* BLACK */
-	palette_set_color(machine(),1,MAKE_RGB(0xff,0xff,0xff)); /* WHITE */
-}
-
 
 /*************************************
  *
@@ -478,24 +474,27 @@ static MACHINE_CONFIG_START( blockade, blockade_state )
 	MCFG_SCREEN_SIZE(32*8, 28*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(blockade_state, screen_update_blockade)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(blockade)
-	MCFG_PALETTE_LENGTH(2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", blockade)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SAMPLES_ADD("samples", blockade_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(1)
+	MCFG_SAMPLES_NAMES(blockade_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(blockade)
+	MCFG_DISCRETE_INTF(blockade)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( blasto, blockade )
-	MCFG_GFXDECODE(blasto)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", blasto)
 MACHINE_CONFIG_END
 
 /*************************************

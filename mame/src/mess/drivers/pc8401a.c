@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 #include "includes/pc8401a.h"
 
 /*
@@ -31,18 +33,18 @@
 
 */
 
+#include "bus/rs232/rs232.h"
+
 /* Fake Keyboard */
 
 void pc8401a_state::scan_keyboard()
 {
-	int row, strobe = 0;
-
-	UINT8 keydata[10] = { m_y0->read(), m_y1->read(), m_y2->read(), m_y3->read(), m_y4->read(), m_y5->read(), m_y6->read(), m_y7->read(), m_y8->read(), m_y9->read() };
+	int strobe = 0;
 
 	/* scan keyboard */
-	for (row = 0; row < 10; row++)
+	for (int row = 0; row < 10; row++)
 	{
-		UINT8 data = keydata[row];
+		UINT8 data = m_io_y[row]->read();
 
 		if (data != 0xff)
 		{
@@ -86,11 +88,15 @@ void pc8401a_state::bankswitch(UINT8 data)
 			program.unmap_write(0x0000, 0x7fff);
 			membank("bank1")->set_entry(rombank);
 		}
-		else
+		else if (m_cart_rom)
 		{
 			/* ROM cartridge */
-			program.unmap_readwrite(0x0000, 0x7fff);
+			program.install_read_bank(0x0000, 0x7fff, "bank1");
+			program.unmap_write(0x0000, 0x7fff);
+			membank("bank1")->set_entry(6);
 		}
+		else
+			program.unmap_readwrite(0x0000, 0x7fff);
 		//logerror("0x0000-0x7fff = ROM %u\n", rombank);
 		break;
 
@@ -260,8 +266,7 @@ WRITE8_MEMBER( pc8401a_state::rtc_ctrl_w )
 READ8_MEMBER( pc8401a_state::io_rom_data_r )
 {
 	//logerror("I/O ROM read from %05x\n", m_io_addr);
-
-	return m_io_rom->base()[m_io_addr];
+	return m_io_cart->read_rom(space, m_io_addr);
 }
 
 WRITE8_MEMBER( pc8401a_state::io_rom_addr_w )
@@ -341,16 +346,16 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( pc8500_io, AS_IO, 8, pc8401a_state )
 	ADDRESS_MAP_UNMAP_HIGH
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x00, 0x00) AM_READ_PORT("Y0")
-	AM_RANGE(0x01, 0x01) AM_READ_PORT("Y1")
-	AM_RANGE(0x02, 0x02) AM_READ_PORT("Y2")
-	AM_RANGE(0x03, 0x03) AM_READ_PORT("Y3")
-	AM_RANGE(0x04, 0x04) AM_READ_PORT("Y4")
-	AM_RANGE(0x05, 0x05) AM_READ_PORT("Y5")
-	AM_RANGE(0x06, 0x06) AM_READ_PORT("Y6")
-	AM_RANGE(0x07, 0x07) AM_READ_PORT("Y7")
-	AM_RANGE(0x08, 0x08) AM_READ_PORT("Y8")
-	AM_RANGE(0x09, 0x09) AM_READ_PORT("Y9")
+	AM_RANGE(0x00, 0x00) AM_READ_PORT("Y.0")
+	AM_RANGE(0x01, 0x01) AM_READ_PORT("Y.1")
+	AM_RANGE(0x02, 0x02) AM_READ_PORT("Y.2")
+	AM_RANGE(0x03, 0x03) AM_READ_PORT("Y.3")
+	AM_RANGE(0x04, 0x04) AM_READ_PORT("Y.4")
+	AM_RANGE(0x05, 0x05) AM_READ_PORT("Y.5")
+	AM_RANGE(0x06, 0x06) AM_READ_PORT("Y.6")
+	AM_RANGE(0x07, 0x07) AM_READ_PORT("Y.7")
+	AM_RANGE(0x08, 0x08) AM_READ_PORT("Y.8")
+	AM_RANGE(0x09, 0x09) AM_READ_PORT("Y.9")
 	AM_RANGE(0x10, 0x10) AM_WRITE(rtc_cmd_w)
 	AM_RANGE(0x20, 0x20) AM_DEVREADWRITE(I8251_TAG, i8251_device, data_r, data_w)
 	AM_RANGE(0x21, 0x21) AM_DEVREADWRITE(I8251_TAG, i8251_device, status_r, control_w)
@@ -378,7 +383,7 @@ ADDRESS_MAP_END
 /* Input Ports */
 
 static INPUT_PORTS_START( pc8401a )
-	PORT_START("Y0")
+	PORT_START("Y.0")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("STOP")// PORT_CODE(KEYCODE_ESC) PORT_CHAR(UCHAR_MAMEKEY(ESC))
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("SHIFT") PORT_CODE(KEYCODE_LSHIFT) PORT_CODE(KEYCODE_RSHIFT) PORT_CHAR(UCHAR_SHIFT_1)
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD )
@@ -388,7 +393,7 @@ static INPUT_PORTS_START( pc8401a )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD )
 
-	PORT_START("Y1")
+	PORT_START("Y.1")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_G) PORT_CHAR('g') PORT_CHAR('G')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_F) PORT_CHAR('f') PORT_CHAR('F')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_E) PORT_CHAR('e') PORT_CHAR('E')
@@ -398,7 +403,7 @@ static INPUT_PORTS_START( pc8401a )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_A) PORT_CHAR('a') PORT_CHAR('A')
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("SPACE") PORT_CODE(KEYCODE_SPACE) PORT_CHAR(' ')
 
-	PORT_START("Y2")
+	PORT_START("Y.2")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_O) PORT_CHAR('o') PORT_CHAR('O')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_N) PORT_CHAR('n') PORT_CHAR('N')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_M) PORT_CHAR('m') PORT_CHAR('M')
@@ -408,7 +413,7 @@ static INPUT_PORTS_START( pc8401a )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_I) PORT_CHAR('i') PORT_CHAR('I')
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_H) PORT_CHAR('h') PORT_CHAR('H')
 
-	PORT_START("Y3")
+	PORT_START("Y.3")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_W) PORT_CHAR('w') PORT_CHAR('W')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_V) PORT_CHAR('v') PORT_CHAR('V')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_U) PORT_CHAR('u') PORT_CHAR('U')
@@ -418,7 +423,7 @@ static INPUT_PORTS_START( pc8401a )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_Q) PORT_CHAR('q') PORT_CHAR('Q')
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_P) PORT_CHAR('p') PORT_CHAR('P')
 
-	PORT_START("Y4")
+	PORT_START("Y.4")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_MINUS) PORT_CHAR('-') PORT_CHAR('*')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_QUOTE) PORT_CHAR('\'') PORT_CHAR('*')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR(']') PORT_CHAR('*')
@@ -428,7 +433,7 @@ static INPUT_PORTS_START( pc8401a )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_Y) PORT_CHAR('y') PORT_CHAR('Y')
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_X) PORT_CHAR('x') PORT_CHAR('X')
 
-	PORT_START("Y5")
+	PORT_START("Y.5")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_7) PORT_CHAR('7') PORT_CHAR('*')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_6) PORT_CHAR('6') PORT_CHAR('*')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_5) PORT_CHAR('5') PORT_CHAR('*')
@@ -438,7 +443,7 @@ static INPUT_PORTS_START( pc8401a )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_1) PORT_CHAR('1') PORT_CHAR('*')
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_0) PORT_CHAR('0') PORT_CHAR('*')
 
-	PORT_START("Y6")
+	PORT_START("Y.6")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_EQUALS) PORT_CHAR('=') PORT_CHAR('*')
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_SLASH) PORT_CHAR('/') PORT_CHAR('*')
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_STOP) PORT_CHAR('.') PORT_CHAR('*')
@@ -448,7 +453,7 @@ static INPUT_PORTS_START( pc8401a )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_9) PORT_CHAR('9') PORT_CHAR('*')
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_8) PORT_CHAR('8') PORT_CHAR('*')
 
-	PORT_START("Y7")
+	PORT_START("Y.7")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("ESC") PORT_CODE(KEYCODE_ESC) PORT_CHAR(UCHAR_MAMEKEY(ESC))
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) // ^I
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("F5") PORT_CODE(KEYCODE_F5) PORT_CHAR(UCHAR_MAMEKEY(F5))
@@ -458,7 +463,7 @@ static INPUT_PORTS_START( pc8401a )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("F1") PORT_CODE(KEYCODE_F1) PORT_CHAR(UCHAR_MAMEKEY(F1))
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) // ^C
 
-	PORT_START("Y8")
+	PORT_START("Y.8")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_RIGHT) PORT_CODE(KEYCODE_RIGHT) PORT_CHAR(UCHAR_MAMEKEY(RIGHT))
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_F6)
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_F7)
@@ -468,7 +473,7 @@ static INPUT_PORTS_START( pc8401a )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("Y9")
+	PORT_START("Y.9")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_F8)
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_F9)
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_F10)
@@ -483,6 +488,9 @@ INPUT_PORTS_END
 
 void pc8401a_state::machine_start()
 {
+	std::string region_tag;
+	m_cart_rom = memregion(region_tag.assign(m_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
+
 	/* initialize RTC */
 	m_rtc->cs_w(1);
 
@@ -494,6 +502,8 @@ void pc8401a_state::machine_start()
 	/* set up A0/A1 memory banking */
 	membank("bank1")->configure_entries(0, 4, m_rom->base(), 0x8000);
 	membank("bank1")->configure_entries(4, 2, ram, 0x8000);
+	if (m_cart_rom)
+		membank("bank1")->configure_entries(6, 1, m_cart_rom->base(), 0x8000);
 	membank("bank1")->set_entry(0);
 
 	/* set up A2 memory banking */
@@ -555,44 +565,6 @@ WRITE8_MEMBER( pc8401a_state::ppi_pc_w )
 	*/
 }
 
-static I8255A_INTERFACE( ppi_intf )
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(pc8401a_state, ppi_pc_r),
-	DEVCB_DRIVER_MEMBER(pc8401a_state, ppi_pc_w)
-};
-
-/* I8251 Interface */
-
-static const i8251_interface uart_intf =
-{
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, serial_port_device, rx),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, serial_port_device, tx),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, rs232_port_device, dsr_r),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, rs232_port_device, dtr_w),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, rs232_port_device, rts_w),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-//-------------------------------------------------
-//  rs232_port_interface rs232_intf
-//-------------------------------------------------
-
-static const rs232_port_interface rs232_intf =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 /* Machine Drivers */
 
 static MACHINE_CONFIG_START( pc8401a, pc8401a_state )
@@ -606,22 +578,30 @@ static MACHINE_CONFIG_START( pc8401a, pc8401a_state )
 
 	/* devices */
 	MCFG_UPD1990A_ADD(UPD1990A_TAG, XTAL_32_768kHz, NULL, NULL)
-	MCFG_I8255A_ADD(I8255A_TAG, ppi_intf)
-	MCFG_I8251_ADD(I8251_TAG, uart_intf)
-	MCFG_RS232_PORT_ADD(RS232_TAG, rs232_intf, default_rs232_devices, NULL)
+
+	MCFG_DEVICE_ADD(I8255A_TAG, I8255A, 0)
+	MCFG_I8255_IN_PORTC_CB(READ8(pc8401a_state, ppi_pc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pc8401a_state, ppi_pc_w))
+
+	MCFG_DEVICE_ADD(I8251_TAG, I8251, 0)
+	MCFG_I8251_TXD_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_txd))
+	MCFG_I8251_DTR_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_dtr))
+	MCFG_I8251_RTS_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_rts))
+
+	MCFG_RS232_PORT_ADD(RS232_TAG, default_rs232_devices, NULL)
+	MCFG_RS232_RXD_HANDLER(DEVWRITELINE(I8251_TAG, i8251_device, write_rxd))
+	MCFG_RS232_DSR_HANDLER(DEVWRITELINE(I8251_TAG, i8251_device, write_dsr))
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD(pc8401a_video)
 
 	/* option ROM cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, NULL)
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* I/O ROM cartridge */
-	MCFG_CARTSLOT_ADD("iocart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_GENERIC_CARTSLOT_ADD("io_cart", generic_linear_slot, NULL)
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -640,22 +620,30 @@ static MACHINE_CONFIG_START( pc8500, pc8500_state )
 
 	/* devices */
 	MCFG_UPD1990A_ADD(UPD1990A_TAG, XTAL_32_768kHz, NULL, NULL)
-	MCFG_I8255A_ADD(I8255A_TAG, ppi_intf)
-	MCFG_I8251_ADD(I8251_TAG, uart_intf)
-	MCFG_RS232_PORT_ADD(RS232_TAG, rs232_intf, default_rs232_devices, NULL)
+
+	MCFG_DEVICE_ADD(I8255A_TAG, I8255A, 0)
+	MCFG_I8255_IN_PORTC_CB(READ8(pc8401a_state, ppi_pc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pc8401a_state, ppi_pc_w))
+
+	MCFG_DEVICE_ADD(I8251_TAG, I8251, 0)
+	MCFG_I8251_TXD_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_txd))
+	MCFG_I8251_DTR_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_dtr))
+	MCFG_I8251_RTS_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_rts))
+
+	MCFG_RS232_PORT_ADD(RS232_TAG, default_rs232_devices, NULL)
+	MCFG_RS232_RXD_HANDLER(DEVWRITELINE(I8251_TAG, i8251_device, write_rxd))
+	MCFG_RS232_DSR_HANDLER(DEVWRITELINE(I8251_TAG, i8251_device, write_dsr))
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD(pc8500_video)
 
 	/* option ROM cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, NULL)
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* I/O ROM cartridge */
-	MCFG_CARTSLOT_ADD("iocart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_GENERIC_CARTSLOT_ADD("io_cart", generic_linear_slot, NULL)
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -668,30 +656,22 @@ MACHINE_CONFIG_END
 ROM_START( pc8401a )
 	ROM_REGION( 0x20000, Z80_TAG, ROMREGION_ERASEFF )
 	ROM_LOAD( "pc8401a.bin", 0x0000, 0x18000, NO_DUMP )
-	ROM_CART_LOAD("cart", 0x18000, 0x8000, ROM_NOMIRROR | ROM_OPTIONAL)
 
 	ROM_REGION( 0x1000, "chargen", 0 )
 	ROM_LOAD( "pc8441a.bin", 0x0000, 0x1000, NO_DUMP )
-
-	ROM_REGION( 0x40000, "iorom", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("iocart", 0x00000, 0x40000, ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START( pc8500 )
 	ROM_REGION( 0x20000, Z80_TAG, ROMREGION_ERASEFF )
 	ROM_LOAD( "pc8500.bin", 0x0000, 0x10000, CRC(c2749ef0) SHA1(f766afce9fda9ec84ed5b39ebec334806798afb3) )
-	ROM_CART_LOAD("cart", 0x18000, 0x8000, ROM_NOMIRROR | ROM_OPTIONAL)
 
 	ROM_REGION( 0x1000, "chargen", 0 )
 	ROM_LOAD( "pc8441a.bin", 0x0000, 0x1000, NO_DUMP )
-
-	ROM_REGION( 0x40000, "iorom", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("iocart", 0x00000, 0x40000, ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 /* System Drivers */
 
 /*    YEAR  NAME        PARENT  COMPAT  MACHINE     INPUT       INIT    COMPANY FULLNAME */
-COMP( 1984, pc8401a,    0,      0,      pc8401a,    pc8401a, driver_device, 0,      "Nippon Electronic Company",    "PC-8401A-LS", GAME_NOT_WORKING )
-//COMP( 1984, pc8401bd,   pc8401a,0,      pc8401a,    pc8401a, driver_device,    0,      "Nippon Electronic Company",  "PC-8401BD", GAME_NOT_WORKING )
+COMP( 1984, pc8401a,    0,      0,      pc8401a,    pc8401a, driver_device, 0,      "Nippon Electronic Company",    "PC-8401A-LS", GAME_NOT_WORKING | GAME_NO_SOUND)
+//COMP( 1984, pc8401bd,   pc8401a,0,      pc8401a,    pc8401a, driver_device, 0,      "Nippon Electronic Company",    "PC-8401BD", GAME_NOT_WORKING)
 COMP( 1985, pc8500,     0,      0,      pc8500,     pc8401a, driver_device, 0,      "Nippon Electronic Company",    "PC-8500", GAME_NOT_WORKING | GAME_NO_SOUND)

@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert, R. Belmont
 //============================================================
 //
 //  output.c - Generic implementation of MAME output routines
-//
-//  Copyright Nicola Salmoria and the MAME Team.
-//  Visit http://mamedev.org for licensing and usage restrictions.
 //
 //============================================================
 
@@ -17,7 +16,7 @@
 #include "emu.h"
 
 // MAMEOS headers
-#include "output.h"
+#include "osdsdl.h"
 
 
 
@@ -55,7 +54,6 @@ static FILE *output;
 //  FUNCTION PROTOTYPES
 //============================================================
 
-static void sdloutput_exit(running_machine &machine);
 static void notifier_callback(const char *outname, INT32 value, void *param);
 
 //============================================================
@@ -68,32 +66,31 @@ PID_CAST osd_getpid(void)
 }
 
 //============================================================
-//  sdloutput_init
+//  output_init
 //============================================================
 
-void sdloutput_init(running_machine &machine)
+bool sdl_osd_interface::output_init()
 {
 	int fildes;
-
-	machine.add_notifier(MACHINE_NOTIFY_EXIT, machine_notify_delegate(FUNC(sdloutput_exit), &machine));
 
 	fildes = open(SDLMAME_OUTPUT, O_RDWR | O_NONBLOCK);
 
 	if (fildes < 0)
 	{
 		output = NULL;
-		mame_printf_verbose("output: unable to open output notifier file %s\n", SDLMAME_OUTPUT);
+		osd_printf_verbose("output: unable to open output notifier file %s\n", SDLMAME_OUTPUT);
 	}
 	else
 	{
 		output = fdopen(fildes, "w");
 
-		mame_printf_verbose("output: opened output notifier file %s\n", SDLMAME_OUTPUT);
-		fprintf(output, "MAME " PID_FMT " START %s\n", osd_getpid(), machine.system().name);
+		osd_printf_verbose("output: opened output notifier file %s\n", SDLMAME_OUTPUT);
+		fprintf(output, "MAME " PID_FMT " START %s\n", osd_getpid(), this->machine().system().name);
 		fflush(output);
 	}
 
 	output_set_notifier(NULL, notifier_callback, NULL);
+	return true;
 }
 
 
@@ -101,15 +98,15 @@ void sdloutput_init(running_machine &machine)
 //  winoutput_exit
 //============================================================
 
-static void sdloutput_exit(running_machine &machine)
+void sdl_osd_interface::output_exit()
 {
 	if (output != NULL)
 	{
-		fprintf(output, "MAME " PID_FMT " STOP %s\n", osd_getpid(), machine.system().name);
+		fprintf(output, "MAME " PID_FMT " STOP %s\n", osd_getpid(), machine().system().name);
 		fflush(output);
 		fclose(output);
 		output = NULL;
-		mame_printf_verbose("output: closed output notifier file\n");
+		osd_printf_verbose("output: closed output notifier file\n");
 	}
 }
 
@@ -128,13 +125,20 @@ static void notifier_callback(const char *outname, INT32 value, void *param)
 
 #else  /* SDLMAME_WIN32 */
 
+#include "emu.h"
+#include "osdsdl.h"
 #include "emucore.h"
 
 //============================================================
 //  Stub for win32
 //============================================================
 
-void sdloutput_init(running_machine &machine)
+bool sdl_osd_interface::output_init()
+{
+	return true;
+}
+
+void sdl_osd_interface::output_exit()
 {
 }
 

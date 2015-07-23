@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli
 /*
 
     Laser Battle / Lazarian (c) 1981 Zaccaria
@@ -20,9 +22,7 @@ TODO:
 #include "cpu/m6800/m6800.h"
 #include "cpu/s2650/s2650.h"
 #include "machine/6821pia.h"
-#include "sound/sn76477.h"
 #include "sound/tms3615.h"
-#include "video/s2636.h"
 #include "includes/laserbat.h"
 
 
@@ -165,9 +165,9 @@ static ADDRESS_MAP_START( laserbat_map, AS_PROGRAM, 8, laserbat_state )
 	AM_RANGE(0x7800, 0x7bff) AM_ROM
 
 	AM_RANGE(0x1400, 0x14ff) AM_MIRROR(0x6000) AM_WRITENOP // always 0 (bullet ram in Quasar)
-	AM_RANGE(0x1500, 0x15ff) AM_MIRROR(0x6000) AM_DEVREADWRITE_LEGACY("s2636_1", s2636_work_ram_r, s2636_work_ram_w)
-	AM_RANGE(0x1600, 0x16ff) AM_MIRROR(0x6000) AM_DEVREADWRITE_LEGACY("s2636_2", s2636_work_ram_r, s2636_work_ram_w)
-	AM_RANGE(0x1700, 0x17ff) AM_MIRROR(0x6000) AM_DEVREADWRITE_LEGACY("s2636_3", s2636_work_ram_r, s2636_work_ram_w)
+	AM_RANGE(0x1500, 0x15ff) AM_MIRROR(0x6000) AM_DEVREADWRITE("s2636_1", s2636_device, work_ram_r, work_ram_w)
+	AM_RANGE(0x1600, 0x16ff) AM_MIRROR(0x6000) AM_DEVREADWRITE("s2636_2", s2636_device, work_ram_r, work_ram_w)
+	AM_RANGE(0x1700, 0x17ff) AM_MIRROR(0x6000) AM_DEVREADWRITE("s2636_3", s2636_device, work_ram_r, work_ram_w)
 	AM_RANGE(0x1800, 0x1bff) AM_MIRROR(0x6000) AM_WRITE(laserbat_videoram_w)
 	AM_RANGE(0x1c00, 0x1fff) AM_MIRROR(0x6000) AM_RAM
 ADDRESS_MAP_END
@@ -180,7 +180,6 @@ static ADDRESS_MAP_START( laserbat_io_map, AS_IO, 8, laserbat_state )
 	AM_RANGE(0x06, 0x06) AM_WRITE(laserbat_input_mux_w)
 	AM_RANGE(0x07, 0x07) AM_WRITE(laserbat_csound2_w)
 	AM_RANGE(S2650_SENSE_PORT, S2650_SENSE_PORT) AM_READ_PORT("SENSE")
-	AM_RANGE(S2650_FO_PORT, S2650_FO_PORT) AM_RAM AM_SHARE("fo_state")
 ADDRESS_MAP_END
 
 
@@ -193,7 +192,6 @@ static ADDRESS_MAP_START( catnmous_io_map, AS_IO, 8, laserbat_state )
 	AM_RANGE(0x06, 0x06) AM_WRITE(laserbat_input_mux_w)
 	AM_RANGE(0x07, 0x07) AM_WRITENOP // unknown
 	AM_RANGE(S2650_SENSE_PORT, S2650_SENSE_PORT) AM_READ_PORT("SENSE")
-	AM_RANGE(S2650_FO_PORT, S2650_FO_PORT) AM_RAM AM_SHARE("fo_state")
 ADDRESS_MAP_END
 
 // the same as in zaccaria.c ?
@@ -485,7 +483,7 @@ TILE_GET_INFO_MEMBER(laserbat_state::get_tile_info)
 
 void laserbat_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(laserbat_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(laserbat_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	save_item(NAME(m_videoram));
 	save_item(NAME(m_colorram));
@@ -495,12 +493,12 @@ UINT32 laserbat_state::screen_update_laserbat(screen_device &screen, bitmap_ind1
 {
 	int y;
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	/* update the S2636 chips */
-	bitmap_ind16 &s2636_1_bitmap = s2636_update(m_s2636_1, cliprect);
-	bitmap_ind16 &s2636_2_bitmap = s2636_update(m_s2636_2, cliprect);
-	bitmap_ind16 &s2636_3_bitmap = s2636_update(m_s2636_3, cliprect);
+	bitmap_ind16 &s2636_1_bitmap = m_s2636_1->update(cliprect);
+	bitmap_ind16 &s2636_2_bitmap = m_s2636_2->update(cliprect);
+	bitmap_ind16 &s2636_3_bitmap = m_s2636_3->update(cliprect);
 
 	/* copy the S2636 images into the main bitmap */
 	for (y = cliprect.min_y; y <= cliprect.max_y; y++)
@@ -525,7 +523,7 @@ UINT32 laserbat_state::screen_update_laserbat(screen_device &screen, bitmap_ind1
 	}
 
 	if (m_sprite_enable)
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				m_sprite_code,
 				m_sprite_color,
 				0,0,
@@ -534,34 +532,6 @@ UINT32 laserbat_state::screen_update_laserbat(screen_device &screen, bitmap_ind1
 	return 0;
 }
 
-/* Laser Battle sound **********************************/
-
-static const sn76477_interface laserbat_sn76477_interface =
-{
-	RES_K(47),      /*  4 noise_res         R21    47K */
-	0,              /*  5 filter_res (variable) */
-	CAP_P(1000),    /*  6 filter_cap        C21    1000 pF */
-	0,              /*  7 decay_res         */
-	0,              /*  8 attack_decay_cap  */
-	0,              /* 10 attack_res        */
-	RES_K(47),      /* 11 amplitude_res     R26    47K */
-	0,              /* 12 feedback_res (variable) */
-	5.0 * RES_K(2.2) / (RES_K(2.2) + RES_K(4.7)),   /* 16  vco_voltage       */
-	0,              /* 17 vco_cap           */
-	0,              /* 18 vco_res (variable) */
-	5.0,            /* 19 pitch_voltage     */
-	0,              /* 20 slf_res (variable) */
-	CAP_U(4.7),     /* 21 slf_cap           C24    4.7 uF */
-	0,              /* 23 oneshot_cap       */
-	0,              /* 24 oneshot_res       */
-	0,              /* 22 vco (variable) */
-	0,              /* 26 mixer A           */
-	0,              /* 25 mixer B (variable) */
-	0,              /* 27 mixer C           */
-	0,              /* 1  envelope 1        */
-	1,              /* 28 envelope 2        */
-	1               /* 9  enable (variable) */
-};
 
 /* Cat'N Mouse sound ***********************************/
 
@@ -616,33 +586,6 @@ WRITE8_MEMBER(laserbat_state::zaccaria_port0b_w)
 	m_last_port0b = data;
 }
 
-static const pia6821_interface pia_intf =
-{
-	DEVCB_DRIVER_MEMBER(laserbat_state,zaccaria_port0a_r),      /* port A in */
-	DEVCB_NULL,     /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(laserbat_state,zaccaria_port0a_w),      /* port A out */
-	DEVCB_DRIVER_MEMBER(laserbat_state,zaccaria_port0b_w),      /* port B out */
-	DEVCB_NULL,     /* line CA2 out */
-	DEVCB_NULL,     /* port CB2 out */
-	DEVCB_DRIVER_LINE_MEMBER(laserbat_state,zaccaria_irq0a),        /* IRQA */
-	DEVCB_DRIVER_LINE_MEMBER(laserbat_state,zaccaria_irq0b)     /* IRQB */
-};
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(driver_device, soundlatch_byte_r),
-	DEVCB_NULL,//ay8910_port0a_w,
-	DEVCB_NULL
-};
-
-
 INTERRUPT_GEN_MEMBER(laserbat_state::laserbat_interrupt)
 {
 	device.execute().set_input_line_and_vector(0, HOLD_LINE, 0x0a);
@@ -654,38 +597,9 @@ INTERRUPT_GEN_MEMBER(laserbat_state::zaccaria_cb1_toggle)
 	m_cb1_toggle ^= 1;
 }
 
-
-static const s2636_interface s2636_1_config =
-{
-	"screen",
-	0x100,
-	0, -19,
-	NULL
-};
-
-static const s2636_interface s2636_2_config =
-{
-	"screen",
-	0x100,
-	0, -19,
-	NULL
-};
-
-static const s2636_interface s2636_3_config =
-{
-	"screen",
-	0x100,
-	0, -19,
-	NULL
-};
-
 void laserbat_state::machine_start()
 {
-	m_s2636_1 = machine().device("s2636_1");
-	m_s2636_2 = machine().device("s2636_2");
-	m_s2636_3 = machine().device("s2636_3");
 	m_pia = machine().device<pia6821_device>("pia");
-	m_sn = machine().device("snsnd");
 	m_tms1 = machine().device<tms3615_device>("tms1");
 	m_tms2 = machine().device<tms3615_device>("tms2");
 
@@ -743,7 +657,6 @@ static MACHINE_CONFIG_START( laserbat, laserbat_state )
 	MCFG_CPU_IO_MAP(laserbat_io_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", laserbat_state,  laserbat_interrupt)
 
-
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(50)
@@ -751,20 +664,40 @@ static MACHINE_CONFIG_START( laserbat, laserbat_state )
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(1*8, 29*8-1, 2*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(laserbat_state, screen_update_laserbat)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(laserbat)
-	MCFG_PALETTE_LENGTH(1024)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", laserbat)
+	MCFG_PALETTE_ADD("palette", 1024)
 
-	MCFG_S2636_ADD("s2636_1", s2636_1_config)
-	MCFG_S2636_ADD("s2636_2", s2636_2_config)
-	MCFG_S2636_ADD("s2636_3", s2636_3_config)
+	MCFG_DEVICE_ADD("s2636_1", S2636, 0)
+	MCFG_S2636_WORKRAM_SIZE(0x100)
+	MCFG_S2636_OFFSETS(0, -19)
 
+	MCFG_DEVICE_ADD("s2636_2", S2636, 0)
+	MCFG_S2636_WORKRAM_SIZE(0x100)
+	MCFG_S2636_OFFSETS(0, -19)
+
+	MCFG_DEVICE_ADD("s2636_3", S2636, 0)
+	MCFG_S2636_WORKRAM_SIZE(0x100)
+	MCFG_S2636_OFFSETS(0, -19)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("snsnd", SN76477, 0) // output not connected
-	MCFG_SOUND_CONFIG(laserbat_sn76477_interface)
+	MCFG_SN76477_NOISE_PARAMS(RES_K(47), 0, CAP_P(1000)) // noise + filter: R21 47K + N/C + C21 1000 pF
+	MCFG_SN76477_DECAY_RES(0)                            // decay_res
+	MCFG_SN76477_ATTACK_PARAMS(0, 0)                     // attack_decay_cap + attack_res
+	MCFG_SN76477_AMP_RES(RES_K(47))                      // amplitude_res: R26 47K
+	MCFG_SN76477_FEEDBACK_RES(RES_K(200))                // feedback_res
+	MCFG_SN76477_VCO_PARAMS(5.0 * RES_K(2.2) / (RES_K(2.2) + RES_K(4.7)), 0, 0) // VCO volt + cap + res
+	MCFG_SN76477_PITCH_VOLTAGE(5.0)                      // pitch_voltage
+	MCFG_SN76477_SLF_PARAMS(CAP_U(4.7), 0)               // slf caps + res: C24 4.7 uF + (variable)
+	MCFG_SN76477_ONESHOT_PARAMS(0,0)                     // oneshot caps + res
+	MCFG_SN76477_VCO_MODE(0)                             // VCO mode
+	MCFG_SN76477_MIXER_PARAMS(0, 0, 0)                   // mixer A, B, C
+	MCFG_SN76477_ENVELOPE_PARAMS(0, 1)                   // envelope 1, 2
+	MCFG_SN76477_ENABLE(1)                               // enable
 
 	MCFG_TMS3615_ADD("tms1", 4000000/8/2) // 250 kHz, from second chip's clock out
 	MCFG_SOUND_ROUTE(TMS3615_FOOTAGE_8, "mono", 1.0)
@@ -785,8 +718,12 @@ static MACHINE_CONFIG_START( catnmous, laserbat_state )
 	MCFG_CPU_PROGRAM_MAP(catnmous_sound_map)
 	MCFG_CPU_PERIODIC_INT_DRIVER(laserbat_state, zaccaria_cb1_toggle,  (double)3580000/4096)
 
-	MCFG_PIA6821_ADD("pia", pia_intf)
-
+	MCFG_DEVICE_ADD("pia", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(laserbat_state, zaccaria_port0a_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(laserbat_state, zaccaria_port0a_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(laserbat_state, zaccaria_port0b_w))
+	MCFG_PIA_IRQA_HANDLER(WRITELINE(laserbat_state, zaccaria_irq0a))
+	MCFG_PIA_IRQB_HANDLER(WRITELINE(laserbat_state, zaccaria_irq0b))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -795,20 +732,28 @@ static MACHINE_CONFIG_START( catnmous, laserbat_state )
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(laserbat_state, screen_update_laserbat)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(laserbat)
-	MCFG_PALETTE_LENGTH(1024)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", laserbat)
+	MCFG_PALETTE_ADD("palette", 1024)
 
-	MCFG_S2636_ADD("s2636_1", s2636_1_config)
-	MCFG_S2636_ADD("s2636_2", s2636_2_config)
-	MCFG_S2636_ADD("s2636_3", s2636_3_config)
+	MCFG_DEVICE_ADD("s2636_1", S2636, 0)
+	MCFG_S2636_WORKRAM_SIZE(0x100)
+	MCFG_S2636_OFFSETS(0, -19)
 
+	MCFG_DEVICE_ADD("s2636_2", S2636, 0)
+	MCFG_S2636_WORKRAM_SIZE(0x100)
+	MCFG_S2636_OFFSETS(0, -19)
+
+	MCFG_DEVICE_ADD("s2636_3", S2636, 0)
+	MCFG_S2636_WORKRAM_SIZE(0x100)
+	MCFG_S2636_OFFSETS(0, -19)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ay1", AY8910, 3580000/2) // ?
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_B_READ_CB(READ8(driver_device, soundlatch_byte_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
 	MCFG_SOUND_ADD("ay2", AY8910, 3580000/2) // ?

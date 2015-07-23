@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, Acho A. Tang, Phil Stroffolino, Olivier Galibert
 /**************************************************************************
  *
  * machine/konamigx.c - contains various System GX hardware abstractions
@@ -5,7 +7,6 @@
  */
 
 #include "emu.h"
-#include "video/konamiic.h"
 #include "includes/konamigx.h"
 
 /***************************************************************************/
@@ -14,14 +15,39 @@
 /*                                                                         */
 /***************************************************************************/
 
-// K055550/K053990 protection chips, perform simple memset() and other game logic operations
-static UINT16 prot_data[0x20];
+/*
 
+
+K055550
+-------
+
+Protection chip which performs a memset() operation.
+
+Used in Violent Storm and Ultimate Battler to clear VRAM between scenes, among
+other things.  May also perform other functions since Violent Storm still isn't
+happy...
+
+Has word-wide registers as follows:
+
+0: Count of units to transfer.  The write here triggers the transfer.
+1-6: Unknown
+7: Destination address, MSW
+8: Destination address, LSW
+9: Unknown
+10: Size of transfer units, MSW
+11: Size of transfer units, LSW
+12: Unknown
+13: Value to fill destination region with
+14-15: Unknown
+
+*/
+
+// K055550/K053990 protection chips, perform simple memset() and other game logic operations
 
 
 READ16_MEMBER(konamigx_state::K055550_word_r)
 {
-	return(prot_data[offset]);
+	return(m_prot_data[offset]);
 }
 
 WRITE16_MEMBER(konamigx_state::K055550_word_w)
@@ -30,7 +56,7 @@ WRITE16_MEMBER(konamigx_state::K055550_word_w)
 	int src, tgt, srcend, tgtend, skip, cx1, sx1, wx1, cy1, sy1, wy1, cz1, sz1, wz1, c2, s2, w2;
 	int dx, dy, angle;
 
-	COMBINE_DATA(prot_data+offset);
+	COMBINE_DATA(m_prot_data+offset);
 
 	if (offset == 0 && ACCESSING_BITS_8_15)
 	{
@@ -39,13 +65,13 @@ WRITE16_MEMBER(konamigx_state::K055550_word_w)
 		{
 			case 0x97: // memset() (Dadandarn at 0x639dc)
 			case 0x9f: // memset() (Violent Storm at 0x989c)
-				adr   = (prot_data[7] << 16) | prot_data[8];
-				bsize = (prot_data[10] << 16) | prot_data[11];
-				count = (prot_data[0] & 0xff) + 1;
+				adr   = (m_prot_data[7] << 16) | m_prot_data[8];
+				bsize = (m_prot_data[10] << 16) | m_prot_data[11];
+				count = (m_prot_data[0] & 0xff) + 1;
 
 				lim = adr+bsize*count;
 				for(i=adr; i<lim; i+=2)
-					space.write_word(i, prot_data[0x1a/2]);
+					space.write_word(i, m_prot_data[0x1a/2]);
 			break;
 
 			// WARNING: The following cases are speculation based with questionable accuracy!(AAT)
@@ -56,19 +82,19 @@ WRITE16_MEMBER(konamigx_state::K055550_word_w)
 				// gameplay. It refers to a 32x8-word list at 0x210e00 and seems to
 				// be tied with another 13x128-byte table at 0x205080.
 				// Both tables appear "check-only" and have little effect on gameplay.
-				count =(prot_data[0] & 0xff) + 1;          // unknown ( byte 0x00)
-				i     = prot_data[1];                      // unknown ( byte 0x1f)
-				adr   = prot_data[7]<<16 | prot_data[8];   // address (dword 0x210e00)
-				lim   = prot_data[9];                      // unknown ( word 0x0010)
-				src   = prot_data[10]<<16 | prot_data[11]; // unknown (dword zero)
-				tgt   = prot_data[12]<<16 | prot_data[13]; // unknown (dword zero)
+				count =(m_prot_data[0] & 0xff) + 1;          // unknown ( byte 0x00)
+				i     = m_prot_data[1];                      // unknown ( byte 0x1f)
+				adr   = m_prot_data[7]<<16 | m_prot_data[8];   // address (dword 0x210e00)
+				lim   = m_prot_data[9];                      // unknown ( word 0x0010)
+				src   = m_prot_data[10]<<16 | m_prot_data[11]; // unknown (dword zero)
+				tgt   = m_prot_data[12]<<16 | m_prot_data[13]; // unknown (dword zero)
 			break;
 
 			case 0xa0: // update collision detection table (Violent Storm at 0x018b42)
-				count = prot_data[0] & 0xff;             // number of objects - 1
-				skip  = prot_data[1]>>(8-1);             // words to skip in each entry to reach the "hit list"
-				adr   = prot_data[2]<<16 | prot_data[3]; // where the table is located
-				bsize = prot_data[5]<<16 | prot_data[6]; // object entry size in bytes
+				count = m_prot_data[0] & 0xff;             // number of objects - 1
+				skip  = m_prot_data[1]>>(8-1);             // words to skip in each entry to reach the "hit list"
+				adr   = m_prot_data[2]<<16 | m_prot_data[3]; // where the table is located
+				bsize = m_prot_data[5]<<16 | m_prot_data[6]; // object entry size in bytes
 
 				srcend = adr + bsize * count;
 				tgtend = srcend + bsize;
@@ -116,8 +142,8 @@ WRITE16_MEMBER(konamigx_state::K055550_word_w)
 			break;
 
 			case 0xc0: // calculate object "homes-in" vector (Violent Storm at 0x03da9e)
-				dx = (short)prot_data[0xc];
-				dy = (short)prot_data[0xd];
+				dx = (short)m_prot_data[0xc];
+				dy = (short)m_prot_data[0xd];
 
 				// it's not necessary to use lookup tables because Violent Storm
 				// only calls the service once per enemy per frame.
@@ -139,7 +165,7 @@ WRITE16_MEMBER(konamigx_state::K055550_word_w)
 				else
 					i = machine().rand() & 0xff; // vector direction indeterminate
 
-				prot_data[0x10] = i;
+				m_prot_data[0x10] = i;
 			break;
 
 			default:
@@ -157,27 +183,27 @@ WRITE16_MEMBER(konamigx_state::K053990_martchmp_word_w)
 	int mode, i, element_size = 1;
 	UINT16 mod_val, mod_data;
 
-	COMBINE_DATA(prot_data+offset);
+	COMBINE_DATA(m_prot_data+offset);
 
 	if (offset == 0x0c && ACCESSING_BITS_8_15)
 	{
-		mode  = (prot_data[0x0d]<<8 & 0xff00) | (prot_data[0x0f] & 0xff);
+		mode  = (m_prot_data[0x0d]<<8 & 0xff00) | (m_prot_data[0x0f] & 0xff);
 
 		switch (mode)
 		{
 			case 0xffff: // word copy
 				element_size = 2;
 			case 0xff00: // byte copy
-				src_addr  = prot_data[0x0];
-				src_addr |= prot_data[0x1]<<16 & 0xff0000;
-				dst_addr  = prot_data[0x2];
-				dst_addr |= prot_data[0x3]<<16 & 0xff0000;
-				src_count = prot_data[0x8]>>8;
-				//dst_count = prot_data[0x9]>>8;
-				src_skip  = prot_data[0xa] & 0xff;
-				dst_skip  = prot_data[0xb] & 0xff;
+				src_addr  = m_prot_data[0x0];
+				src_addr |= m_prot_data[0x1]<<16 & 0xff0000;
+				dst_addr  = m_prot_data[0x2];
+				dst_addr |= m_prot_data[0x3]<<16 & 0xff0000;
+				src_count = m_prot_data[0x8]>>8;
+				//dst_count = m_prot_data[0x9]>>8;
+				src_skip  = m_prot_data[0xa] & 0xff;
+				dst_skip  = m_prot_data[0xb] & 0xff;
 
-				if ((prot_data[0x8] & 0xff) == 2) src_count <<= 1;
+				if ((m_prot_data[0x8] & 0xff) == 2) src_count <<= 1;
 				src_skip += element_size;
 				dst_skip += element_size;
 
@@ -197,16 +223,16 @@ WRITE16_MEMBER(konamigx_state::K053990_martchmp_word_w)
 			break;
 
 			case 0x00ff: // sprite list modifier
-				src_addr  = prot_data[0x0];
-				src_addr |= prot_data[0x1]<<16 & 0xff0000;
-				src_skip  = prot_data[0x1]>>8;
-				dst_addr  = prot_data[0x2];
-				dst_addr |= prot_data[0x3]<<16 & 0xff0000;
-				dst_skip  = prot_data[0x3]>>8;
-				mod_addr  = prot_data[0x4];
-				mod_addr |= prot_data[0x5]<<16 & 0xff0000;
-				mod_skip  = prot_data[0x5]>>8;
-				mod_offs  = prot_data[0x8] & 0xff;
+				src_addr  = m_prot_data[0x0];
+				src_addr |= m_prot_data[0x1]<<16 & 0xff0000;
+				src_skip  = m_prot_data[0x1]>>8;
+				dst_addr  = m_prot_data[0x2];
+				dst_addr |= m_prot_data[0x3]<<16 & 0xff0000;
+				dst_skip  = m_prot_data[0x3]>>8;
+				mod_addr  = m_prot_data[0x4];
+				mod_addr |= m_prot_data[0x5]<<16 & 0xff0000;
+				mod_skip  = m_prot_data[0x5]>>8;
+				mod_offs  = m_prot_data[0x8] & 0xff;
 				mod_offs<<= 1;
 				mod_count = 0x100;
 
@@ -234,8 +260,12 @@ WRITE16_MEMBER(konamigx_state::K053990_martchmp_word_w)
 	}
 }
 
-void konamigx_esc_alert(UINT32 *srcbase, int srcoffs, int count, int mode) // (WARNING: assumed big endianess)
+void konamigx_state::konamigx_esc_alert(UINT32 *srcbase, int srcoffs, int count, int mode) // (WARNING: assumed big endianess)
 {
+	UINT16* k053247_ram;
+	m_k055673->k053247_get_ram(&k053247_ram);
+
+
 // hand-filled but should be close
 static const UINT8 ztable[7][8] =
 {
@@ -269,7 +299,7 @@ static const UINT8 ptable[7][8] =
 	if (mode == 0)
 	{
 		src = srcbase + srcoffs;
-		dst = K053247_ram;
+		dst = k053247_ram;
 		data1 = count<<2;
 		data2 = count<<3;
 		src += data1; dst += data2; i = -data1; j = -data2;
@@ -354,7 +384,7 @@ if((data1=obj[0])&0x80000000)\
 				case 0x11010010: i = 5; vmask = 0x1ff; break;
 				case 0x01111018: i = 4; break;
 				case 0x10010011: i = 3;
-					if ((srcbase[0x1c75]&0xff)==32) K055555_write_reg(K55_BLEND_ENABLES,36); // (TEMPORARY)
+					if ((srcbase[0x1c75]&0xff)==32) m_k055555->K055555_write_reg(K55_BLEND_ENABLES,36); // (TEMPORARY)
 				break;
 				case 0x11010811: i = 2; break;
 				case 0x10000010: i = 1; break;
@@ -370,7 +400,7 @@ if((data1=obj[0])&0x80000000)\
 		zcode = ztable[i];
 		pcode = ptable[i];
 
-		dst = K053247_ram;
+		dst = k053247_ram;
 		j = 256;
 
 		// decode Vic-Viper
@@ -435,33 +465,30 @@ if((data1=obj[0])&0x80000000)\
 #undef EXTRACT_EVEN
 }
 
-static UINT32 fantjour_dma[8];
-
-void fantjour_dma_install(running_machine &machine)
+void konamigx_state::fantjour_dma_install()
 {
-	konamigx_state *state = machine.driver_data<konamigx_state>();
-	machine.save().save_item(NAME(fantjour_dma));
-	state->m_maincpu->space(AS_PROGRAM).install_write_handler(0xdb0000, 0xdb001f, write32_delegate(FUNC(konamigx_state::fantjour_dma_w),state));
-	memset(fantjour_dma, 0, sizeof(fantjour_dma));
+	save_item(NAME(m_fantjour_dma));
+	m_maincpu->space(AS_PROGRAM).install_write_handler(0xdb0000, 0xdb001f, write32_delegate(FUNC(konamigx_state::fantjour_dma_w),this));
+	memset(m_fantjour_dma, 0, sizeof(m_fantjour_dma));
 }
 
 WRITE32_MEMBER(konamigx_state::fantjour_dma_w)
 {
-	COMBINE_DATA(fantjour_dma + offset);
+	COMBINE_DATA(m_fantjour_dma + offset);
 	if(!offset && ACCESSING_BITS_24_31) {
-		UINT32 sa = fantjour_dma[1];
-		//      UINT16 ss = (fantjour_dma[2] & 0xffff0000) >> 16;
-		//      UINT32 sb = ((fantjour_dma[2] & 0xffff) << 16) | ((fantjour_dma[3] & 0xffff0000) >> 16);
+		UINT32 sa = m_fantjour_dma[1];
+		//      UINT16 ss = (m_fantjour_dma[2] & 0xffff0000) >> 16;
+		//      UINT32 sb = ((m_fantjour_dma[2] & 0xffff) << 16) | ((m_fantjour_dma[3] & 0xffff0000) >> 16);
 
-		UINT32 da = ((fantjour_dma[3] & 0xffff) << 16) | ((fantjour_dma[4] & 0xffff0000) >> 16);
-		//      UINT16 ds = fantjour_dma[4] & 0xffff;
-		UINT32 db = fantjour_dma[5];
+		UINT32 da = ((m_fantjour_dma[3] & 0xffff) << 16) | ((m_fantjour_dma[4] & 0xffff0000) >> 16);
+		//      UINT16 ds = m_fantjour_dma[4] & 0xffff;
+		UINT32 db = m_fantjour_dma[5];
 
-		//      UINT8 sz1 = fantjour_dma[0] >> 8;
-		UINT8 sz2 = fantjour_dma[0] >> 16;
-		UINT8 mode = fantjour_dma[0] >> 24;
+		//      UINT8 sz1 = m_fantjour_dma[0] >> 8;
+		UINT8 sz2 = m_fantjour_dma[0] >> 16;
+		UINT8 mode = m_fantjour_dma[0] >> 24;
 
-		UINT32 x   = fantjour_dma[6];
+		UINT32 x   = m_fantjour_dma[6];
 		UINT32 i1, i2;
 
 		if(mode == 0x93)

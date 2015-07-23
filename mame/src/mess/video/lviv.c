@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Krzysztof Strzecha
 /***************************************************************************
 
   lviv.c
@@ -24,12 +26,12 @@ const unsigned char lviv_palette[8*3] =
 };
 
 
-void lviv_state::palette_init()
+PALETTE_INIT_MEMBER(lviv_state, lviv)
 {
 	int i;
 
 	for ( i = 0; i < sizeof(lviv_palette) / 3; i++ ) {
-		palette_set_color_rgb(machine(), i, lviv_palette[i*3], lviv_palette[i*3+1], lviv_palette[i*3+2]);
+		m_palette->set_pen_color(i, lviv_palette[i*3], lviv_palette[i*3+1], lviv_palette[i*3+2]);
 	}
 }
 

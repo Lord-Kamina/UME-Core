@@ -8,7 +8,6 @@
 
   Undumped pirate carts:
   - 4B-003: Sachen 4-in-1 version 3 (Taiwan's Mahjong, Japan's Mahjong, Hong Kong's Mahjong, Store Tris)
-  - 4B-004: Sachen 4-in-1 version 4 (Pile Wonder, Snake Roy, Suleiman's Treasure, Puppet Knight)
   - GOWIN carts (see below the list of known games)
 
 -->
@@ -184,7 +183,7 @@
 	</software>
 
 	<software name="advpinoc">
-		<description>The Adventures of Pinocchio (USA, Prototype)</description>
+		<description>The Adventures of Pinocchio (Prototype)</description>
 		<year>1993</year>
 		<publisher>Nintendo</publisher>
 		<part name="cart" interface="gameboy_cart">
@@ -1605,6 +1604,18 @@
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="131072">
 				<rom name="battle unit zeoth (usa, europe).bin" size="131072" crc="e67a92b3" sha1="eba09c60cd60feba0a7a9e82597dad080ce78d22" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="jetpack" cloneof="bzeoth">
+		<description>Jetpack (Battle Unit Zeoth Prototype)</description>
+		<year>1991</year>
+		<publisher>Jaleco</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="131072">
+				<rom name="jetpack.bin" size="131072" crc="1c223204" sha1="df7abbcaaccd5cff4c55bb331fa5d3049fb92896" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -3646,6 +3657,18 @@
 		</part>
 	</software>
 
+	<software name="cosmotnkjp" cloneof="cosmotnk">
+		<description>Cosmo Tank (Jpn, Prototype)</description>
+		<year>1990</year>
+		<publisher>Atlus</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="131072">
+				<rom name="cosmo tank (j) (proto).bin" size="131072" crc="2022bbb9" sha1="8963c2e8e42c452528078f10df699fd266f01749" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="cosmotnk">
 		<description>Cosmo Tank (USA)</description>
 		<year>1990</year>
@@ -3818,10 +3841,10 @@
 
 	<software name="daffy">
 		<!-- Notes: SGB enhanced -->
-		<description>Daffy Duck - The Marvin Missions (Euro)</description>
+		<description>Daffy Duck - The Marvin Missions (Euro, USA)</description>
 		<year>1995</year>
 		<publisher>Sunsoft</publisher>
-		<info name="serial" value="DMG-YS-NOE-1"/>
+		<info name="serial" value="DMG-YS-USA, DMG-YS-NOE"/>
 		<part name="cart" interface="gameboy_cart">
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="262144">
@@ -3846,12 +3869,13 @@
 		</part>
 	</software>
 
-	<software name="daffyu" cloneof="daffy">
+<!-- This dump has been verified from an European cart by NoIntro guys, the duffy set is still unverified (maybe a Rev.1?) -->
+	<software name="daffya" cloneof="daffy">
 		<!-- Notes: SGB enhanced -->
-		<description>Daffy Duck - The Marvin Missions (USA)</description>
+		<description>Daffy Duck - The Marvin Missions (Euro, Alt)</description>
 		<year>1995</year>
 		<publisher>Sunsoft</publisher>
-		<info name="serial" value="DMG-YS-USA"/>
+		<info name="serial" value="DMG-YS-NOE"/>
 		<part name="cart" interface="gameboy_cart">
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="131072">
@@ -3979,6 +4003,19 @@
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="131072">
 				<rom name="darkwing duck (germany).bin" size="131072" crc="176c1fa2" sha1="5960dc01e06f19e166646504bc3097248f4a22cb" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="darkwings" cloneof="darkwing">
+		<description>Disney's Darkwing Duck (Spa)</description>
+		<year>1993</year>
+		<publisher>Sunsoft</publisher>
+		<info name="serial" value="DMG-DC-ESP"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="131072">
+				<rom name="darkwing.bin" size="131072" crc="a1d4c544" sha1="3d4b301aab995bdf19b15ed5040df7426a2e8057" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -4260,10 +4297,10 @@
 
 	<software name="dkonga" cloneof="dkong">
 		<!-- Notes: SGB enhanced, also released by NP in 2000-03 -->
-		<description>Donkey Kong (Jpn)</description>
+		<description>Donkey Kong (Jpn, USA)</description>
 		<year>1994</year>
 		<publisher>Nintendo</publisher>
-		<info name="serial" value="DMG-QDA"/>
+		<info name="serial" value="DMG-QDA, DMG-QD-USA"/>
 		<info name="release" value="19940614 (JPN)"/>
 		<info name="alt_title" value="ドンキーコング"/>
 		<part name="cart" interface="gameboy_cart">
@@ -4747,6 +4784,17 @@
 		</part>
 	</software>
 
+	<software name="drmariop" cloneof="drmario">
+		<description>Dr. Mario (Prototype)</description>
+		<year>1990</year>
+		<publisher>Nintendo</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<dataarea name="rom" size="32768">
+				<rom name="drmario.bin" size="32768" crc="2b2f4f8f" sha1="4b2343f40e7ca3c583108ed70a870c7bd906b108" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="dracden" cloneof="cvania">
 		<description>Dracula Densetsu (Jpn)</description>
 		<year>1989</year>
@@ -4935,7 +4983,7 @@
 		<info name="serial" value="DMG-AD4P-EUR"/>
 		<part name="cart" interface="gameboy_cart">
 			<dataarea name="rom" size="32768">
-				<rom name="dropzone (europe).bin" size="32768" crc="6cb45fc6" sha1="703be7960b363f187737f7ee5fd4af60b6c98428" offset="000000" />
+				<rom name="dropzone (europe).bin" size="32768" crc="351a7277" sha1="0bf73ffa90fdba5a4ee4e2338bb2f0d01af6fb88" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -5269,6 +5317,18 @@
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="131072">
 				<rom name="f-15 strike eagle (usa, europe).bin" size="131072" crc="045dee8c" sha1="237a08abe860bce316f1ce337afb11ee0e566037" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="f15sep" cloneof="f15se">
+		<description>F-15 Strike Eagle (Prototype)</description>
+		<year>1993</year>
+		<publisher>MicroProse</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="131072">
+				<rom name="f-15 strike eagle dump 10 nov 2013.bin" size="131072" crc="d80bdbba" sha1="298c07ef596ab3a3c4a320b2f2d7e2c0dbaf764d" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -6700,6 +6760,18 @@
 		</part>
 	</software>
 
+	<software name="gogotankjp" cloneof="gogotank">
+		<description>Go! Go! Tank (Jpn, Prototype)</description>
+		<year>1990</year>
+		<publisher>Copya Systems</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="65536">
+				<rom name="go! go! tank (proto).bin" size="65536" crc="6dcf5e7f" sha1="18bbee226858af45a81f7da1186938f53511ef73" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="gogotank">
 		<description>Go! Go! Tank (USA)</description>
 		<year>1991</year>
@@ -6833,6 +6905,96 @@
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="262144">
 				<rom name="golf classic (europe).bin" size="262144" crc="a6dadb1e" sha1="b7ffb77a5061c33b0bbe5b074c1526e46c5eb7c3" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="gbsjous">
+		<description>Goukaku Boy GOLD - Shikakui Atama o Maruku Suru - Joushiki no Sho (Jpn)</description>
+		<year>2000</year>
+		<publisher>Imagineer</publisher>
+		<info name="serial" value="DMG-BJ3J-JPN"/>
+		<info name="release" value="20000317"/>
+		<info name="alt_title" value="ゴールド シカクいアタマをマルくする。 合格ボーイGOLD ■いアタマを●くする。 国語 算数 理科 社会 常識の書"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc5" />
+			<!-- cartridge ram -->
+			<dataarea name="rom" size="1048576">
+				<rom name="sikakujosikbj3j1.bin" size="1048576" crc="26772e04" sha1="a6ab7420a2d69d62338bc03dc4e0e46b0dc8429b" offset="000000" />
+			</dataarea>
+			<dataarea name="nvram" size="8192">
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="gbsjousse" cloneof="gbsjous">
+		<description>Goukaku Boy GOLD - Shikakui Atama o Maruku Suru - Joushiki no Sho (Jpn, Special Edition)</description>
+		<year>2002</year>
+		<publisher>IE Institute</publisher>
+		<info name="serial" value="DMG-BS4J-JPN"/>
+		<info name="release" value="200203xx"/>
+		<info name="alt_title" value="ゴールド シカクいアタマをマルくする。 合格ボーイGOLD ■いアタマを●くする。 国語 算数 理科 社会 常識の書 スペシャルエディション"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc5" />
+			<!-- cartridge ram -->
+			<dataarea name="rom" size="1048576">
+				<rom name="goukaku boy series - shikakui atama o marukusuru - joushiki no sho (japan).bin" size="1048576" crc="5d43a385" sha1="d367f2dab5eacb10e785a13a2550ca7cc3e54177" offset="000000" />
+			</dataarea>
+			<dataarea name="nvram" size="8192">
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="gbskjtat">
+		<description>Goukaku Boy GOLD - Shikakui Atama o Maruku Suru - Kanji no Tatsujin (Jpn, Special Edition)</description>
+		<year>2001</year>
+		<publisher>Imagineer</publisher>
+		<info name="serial" value="DMG-BK4J-JPN"/>
+		<info name="release" value="20010330"/>
+		<info name="alt_title" value="ゴールド シカクいアタマをマルくする。 合格ボーイGOLD ■いアタマを●くする。 読み 書き 筆順 熟語 漢字の達人"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc5" />
+			<!-- cartridge ram -->
+			<dataarea name="rom" size="1048576">
+				<rom name="goukaku boy series - shikakui atama o marukusuru - kanji no tatsujin (japan).bin" size="1048576" crc="62b00f69" sha1="1d3e5ad888b8339e35c46455d84017d8a0d69c6d" offset="000000" />
+			</dataarea>
+			<dataarea name="nvram" size="8192">
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="gbskstat">
+		<description>Goukaku Boy GOLD - Shikakui Atama o Maruku Suru - Keisan no Tatsujin (Jpn)</description>
+		<year>2001</year>
+		<publisher>Imagineer</publisher>
+		<info name="serial" value="DMG-BC4J-JPN"/>
+		<info name="release" value="20010330"/>
+		<info name="alt_title" value="ゴールド シカクいアタマをマルくする。 合格ボーイGOLD ■いアタマを●くする。 整数 小数 分数 単位 計算の達人"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc5" />
+			<!-- cartridge ram -->
+			<dataarea name="rom" size="1048576">
+				<rom name="goukaku boy series - shikakui atama o marukusuru - keisan no tatsujin (japan).bin" size="1048576" crc="71acbb67" sha1="e2ac91493248869aba6b7d26a36e5ff6bd6d6f5a" offset="000000" />
+			</dataarea>
+			<dataarea name="nvram" size="8192">
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="gbsnanm">
+		<description>Goukaku Boy GOLD - Shikakui Atama o Maruku Suru - Nanmon no Sho (Jpn)</description>
+		<year>2000</year>
+		<publisher>Imagineer</publisher>
+		<info name="serial" value="DMG-BD4J-JPN"/>
+		<info name="release" value="20000317"/>
+		<info name="alt_title" value="ゴールド シカクいアタマをマルくする。 合格ボーイGOLD ■いアタマを●くする。 国語 算数 理科 社会 難問の書"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc5" />
+			<!-- cartridge ram -->
+			<dataarea name="rom" size="1048576">
+				<rom name="goukaku boy series - shikakui atama o marukusuru - nanmon no sho (japan).bin" size="1048576" crc="3c907f2c" sha1="fa7a40acd835676fbcae9507a8aaaf1191f9b1cd" offset="000000" />
+			</dataarea>
+			<dataarea name="nvram" size="8192">
 			</dataarea>
 		</part>
 	</software>
@@ -7062,62 +7224,8 @@
 		</part>
 	</software>
 
-	<software name="gbsjous">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Joushiki no Sho (Jpn)</description>
-		<year>2000</year>
-		<publisher>Imagineer</publisher>
-		<info name="serial" value="DMG-BS4J-JPN"/>
-		<info name="release" value="20000317"/>
-		<info name="alt_title" value="ゴールド シカクいアタマをマルくする。 合格ボーイGOLD ■いアタマを●くする。 国語 算数 理科 社会 常識の書"/>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc5" />
-			<!-- cartridge ram -->
-			<dataarea name="rom" size="1048576">
-				<rom name="goukaku boy series - shikakui atama o marukusuru - joushiki no sho (japan).bin" size="1048576" crc="5d43a385" sha1="d367f2dab5eacb10e785a13a2550ca7cc3e54177" offset="000000" />
-			</dataarea>
-			<dataarea name="nvram" size="8192">
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="gbskjtat">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Kanji no Tatsujin (Jpn)</description>
-		<year>2001</year>
-		<publisher>Imagineer</publisher>
-		<info name="serial" value="DMG-BK4J-JPN"/>
-		<info name="release" value="20010330"/>
-		<info name="alt_title" value="ゴールド シカクいアタマをマルくする。 合格ボーイGOLD ■いアタマを●くする。 読み 書き 筆順 熟語 漢字の達人"/>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc5" />
-			<!-- cartridge ram -->
-			<dataarea name="rom" size="1048576">
-				<rom name="goukaku boy series - shikakui atama o marukusuru - kanji no tatsujin (japan).bin" size="1048576" crc="62b00f69" sha1="1d3e5ad888b8339e35c46455d84017d8a0d69c6d" offset="000000" />
-			</dataarea>
-			<dataarea name="nvram" size="8192">
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="gbskstat">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Keisan no Tatsujin (Jpn)</description>
-		<year>2001</year>
-		<publisher>Imagineer</publisher>
-		<info name="serial" value="DMG-BC4J-JPN"/>
-		<info name="release" value="20010330"/>
-		<info name="alt_title" value="ゴールド シカクいアタマをマルくする。 合格ボーイGOLD ■いアタマを●くする。 整数 小数 分数 単位 計算の達人"/>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc5" />
-			<!-- cartridge ram -->
-			<dataarea name="rom" size="1048576">
-				<rom name="goukaku boy series - shikakui atama o marukusuru - keisan no tatsujin (japan).bin" size="1048576" crc="71acbb67" sha1="e2ac91493248869aba6b7d26a36e5ff6bd6d6f5a" offset="000000" />
-			</dataarea>
-			<dataarea name="nvram" size="8192">
-			</dataarea>
-		</part>
-	</software>
-
 	<software name="gbskokug">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Kokugo Battle Hen (Jpn)</description>
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Kokugo Battle Hen (Jpn)</description>
 		<year>1999</year>
 		<publisher>Imagineer</publisher>
 		<info name="serial" value="DMG-AJ6J-JPN"/>
@@ -7131,26 +7239,23 @@
 		</part>
 	</software>
 
-	<software name="gbsnanm">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Nanmon no Sho (Jpn)</description>
-		<year>2000</year>
-		<publisher>Imagineer</publisher>
-		<info name="serial" value="DMG-BD4J-JPN"/>
-		<info name="release" value="20000317"/>
-		<info name="alt_title" value="ゴールド シカクいアタマをマルくする。 合格ボーイGOLD ■いアタマを●くする。 国語 算数 理科 社会 難問の書"/>
+	<software name="gbskokugse" cloneof="gbskokug">
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Kokugo Battle Hen (Jpn, Special Edition)</description>
+		<year>2002</year>
+		<publisher>IE Institute</publisher>
+		<info name="serial" value="DMG-BF3J-JPN"/>
+		<info name="release" value="200203xx"/>
+		<info name="alt_title" value="シカクいアタマをマルくする。 合格ボーイシリーズ ■いアタマを●くする。 国語バトル編 スペシャルエディション"/>
 		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc5" />
-			<!-- cartridge ram -->
-			<dataarea name="rom" size="1048576">
-				<rom name="goukaku boy series - shikakui atama o marukusuru - nanmon no sho (japan).bin" size="1048576" crc="3c907f2c" sha1="fa7a40acd835676fbcae9507a8aaaf1191f9b1cd" offset="000000" />
-			</dataarea>
-			<dataarea name="nvram" size="8192">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="262144">
+				<rom name="goukaku boy series - shikakui atama o marukusuru - kokugo battle hen (japan) (special edition).bin" size="262144" crc="7e6e16d5" sha1="3fc9c1bc1d3b8e7ee90c14d4ae4938726f61a2db" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
 
 	<software name="gbsrikbt">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Rika Battle Hen (Jpn)</description>
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Rika Battle Hen (Jpn)</description>
 		<year>1999</year>
 		<publisher>Imagineer</publisher>
 		<info name="serial" value="DMG-AE8J-JPN"/>
@@ -7164,8 +7269,23 @@
 		</part>
 	</software>
 
+	<software name="gbsrikbtse" cloneof="gbsrikbt">
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Rika Battle Hen (Jpn, Special Edition)</description>
+		<year>2002</year>
+		<publisher>IE Institute</publisher>
+		<info name="serial" value="DMG-BH4J-JPN"/>
+		<info name="release" value="200203xx"/>
+		<info name="alt_title" value="シカクいアタマをマルくする。 合格ボーイシリーズ ■いアタマを●くする。 理科バトル編 スペシャルエディション"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="262144">
+				<rom name="goukaku boy series - shikakui atama o marukusuru - rika battle hen (japan) (special edition).bin" size="262144" crc="62aa54a4" sha1="4569f5cc0f528fdf46cfd1b3a8ef8a6fd3953d7e" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="gbssanbt">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Sansuu Battle Hen (Jpn)</description>
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Sansuu Battle Hen (Jpn)</description>
 		<year>1999</year>
 		<publisher>Imagineer</publisher>
 		<info name="serial" value="DMG-AF3J-JPN"/>
@@ -7179,8 +7299,23 @@
 		</part>
 	</software>
 
+	<software name="gbssanbtse" cloneof="gbssanbt">
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Sansuu Battle Hen (Jpn, Special Edition)</description>
+		<year>2002</year>
+		<publisher>IE Institute</publisher>
+		<info name="serial" value="DMG-BB4J-JPN"/>
+		<info name="release" value="200203xx"/>
+		<info name="alt_title" value="シカクいアタマをマルくする。 合格ボーイシリーズ ■いアタマを●くする。 算数バトル編 スペシャルエディション"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="262144">
+				<rom name="goukaku boy series - shikakui atama o marukusuru - sansuu battle hen (japan) (special edition).bin" size="262144" crc="de74fd69" sha1="1e0fe5a54b4eb03a1f108d8650ad5ef8814d7444" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="gbsshkbt">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Shakai Battle Hen (Jpn)</description>
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Shakai Battle Hen (Jpn)</description>
 		<year>1999</year>
 		<publisher>Imagineer</publisher>
 		<info name="serial" value="DMG-AK8J-JPN"/>
@@ -7194,8 +7329,23 @@
 		</part>
 	</software>
 
+	<software name="gbsshkbtse" cloneof="gbsshkbt">
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Shakai Battle Hen (Jpn, Special Edition)</description>
+		<year>2002</year>
+		<publisher>IE Institute</publisher>
+		<info name="serial" value="DMG-BE3J-JPN"/>
+		<info name="release" value="200203xx"/>
+		<info name="alt_title" value="シカクいアタマをマルくする。 合格ボーイシリーズ ■いアタマを●くする。 社会バトル編 スペシャルエディション"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="262144">
+				<rom name="goukaku boy series - shikakui atama o marukusuru - shakai battle hen (japan) (special edition).bin" size="262144" crc="8ba62b3d" sha1="dfdcabdc06b74f896b9ef47db2a9cc49ddb104c4" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="gbsasob">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Suuji de Asobou Sansuu Hen (Jpn, Rev. A)</description>
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Suuji de Asobou Sansuu Hen (Jpn, Rev. A)</description>
 		<year>1998</year>
 		<publisher>Imagineer</publisher>
 		<info name="serial" value="DMG-AM5J-JPN"/>
@@ -7210,7 +7360,7 @@
 	</software>
 
 	<software name="gbsasoba" cloneof="gbsasob">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Suuji de Asobou Sansuu Hen (Jpn)</description>
+		<description>Goukaku Boy Series - Shikakui Atama o Maruku Suru - Suuji de Asobou Sansuu Hen (Jpn)</description>
 		<year>1998</year>
 		<publisher>Imagineer</publisher>
 		<info name="serial" value="DMG-AM5J-JPN"/>
@@ -7225,7 +7375,7 @@
 	</software>
 
 	<software name="gbsshika">
-		<description>Goukaku Boy Series - Shikakui Atama o Marukusuru - Zukei no Tatsujin (Jpn)</description>
+		<description>Goukaku Boy GOLD - Shikakui Atama o Maruku Suru - Zukei no Tatsujin (Jpn)</description>
 		<year>2000</year>
 		<publisher>Imagineer</publisher>
 		<info name="serial" value="DMG-BZ4J-JPN"/>
@@ -9095,7 +9245,7 @@
 	</software>
 
 	<software name="karakuri">
-		<description>Karakuri Kengouden Musashi Road (Jpn)</description>
+		<description>Karakuri Kengouden Musashi Lord (Jpn)</description>
 		<year>1991</year>
 		<publisher>Yutaka</publisher>
 		<info name="serial" value="DMG-MUJ"/>
@@ -9631,7 +9781,7 @@
 	</software>
 
 	<software name="kizuchid">
-		<description>Kizuchida Quiz da Gen-san da! (Jpn)</description>
+		<description>Kizuchi da Quiz da Gen-san da! (Jpn)</description>
 		<year>1992</year>
 		<publisher>Irem</publisher>
 		<info name="serial" value="DMG-QGJ (IG-09)"/>
@@ -10846,7 +10996,20 @@
 		</part>
 	</software>
 
-	<software name="4in1ta" cloneof="varpack">
+	<software name="4in1_601" supported="no">
+		<description>Mani 4 in 1 (Chi, DMG-601 CHN)</description>
+		<year>19??</year>
+		<publisher>Mani</publisher>
+		<info name="serial" value="DMG-601-CHN"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_m161_m12" />
+			<dataarea name="rom" size="262144">
+				<rom name="dmg-601-chn.bin" size="262144" crc="0c38a775" sha1="dfe46e066c599c17e684ddda3fd74c5357910630" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="4in1_602" cloneof="varpack">
 		<description>Mani 4 in 1 (Chi, DMG-602 CHN)</description>
 		<year>19??</year>
 		<publisher>Mani</publisher>
@@ -10854,12 +11017,12 @@
 		<part name="cart" interface="gameboy_cart">
 			<feature name="slot" value="rom_mmm01" />
 			<dataarea name="rom" size="524288">
-				<rom name="mani 4 in 1 (china).bin" size="524288" crc="5bfc3ef5" sha1="c0639d6c993690022200f2fa4b3094249b9335c0" offset="000000" />
+				<rom name="dmg-602-chn.bin" size="524288" crc="5bfc3ef5" sha1="c0639d6c993690022200f2fa4b3094249b9335c0" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
 
-	<software name="4in1to">
+	<software name="4in1_603">
 		<description>Mani 4 in 1 (Chi, DMG-603 CHN)</description>
 		<year>19??</year>
 		<publisher>Mani</publisher>
@@ -10867,7 +11030,33 @@
 		<part name="cart" interface="gameboy_cart">
 			<feature name="slot" value="rom_mmm01" />
 			<dataarea name="rom" size="524288">
-				<rom name="4 in 1 (dmg-603 chn) [raw dump].bin" size="524288" crc="c373ac09" sha1="0030295574e4c518ff5cdf20febf6b6737426468" offset="000000" />
+				<rom name="dmg-603-chn.bin" size="524288" crc="c373ac09" sha1="0030295574e4c518ff5cdf20febf6b6737426468" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="4in1_604">
+		<description>Mani 4 in 1 (Chi, DMG-604 CHN)</description>
+		<year>19??</year>
+		<publisher>Mani</publisher>
+		<info name="serial" value="DMG-604-CHN"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mmm01" />
+			<dataarea name="rom" size="524288">
+				<rom name="dmg-604-chn.bin" size="524288" crc="cb48b6d0" sha1="1c79eb31a6754b4e96d33a182d36833208dc7177" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="4in1_605">
+		<description>Mani 4 in 1 (Chi, DMG-605 CHN)</description>
+		<year>19??</year>
+		<publisher>Mani</publisher>
+		<info name="serial" value="DMG-605-CHN"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mmm01" />
+			<dataarea name="rom" size="1048576">
+				<rom name="dmg-605-chn.bin" size="1048576" crc="950773ee" sha1="af4706da224d794668f3b2c68aea7b3c16452d83" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -11494,7 +11683,7 @@
 	</software>
 
 	<software name="mickeymw">
-		<description>Mickey Mouse - Magic Wand (Euro, USA)</description>
+		<description>Mickey Mouse - Magic Wands (Euro, USA)</description>
 		<year>1998</year>
 		<publisher>Nintendo</publisher>
 		<info name="serial" value="DMG-I5-USA, DMG-I5-NOE"/>
@@ -12183,7 +12372,7 @@
 			<feature name="slot" value="rom_mbc1" />
 			<!-- cartridge ram -->
 			<dataarea name="rom" size="524288">
-				<rom name="monster race (japan).bin" size="524288" crc="ad529057" sha1="a30e68a691d92d8899d140e5786a185805b8db65" offset="000000" />
+				<rom name="monster race (japan).bin" size="524288" crc="c191bd66" sha1="bb305ec61ec272a7a2fada1c03ba6784c5168f86" offset="000000" />
 			</dataarea>
 			<dataarea name="nvram" size="32768">
 			</dataarea>
@@ -15877,14 +16066,27 @@
 	</software>
 
 	<software name="powrace">
-		<description>Power Racer (Euro, USA)</description>
+		<description>Power Racer (Euro)</description>
 		<year>1990</year>
 		<publisher>Tecmo</publisher>
-		<info name="serial" value="DMG-PQ-USA, DMG-PQ-NOE"/>
+		<info name="serial" value="DMG-PQ-NOE"/>
 		<part name="cart" interface="gameboy_cart">
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="65536">
-				<rom name="power racer (usa, europe).bin" size="65536" crc="cf8aeee8" sha1="6e10f59bb4090c0d0e79b57a2e39d9577ce0282e" offset="000000" />
+				<rom name="power racer (europe).bin" size="65536" crc="cf8aeee8" sha1="6e10f59bb4090c0d0e79b57a2e39d9577ce0282e" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="powraceu" cloneof="powrace">
+		<description>Power Racer (USA)</description>
+		<year>1990</year>
+		<publisher>Tecmo</publisher>
+		<info name="serial" value="DMG-PQ-USA"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="65536">
+				<rom name="power racer (usa).bin" size="65536" crc="afc6a949" sha1="c0c8f28a9b66b6c08a0ed4d31a186c3382160c3d" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -16075,6 +16277,19 @@
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="131072">
 				<rom name="probotector 2 (europe).bin" size="131072" crc="b5090e43" sha1="d3eafed6727afd14bd30ffc31e2d3e4ee6cfc52e" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="probot2s" cloneof="probot2">
+		<!-- Notes: SGB enhanced -->
+		<description>Probotector 2 (Euro, Sample)</description>
+		<year>1995</year>
+		<publisher>Konami</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="131072">
+				<rom name="probotector 2 (sample).bin" size="131072" crc="7d60c005" sha1="8f060253ea228c43d2992458dbf904a0b0d7b01e" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -16543,7 +16758,7 @@
 		<part name="cart" interface="gameboy_cart">
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="131072">
-				<rom name="radar mission (japan).bin" size="131072" crc="7c7e6d1c" sha1="a69585cf74e66fd94cdea090e515c7e4a0e044b8" offset="000000" />
+				<rom name="radar mission (japan).bin" size="131072" crc="892fc0af" sha1="64a808f582afcbed6a3ce0263f1dae6fde57f30b" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -17076,6 +17291,20 @@
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="262144">
 				<rom name="rockman world (japan).bin" size="262144" crc="3be6ac04" sha1="91318509322fbcd1e1e05b98243227377d8f31d5" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="rockmanp" cloneof="megaman">
+		<description>Rockman World (Jpn, Prototype)</description>
+		<year>1991</year>
+		<publisher>Capcom</publisher>
+		<info name="alt_title" value="ロックマンワールド"/>
+		<info name="usage" value="Enable 'Skip BIOS check' configuration setting to boot"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="262144">
+				<rom name="rockman world (proto).bin" size="262144" crc="d7356a4f" sha1="60c5c997b4b2c47d852520817228d2b8efc2a33f" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -18408,7 +18637,7 @@
 		<description>Soccer (Euro)</description>
 		<year>1994</year>
 		<publisher>GameTek</publisher>
-		<info name="serial" value="DMG-YK-(NOE-1/UKV-1/ESP-1)"/>
+		<info name="serial" value="DMG-YK-(NOE-1/UKV-1/ESP-1/AUS)"/>
 		<part name="cart" interface="gameboy_cart">
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="131072">
@@ -18965,7 +19194,7 @@
 		<part name="cart" interface="gameboy_cart">
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="131072">
-				<rom name="spot - the cool adventure (usa).bin" size="131072" crc="0e08f59b" sha1="7e80ddc835ecde69ea11c4702a6cfb93575e917a" offset="000000" />
+				<rom name="spot - the cool adventure (usa).bin" size="131072" crc="76f67428" sha1="bcc923e6e73efe7e865625bb6ecf2ef08e380826" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -19556,7 +19785,7 @@
 		<description>Super Chinese Land 3 (Jpn)</description>
 		<year>1995</year>
 		<publisher>Culture Brain</publisher>
-		<info name="serial" value="DMG-ACLJ-JPN"/>
+		<info name="serial" value="DMG-ACLJ-JPN, DMG-214 CHN"/>
 		<info name="release" value="19950113"/>
 		<info name="alt_title" value="スーパーチャイニーズランド3"/>
 		<part name="cart" interface="gameboy_cart">
@@ -20290,7 +20519,7 @@
 	</software>
 
 	<software name="tasmaniaj" cloneof="tasmania">
-		<description>Tasmania Story (Jpn)</description>
+		<description>Tasmania Monogatari (Jpn)</description>
 		<year>1990</year>
 		<publisher>Pony Canyon</publisher>
 		<info name="serial" value="DMG-TAJ (R30G10001)"/>
@@ -21899,7 +22128,7 @@
 	</software>
 
 	<software name="uruseiya">
-		<description>Urusei Yatsura - Miss Tomobiki o Saguse! (Jpn)</description>
+		<description>Urusei Yatsura - Miss Tomobiki o Sagase! (Jpn)</description>
 		<year>1992</year>
 		<publisher>Yanoman</publisher>
 		<info name="serial" value="DMG-UYJ"/>
@@ -22240,6 +22469,19 @@
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="131072">
 				<rom name="who framed roger rabbit (europe).bin" size="131072" crc="dbeed84e" sha1="4d59882150fc28733902e5e6de8f19a751bd7913" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="rogerrabs" cloneof="rogerrab">
+		<description>Who Framed Roger Rabbit (Spa)</description>
+		<year>1991</year>
+		<publisher>Capcom</publisher>
+		<info name="serial" value="DMG-RR-ESP"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="131072">
+				<rom name="who framed roger rabbit.bin" size="131072" crc="cd11c917" sha1="d92515a09d78099238565bb0f1873f57f00b6728" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -22978,7 +23220,7 @@
 	</software>
 
 	<software name="yuyu3">
-		<description>Yu Yu Hakusho Dai-3-dan - Makai no Tobira (Jpn)</description>
+		<description>Yu Yu Hakusho Dai-3-dan - Makai no Tobira Hen (Jpn)</description>
 		<year>1994</year>
 		<publisher>Tomy</publisher>
 		<info name="serial" value="DMG-UGJ"/>
@@ -22987,7 +23229,7 @@
 		<part name="cart" interface="gameboy_cart">
 			<feature name="slot" value="rom_mbc1" />
 			<dataarea name="rom" size="262144">
-				<rom name="yuu yuu hakusho dai-3-dan - makai no tobira (japan).bin" size="262144" crc="a67cd2cc" sha1="eb72f6956e8c8aa05bee69a0f174f58724008abd" offset="000000" />
+				<rom name="yuu yuu hakusho dai-3-dan - makai no tobira (japan).bin" size="262144" crc="25c618f6" sha1="ffaff18cc2028ca7f823ed1c2a025ed5a61d1b9d" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
@@ -23224,161 +23466,112 @@
 
 <!-- Sachen carts -->
 
-	<!-- This should contain Virus Attack, Electron World, Dice, Trouble Zone, but it currently does not work -->
-	<software name="4in1" supported="no">
+	<software name="4in1_001">
+		<description>4 in 1 (Euro, 4B-001)</description>
+		<year>19??</year>
+		<publisher>Sachen</publisher>
+		<info name="serial" value="4B-001"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_sachen1" />
+			<dataarea name="rom" size="262144">
+				<rom name="4b-001.bin" size="262144" crc="82f06e93" sha1="7506c75fdfa29935afb1e85f5b6013516b2e9f92" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="4in1_002">
 		<description>4 in 1 (Euro, 4B-002)</description>
 		<year>19??</year>
-		<publisher>&lt;unlicensed&gt;</publisher>
+		<publisher>Sachen</publisher>
 		<info name="serial" value="4B-002"/>
 		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc1" />
+			<feature name="slot" value="rom_sachen1" />
 			<dataarea name="rom" size="65536">
 				<rom name="4 in 1 (europe) (4b-002) (unl).bin" size="65536" crc="5e438db8" sha1="d9cb1721854709be7667f5dbce0adf2488c0919b" offset="000000" />
 			</dataarea>
 		</part>
 	</software>
 
+	<software name="4in1_004">
+		<description>4 in 1 (Euro, 4B-004)</description>
+		<year>19??</year>
+		<publisher>Sachen</publisher>
+		<info name="serial" value="4B-004"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_sachen1" />
+			<dataarea name="rom" size="262144">
+				<rom name="4b-004.bin" size="262144" crc="c69a19f6" sha1="ca7990dc03a3b3ada1dce37afc4490deaf872402" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="4in1_005">
+		<description>4 in 1 (Euro, 4B-005)</description>
+		<year>19??</year>
+		<publisher>Sachen</publisher>
+		<info name="serial" value="4B-005"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_sachen1" />
+			<dataarea name="rom" size="262144">
+				<rom name="4b-005.bin" size="262144" crc="f4310eb3" sha1="2107979104cff88bcd635215a936bbc44354ea7c" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="4in1_006">
+		<description>4 in 1 (Euro, 4B-006)</description>
+		<year>19??</year>
+		<publisher>Sachen</publisher>
+		<info name="serial" value="4B-006"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_sachen1" />
+			<dataarea name="rom" size="262144">
+				<rom name="4b-006.bin" size="262144" crc="95398da5" sha1="2e856de768c7cb442a206de8c94a23548027bb60" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="4in1_007" supported="no">
+		<description>4 in 1 (Euro, 4B-007)</description>
+		<year>19??</year>
+		<publisher>Sachen</publisher>
+		<info name="serial" value="4B-007"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_sachen1" />
+			<dataarea name="rom" size="262144">
+				<rom name="4b-007.bin" size="262144" crc="62d9350e" sha1="0eef7f3934508ab79e1cad4ddf3bfdb3216b6b4f" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="4in1_008" supported="no">
+		<description>4 in 1 (Euro, 4B-008)</description>
+		<year>19??</year>
+		<publisher>Sachen</publisher>
+		<info name="serial" value="4B-008"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_sachen1" />
+			<dataarea name="rom" size="262144">
+				<rom name="4b-008.bin" size="262144" crc="740e9bc8" sha1="d7c11d56a42ed7c4ef2fe3c752931a63160d7429" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="4in1_009" supported="no">
+		<description>4 in 1 (Euro, 4B-009)</description>
+		<year>19??</year>
+		<publisher>Sachen</publisher>
+		<info name="serial" value="4B-009"/>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_sachen1" />
+			<dataarea name="rom" size="262144">
+				<rom name="4b-009.bin" size="262144" crc="114e1f1e" sha1="39743e21935a9115fcb4ee86d67d51bdb4b5f6d6" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+
 	<!-- Below we list the ripped games from Sachen multicarts (I assumed they come from a 4-in-1 cart, but they could come as well from a 8-in-1 cart).
 	    They should be removed as soon as the carts are properly dumped and emulated -->
-	<software name="srider">
-		<description>Street Rider (ripped from 4-in-1 4B-001)</description>
-		<year>19??</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<dataarea name="rom" size="32768">
-				<rom name="street rider (unl).bin" size="32768" crc="7751e066" sha1="b545cc60952176841590db7350479af8ec9d650e" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="vexblock">
-		<description>Vex Block (ripped from 4-in-1 4B-001)</description>
-		<year>19??</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<dataarea name="rom" size="32768">
-				<rom name="vex block (unl).bin" size="32768" crc="642aee97" sha1="869a81dbb555b2f815da5abb75304c70ce27b41c" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="trapturn">
-		<description>Trap &amp; Turn (ripped from 4-in-1 4B-001)</description>
-		<year>19??</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<dataarea name="rom" size="32768">
-				<rom name="trap &amp; turn (unl).bin" size="32768" crc="1c2fc6bf" sha1="822ab29560118eaa65586bbbef4ab7d64cbc9fae" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="duckadv">
-		<description>Duck Adventures (ripped from 4-in-1 4B-001)</description>
-		<year>1993</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc1" />
-			<dataarea name="rom" size="131072">
-				<rom name="duck adventures (unl).bin" size="131072" crc="d25f3b3c" sha1="eae872c3f3e0d29dd18bc5c82f248e09af7a5888" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="azone">
-		<description>Arctic Zone (ripped from 4-in-1 4B-005)</description>
-		<year>1993</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<dataarea name="rom" size="32768">
-				<rom name="arctic zone (unl).bin" size="32768" crc="eefe1001" sha1="0c1bf2e1aa03d9b856abc2f6d0f5ac8ced4c44e1" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="mtower">
-		<description>Magical Tower (ripped from 4-in-1 4B-005)</description>
-		<year>19??</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc1" />
-			<dataarea name="rom" size="65536">
-				<rom name="magical tower (unl).bin" size="65536" crc="f157ae9e" sha1="c240182aef0ce365df3a61f0e0c417b7ea906200" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="railway">
-		<description>Railway (ripped from 4-in-1 4B-005)</description>
-		<year>19??</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc1" />
-			<dataarea name="rom" size="65536">
-				<rom name="railway (unl).bin" size="65536" crc="a19ca3c1" sha1="6706d1da551ace91cedeb8a14f932c8e49ec87e6" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="wormvis">
-		<description>Worm Visitor (ripped from 4-in-1 4B-005)</description>
-		<year>19??</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc1" />
-			<dataarea name="rom" size="65536">
-				<rom name="worm visitor (unl).bin" size="65536" crc="66130a7a" sha1="96819e9941ffa1bb8118df8ff4b57709a9c597e1" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="bombdisp">
-		<description>Bomb Disposer (ripped from 4-in-1 4B-006)</description>
-		<year>1993</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<dataarea name="rom" size="32768">
-				<rom name="bomb disposer (unl).bin" size="32768" crc="c2a85d91" sha1="f39beb0cddceab0067cb468edca60cacd5ee5a37" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="aforce">
-		<description>A-Force (ripped from 4-in-1 4B-006)</description>
-		<year>1993</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc1" />
-			<dataarea name="rom" size="65536">
-				<rom name="a-force (unl).bin" size="65536" crc="776d03dc" sha1="b8fe29112be8108cf087a5a90f347c736ad38a39" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="bftale">
-		<description>Black Forest Tale (ripped from 4-in-1 4B-006)</description>
-		<year>1993</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc1" />
-			<dataarea name="rom" size="65536">
-				<rom name="black forest tale (unl).bin" size="65536" crc="3d4e1779" sha1="f5b46d061498b37e0c6eb0513c63720db17b5e52" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
-	<software name="2ndspace">
-		<description>2nd Space (ripped from 4-in-1 4B-006)</description>
-		<year>1993</year>
-		<publisher>Sachen</publisher>
-		<part name="cart" interface="gameboy_cart">
-			<feature name="slot" value="rom_mbc1" />
-			<dataarea name="rom" size="131072">
-				<rom name="2nd space (unl).bin" size="131072" crc="1d0f279c" sha1="9424aa6b2d12b3729d1bf0e8602632fd780f9090" offset="000000" />
-			</dataarea>
-		</part>
-	</software>
-
 	<software name="antsoldr" supported="partial">
 		<description>Ant Soldier (ripped from 4-in-1 4B-007)</description>
 		<year>1993</year>
@@ -23499,6 +23692,18 @@
 	</software>
 
 <!-- Other Asian pirate carts -->
+
+	<software name="smw7" cloneof="advisln2">
+		<description>Super Mario World 7 (Chi, ripped from 18 in 1 multicart)</description>
+		<year>1998</year>
+		<publisher>&lt;unknown&gt;</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_mbc1" />
+			<dataarea name="rom" size="262144">
+				<rom name="super mario world 7 (unlicensed) (multicart rip).bin" size="262144" crc="aad1226e" sha1="0ee89297e9d24c1b4247765c8561a2cc90e383c9" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
 
 	<software name="rockman8">
 		<description>Rockman 8 (Chi)</description>
@@ -23701,6 +23906,19 @@
 				<rom name="tiger a dragon (unl).bin" size="2097152" crc="933513a6" sha1="d327c880e7ffb9db0422e09310031e58a32b8433" offset="000000" />
 			</dataarea>
 			<dataarea name="nvram" size="8192">
+			</dataarea>
+		</part>
+	</software>
+
+
+	<software name="188in1" supported="partial">
+		<description>Color GameBoy 188 in 1 (HK)</description>
+		<year>199?</year>
+		<publisher>&lt;unknown&gt;</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<feature name="slot" value="rom_188in1" />
+			<dataarea name="rom" size="8388608">
+				<rom name="m29w640ft.u2" size="8388608" crc="e4068d7d" sha1="e61ee50ed39fd5b5cc8bdcb96fe1c3cccdcfc76f" offset="000000" />
 			</dataarea>
 		</part>
 	</software>

@@ -1,11 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Couriersud
 /*****************************************************************************
 
     resnet.h
 
     Compute weights for resistors networks.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 *****************************************************************************/
 
@@ -153,11 +152,11 @@ struct res_net_decode_info {
 
 /* return a single value for one channel */
 
-int compute_res_net(int inputs, int channel, const res_net_info *di);
+int compute_res_net(int inputs, int channel, const res_net_info &di);
 
 /* compute all values */
 
-rgb_t *compute_res_net_all(running_machine &machine, const UINT8 *prom, const res_net_decode_info *rdi, const res_net_info *di);
+void compute_res_net_all(std::vector<rgb_t> &rgb, const UINT8 *prom, const res_net_decode_info &rdi, const res_net_info &di);
 
 
 /* legacy interface */
@@ -175,6 +174,7 @@ double compute_resistor_weights(
 #define combine_4_weights(tab,w0,w1,w2,w3)              ((int)(((tab)[0]*(w0) + (tab)[1]*(w1) + (tab)[2]*(w2) + (tab)[3]*(w3)) + 0.5))
 #define combine_3_weights(tab,w0,w1,w2)                 ((int)(((tab)[0]*(w0) + (tab)[1]*(w1) + (tab)[2]*(w2)) + 0.5))
 #define combine_2_weights(tab,w0,w1)                    ((int)(((tab)[0]*(w0) + (tab)[1]*(w1)) + 0.5))
+#define combine_1_weights(tab,w0)                       ((int)(((tab)[0]*(w0) + 0.5)))
 
 
 

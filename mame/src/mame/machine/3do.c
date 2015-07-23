@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Angelo Salese, Wilbert Pol
 /*
 
 Reset boot sequence:
@@ -164,8 +166,8 @@ TIMER_DEVICE_CALLBACK_MEMBER( _3do_state::timer_x16_cb )
 	}
 }
 
-READ8_MEMBER(_3do_state::_3do_nvarea_r) { return m_nvram[offset]; }
-WRITE8_MEMBER(_3do_state::_3do_nvarea_w) { m_nvram[offset] = data; }
+READ8_MEMBER(_3do_state::_3do_nvarea_r) { return m_nvmem[offset]; }
+WRITE8_MEMBER(_3do_state::_3do_nvarea_w) { m_nvmem[offset] = data; }
 
 
 
@@ -499,7 +501,7 @@ WRITE32_MEMBER(_3do_state::_3do_madam_w){
 	case 0x0100/4:  /* 03300100 - SPRSTRT - Start the CEL engine (W) */
 	case 0x0104/4:  /* 03300104 - SPRSTOP - Stop the CEL engine (W) */
 	case 0x0108/4:  /* 03300108 - SPRCNTU - Continue the CEL engine (W) */
-	case 0x010c/4:  /* 0330010c - SPRPAUS - Pause the the CEL engine (W) */
+	case 0x010c/4:  /* 0330010c - SPRPAUS - Pause the CEL engine (W) */
 		break;
 	case 0x0110/4:  /* 03300110 - CCOBCTL0 - CCoB control (RW) */
 		m_madam.ccobctl0 = data;

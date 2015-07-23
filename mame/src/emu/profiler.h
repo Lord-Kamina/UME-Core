@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     profiler.h
 
     Functions to manage profiling of MAME execution.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ****************************************************************************
 
@@ -100,7 +71,7 @@ enum profile_type
 	PROFILER_IDLE,
 	PROFILER_TOTAL
 };
-DECLARE_ENUM_OPERATORS(profile_type);
+DECLARE_ENUM_OPERATORS(profile_type)
 
 
 
@@ -118,7 +89,10 @@ public:
 	real_profiler_state();
 
 	// getters
-	bool enabled() const { return m_filoptr != NULL; }
+	bool enabled() const
+	{
+		return m_filoptr != NULL;
+	}
 	const char *text(running_machine &machine);
 
 	// enable/disable
@@ -193,7 +167,7 @@ private:
 
 	// internal state
 	filo_entry *        m_filoptr;                  // current FILO index
-	astring             m_text;                     // profiler text
+	std::string         m_text;                     // profiler text
 	attotime            m_text_time;                // profiler text last update
 	filo_entry          m_filo[32];                 // array of FILO entries
 	osd_ticks_t         m_data[PROFILER_TOTAL + 1]; // array of data

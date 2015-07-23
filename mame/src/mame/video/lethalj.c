@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     The Game Room Lethal Justice hardware
@@ -23,7 +25,7 @@
 inline void lethalj_state::get_crosshair_xy(int player, int *x, int *y)
 {
 	static const char *const gunnames[] = { "LIGHT0_X", "LIGHT0_Y", "LIGHT1_X", "LIGHT1_Y" };
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 	int width = visarea.width();
 	int height = visarea.height();
 
@@ -134,12 +136,14 @@ void lethalj_state::do_blit()
 
 			/* loop over X coordinates */
 			for (x = 0; x <= width; x++, sx++, dx++)
-				if (dx >= 0 && dx < BLITTER_DEST_WIDTH)
-				{
-					int pix = source[sx % BLITTER_SOURCE_WIDTH];
-					if (pix)
-						dest[dx] = pix;
-				}
+			{
+				dx &= BLITTER_DEST_WIDTH -1 ;
+
+				int pix = source[sx % BLITTER_SOURCE_WIDTH];
+				if (pix)
+					dest[dx] = pix;
+
+			}
 		}
 	}
 }
@@ -174,21 +178,20 @@ WRITE16_MEMBER(lethalj_state::lethalj_blitter_w)
  *
  *************************************/
 
-void lethalj_scanline_update(screen_device &screen, bitmap_ind16 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_IND16_CB_MEMBER(lethalj_state::scanline_update)
 {
-	lethalj_state *state = screen.machine().driver_data<lethalj_state>();
-	UINT16 *src = &state->m_screenram[(state->m_vispage << 17) | ((params->rowaddr << 9) & 0x3fe00)];
+	UINT16 *src = &m_screenram[(m_vispage << 17) | ((params->rowaddr << 9) & 0x3fe00)];
 	UINT16 *dest = &bitmap.pix16(scanline);
 	int coladdr = params->coladdr << 1;
 	int x;
 
 	/* blank palette: fill with white */
-	if (state->m_blank_palette)
+	if (m_blank_palette)
 	{
 		for (x = params->heblnk; x < params->hsblnk; x++)
 			dest[x] = 0x7fff;
 		if (scanline == screen.visible_area().max_y)
-			state->m_blank_palette = 0;
+			m_blank_palette = 0;
 		return;
 	}
 

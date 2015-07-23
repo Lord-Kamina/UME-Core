@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Jarek Burczynski
 /*
 **
 ** File: ym2413.c - software implementation of YM2413
@@ -304,24 +306,28 @@ static const UINT32 ksl_tab[8*16]=
 		0.000/DV, 0.000/DV, 3.000/DV, 4.875/DV,
 		6.000/DV, 7.125/DV, 7.875/DV, 8.625/DV,
 		9.000/DV, 9.750/DV,10.125/DV,10.500/DV,
-	10.875/DV,11.250/DV,11.625/DV,12.000/DV,
+		10.875/DV,11.250/DV,11.625/DV,12.000/DV,
 	/* OCT 5 */
 		0.000/DV, 3.000/DV, 6.000/DV, 7.875/DV,
 		9.000/DV,10.125/DV,10.875/DV,11.625/DV,
-	12.000/DV,12.750/DV,13.125/DV,13.500/DV,
-	13.875/DV,14.250/DV,14.625/DV,15.000/DV,
+		12.000/DV,12.750/DV,13.125/DV,13.500/DV,
+		13.875/DV,14.250/DV,14.625/DV,15.000/DV,
 	/* OCT 6 */
 		0.000/DV, 6.000/DV, 9.000/DV,10.875/DV,
-	12.000/DV,13.125/DV,13.875/DV,14.625/DV,
-	15.000/DV,15.750/DV,16.125/DV,16.500/DV,
-	16.875/DV,17.250/DV,17.625/DV,18.000/DV,
+		12.000/DV,13.125/DV,13.875/DV,14.625/DV,
+		15.000/DV,15.750/DV,16.125/DV,16.500/DV,
+		16.875/DV,17.250/DV,17.625/DV,18.000/DV,
 	/* OCT 7 */
 		0.000/DV, 9.000/DV,12.000/DV,13.875/DV,
-	15.000/DV,16.125/DV,16.875/DV,17.625/DV,
-	18.000/DV,18.750/DV,19.125/DV,19.500/DV,
-	19.875/DV,20.250/DV,20.625/DV,21.000/DV
+		15.000/DV,16.125/DV,16.875/DV,17.625/DV,
+		18.000/DV,18.750/DV,19.125/DV,19.500/DV,
+		19.875/DV,20.250/DV,20.625/DV,21.000/DV
 };
 #undef DV
+
+/* 0 / 1.5 / 3.0 / 6.0 dB/OCT, confirmed on a real YM2413 (the application manual is incorrect) */
+static const UINT32 ksl_shift[4] = { 31, 2, 1, 0 };
+
 
 /* sustain level table (3dB per step) */
 /* 0 - 15: 0, 3, 6, 9,12,15,18,21,24,27,30,33,36,39,42,45 (dB)*/
@@ -443,8 +449,8 @@ O( 0),O( 0),O( 0),O( 0),O( 0),O( 0),O( 0),O( 0),
 #define ML 2
 static const UINT8 mul_tab[16]= {
 /* 1/2, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,10,12,12,15,15 */
-	0.50*ML, 1.00*ML, 2.00*ML, 3.00*ML, 4.00*ML, 5.00*ML, 6.00*ML, 7.00*ML,
-	8.00*ML, 9.00*ML,10.00*ML,10.00*ML,12.00*ML,12.00*ML,15.00*ML,15.00*ML
+	ML/2, 1*ML, 2*ML, 3*ML, 4*ML, 5*ML, 6*ML, 7*ML,
+	8*ML, 9*ML,10*ML,10*ML,12*ML,12*ML,15*ML,15*ML
 };
 #undef ML
 
@@ -1475,14 +1481,11 @@ INLINE void set_mul(YM2413 *chip,int slot,int v)
 /* set ksl, tl */
 INLINE void set_ksl_tl(YM2413 *chip,int chan,int v)
 {
-	int ksl;
 	OPLL_CH   *CH   = &chip->P_CH[chan];
 /* modulator */
 	OPLL_SLOT *SLOT = &CH->SLOT[SLOT1];
 
-	ksl = v>>6; /* 0 / 1.5 / 3.0 / 6.0 dB/OCT */
-
-	SLOT->ksl = ksl ? 3-ksl : 31;
+	SLOT->ksl = ksl_shift[v >> 6];
 	SLOT->TL  = (v&0x3f)<<(ENV_BITS-2-7); /* 7 bits TL (bit 6 = always 0) */
 	SLOT->TLL = SLOT->TL + (CH->ksl_base>>SLOT->ksl);
 }
@@ -1490,7 +1493,6 @@ INLINE void set_ksl_tl(YM2413 *chip,int chan,int v)
 /* set ksl , waveforms, feedback */
 INLINE void set_ksl_wave_fb(YM2413 *chip,int chan,int v)
 {
-	int ksl;
 	OPLL_CH   *CH   = &chip->P_CH[chan];
 /* modulator */
 	OPLL_SLOT *SLOT = &CH->SLOT[SLOT1];
@@ -1499,9 +1501,8 @@ INLINE void set_ksl_wave_fb(YM2413 *chip,int chan,int v)
 
 /*carrier*/
 	SLOT = &CH->SLOT[SLOT2];
-	ksl = v>>6; /* 0 / 1.5 / 3.0 / 6.0 dB/OCT */
 
-	SLOT->ksl = ksl ? 3-ksl : 31;
+	SLOT->ksl = ksl_shift[v >> 6];
 	SLOT->TLL = SLOT->TL + (CH->ksl_base>>SLOT->ksl);
 
 	SLOT->wavetable = ((v&0x10)>>4)*SIN_LEN;

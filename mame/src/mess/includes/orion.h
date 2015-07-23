@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /*****************************************************************************
  *
  * includes/orion.h
@@ -9,11 +11,14 @@
 
 #include "machine/wd_fdc.h"
 #include "includes/radio86.h"
+#include "cpu/z80/z80.h"
+#include "cpu/i8085/i8085.h"
 #include "machine/i8255.h"
 #include "machine/ram.h"
 #include "machine/mc146818.h"
 #include "sound/speaker.h"
 #include "sound/ay8910.h"
+#include "sound/wave.h"
 
 
 class orion_state : public radio86_state
@@ -116,8 +121,5 @@ protected:
 	void orion_set_video_mode(int width);
 	void orionpro_bank_switch();
 };
-
-/*----------- defined in machine/orion.c -----------*/
-extern const i8255_interface orion128_ppi8255_interface_1;
 
 #endif /* ORION_H_ */

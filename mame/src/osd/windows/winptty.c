@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 #define WIN32_LEAN_AND_MEAN
 
 #include <windows.h>
@@ -19,12 +21,13 @@ file_error win_open_ptty(const char *path, UINT32 openflags, osd_file **file, UI
 
 	pipe = CreateNamedPipe(t_name, PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT, 1, 32, 32, 0, NULL);
 
+	osd_free(t_name);
+
 	if(pipe == INVALID_HANDLE_VALUE)
 		return FILERR_ACCESS_DENIED;
 
 	(*file)->handle = pipe;
 	*filesize = 0;
-	osd_free(t_name);
 	return FILERR_NONE;
 }
 
@@ -63,6 +66,5 @@ file_error win_close_ptty(osd_file *file)
 	FlushFileBuffers(file->handle);
 	DisconnectNamedPipe(file->handle);
 	CloseHandle(file->handle);
-	free(file);
 	return FILERR_NONE;
 }

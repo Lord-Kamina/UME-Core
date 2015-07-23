@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli
 /*
 
 Championship Bowling
@@ -15,7 +17,7 @@ This game runs on Seta Hardware.
 PCB Layout
 ----------
 
-PO-052A
+P0-052A
 |---------------------------------------------------------|
 | MB3712     SW1        AB001009  AB001007  AB001005      |
 |                 X1-007                                  |
@@ -50,7 +52,7 @@ PO-052A
 ROM Sub Board (plugs into DIP32 socket on main board)
 -------------
 
-PO-047A
+P0-047A
 |--------------------------------------------|
 |                                            |
 |     AB003003           AB002003            |
@@ -155,15 +157,24 @@ Notes:
 #include "sound/x1_010.h"
 #include "machine/nvram.h"
 #include "machine/ticket.h"
-#include "includes/tnzs.h"
 #include "video/seta001.h"
 
-class champbwl_state : public tnzs_state
+class champbwl_state : public driver_device
 {
 public:
 	champbwl_state(const machine_config &mconfig, device_type type, const char *tag)
-		: tnzs_state(mconfig, type, tag) { }
+		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_seta001(*this, "spritegen"),
+		m_palette(*this, "palette"),
+		m_x1(*this, "x1snd") { }
 
+	int      m_screenflip;
+
+	required_device<cpu_device> m_maincpu;
+	required_device<seta001_device> m_seta001;
+	required_device<palette_device> m_palette;
+	required_device<x1_010_device> m_x1;
 	UINT8    m_last_trackball_val[2];
 	DECLARE_READ8_MEMBER(trackball_r);
 	DECLARE_WRITE8_MEMBER(champbwl_misc_w);
@@ -171,12 +182,24 @@ public:
 	DECLARE_MACHINE_START(champbwl);
 	DECLARE_MACHINE_RESET(champbwl);
 	DECLARE_MACHINE_START(doraemon);
+	DECLARE_PALETTE_INIT(champbwl);
 	UINT32 screen_update_champbwl(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_doraemon(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void screen_eof_champbwl(screen_device &screen, bool state);
 	void screen_eof_doraemon(screen_device &screen, bool state);
 };
 
+PALETTE_INIT_MEMBER(champbwl_state,champbwl)
+{
+	const UINT8 *color_prom = memregion("proms")->base();
+	int i, col;
+
+	for (i = 0; i < palette.entries(); i++)
+	{
+		col = (color_prom[i] << 8) + color_prom[i + 512];
+		palette.set_pen_color(i, pal5bit(col >> 10), pal5bit(col >> 5), pal5bit(col >> 0));
+	}
+}
 
 
 READ8_MEMBER(champbwl_state::trackball_r)
@@ -208,12 +231,12 @@ static ADDRESS_MAP_START( champbwl_map, AS_PROGRAM, 8, champbwl_state )
 	AM_RANGE(0x0000, 0x3fff) AM_ROM AM_REGION("maincpu", 0x10000)
 	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x8000, 0x87ff) AM_RAM AM_SHARE("nvram")
-	AM_RANGE(0xa000, 0xafff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodelow_r8, spritecodelow_w8)
-	AM_RANGE(0xb000, 0xbfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodehigh_r8, spritecodehigh_w8)
-	AM_RANGE(0xc000, 0xdfff) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_r, seta_sound_w)
-	AM_RANGE(0xe000, 0xe2ff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spriteylow_r8, spriteylow_w8)
-	AM_RANGE(0xe300, 0xe303) AM_MIRROR(0xfc) AM_DEVWRITE_LEGACY("spritegen", spritectrl_w8) /* control registers (0x80 mirror used by Arkanoid 2) */
-	AM_RANGE(0xe800, 0xe800) AM_DEVWRITE_LEGACY("spritegen", spritebgflag_w8)   /* enable / disable background transparency */
+	AM_RANGE(0xa000, 0xafff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodelow_r8, spritecodelow_w8)
+	AM_RANGE(0xb000, 0xbfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodehigh_r8, spritecodehigh_w8)
+	AM_RANGE(0xc000, 0xdfff) AM_DEVREADWRITE("x1snd", x1_010_device, read, write)
+	AM_RANGE(0xe000, 0xe2ff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spriteylow_r8, spriteylow_w8)
+	AM_RANGE(0xe300, 0xe303) AM_MIRROR(0xfc) AM_DEVWRITE("spritegen", seta001_device, spritectrl_w8) /* control registers (0x80 mirror used by Arkanoid 2) */
+	AM_RANGE(0xe800, 0xe800) AM_DEVWRITE("spritegen", seta001_device, spritebgflag_w8)   /* enable / disable background transparency */
 
 	AM_RANGE(0xf000, 0xf000) AM_READ(trackball_r)
 	AM_RANGE(0xf002, 0xf002) AM_READ_PORT("IN0")
@@ -247,12 +270,12 @@ static ADDRESS_MAP_START( doraemon, AS_PROGRAM, 8, champbwl_state )
 	AM_RANGE(0x0000, 0x3fff) AM_ROM
 	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x8000, 0x87ff) AM_RAM AM_SHARE("nvram")
-	AM_RANGE(0xa000, 0xafff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodelow_r8, spritecodelow_w8)
-	AM_RANGE(0xb000, 0xbfff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spritecodehigh_r8, spritecodehigh_w8)
-	AM_RANGE(0xc000, 0xc07f) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_r,seta_sound_w) // Sound
-	AM_RANGE(0xe000, 0xe2ff) AM_RAM AM_DEVREADWRITE_LEGACY("spritegen", spriteylow_r8, spriteylow_w8)
-	AM_RANGE(0xe300, 0xe303) AM_DEVWRITE_LEGACY("spritegen", spritectrl_w8)
-	AM_RANGE(0xe800, 0xe800) AM_DEVWRITE_LEGACY("spritegen", spritebgflag_w8)   /* enable / disable background transparency */
+	AM_RANGE(0xa000, 0xafff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodelow_r8, spritecodelow_w8)
+	AM_RANGE(0xb000, 0xbfff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spritecodehigh_r8, spritecodehigh_w8)
+	AM_RANGE(0xc000, 0xc07f) AM_DEVREADWRITE("x1snd", x1_010_device, read, write) // Sound
+	AM_RANGE(0xe000, 0xe2ff) AM_RAM AM_DEVREADWRITE("spritegen", seta001_device, spriteylow_r8, spriteylow_w8)
+	AM_RANGE(0xe300, 0xe303) AM_DEVWRITE("spritegen", seta001_device, spritectrl_w8)
+	AM_RANGE(0xe800, 0xe800) AM_DEVWRITE("spritegen", seta001_device, spritebgflag_w8)   /* enable / disable background transparency */
 	AM_RANGE(0xf000, 0xf000) AM_READ_PORT("IN0") AM_WRITE(doraemon_outputs_w)
 	AM_RANGE(0xf002, 0xf002) AM_READ_PORT("IN1") AM_WRITENOP    // Ack?
 	AM_RANGE(0xf004, 0xf004) AM_WRITENOP                        // Ack?
@@ -429,11 +452,6 @@ static GFXDECODE_START( champbwl )
 	GFXDECODE_ENTRY( "gfx1", 0, charlayout, 0, 32 )
 GFXDECODE_END
 
-static const x1_010_interface champbwl_sound_intf =
-{
-	0x0000      /* address */
-};
-
 MACHINE_START_MEMBER(champbwl_state,champbwl)
 {
 	UINT8 *ROM = memregion("maincpu")->base();
@@ -447,7 +465,6 @@ MACHINE_START_MEMBER(champbwl_state,champbwl)
 MACHINE_RESET_MEMBER(champbwl_state,champbwl)
 {
 	m_screenflip = 0;
-	m_mcu_type = -1;
 	m_last_trackball_val[0] = 0;
 	m_last_trackball_val[1] = 0;
 
@@ -457,10 +474,10 @@ UINT32 champbwl_state::screen_update_champbwl(screen_device &screen, bitmap_ind1
 {
 	bitmap.fill(0x1f0, cliprect);
 
-	machine().device<seta001_device>("spritegen")->set_fg_yoffsets( -0x12, 0x0e );
-	machine().device<seta001_device>("spritegen")->set_bg_yoffsets( 0x1, -0x1 );
+	m_seta001->set_fg_yoffsets( -0x12, 0x0e );
+	m_seta001->set_bg_yoffsets( 0x1, -0x1 );
 
-	machine().device<seta001_device>("spritegen")->seta001_draw_sprites(machine(), bitmap, cliprect, 0x800, 1 );
+	m_seta001->draw_sprites(screen, bitmap, cliprect, 0x800, 1 );
 	return 0;
 }
 
@@ -468,7 +485,7 @@ void champbwl_state::screen_eof_champbwl(screen_device &screen, bool state)
 {
 	// rising edge
 	if (state)
-		machine().device<seta001_device>("spritegen")->tnzs_eof();
+		m_seta001->tnzs_eof();
 }
 
 
@@ -485,6 +502,8 @@ static MACHINE_CONFIG_START( champbwl, champbwl_state )
 	MCFG_MACHINE_RESET_OVERRIDE(champbwl_state,champbwl)
 
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -494,17 +513,17 @@ static MACHINE_CONFIG_START( champbwl, champbwl_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 48*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(champbwl_state, screen_update_champbwl)
 	MCFG_SCREEN_VBLANK_DRIVER(champbwl_state, screen_eof_champbwl)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(champbwl)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", champbwl)
+	MCFG_PALETTE_ADD("palette", 512)
 
-	MCFG_PALETTE_INIT_OVERRIDE(champbwl_state,arknoid2)
+	MCFG_PALETTE_INIT_OWNER(champbwl_state,champbwl)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_ADD("x1snd", X1_010, 16000000)
-	MCFG_SOUND_CONFIG(champbwl_sound_intf)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -516,10 +535,10 @@ UINT32 champbwl_state::screen_update_doraemon(screen_device &screen, bitmap_ind1
 {
 	bitmap.fill(0x1f0, cliprect);
 
-	machine().device<seta001_device>("spritegen")->set_bg_yoffsets( 0x00, 0x01 );
-	machine().device<seta001_device>("spritegen")->set_fg_yoffsets( 0x00, 0x10 );
+	m_seta001->set_bg_yoffsets( 0x00, 0x01 );
+	m_seta001->set_fg_yoffsets( 0x00, 0x10 );
 
-	machine().device<seta001_device>("spritegen")->seta001_draw_sprites(machine(), bitmap, cliprect, 0x800, 1 );
+	m_seta001->draw_sprites(screen, bitmap, cliprect, 0x800, 1 );
 	return 0;
 }
 
@@ -527,7 +546,7 @@ void champbwl_state::screen_eof_doraemon(screen_device &screen, bool state)
 {
 	// rising edge
 	if (state)
-		machine().device<seta001_device>("spritegen")->setac_eof();
+		m_seta001->setac_eof();
 }
 
 MACHINE_START_MEMBER(champbwl_state,doraemon)
@@ -545,6 +564,8 @@ static MACHINE_CONFIG_START( doraemon, champbwl_state )
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 	MCFG_DEVICE_ADD("spritegen", SETA001_SPRITE, 0)
+	MCFG_SETA001_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_SETA001_SPRITE_PALETTE("palette")
 	MCFG_TICKET_DISPENSER_ADD("hopper", attotime::from_msec(2000), TICKET_MOTOR_ACTIVE_LOW, TICKET_STATUS_ACTIVE_LOW )
 
 	MCFG_MACHINE_START_OVERRIDE(champbwl_state,doraemon)
@@ -557,16 +578,16 @@ static MACHINE_CONFIG_START( doraemon, champbwl_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 320-1, 16, 256-16-1)
 	MCFG_SCREEN_UPDATE_DRIVER(champbwl_state, screen_update_doraemon)
 	MCFG_SCREEN_VBLANK_DRIVER(champbwl_state, screen_eof_doraemon)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(champbwl)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", champbwl)
+	MCFG_PALETTE_ADD("palette", 512)
 
-	MCFG_PALETTE_INIT_OVERRIDE(champbwl_state,arknoid2)
+	MCFG_PALETTE_INIT_OWNER(champbwl_state,champbwl)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("x1snd", X1_010, XTAL_14_31818MHz)
-	MCFG_SOUND_CONFIG(champbwl_sound_intf)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 

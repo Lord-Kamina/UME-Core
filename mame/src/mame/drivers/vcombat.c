@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Jason Eckhardt, Andrew Gardner, Philip Bennett
 /*
 Virtual Combat hardware games.
 
@@ -96,18 +98,16 @@ public:
 	vcombat_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_tlc34076(*this, "tlc34076"),
-		m_vid_0_shared_ram(*this, "vid_0_ram"),
-		m_vid_1_shared_ram(*this, "vid_1_ram"),
 		m_framebuffer_ctrl(*this, "fb_control"),
 		m_maincpu(*this, "maincpu"),
 		m_soundcpu(*this, "soundcpu"),
+		m_vid_0(*this, "vid_0"),
+		m_vid_1(*this, "vid_1"),
 		m_dac(*this, "dac") { }
 
 	UINT16* m_m68k_framebuffer[2];
 	UINT16* m_i860_framebuffer[2][2];
 	required_device<tlc34076_device> m_tlc34076;
-	required_shared_ptr<UINT16> m_vid_0_shared_ram;
-	required_shared_ptr<UINT16> m_vid_1_shared_ram;
 	required_shared_ptr<UINT16> m_framebuffer_ctrl;
 	int m_crtc_select;
 	DECLARE_WRITE16_MEMBER(main_video_write);
@@ -121,8 +121,6 @@ public:
 	DECLARE_WRITE64_MEMBER(v0_fb_w);
 	DECLARE_WRITE64_MEMBER(v1_fb_w);
 	DECLARE_WRITE16_MEMBER(crtc_w);
-	DECLARE_DIRECT_UPDATE_MEMBER(vcombat_vid_0_direct_handler);
-	DECLARE_DIRECT_UPDATE_MEMBER(vcombat_vid_1_direct_handler);
 	DECLARE_WRITE16_MEMBER(vcombat_dac_w);
 	DECLARE_WRITE_LINE_MEMBER(sound_update);
 	DECLARE_DRIVER_INIT(shadfgtr);
@@ -133,6 +131,8 @@ public:
 	UINT32 screen_update_vcombat_aux(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_soundcpu;
+	required_device<i860_cpu_device> m_vid_0;
+	optional_device<i860_cpu_device> m_vid_1;
 	required_device<dac_device> m_dac;
 };
 
@@ -228,7 +228,7 @@ READ16_MEMBER(vcombat_state::control_3_r)
 	return (ioport("IN2")->read() << 8);
 }
 
-static void wiggle_i860_common(device_t *device, UINT16 data)
+static void wiggle_i860_common(i860_cpu_device *device, UINT16 data)
 {
 	int bus_hold = (data & 0x03) == 0x03;
 	int reset = data & 0x10;
@@ -238,31 +238,31 @@ static void wiggle_i860_common(device_t *device, UINT16 data)
 	if (bus_hold)
 	{
 		fprintf(stderr, "M0 asserting bus HOLD to i860 %s\n", device->tag());
-		i860_set_pin(device, DEC_PIN_BUS_HOLD, 1);
+		device->i860_set_pin(DEC_PIN_BUS_HOLD, 1);
 	}
 	else
 	{
 		fprintf(stderr, "M0 clearing bus HOLD to i860 %s\n", device->tag());
-		i860_set_pin(device, DEC_PIN_BUS_HOLD, 0);
+		device->i860_set_pin(DEC_PIN_BUS_HOLD, 0);
 	}
 
 	if (reset)
 	{
 		fprintf(stderr, "M0 asserting RESET to i860 %s\n", device->tag());
-		i860_set_pin(device, DEC_PIN_RESET, 1);
+		device->i860_set_pin(DEC_PIN_RESET, 1);
 	}
 	else
-		i860_set_pin(device, DEC_PIN_RESET, 0);
+		device->i860_set_pin(DEC_PIN_RESET, 0);
 }
 
 WRITE16_MEMBER(vcombat_state::wiggle_i860p0_pins_w)
 {
-	wiggle_i860_common(machine().device("vid_0"), data);
+	wiggle_i860_common(m_vid_0, data);
 }
 
 WRITE16_MEMBER(vcombat_state::wiggle_i860p1_pins_w)
 {
-	wiggle_i860_common(machine().device("vid_1"), data);
+	wiggle_i860_common(m_vid_1, data);
 }
 
 READ16_MEMBER(vcombat_state::main_irqiack_r)
@@ -415,51 +415,23 @@ ADDRESS_MAP_END
 
 MACHINE_RESET_MEMBER(vcombat_state,vcombat)
 {
-	i860_set_pin(machine().device("vid_0"), DEC_PIN_BUS_HOLD, 1);
-	i860_set_pin(machine().device("vid_1"), DEC_PIN_BUS_HOLD, 1);
+	m_vid_0->i860_set_pin(DEC_PIN_BUS_HOLD, 1);
+	m_vid_1->i860_set_pin(DEC_PIN_BUS_HOLD, 1);
 
 	m_crtc_select = 0;
 }
 
 MACHINE_RESET_MEMBER(vcombat_state,shadfgtr)
 {
-	i860_set_pin(machine().device("vid_0"), DEC_PIN_BUS_HOLD, 1);
+	m_vid_0->i860_set_pin(DEC_PIN_BUS_HOLD, 1);
 
 	m_crtc_select = 0;
-}
-
-
-DIRECT_UPDATE_MEMBER(vcombat_state::vcombat_vid_0_direct_handler)
-{
-	if (address >= 0xfffc0000 && address <= 0xffffffff)
-	{
-		direct.explicit_configure(0xfffc0000, 0xffffffff, 0x3ffff, m_vid_0_shared_ram);
-		return ~0;
-	}
-	return address;
-}
-
-DIRECT_UPDATE_MEMBER(vcombat_state::vcombat_vid_1_direct_handler)
-{
-	if (address >= 0xfffc0000 && address <= 0xffffffff)
-	{
-		direct.explicit_configure(0xfffc0000, 0xffffffff, 0x3ffff, m_vid_1_shared_ram);
-		return ~0;
-	}
-	return address;
 }
 
 
 DRIVER_INIT_MEMBER(vcombat_state,vcombat)
 {
 	UINT8 *ROM = memregion("maincpu")->base();
-
-	/* The two i860s execute out of RAM */
-	address_space &v0space = machine().device<i860_device>("vid_0")->space(AS_PROGRAM);
-	v0space.set_direct_update_handler(direct_update_delegate(FUNC(vcombat_state::vcombat_vid_0_direct_handler), this));
-
-	address_space &v1space = machine().device<i860_device>("vid_1")->space(AS_PROGRAM);
-	v1space.set_direct_update_handler(direct_update_delegate(FUNC(vcombat_state::vcombat_vid_1_direct_handler), this));
 
 	/* Allocate the 68000 framebuffers */
 	m_m68k_framebuffer[0] = auto_alloc_array(machine(), UINT16, 0x8000);
@@ -500,10 +472,6 @@ DRIVER_INIT_MEMBER(vcombat_state,shadfgtr)
 	m_i860_framebuffer[0][1] = auto_alloc_array(machine(), UINT16, 0x8000);
 	m_i860_framebuffer[1][0] = NULL;
 	m_i860_framebuffer[1][1] = NULL;
-
-	/* The i860 executes out of RAM */
-	address_space &space = machine().device<i860_device>("vid_0")->space(AS_PROGRAM);
-	space.set_direct_update_handler(direct_update_delegate(FUNC(vcombat_state::vcombat_vid_0_direct_handler), this));
 }
 
 
@@ -571,22 +539,6 @@ WRITE_LINE_MEMBER(vcombat_state::sound_update)
 	m_soundcpu->set_input_line(M68K_IRQ_1, state ? ASSERT_LINE : CLEAR_LINE);
 }
 
-static MC6845_INTERFACE( mc6845_intf )
-{
-	"screen",                   /* screen we are acting on */
-	false,                      /* show border area */
-	16,                         /* number of pixels per video memory address */
-	NULL,                       /* before pixel update callback */
-	NULL,                       /* row update callback */
-	NULL,                       /* after pixel update callback */
-	DEVCB_NULL,                 /* callback for display state changes */
-	DEVCB_NULL,                 /* callback for cursor state changes */
-	DEVCB_DRIVER_LINE_MEMBER(vcombat_state,sound_update),   /* HSYNC callback */
-	DEVCB_NULL,                 /* VSYNC callback */
-	NULL                        /* update address callback */
-};
-
-
 static MACHINE_CONFIG_START( vcombat, vcombat_state )
 	MCFG_CPU_ADD("maincpu", M68000, XTAL_12MHz)
 	MCFG_CPU_PROGRAM_MAP(main_map)
@@ -617,7 +569,7 @@ static MACHINE_CONFIG_START( vcombat, vcombat_state )
 	MCFG_TLC34076_ADD("tlc34076", TLC34076_6_BIT)
 
 	/* Disabled for now as it can't handle multiple screens */
-//  MCFG_MC6845_ADD("crtc", MC6845, 6000000 / 16, mc6845_intf)
+//  MCFG_MC6845_ADD("crtc", MC6845, "screen", 6000000 / 16)
 	MCFG_DEFAULT_LAYOUT(layout_dualhsxs)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -653,7 +605,10 @@ static MACHINE_CONFIG_START( shadfgtr, vcombat_state )
 
 	MCFG_TLC34076_ADD("tlc34076", TLC34076_6_BIT)
 
-	MCFG_MC6845_ADD("crtc", MC6845, XTAL_20MHz / 4 / 16, mc6845_intf)
+	MCFG_MC6845_ADD("crtc", MC6845, "screen", XTAL_20MHz / 4 / 16)
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(16)
+	MCFG_MC6845_OUT_HSYNC_CB(WRITELINE(vcombat_state, sound_update))
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(XTAL_20MHz / 4, 320, 0, 256, 277, 0, 224)

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Nicola Salmoria
 /**********************************************************
 
     Jongkyo
@@ -43,6 +45,7 @@ public:
 	/* misc */
 	UINT8    m_rom_bank;
 	UINT8    m_mux_data;
+	UINT8    m_flip_screen;
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
@@ -58,7 +61,7 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(jongkyo);
 	UINT32 screen_update_jongkyo(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	required_device<cpu_device> m_maincpu;
 };
@@ -85,6 +88,7 @@ UINT32 jongkyo_state::screen_update_jongkyo(screen_device &screen, bitmap_ind16 
 		for (x = 0; x < 256; x += 4)
 		{
 			int b;
+			int res_x,res_y;
 			UINT8 data1;
 			UINT8 data2;
 			UINT8 data3;
@@ -103,7 +107,9 @@ UINT32 jongkyo_state::screen_update_jongkyo(screen_device &screen, bitmap_ind16 
 
 			for (b = 0; b < 4; ++b)
 			{
-				bitmap.pix16(255 - y, 255 - (x + b)) = ((data2 & 0x01)) + ((data2 & 0x10) >> 3) +
+				res_x = m_flip_screen ? 255 - (x + b) : (x + b);
+				res_y = m_flip_screen ? 255 - y : y;
+				bitmap.pix16(res_y, res_x) = ((data2 & 0x01)) + ((data2 & 0x10) >> 3) +
 															((data1 & 0x01) << 2) + ((data1 & 0x10) >> 1) +
 															((data3 & 0x01) << 4) + ((data3 & 0x10) << 1);
 				data1 >>= 1;
@@ -133,6 +139,7 @@ WRITE8_MEMBER(jongkyo_state::bank_select_w)
 		m_rom_bank |= mask;
 
 	membank("bank1")->set_entry(m_rom_bank);
+	membank("bank1d")->set_entry(m_rom_bank);
 }
 
 WRITE8_MEMBER(jongkyo_state::mux_w)
@@ -143,10 +150,13 @@ WRITE8_MEMBER(jongkyo_state::mux_w)
 
 WRITE8_MEMBER(jongkyo_state::jongkyo_coin_counter_w)
 {
+	/* bit 0 = hopper out? */
+
 	/* bit 1 = coin counter */
 	coin_counter_w(machine(), 0, data & 2);
 
 	/* bit 2 always set? */
+	m_flip_screen = (data & 4) >> 2;
 }
 
 READ8_MEMBER(jongkyo_state::input_1p_r)
@@ -234,6 +244,11 @@ static ADDRESS_MAP_START( jongkyo_memmap, AS_PROGRAM, 8, jongkyo_state )
 	AM_RANGE(0x8000, 0xffff) AM_RAM AM_SHARE("videoram")
 ADDRESS_MAP_END
 
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 8, jongkyo_state )
+	AM_RANGE(0x0000, 0x6bff) AM_ROMBANK("bank0d")
+	AM_RANGE(0x6c00, 0x6fff) AM_ROMBANK("bank1d")
+ADDRESS_MAP_END
+
 
 static ADDRESS_MAP_START( jongkyo_portmap, AS_IO, 8, jongkyo_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
@@ -244,6 +259,7 @@ static ADDRESS_MAP_START( jongkyo_portmap, AS_IO, 8, jongkyo_state )
 	AM_RANGE(0x10, 0x10) AM_READ_PORT("DSW") AM_WRITE(jongkyo_coin_counter_w)
 	AM_RANGE(0x11, 0x11) AM_READ_PORT("IN0") AM_WRITE(mux_w)
 	// W 11 select keyboard row (fe fd fb f7)
+	AM_RANGE(0x40, 0x40) AM_READNOP // unknown, if (A & 0xf) == 0x0a then a bit 0 write to 0x7520 doesn't occur
 	AM_RANGE(0x40, 0x45) AM_WRITE(bank_select_w)
 	AM_RANGE(0x46, 0x4f) AM_WRITE(unknown_w)
 ADDRESS_MAP_END
@@ -387,7 +403,7 @@ static INPUT_PORTS_START( jongkyo )
 	PORT_DIPNAME( 0x02, 0x00, "Memory Reset" )
 	PORT_DIPSETTING(    0x00, DEF_STR( No ) )
 	PORT_DIPSETTING(    0x02, DEF_STR( Yes ) )
-	PORT_DIPNAME( 0x04, 0x00, "Analizer" )
+	PORT_DIPNAME( 0x04, 0x00, "Analyzer" )
 	PORT_DIPSETTING(    0x00, DEF_STR( No ) )
 	PORT_DIPSETTING(    0x04, DEF_STR( Yes ) )
 	PORT_SERVICE( 0x08, IP_ACTIVE_HIGH )
@@ -433,7 +449,7 @@ INPUT_PORTS_END
  *
  *************************************/
 
-void jongkyo_state::palette_init()
+PALETTE_INIT_MEMBER(jongkyo_state, jongkyo)
 {
 	int i;
 	UINT8* proms = memregion("proms")->base();
@@ -445,27 +461,10 @@ void jongkyo_state::palette_init()
 		int g = (data  >> 3) & 0x07;
 		int b = (data  >> 6) & 0x03;
 
-			palette_set_color_rgb(machine(), i, r << 5, g << 5, b << 6 );
+			palette.set_pen_color(i, r << 5, g << 5, b << 6 );
 
 	}
 }
-
-/*************************************
- *
- *  Sound interface
- *
- *************************************/
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(jongkyo_state,input_1p_r),
-	DEVCB_DRIVER_MEMBER(jongkyo_state,input_2p_r),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 
 /*************************************
  *
@@ -478,12 +477,14 @@ void jongkyo_state::machine_start()
 	save_item(NAME(m_videoram2));
 	save_item(NAME(m_rom_bank));
 	save_item(NAME(m_mux_data));
+	save_item(NAME(m_flip_screen));
 }
 
 void jongkyo_state::machine_reset()
 {
 	m_rom_bank = 0;
 	m_mux_data = 0;
+	m_flip_screen = 1;
 }
 
 
@@ -493,6 +494,7 @@ static MACHINE_CONFIG_START( jongkyo, jongkyo_state )
 	MCFG_CPU_ADD("maincpu", Z80,JONGKYO_CLOCK/4)
 	MCFG_CPU_PROGRAM_MAP(jongkyo_memmap)
 	MCFG_CPU_IO_MAP(jongkyo_portmap)
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", jongkyo_state,  irq0_line_hold)
 
 
@@ -503,13 +505,15 @@ static MACHINE_CONFIG_START( jongkyo, jongkyo_state )
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 256-1, 8, 256-8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(jongkyo_state, screen_update_jongkyo)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x100)
-
+	MCFG_PALETTE_ADD("palette", 0x100)
+	MCFG_PALETTE_INIT_OWNER(jongkyo_state, jongkyo)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("aysnd", AY8910, JONGKYO_CLOCK/8)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(jongkyo_state, input_1p_r))
+	MCFG_AY8910_PORT_B_READ_CB(READ8(jongkyo_state, input_2p_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.33)
 MACHINE_CONFIG_END
 
@@ -521,12 +525,13 @@ MACHINE_CONFIG_END
  *************************************/
 
 ROM_START( jongkyo )
-	ROM_REGION( 0x9000, "maincpu", 0 )
+	ROM_REGION( 0x8c00, "maincpu", 0 )
 	ROM_LOAD( "epr-6258", 0x00000, 0x02000, CRC(fb8b7bcc) SHA1(8ece7c2c82c237b4b51829d412b2109b96ccd0e7) )
 	ROM_LOAD( "epr-6259", 0x02000, 0x02000, CRC(e46cde5d) SHA1(1cbe1677cfb3fa9f76ad90d5b1446ce9cefee6b7) )
 	ROM_LOAD( "epr-6260", 0x04000, 0x02000, CRC(369a5365) SHA1(037a2971a59ab339595b333cbdfd4cbb104de2be) )
-	ROM_LOAD( "epr-6262", 0x06000, 0x01000, CRC(ecf50f34) SHA1(ecfa1a9360d8fbcbed457d46e53bae77f6d78c1d) )
-	ROM_LOAD( "epr-6261", 0x07000, 0x02000, CRC(9c475ae1) SHA1(b993c2636dafed9f80fa87e71921c3c85c039e45) )  // banked at 6c00-6fff
+	ROM_LOAD( "epr-6262", 0x06000, 0x00c00, CRC(ecf50f34) SHA1(ecfa1a9360d8fbcbed457d46e53bae77f6d78c1d) )
+	ROM_IGNORE(0x400)
+	ROM_LOAD( "epr-6261", 0x06c00, 0x02000, CRC(9c475ae1) SHA1(b993c2636dafed9f80fa87e71921c3c85c039e45) )  // banked at 6c00-6fff
 
 	ROM_REGION( 0x300, "proms", 0 )
 	/* colours */
@@ -547,17 +552,44 @@ ROM_END
 
 DRIVER_INIT_MEMBER(jongkyo_state,jongkyo)
 {
-	int i;
+	static const UINT8 convtable[32][4] =
+	{
+		/*       opcode                   data                     address      */
+		/*  A    B    C    D         A    B    C    D                           */
+		{ 0x28,0x08,0xa8,0x88 }, { 0xa0,0xa8,0x20,0x28 },   /* ...0...0...0...0 */
+		{ 0x80,0x88,0xa0,0xa8 }, { 0xa0,0xa8,0x20,0x28 },   /* ...0...0...0...1 */
+		{ 0xa0,0xa8,0x20,0x28 }, { 0x20,0xa0,0x00,0x80 },   /* ...0...0...1...0 */
+		{ 0xa0,0xa8,0x20,0x28 }, { 0x80,0x88,0xa0,0xa8 },   /* ...0...0...1...1 */
+		{ 0x08,0x88,0x00,0x80 }, { 0x08,0x88,0x00,0x80 },   /* ...0...1...0...0 */
+		{ 0x88,0xa8,0x80,0xa0 }, { 0x08,0x88,0x00,0x80 },   /* ...0...1...0...1 */
+		{ 0x20,0xa0,0x00,0x80 }, { 0x20,0xa0,0x00,0x80 },   /* ...0...1...1...0 */
+		{ 0x08,0x88,0x00,0x80 }, { 0x08,0x88,0x00,0x80 },   /* ...0...1...1...1 */
+		{ 0x88,0xa8,0x80,0xa0 }, { 0xa0,0xa8,0x20,0x28 },   /* ...1...0...0...0 */
+		{ 0x80,0x88,0xa0,0xa8 }, { 0x80,0x88,0xa0,0xa8 },   /* ...1...0...0...1 */
+		{ 0xa0,0xa8,0x20,0x28 }, { 0x20,0xa0,0x00,0x80 },   /* ...1...0...1...0 */
+		{ 0xa0,0xa8,0x20,0x28 }, { 0x80,0x88,0xa0,0xa8 },   /* ...1...0...1...1 */
+		{ 0x08,0x88,0x00,0x80 }, { 0x28,0x08,0xa8,0x88 },   /* ...1...1...0...0 */
+		{ 0x08,0x88,0x00,0x80 }, { 0x80,0x88,0xa0,0xa8 },   /* ...1...1...0...1 */
+		{ 0x28,0x08,0xa8,0x88 }, { 0x20,0xa0,0x00,0x80 },   /* ...1...1...1...0 */
+		{ 0x80,0x88,0xa0,0xa8 }, { 0x08,0x88,0x00,0x80 }    /* ...1...1...1...1 */
+	};
+
 	UINT8 *rom = memregion("maincpu")->base();
 
 	/* first of all, do a simple bitswap */
-	for (i = 0x6000; i < 0x9000; ++i)
+	for (int i = 0x6000; i < 0x8c00; ++i)
 	{
 		rom[i] = BITSWAP8(rom[i], 7,6,5,3,4,2,1,0);
 	}
 
+	UINT8 *opcodes = auto_alloc_array(machine(), UINT8, 0x6c00+0x400*8);
+
 	/* then do the standard Sega decryption */
-	jongkyo_decode(machine(), "maincpu");
+	sega_decode(rom, opcodes, 0x6c00, convtable, 8, 0x400);
+
+	membank("bank1")->configure_entries(0, 8, rom+0x6c00, 0x400);
+	membank("bank1d")->configure_entries(0, 8, opcodes+0x6c00, 0x400);
+	membank("bank0d")->set_base(opcodes);
 }
 
 

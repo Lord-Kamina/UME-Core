@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
 Atari Orbit video emulation
@@ -30,7 +32,7 @@ TILE_GET_INFO_MEMBER(orbit_state::get_tile_info)
 
 void orbit_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(orbit_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 30);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(orbit_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 30);
 }
 
 
@@ -69,7 +71,7 @@ void orbit_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect 
 		hpos <<= 1;
 		vpos <<= 1;
 
-		drawgfxzoom_transpen(bitmap, cliprect, machine().gfx[layout], code, 0, flip_x, flip_y,
+		m_gfxdecode->gfx(layout)->zoom_transpen(bitmap,cliprect, code, 0, flip_x, flip_y,
 			hpos, vpos, zoom_x, zoom_y, 0);
 	}
 }
@@ -79,7 +81,7 @@ UINT32 orbit_state::screen_update_orbit(screen_device &screen, bitmap_ind16 &bit
 {
 	m_flip_screen = ioport("DSW2")->read() & 8;
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	draw_sprites(bitmap, cliprect);
 	return 0;

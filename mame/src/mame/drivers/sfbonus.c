@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*
 "CGA" Amcoe HW (c) 1999-2004 Amcoe
 
@@ -283,14 +285,28 @@ class sfbonus_state : public driver_device
 public:
 	sfbonus_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
 		m_nvram(*this, "nvram"),
 		m_1800_regs(*this, "1800_regs"),
 		m_vregs(*this, "vregs"),
 		m_2801_regs(*this, "2801_regs"),
 		m_2c01_regs(*this, "2c01_regs"),
 		m_3000_regs(*this, "3000_regs"),
-		m_3800_regs(*this, "3800_regs"),
-		m_maincpu(*this, "maincpu") { }
+		m_3800_regs(*this, "3800_regs")  { }
+
+	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
+	required_shared_ptr<UINT8> m_nvram;
+	required_shared_ptr<UINT8> m_1800_regs;
+	required_shared_ptr<UINT8> m_vregs;
+	required_shared_ptr<UINT8> m_2801_regs;
+	required_shared_ptr<UINT8> m_2c01_regs;
+	required_shared_ptr<UINT8> m_3000_regs;
+	required_shared_ptr<UINT8> m_3800_regs;
 
 	bitmap_ind16 *m_temp_reel_bitmap;
 	tilemap_t *m_tilemap;
@@ -304,13 +320,7 @@ public:
 	UINT8 *m_reel3_ram;
 	UINT8 *m_reel4_ram;
 	UINT8* m_videoram;
-	required_shared_ptr<UINT8> m_nvram;
-	required_shared_ptr<UINT8> m_1800_regs;
-	required_shared_ptr<UINT8> m_vregs;
-	required_shared_ptr<UINT8> m_2801_regs;
-	required_shared_ptr<UINT8> m_2c01_regs;
-	required_shared_ptr<UINT8> m_3000_regs;
-	required_shared_ptr<UINT8> m_3800_regs;
+
 	DECLARE_WRITE8_MEMBER(sfbonus_videoram_w);
 	DECLARE_WRITE8_MEMBER(sfbonus_bank_w);
 	DECLARE_READ8_MEMBER(sfbonus_2800_r);
@@ -454,8 +464,8 @@ public:
 	TILE_GET_INFO_MEMBER(get_sfbonus_reel4_tile_info);
 	virtual void machine_reset();
 	virtual void video_start();
+	void draw_reel_layer(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int category);
 	UINT32 screen_update_sfbonus(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	required_device<cpu_device> m_maincpu;
 };
 
 
@@ -781,8 +791,7 @@ TILE_GET_INFO_MEMBER(sfbonus_state::get_sfbonus_tile_info)
 	int flipx = (m_tilemap_ram[(tile_index*2)+1] & 0x80)>>7;
 	int flipy = (m_tilemap_ram[(tile_index*2)+1] & 0x40)>>5;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			code,
 			0,
 			TILE_FLIPYX(flipx | flipy));
@@ -796,8 +805,7 @@ TILE_GET_INFO_MEMBER(sfbonus_state::get_sfbonus_reel_tile_info)
 
 	int priority = (m_reel_ram[(tile_index*2)+1] & 0x40)>>6;
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			priority,  // colour aboused as priority
 			TILE_FLIPYX(flipx | flipy));
@@ -811,8 +819,7 @@ TILE_GET_INFO_MEMBER(sfbonus_state::get_sfbonus_reel2_tile_info)
 
 	int priority = (m_reel2_ram[(tile_index*2)+1] & 0x40)>>6;
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			priority,  // colour abused as priority
 			TILE_FLIPYX(flipx | flipy));
@@ -826,8 +833,7 @@ TILE_GET_INFO_MEMBER(sfbonus_state::get_sfbonus_reel3_tile_info)
 
 	int priority = (m_reel3_ram[(tile_index*2)+1] & 0x40)>>6;
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			priority,  // colour abused as priority
 			TILE_FLIPYX(flipx | flipy));
@@ -841,8 +847,7 @@ TILE_GET_INFO_MEMBER(sfbonus_state::get_sfbonus_reel4_tile_info)
 
 	int priority = (m_reel4_ram[(tile_index*2)+1] & 0x40)>>6;
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			priority, // colour abused as priority
 			TILE_FLIPYX(flipx | flipy));
@@ -904,11 +909,11 @@ void sfbonus_state::video_start()
 {
 	m_temp_reel_bitmap = auto_bitmap_ind16_alloc(machine(),1024,512);
 
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_tile_info),this),TILEMAP_SCAN_ROWS,8,8, 128, 64);
-	m_reel_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_reel_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 16);
-	m_reel2_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_reel2_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 16);
-	m_reel3_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_reel3_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 16);
-	m_reel4_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_reel4_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 16);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_tile_info),this),TILEMAP_SCAN_ROWS,8,8, 128, 64);
+	m_reel_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_reel_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 16);
+	m_reel2_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_reel2_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 16);
+	m_reel3_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_reel3_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 16);
+	m_reel4_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(sfbonus_state::get_sfbonus_reel4_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 16);
 
 	m_tilemap->set_transparent_pen(0);
 	m_reel_tilemap->set_transparent_pen(255);
@@ -926,18 +931,17 @@ void sfbonus_state::video_start()
 
 }
 
-static void sfbonus_draw_reel_layer(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int catagory)
+void sfbonus_state::draw_reel_layer(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int category)
 {
-	sfbonus_state *state = screen.machine().driver_data<sfbonus_state>();
 	int zz;
 	int i;
 	int startclipmin;
 	const rectangle &visarea = screen.visible_area();
-	UINT8* selectbase = &state->m_videoram[0x600];
-	UINT8* bg_scroll = &state->m_videoram[0x000];
-	UINT8* reels_rowscroll = &state->m_videoram[0x400];
-	int globalyscrollreels = (state->m_vregs[6] | state->m_vregs[7]<<8);
-	int globalxscrollreels = (state->m_vregs[4] | state->m_vregs[5]<<8);
+	UINT8* selectbase = &m_videoram[0x600];
+	UINT8* bg_scroll = &m_videoram[0x000];
+	UINT8* reels_rowscroll = &m_videoram[0x400];
+	int globalyscrollreels = (m_vregs[6] | m_vregs[7]<<8);
+	int globalxscrollreels = (m_vregs[4] | m_vregs[5]<<8);
 	globalyscrollreels += 8;
 	globalxscrollreels += 8;
 
@@ -947,16 +951,16 @@ static void sfbonus_draw_reel_layer(screen_device &screen, bitmap_ind16 &bitmap,
 	{
 		int scroll;
 		scroll = bg_scroll[(i*2)+0x000] | (bg_scroll[(i*2)+0x001]<<8);
-		state->m_reel_tilemap->set_scrolly(i, scroll + globalyscrollreels );
+		m_reel_tilemap->set_scrolly(i, scroll + globalyscrollreels );
 
 		scroll = bg_scroll[(i*2)+0x080] | (bg_scroll[(i*2)+0x081]<<8);
-		state->m_reel2_tilemap->set_scrolly(i, scroll + globalyscrollreels);
+		m_reel2_tilemap->set_scrolly(i, scroll + globalyscrollreels);
 
 		scroll = bg_scroll[(i*2)+0x100] | (bg_scroll[(i*2)+0x101]<<8);
-		state->m_reel3_tilemap->set_scrolly(i, scroll + globalyscrollreels);
+		m_reel3_tilemap->set_scrolly(i, scroll + globalyscrollreels);
 
 		scroll = bg_scroll[(i*2)+0x180] | (bg_scroll[(i*2)+0x181]<<8);
-		state->m_reel4_tilemap->set_scrolly(i, scroll + globalyscrollreels);
+		m_reel4_tilemap->set_scrolly(i, scroll + globalyscrollreels);
 	}
 
 //  printf("------------\n");
@@ -984,73 +988,73 @@ static void sfbonus_draw_reel_layer(screen_device &screen, bitmap_ind16 &bitmap,
 		{
 			rowscroll = reels_rowscroll[((line/8)*2)+0x000] | (reels_rowscroll[((line/8)*2)+0x001]<<8);
 			xxxscroll = globalxscrollreels + rowscroll;
-			state->m_reel_tilemap->set_scrollx(0, xxxscroll  );
-			state->m_reel2_tilemap->set_scrollx(0, xxxscroll );
-			state->m_reel3_tilemap->set_scrollx(0, xxxscroll );
-			state->m_reel4_tilemap->set_scrollx(0, xxxscroll );
+			m_reel_tilemap->set_scrollx(0, xxxscroll  );
+			m_reel2_tilemap->set_scrollx(0, xxxscroll );
+			m_reel3_tilemap->set_scrollx(0, xxxscroll );
+			m_reel4_tilemap->set_scrollx(0, xxxscroll );
 		}
 		else if (rowenable==0x1)
 		{
 			rowscroll = reels_rowscroll[((line/8)*2)+0x080] | (reels_rowscroll[((line/8)*2)+0x081]<<8);
 			xxxscroll = globalxscrollreels + rowscroll;
-			state->m_reel_tilemap->set_scrollx(0, xxxscroll  );
-			state->m_reel2_tilemap->set_scrollx(0, xxxscroll );
-			state->m_reel3_tilemap->set_scrollx(0, xxxscroll );
-			state->m_reel4_tilemap->set_scrollx(0, xxxscroll );
+			m_reel_tilemap->set_scrollx(0, xxxscroll  );
+			m_reel2_tilemap->set_scrollx(0, xxxscroll );
+			m_reel3_tilemap->set_scrollx(0, xxxscroll );
+			m_reel4_tilemap->set_scrollx(0, xxxscroll );
 		}
 		else if (rowenable==0x2)
 		{
 			rowscroll = reels_rowscroll[((line/8)*2)+0x100] | (reels_rowscroll[((line/8)*2)+0x101]<<8);
 			xxxscroll = globalxscrollreels + rowscroll;
-			state->m_reel_tilemap->set_scrollx(0, xxxscroll  );
-			state->m_reel2_tilemap->set_scrollx(0, xxxscroll );
-			state->m_reel3_tilemap->set_scrollx(0, xxxscroll );
-			state->m_reel4_tilemap->set_scrollx(0, xxxscroll );
+			m_reel_tilemap->set_scrollx(0, xxxscroll  );
+			m_reel2_tilemap->set_scrollx(0, xxxscroll );
+			m_reel3_tilemap->set_scrollx(0, xxxscroll );
+			m_reel4_tilemap->set_scrollx(0, xxxscroll );
 		}
 		else if (rowenable==0x3)
 		{
 			rowscroll = reels_rowscroll[((line/8)*2)+0x180] | (reels_rowscroll[((line/8)*2)+0x181]<<8);
 			xxxscroll = globalxscrollreels + rowscroll;
-			state->m_reel_tilemap->set_scrollx(0, xxxscroll  );
-			state->m_reel2_tilemap->set_scrollx(0, xxxscroll );
-			state->m_reel3_tilemap->set_scrollx(0, xxxscroll );
-			state->m_reel4_tilemap->set_scrollx(0, xxxscroll );
+			m_reel_tilemap->set_scrollx(0, xxxscroll  );
+			m_reel2_tilemap->set_scrollx(0, xxxscroll );
+			m_reel3_tilemap->set_scrollx(0, xxxscroll );
+			m_reel4_tilemap->set_scrollx(0, xxxscroll );
 		}
 
 		if (rowenable2==0)
 		{
-			state->m_reel_tilemap->draw(*state->m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(catagory),3);
+			m_reel_tilemap->draw(screen, *m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(category),3);
 		}
 		if (rowenable==0)
 		{
-			state->m_reel_tilemap->draw(*state->m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(catagory),3);
+			m_reel_tilemap->draw(screen, *m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(category),3);
 		}
 
 		if (rowenable2==0x1)
 		{
-			state->m_reel2_tilemap->draw(*state->m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(catagory),2);
+			m_reel2_tilemap->draw(screen, *m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(category),2);
 		}
 		if (rowenable==0x1)
 		{
-			state->m_reel2_tilemap->draw(*state->m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(catagory),2);
+			m_reel2_tilemap->draw(screen, *m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(category),2);
 		}
 
 		if (rowenable2==0x2)
 		{
-			state->m_reel3_tilemap->draw(*state->m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(catagory),1);
+			m_reel3_tilemap->draw(screen, *m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(category),1);
 		}
 		if (rowenable==0x2)
 		{
-			state->m_reel3_tilemap->draw(*state->m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(catagory),1);
+			m_reel3_tilemap->draw(screen, *m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(category),1);
 		}
 
 		if (rowenable2==0x3)
 		{
-			state->m_reel4_tilemap->draw(*state->m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(catagory),4);
+			m_reel4_tilemap->draw(screen, *m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(category),4);
 		}
 		if (rowenable==0x3)
 		{
-			state->m_reel4_tilemap->draw(*state->m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(catagory),4);
+			m_reel4_tilemap->draw(screen, *m_temp_reel_bitmap, clip, TILEMAP_DRAW_CATEGORY(category),4);
 		}
 
 
@@ -1074,11 +1078,11 @@ UINT32 sfbonus_state::screen_update_sfbonus(screen_device &screen, bitmap_ind16 
 	globalyscroll += 8;
 	globalxscroll += 8;
 
-	bitmap.fill(machine().pens[0], cliprect);
-	m_temp_reel_bitmap->fill(machine().pens[0], cliprect);
+	bitmap.fill(m_palette->pen(0), cliprect);
+	m_temp_reel_bitmap->fill(m_palette->pen(0), cliprect);
 
 	/* render reels to bitmap */
-	sfbonus_draw_reel_layer(screen,*m_temp_reel_bitmap,cliprect,0);
+	draw_reel_layer(screen,*m_temp_reel_bitmap,cliprect,0);
 
 	{
 		int y,x;
@@ -1104,7 +1108,7 @@ UINT32 sfbonus_state::screen_update_sfbonus(screen_device &screen, bitmap_ind16 
 		scroll = front_rowscroll[(i*2)+0x000] | (front_rowscroll[(i*2)+0x001]<<8);
 		m_tilemap->set_scrollx(i, scroll+globalxscroll );
 	}
-	m_tilemap->draw(bitmap, cliprect, 0,0);
+	m_tilemap->draw(screen, bitmap, cliprect, 0,0);
 
 	{
 		int y,x;
@@ -1350,11 +1354,6 @@ static ADDRESS_MAP_START( ramdac_map, AS_0, 8, sfbonus_state )
 	AM_RANGE(0x000, 0x3ff) AM_DEVREADWRITE("ramdac",ramdac_device,ramdac_pal_r,ramdac_rgb666_w)
 ADDRESS_MAP_END
 
-static RAMDAC_INTERFACE( ramdac_intf )
-{
-	0
-};
-
 
 static MACHINE_CONFIG_START( sfbonus, sfbonus_state )
 	MCFG_CPU_ADD("maincpu", Z80, 6000000) // custom packaged z80 CPU ?? Mhz
@@ -1366,7 +1365,7 @@ static MACHINE_CONFIG_START( sfbonus, sfbonus_state )
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
-	MCFG_GFXDECODE(sfbonus)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", sfbonus)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -1374,10 +1373,11 @@ static MACHINE_CONFIG_START( sfbonus, sfbonus_state )
 	MCFG_SCREEN_SIZE(128*8, 64*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 512-1, 0*8, 288-1)
 	MCFG_SCREEN_UPDATE_DRIVER(sfbonus_state, screen_update_sfbonus)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x100*2) // *2 for priority workaraound / custom drawing
+	MCFG_PALETTE_ADD("palette", 0x100*2) // *2 for priority workaraound / custom drawing
 
-	MCFG_RAMDAC_ADD("ramdac", ramdac_intf, ramdac_map)
+	MCFG_RAMDAC_ADD("ramdac", ramdac_map, "palette")
 
 
 	/* Parrot 3 seems fine at 1 Mhz, but Double Challenge isn't? */
@@ -5540,8 +5540,8 @@ ROM_END
    ROM5   C409
    ROM6   59B6
 
-Note: There are at least two graphics roms updated for the "2nd Edition" which are currently undumped.
-      It to correct the misspelling of POINT on the play field, currently it's "PONIT".
+Note: ROM5 & ROM6 graphics roms were updated at some point to correct the misspelling of
+      POINT on the play field, currently it's "PONIT". Theses are currently undumped.
 */
 ROM_START( spooky )
 	ROM_REGION( 0x80000, "maincpu", 0 ) /* Z80 Code */

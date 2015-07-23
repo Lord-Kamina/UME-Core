@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Takahiro Nogi
 /******************************************************************************
 
     Video Hardware for Video System Games.
@@ -64,8 +66,7 @@ WRITE16_MEMBER(inufuku_state::inufuku_scrollreg_w)
 
 TILE_GET_INFO_MEMBER(inufuku_state::get_inufuku_bg_tile_info)
 {
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			m_bg_videoram[tile_index],
 			m_bg_palettebank,
 			0);
@@ -73,8 +74,7 @@ TILE_GET_INFO_MEMBER(inufuku_state::get_inufuku_bg_tile_info)
 
 TILE_GET_INFO_MEMBER(inufuku_state::get_inufuku_tx_tile_info)
 {
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			m_tx_videoram[tile_index],
 			m_tx_palettebank,
 			0);
@@ -117,8 +117,8 @@ UINT32 inufuku_state::inufuku_tile_callback( UINT32 code )
 
 void inufuku_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(inufuku_state::get_inufuku_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(inufuku_state::get_inufuku_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(inufuku_state::get_inufuku_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(inufuku_state::get_inufuku_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
 
 	m_bg_tilemap->set_transparent_pen(255);
 	m_tx_tilemap->set_transparent_pen(255);
@@ -138,8 +138,8 @@ UINT32 inufuku_state::screen_update_inufuku(screen_device &screen, bitmap_ind16 
 {
 	int i;
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
-	machine().priority_bitmap.fill(0);
+	bitmap.fill(m_palette->black_pen(), cliprect);
+	screen.priority().fill(0);
 
 	if (m_bg_raster)
 	{
@@ -153,13 +153,13 @@ UINT32 inufuku_state::screen_update_inufuku(screen_device &screen, bitmap_ind16 
 		m_bg_tilemap->set_scrollx(0, m_bg_scrollx);
 	}
 	m_bg_tilemap->set_scrolly(0, m_bg_scrolly);
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	m_tx_tilemap->set_scrollx(0, m_tx_scrollx);
 	m_tx_tilemap->set_scrolly(0, m_tx_scrolly);
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 4);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 4);
 
-	m_spr->draw_sprites( m_spriteram1_old, m_spriteram1.bytes(), machine(), bitmap, cliprect );
+	m_spr->draw_sprites( m_spriteram1_old, m_spriteram1.bytes(), screen, bitmap, cliprect );
 	return 0;
 }
 

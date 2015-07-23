@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /****************************************************************************
 
     Gotya / The Hand driver by Zsolt Vasvari
@@ -167,13 +169,6 @@ static const char *const sample_names[] =
 	0
 };
 
-static const samples_interface gotya_samples_interface =
-{
-	4,  /* 4 channels */
-	sample_names
-};
-
-
 void gotya_state::machine_start()
 {
 	save_item(NAME(m_scroll_bit_8));
@@ -201,15 +196,19 @@ static MACHINE_CONFIG_START( gotya, gotya_state )
 	MCFG_SCREEN_SIZE(36*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 36*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gotya_state, screen_update_gotya)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(gotya)
-	MCFG_PALETTE_LENGTH(16*4)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", gotya)
+	MCFG_PALETTE_ADD("palette", 16*4)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(gotya_state, gotya)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SAMPLES_ADD("samples", gotya_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(4)
+	MCFG_SAMPLES_NAMES(sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 

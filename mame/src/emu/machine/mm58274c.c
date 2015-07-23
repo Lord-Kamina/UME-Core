@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Raphael Nabet
 /***************************************************************************
 
     mm58274c.c
@@ -46,30 +48,12 @@ const device_type MM58274C = &device_creator<mm58274c_device>;
 
 
 mm58274c_device::mm58274c_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-				: device_t(mconfig, MM58274C, "National Semiconductor MM58274C", tag, owner, clock)
+				: device_t(mconfig, MM58274C, "National Semiconductor MM58274C", tag, owner, clock, "mm58274c", __FILE__),
+					m_mode24(0),
+					m_day1(0)
 {
 }
 
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void mm58274c_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const mm58274c_interface *intf = reinterpret_cast<const mm58274c_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<mm58274c_interface *>(this) = *intf;
-	// or initialize to defaults if none provided
-	else
-	{
-		m_mode24 = 0;
-		m_day1 = 0;
-	}
-}
 
 //-------------------------------------------------
 //  device_start - device-specific startup
@@ -143,6 +127,8 @@ void mm58274c_device::device_reset()
 	m_seconds1 = systime.local_time.second / 10;
 	m_seconds2 = systime.local_time.second % 10;
 	m_tenths = 0;
+	m_status = 0;
+	m_control = 0;
 }
 
 
@@ -161,7 +147,7 @@ attotime mm58274c_device::interrupt_period_table(int val)
 		case 7: return attotime::from_seconds(60);
 		default: fatalerror("out of range\n");
 	}
-};
+}
 
 READ8_MEMBER( mm58274c_device::read )
 {

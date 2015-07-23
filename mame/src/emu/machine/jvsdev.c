@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #include "jvsdev.h"
 #include "jvshost.h"
 
@@ -7,7 +9,8 @@ void jvs_device::static_set_jvs_host_tag(device_t &device, const char *jvs_host_
 	jvsdev.jvs_host_tag = jvs_host_tag;
 }
 
-jvs_device::jvs_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock) : device_t(mconfig, type, name, tag, owner, clock)
+jvs_device::jvs_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source)
+	: device_t(mconfig, type, name, tag, owner, clock, shortname, source)
 {
 	jvs_host_tag = 0;
 	next_device = 0;
@@ -179,7 +182,8 @@ int jvs_device::handle_message(const UINT8 *send_buffer, UINT32 send_size, UINT8
 		return 0;
 	}
 
-	return -1;
+	// never executed
+	//return -1;
 }
 
 bool jvs_device::get_address_set_line()

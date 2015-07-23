@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     Driver for Atari/Midway Phoenix/Seattle/Flagstaff hardware games
@@ -430,7 +432,11 @@ public:
 		m_asic_reset(*this, "asic_reset"),
 		m_rombase(*this, "rombase"),
 		m_maincpu(*this, "maincpu"),
-		m_ide(*this, "ide")
+		m_ide(*this, "ide"),
+		m_ethernet(*this, "ethernet"),
+		m_cage(*this, "cage"),
+		m_dcs(*this, "dcs"),
+		m_ioasic(*this, "ioasic")
 	{
 	}
 
@@ -440,9 +446,15 @@ public:
 	required_shared_ptr<UINT32> m_interrupt_config;
 	required_shared_ptr<UINT32> m_asic_reset;
 	required_shared_ptr<UINT32> m_rombase;
+	required_device<mips3_device> m_maincpu;
+	required_device<bus_master_ide_controller_device> m_ide;
+	optional_device<smc91c94_device> m_ethernet;
+	optional_device<atari_cage_seattle_device> m_cage;
+	optional_device<dcs_audio_device> m_dcs;
+	required_device<midway_ioasic_device> m_ioasic;
 	galileo_data m_galileo;
 	widget_data m_widget;
-	device_t *m_voodoo;
+	voodoo_device *m_voodoo;
 	UINT8 m_voodoo_stalled;
 	UINT8 m_cpu_stalled_on_voodoo;
 	UINT32 m_cpu_stalled_offset;
@@ -482,7 +494,7 @@ public:
 	DECLARE_WRITE32_MEMBER(ethernet_w);
 	DECLARE_READ32_MEMBER(widget_r);
 	DECLARE_WRITE32_MEMBER(widget_w);
-	DECLARE_READ16_MEMBER(seattle_ide_r);
+	DECLARE_READ32_MEMBER(seattle_ide_r);
 	DECLARE_WRITE_LINE_MEMBER(ide_interrupt);
 	DECLARE_WRITE_LINE_MEMBER(vblank_assert);
 	DECLARE_WRITE_LINE_MEMBER(voodoo_stall);
@@ -502,7 +514,8 @@ public:
 	virtual void machine_reset();
 	UINT32 screen_update_seattle(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	TIMER_CALLBACK_MEMBER(galileo_timer_callback);
-	void ethernet_interrupt_machine(int state);
+	DECLARE_WRITE_LINE_MEMBER(ethernet_interrupt);
+	DECLARE_WRITE_LINE_MEMBER(ioasic_irq);
 	void update_vblank_irq();
 	UINT32 pci_bridge_r(address_space &space, UINT8 reg, UINT8 type);
 	void pci_bridge_w(address_space &space, UINT8 reg, UINT8 type, UINT32 data);
@@ -516,9 +529,7 @@ public:
 	void galileo_reset();
 	void widget_reset();
 	void update_widget_irq();
-	void init_common(int ioasic, int serialnum, int yearoffs, int config);
-	required_device<cpu_device> m_maincpu;
-	required_device<bus_master_ide_controller_device> m_ide;
+	void init_common(int config);
 };
 
 /*************************************
@@ -544,7 +555,7 @@ void seattle_state::machine_start()
 {
 	int index;
 
-	m_voodoo = machine().device("voodoo");
+	m_voodoo = machine().device<voodoo_device>("voodoo");
 
 	/* allocate timers for the galileo */
 	m_galileo.timer[0].timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(seattle_state::galileo_timer_callback),this));
@@ -553,11 +564,11 @@ void seattle_state::machine_start()
 	m_galileo.timer[3].timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(seattle_state::galileo_timer_callback),this));
 
 	/* set the fastest DRC options, but strict verification */
-	mips3drc_set_options(m_maincpu, MIPS3DRC_FASTEST_OPTIONS + MIPS3DRC_STRICT_VERIFY);
+	m_maincpu->mips3drc_set_options(MIPS3DRC_FASTEST_OPTIONS + MIPS3DRC_STRICT_VERIFY);
 
-	/* configure fast RAM regions for DRC */
-	mips3drc_add_fastram(m_maincpu, 0x00000000, 0x007fffff, FALSE, m_rambase);
-	mips3drc_add_fastram(m_maincpu, 0x1fc00000, 0x1fc7ffff, TRUE,  m_rombase);
+	/* configure fast RAM regions */
+	m_maincpu->add_fastram(0x00000000, 0x007fffff, FALSE, m_rambase);
+	m_maincpu->add_fastram(0x1fc00000, 0x1fc7ffff, TRUE,  m_rombase);
 
 	/* register for save states */
 	save_item(NAME(m_galileo.reg));
@@ -568,8 +579,8 @@ void seattle_state::machine_start()
 	save_item(NAME(m_galileo.pci_ide_regs));
 	for (index = 0; index < ARRAY_LENGTH(m_galileo.timer); index++)
 	{
-		state_save_register_item(machine(), "galileo", NULL, index, m_galileo.timer[index].count);
-		state_save_register_item(machine(), "galileo", NULL, index, m_galileo.timer[index].active);
+		save_item(NAME(m_galileo.timer[index].count), index);
+		save_item(NAME(m_galileo.timer[index].active), index);
 	}
 	save_item(NAME(m_widget.ethernet_addr));
 	save_item(NAME(m_widget.irq_num));
@@ -600,15 +611,15 @@ void seattle_state::machine_reset()
 	m_cpu_stalled_on_voodoo = FALSE;
 
 	/* reset either the DCS2 board or the CAGE board */
-	if (machine().device("dcs2") != NULL)
+	if (machine().device("dcs") != NULL)
 	{
-		dcs_reset_w(machine(), 1);
-		dcs_reset_w(machine(), 0);
+		m_dcs->reset_w(1);
+		m_dcs->reset_w(0);
 	}
 	else if (machine().device("cage") != NULL)
 	{
-		cage_control_w(machine(), 0);
-		cage_control_w(machine(), 3);
+		m_cage->control_w(0);
+		m_cage->control_w(3);
 	}
 
 	/* reset the other devices */
@@ -638,7 +649,7 @@ WRITE_LINE_MEMBER(seattle_state::ide_interrupt)
  *
  *************************************/
 
-void seattle_state::ethernet_interrupt_machine(int state)
+WRITE_LINE_MEMBER(seattle_state::ethernet_interrupt)
 {
 	m_ethernet_irq_state = state;
 	if (m_board_config == FLAGSTAFF_CONFIG)
@@ -651,13 +662,6 @@ void seattle_state::ethernet_interrupt_machine(int state)
 		update_widget_irq();
 }
 
-static void ethernet_interrupt(device_t *device, int state)
-{
-	seattle_state *drvstate = device->machine().driver_data<seattle_state>();
-	drvstate->ethernet_interrupt_machine(state);
-}
-
-
 
 /*************************************
  *
@@ -665,12 +669,10 @@ static void ethernet_interrupt(device_t *device, int state)
  *
  *************************************/
 
-static void ioasic_irq(running_machine &machine, int state)
+WRITE_LINE_MEMBER(seattle_state::ioasic_irq)
 {
-	seattle_state *drvstate = machine.driver_data<seattle_state>();
-	drvstate->m_maincpu->set_input_line(IOASIC_IRQ_NUM, state);
+	m_maincpu->set_input_line(IOASIC_IRQ_NUM, state);
 }
-
 
 
 /*************************************
@@ -735,7 +737,7 @@ WRITE32_MEMBER(seattle_state::interrupt_config_w)
 
 	/* update the states */
 	update_vblank_irq();
-	ethernet_interrupt_machine(m_ethernet_irq_state);
+	ethernet_interrupt(m_ethernet_irq_state);
 }
 
 
@@ -748,7 +750,7 @@ WRITE32_MEMBER(seattle_state::seattle_interrupt_enable_w)
 		if (m_vblank_latch)
 			update_vblank_irq();
 		if (m_ethernet_irq_state)
-			ethernet_interrupt_machine(m_ethernet_irq_state);
+			ethernet_interrupt(m_ethernet_irq_state);
 	}
 }
 
@@ -1064,7 +1066,7 @@ void seattle_state::galileo_perform_dma(address_space &space, int which)
 				}
 
 				/* write the data and advance */
-				voodoo_w(m_voodoo, space, (dstaddr & 0xffffff) / 4, space.read_dword(srcaddr), 0xffffffff);
+				m_voodoo->voodoo_w(space, (dstaddr & 0xffffff) / 4, space.read_dword(srcaddr), 0xffffffff);
 				srcaddr += srcinc;
 				dstaddr += dstinc;
 				bytesleft -= 4;
@@ -1348,7 +1350,7 @@ WRITE32_MEMBER(seattle_state::seattle_voodoo_w)
 	/* if we're not stalled, just write and get out */
 	if (!m_voodoo_stalled)
 	{
-		voodoo_w(m_voodoo, space, offset, data, mem_mask);
+		m_voodoo->voodoo_w(space, offset, data, mem_mask);
 		return;
 	}
 
@@ -1414,8 +1416,8 @@ WRITE_LINE_MEMBER(seattle_state::voodoo_stall)
 			/* if the CPU had a pending write, do it now */
 			if (m_cpu_stalled_on_voodoo)
 			{
-				address_space &space = machine().firstcpu->space(AS_PROGRAM);
-				voodoo_w(m_voodoo, space, m_cpu_stalled_offset, m_cpu_stalled_data, m_cpu_stalled_mem_mask);
+				address_space &space = m_maincpu->space(AS_PROGRAM);
+				m_voodoo->voodoo_w(space, m_cpu_stalled_offset, m_cpu_stalled_data, m_cpu_stalled_mem_mask);
 			}
 			m_cpu_stalled_on_voodoo = FALSE;
 
@@ -1518,21 +1520,19 @@ WRITE32_MEMBER(seattle_state::carnevil_gun_w)
 
 READ32_MEMBER(seattle_state::ethernet_r)
 {
-	device_t *device = machine().device("ethernet");
 	if (!(offset & 8))
-		return smc91c9x_r(device, space, offset & 7, mem_mask & 0xffff);
+		return m_ethernet->read(space, offset & 7, mem_mask & 0xffff);
 	else
-		return smc91c9x_r(device, space, offset & 7, mem_mask & 0x00ff);
+		return m_ethernet->read(space, offset & 7, mem_mask & 0x00ff);
 }
 
 
 WRITE32_MEMBER(seattle_state::ethernet_w)
 {
-	device_t *device = machine().device("ethernet");
 	if (!(offset & 8))
-		smc91c9x_w(device, space, offset & 7, data & 0xffff, mem_mask | 0xffff);
+		m_ethernet->write(space, offset & 7, data & 0xffff, mem_mask | 0xffff);
 	else
-		smc91c9x_w(device, space, offset & 7, data & 0x00ff, mem_mask | 0x00ff);
+		m_ethernet->write(space, offset & 7, data & 0x00ff, mem_mask | 0x00ff);
 }
 
 
@@ -1565,7 +1565,6 @@ void seattle_state::update_widget_irq()
 
 READ32_MEMBER(seattle_state::widget_r)
 {
-	device_t *device = machine().device("ethernet");
 	UINT32 result = ~0;
 
 	switch (offset)
@@ -1584,7 +1583,7 @@ READ32_MEMBER(seattle_state::widget_r)
 			break;
 
 		case WREG_ETHER_DATA:
-			result = smc91c9x_r(device, space, m_widget.ethernet_addr & 7, mem_mask & 0xffff);
+			result = m_ethernet->read(space, m_widget.ethernet_addr & 7, mem_mask & 0xffff);
 			break;
 	}
 
@@ -1596,7 +1595,6 @@ READ32_MEMBER(seattle_state::widget_r)
 
 WRITE32_MEMBER(seattle_state::widget_w)
 {
-	device_t *device = machine().device("ethernet");
 	if (LOG_WIDGET)
 		logerror("Widget write (%02X) = %08X & %08X\n", offset*4, data, mem_mask);
 
@@ -1616,7 +1614,7 @@ WRITE32_MEMBER(seattle_state::widget_w)
 			break;
 
 		case WREG_ETHER_DATA:
-			smc91c9x_w(device, space, m_widget.ethernet_addr & 7, data & 0xffff, mem_mask & 0xffff);
+			m_ethernet->write(space, m_widget.ethernet_addr & 7, data & 0xffff, mem_mask & 0xffff);
 			break;
 	}
 }
@@ -1672,13 +1670,13 @@ WRITE32_MEMBER(seattle_state::asic_reset_w)
 {
 	COMBINE_DATA(m_asic_reset);
 	if (!(*m_asic_reset & 0x0002))
-		midway_ioasic_reset(machine());
+		m_ioasic->ioasic_reset();
 }
 
 
 WRITE32_MEMBER(seattle_state::asic_fifo_w)
 {
-	midway_ioasic_fifo_w(machine(), data);
+	m_ioasic->fifo_w(data);
 }
 
 
@@ -1773,25 +1771,25 @@ PCI Mem  = 08000000-09FFFFFF
 
 */
 
-READ16_MEMBER(seattle_state::seattle_ide_r)
+READ32_MEMBER(seattle_state::seattle_ide_r)
 {
 	/* note that blitz times out if we don't have this cycle stealing */
-	if (offset == 6/2)
+	if (offset == 6/4)
 		m_maincpu->eat_cycles(100);
-	return m_ide->read_cs1_pc(space, offset, mem_mask);
+	return m_ide->read_cs1(space, offset, mem_mask);
 }
 
 static ADDRESS_MAP_START( seattle_map, AS_PROGRAM, 32, seattle_state )
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x00000000, 0x007fffff) AM_RAM AM_SHARE("rambase") // wg3dh only has 4MB; sfrush, blitz99 8MB
-	AM_RANGE(0x08000000, 0x08ffffff) AM_DEVREAD_LEGACY("voodoo", voodoo_r) AM_WRITE(seattle_voodoo_w)
-	AM_RANGE(0x0a0001f0, 0x0a0001f7) AM_DEVREADWRITE16("ide", bus_master_ide_controller_device, read_cs0_pc, write_cs0_pc, 0xffffffff)
-	AM_RANGE(0x0a0003f0, 0x0a0003f7) AM_READ16(seattle_ide_r, 0xffffffff) AM_DEVWRITE16("ide", bus_master_ide_controller_device, write_cs1_pc, 0xffffffff)
+	AM_RANGE(0x08000000, 0x08ffffff) AM_DEVREAD("voodoo", voodoo_device, voodoo_r) AM_WRITE(seattle_voodoo_w)
+	AM_RANGE(0x0a0001f0, 0x0a0001f7) AM_DEVREADWRITE("ide", bus_master_ide_controller_device, read_cs0, write_cs0)
+	AM_RANGE(0x0a0003f0, 0x0a0003f7) AM_READ(seattle_ide_r) AM_DEVWRITE("ide", bus_master_ide_controller_device, write_cs1)
 	AM_RANGE(0x0a00040c, 0x0a00040f) AM_NOP                     // IDE-related, but annoying
-	AM_RANGE(0x0a000f00, 0x0a000f07) AM_DEVREADWRITE("ide", bus_master_ide_controller_device, ide_bus_master32_r, ide_bus_master32_w)
+	AM_RANGE(0x0a000f00, 0x0a000f07) AM_DEVREADWRITE("ide", bus_master_ide_controller_device, bmdma_r, bmdma_w)
 	AM_RANGE(0x0c000000, 0x0c000fff) AM_READWRITE(galileo_r, galileo_w)
 	AM_RANGE(0x13000000, 0x13000003) AM_WRITE(asic_fifo_w)
-	AM_RANGE(0x16000000, 0x1600003f) AM_READWRITE_LEGACY(midway_ioasic_r, midway_ioasic_w)
+	AM_RANGE(0x16000000, 0x1600003f) AM_DEVREADWRITE("ioasic", midway_ioasic_device, read, write)
 	AM_RANGE(0x16100000, 0x1611ffff) AM_READWRITE(cmos_r, cmos_w) AM_SHARE("nvram")
 	AM_RANGE(0x17000000, 0x17000003) AM_READWRITE(cmos_protect_r, cmos_protect_w)
 	AM_RANGE(0x17100000, 0x17100003) AM_WRITE(seattle_watchdog_w)
@@ -2508,38 +2506,28 @@ INPUT_PORTS_END
  *
  *************************************/
 
-static const mips3_config r5000_config =
-{
-	16384,      /* code cache size */
-	16384,      /* data cache size */
-	SYSTEM_CLOCK    /* system clock rate */
-};
-
-static const voodoo_config voodoo_intf =
-{
-	2, //               fbmem;
-	4,//                tmumem0;
-	0,//                tmumem1;
-	"screen",//         screen;
-	"maincpu",//            cputag;
-	DEVCB_DRIVER_LINE_MEMBER(seattle_state,vblank_assert),//    vblank;
-	DEVCB_DRIVER_LINE_MEMBER(seattle_state,voodoo_stall)//             stall;
-};
-
 static MACHINE_CONFIG_START( seattle_common, seattle_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", R5000LE, SYSTEM_CLOCK*3)
-	MCFG_CPU_CONFIG(r5000_config)
+	MCFG_MIPS3_ICACHE_SIZE(16384)
+	MCFG_MIPS3_DCACHE_SIZE(16384)
+	MCFG_MIPS3_SYSTEM_CLOCK(SYSTEM_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(seattle_map)
 
 	MCFG_NVRAM_ADD_1FILL("nvram")
 
-	MCFG_BUS_MASTER_IDE_CONTROLLER_ADD("ide", ide_devices, "hdd", NULL, true)
-	MCFG_IDE_CONTROLLER_IRQ_HANDLER(WRITELINE(seattle_state, ide_interrupt))
+	MCFG_BUS_MASTER_IDE_CONTROLLER_ADD("ide", ata_devices, "hdd", NULL, true)
+	MCFG_ATA_INTERFACE_IRQ_HANDLER(WRITELINE(seattle_state, ide_interrupt))
 	MCFG_BUS_MASTER_IDE_CONTROLLER_SPACE("maincpu", AS_PROGRAM)
 
-	MCFG_3DFX_VOODOO_1_ADD("voodoo", STD_VOODOO_1_CLOCK, voodoo_intf)
+	MCFG_DEVICE_ADD("voodoo", VOODOO_1, STD_VOODOO_1_CLOCK)
+	MCFG_VOODOO_FBMEM(2)
+	MCFG_VOODOO_TMUMEM(4,0)
+	MCFG_VOODOO_SCREEN_TAG("screen")
+	MCFG_VOODOO_CPU_TAG("maincpu")
+	MCFG_VOODOO_VBLANK_CB(WRITELINE(seattle_state,vblank_assert))
+	MCFG_VOODOO_STALL_CB(WRITELINE(seattle_state,voodoo_stall))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -2547,76 +2535,215 @@ static MACHINE_CONFIG_START( seattle_common, seattle_state )
 	MCFG_SCREEN_SIZE(640, 480)
 	MCFG_SCREEN_VISIBLE_AREA(0, 639, 0, 479)
 	MCFG_SCREEN_UPDATE_DRIVER(seattle_state, screen_update_seattle)
-
 	/* sound hardware */
 MACHINE_CONFIG_END
 
 
 static MACHINE_CONFIG_DERIVED( phoenixsa, seattle_common )
-	MCFG_FRAGMENT_ADD(dcs2_audio_2115)
-
 	MCFG_CPU_REPLACE("maincpu", R4700LE, SYSTEM_CLOCK*2)
-	MCFG_CPU_CONFIG(r5000_config)
+	MCFG_MIPS3_ICACHE_SIZE(16384)
+	MCFG_MIPS3_DCACHE_SIZE(16384)
+	MCFG_MIPS3_SYSTEM_CLOCK(SYSTEM_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(seattle_map)
 MACHINE_CONFIG_END
 
 
 static MACHINE_CONFIG_DERIVED( seattle150, seattle_common )
-	MCFG_FRAGMENT_ADD(dcs2_audio_2115)
-
 	MCFG_CPU_REPLACE("maincpu", R5000LE, SYSTEM_CLOCK*3)
-	MCFG_CPU_CONFIG(r5000_config)
+	MCFG_MIPS3_ICACHE_SIZE(16384)
+	MCFG_MIPS3_DCACHE_SIZE(16384)
+	MCFG_MIPS3_SYSTEM_CLOCK(SYSTEM_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(seattle_map)
 MACHINE_CONFIG_END
 
-static const smc91c9x_config ethernet_intf =
-{
-	ethernet_interrupt
-};
 
 static MACHINE_CONFIG_DERIVED( seattle150_widget, seattle150 )
-	MCFG_SMC91C94_ADD("ethernet", ethernet_intf)
+	MCFG_SMC91C94_ADD("ethernet")
+	MCFG_SMC91C94_IRQ_CALLBACK(WRITELINE(seattle_state, ethernet_interrupt))
 MACHINE_CONFIG_END
 
 
 static MACHINE_CONFIG_DERIVED( seattle200, seattle_common )
-	MCFG_FRAGMENT_ADD(dcs2_audio_2115)
-
 	MCFG_CPU_REPLACE("maincpu", R5000LE, SYSTEM_CLOCK*4)
-	MCFG_CPU_CONFIG(r5000_config)
+	MCFG_MIPS3_ICACHE_SIZE(16384)
+	MCFG_MIPS3_DCACHE_SIZE(16384)
+	MCFG_MIPS3_SYSTEM_CLOCK(SYSTEM_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(seattle_map)
 MACHINE_CONFIG_END
 
 
 static MACHINE_CONFIG_DERIVED( seattle200_widget, seattle200 )
-	MCFG_SMC91C94_ADD("ethernet", ethernet_intf)
+	MCFG_SMC91C94_ADD("ethernet")
+	MCFG_SMC91C94_IRQ_CALLBACK(WRITELINE(seattle_state, ethernet_interrupt))
 MACHINE_CONFIG_END
-
-static const voodoo_config voodoo_2_intf =
-{
-	2, //               fbmem;
-	4,//                tmumem0;
-	4,//                tmumem1;
-	"screen",//         screen;
-	"maincpu",//            cputag;
-	DEVCB_DRIVER_LINE_MEMBER(seattle_state,vblank_assert),//    vblank;
-	DEVCB_DRIVER_LINE_MEMBER(seattle_state,voodoo_stall)//             stall;
-};
 
 static MACHINE_CONFIG_DERIVED( flagstaff, seattle_common )
-	MCFG_FRAGMENT_ADD(cage_seattle)
-
 	MCFG_CPU_REPLACE("maincpu", R5000LE, SYSTEM_CLOCK*4)
-	MCFG_CPU_CONFIG(r5000_config)
+	MCFG_MIPS3_ICACHE_SIZE(16384)
+	MCFG_MIPS3_DCACHE_SIZE(16384)
+	MCFG_MIPS3_SYSTEM_CLOCK(SYSTEM_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(seattle_map)
 
-	MCFG_SMC91C94_ADD("ethernet", ethernet_intf)
+	MCFG_SMC91C94_ADD("ethernet")
+	MCFG_SMC91C94_IRQ_CALLBACK(WRITELINE(seattle_state, ethernet_interrupt))
 
 	MCFG_DEVICE_REMOVE("voodoo")
-	MCFG_3DFX_VOODOO_1_ADD("voodoo", STD_VOODOO_1_CLOCK, voodoo_2_intf)
+	MCFG_DEVICE_ADD("voodoo", VOODOO_1, STD_VOODOO_1_CLOCK)
+	MCFG_VOODOO_FBMEM(2)
+	MCFG_VOODOO_TMUMEM(4,4)
+	MCFG_VOODOO_SCREEN_TAG("screen")
+	MCFG_VOODOO_CPU_TAG("maincpu")
+	MCFG_VOODOO_VBLANK_CB(WRITELINE(seattle_state,vblank_assert))
+	MCFG_VOODOO_STALL_CB(WRITELINE(seattle_state,voodoo_stall))
+MACHINE_CONFIG_END
+
+// Per game configurations
+
+static MACHINE_CONFIG_DERIVED( wg3dh, phoenixsa )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x3839)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_STANDARD)
+	MCFG_MIDWAY_IOASIC_UPPER(310/* others? */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(80)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
 MACHINE_CONFIG_END
 
 
+static MACHINE_CONFIG_DERIVED( mace, seattle150 )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x3839)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_MACE)
+	MCFG_MIDWAY_IOASIC_UPPER(319/* others? */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(80)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( sfrush, flagstaff )
+	MCFG_DEVICE_ADD("cage", ATARI_CAGE_SEATTLE, 0)
+	MCFG_ATARI_CAGE_SPEEDUP(0x5236)
+	MCFG_ATARI_CAGE_IRQ_CALLBACK(DEVWRITE8("ioasic",midway_ioasic_device,cage_irq_handler))
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_STANDARD)
+	MCFG_MIDWAY_IOASIC_UPPER(315/* no alternates */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(100)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( sfrushrk, flagstaff )
+	MCFG_DEVICE_ADD("cage", ATARI_CAGE_SEATTLE, 0)
+	MCFG_ATARI_CAGE_SPEEDUP(0x5329)
+	MCFG_ATARI_CAGE_IRQ_CALLBACK(DEVWRITE8("ioasic",midway_ioasic_device,cage_irq_handler))
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_SFRUSHRK)
+	MCFG_MIDWAY_IOASIC_UPPER(331/* unknown */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(100)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( calspeed, seattle150_widget )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x39c0)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_CALSPEED)
+	MCFG_MIDWAY_IOASIC_UPPER(328/* others? */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(100)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+	MCFG_MIDWAY_IOASIC_AUTO_ACK(1)
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( vaportrx, seattle200_widget )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x39c2)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_VAPORTRX)
+	MCFG_MIDWAY_IOASIC_UPPER(324/* 334? unknown */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(100)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( biofreak, seattle150 )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x3835)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_STANDARD)
+	MCFG_MIDWAY_IOASIC_UPPER(231/* no alternates */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(80)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( blitz, seattle150 )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x39c2)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_BLITZ99)
+	MCFG_MIDWAY_IOASIC_UPPER(444/* or 528 */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(80)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( blitz99, seattle150 )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x0afb)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_BLITZ99)
+	MCFG_MIDWAY_IOASIC_UPPER(481/* or 484 or 520 */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(80)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( blitz2k, seattle150 )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x0b5d)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_BLITZ99)
+	MCFG_MIDWAY_IOASIC_UPPER(494/* or 498 */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(80)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( carnevil, seattle150 )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x0af7)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_CARNEVIL)
+	MCFG_MIDWAY_IOASIC_UPPER(469/* 469 or 486 or 528 */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(80)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( hyprdriv, seattle200_widget )
+	MCFG_DEVICE_ADD("dcs", DCS2_AUDIO_2115, 0)
+	MCFG_DCS2_AUDIO_DRAM_IN_MB(2)
+	MCFG_DCS2_AUDIO_POLLING_OFFSET(0x0af7)
+
+	MCFG_DEVICE_ADD("ioasic", MIDWAY_IOASIC, 0)
+	MCFG_MIDWAY_IOASIC_SHUFFLE(MIDWAY_IOASIC_HYPRDRIV)
+	MCFG_MIDWAY_IOASIC_UPPER(469/* unknown */)
+	MCFG_MIDWAY_IOASIC_YEAR_OFFS(80)
+	MCFG_MIDWAY_IOASIC_IRQ_CALLBACK(WRITELINE(seattle_state, ioasic_irq))
+MACHINE_CONFIG_END
 
 /*************************************
  *
@@ -2628,7 +2755,7 @@ ROM_START( wg3dh )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )  /* Boot Code Version L1.2 (10/8/96) */
 	ROM_LOAD( "wg3dh_12.u32", 0x000000, 0x80000, CRC(15e4cea2) SHA1(72c0db7dc53ce645ba27a5311b5ce803ad39f131) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive Version 1.3 (Guts 10/15/96, Main 10/15/96) */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive Version 1.3 (Guts 10/15/96, Main 10/15/96) */
 	DISK_IMAGE( "wg3dh", 0, SHA1(4fc6f25d7f043d9bcf8743aa8df1d9be3cbc375b) )
 
 	ROM_REGION16_LE( 0x10000, "dcs", 0 )    /* ADSP-2115 data Version L1.1 */
@@ -2640,7 +2767,7 @@ ROM_START( mace )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )  /* Boot Code Version 1.0ce 7/2/97 */
 	ROM_LOAD( "mace10ce.u32", 0x000000, 0x80000, CRC(7a50b37e) SHA1(33788835f84a9443566c80bee9f20a1691490c6d) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive Version 1.0B 6/10/97 (Guts 7/2/97, Main 7/2/97) */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive Version 1.0B 6/10/97 (Guts 7/2/97, Main 7/2/97) */
 	DISK_IMAGE( "mace", 0, SHA1(96ec8d3ff5dd894e21aa81403bcdbeba44bb97ea) )
 
 	ROM_REGION16_LE( 0x10000, "dcs", 0 )    /* ADSP-2115 data Version L1.1, Labeled as Version 1.0 */
@@ -2652,7 +2779,7 @@ ROM_START( macea )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )  /* Boot Code Version ??? 5/7/97 */
 	ROM_LOAD( "maceboot.u32", 0x000000, 0x80000, CRC(effe3ebc) SHA1(7af3ca3580d6276ffa7ab8b4c57274e15ee6bcbb) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive Version 1.0a (Guts 6/9/97, Main 5/12/97) */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive Version 1.0a (Guts 6/9/97, Main 5/12/97) */
 	DISK_IMAGE( "macea", 0, BAD_DUMP SHA1(9bd4a60627915d71932cab24f89c48ea21f4c1cb) )
 
 	ROM_REGION16_LE( 0x10000, "dcs", 0 )    /* ADSP-2115 data Version L1.1 */
@@ -2673,7 +2800,7 @@ ROM_START( sfrush )
 	ROM_LOAD32_WORD( "sfrush.u53",  0x800000, 0x200000, CRC(71f8ddb0) SHA1(c24bef801f43bae68fda043c4356e8cf1298ca97) )
 	ROM_LOAD32_WORD( "sfrush.u49",  0x800002, 0x200000, CRC(dfb0a54c) SHA1(ed34f9485f7a7e5bb73bf5c6428b27548e12db12) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive Version L1.06 */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive Version L1.06 */
 	DISK_IMAGE( "sfrush", 0, SHA1(e2db0270a707fb2115207f988d5751081d6b4994) )
 ROM_END
 
@@ -2691,7 +2818,7 @@ ROM_START( sfrushrk )
 	ROM_LOAD32_WORD( "audio.u53",  0x800000, 0x200000, CRC(51c89a14) SHA1(6bc62bcda224040a4596d795132874828011a038) )
 	ROM_LOAD32_WORD( "audio.u49",  0x800002, 0x200000, CRC(e6b684d3) SHA1(1f5bab7fae974cecc8756dd23e3c7aa2cf6e7dc7) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive Version 1.2 */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive Version 1.2 */
 	DISK_IMAGE( "sfrushrk", 0, SHA1(e763f26aca67ebc17fe8b8df4fba91d492cf7837) )
 ROM_END
 
@@ -2700,7 +2827,7 @@ ROM_START( calspeed )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )  /* Boot Code Version 1.2 (2/18/98) */
 	ROM_LOAD( "caspd1_2.u32", 0x000000, 0x80000, CRC(0a235e4e) SHA1(b352f10fad786260b58bd344b5002b6ea7aaf76d) )
 
-	DISK_REGION( "drive_0" )    /* Release version 2.1a (4/17/98) (Guts 1.25 4/17/98, Main 4/17/98) */
+	DISK_REGION( "ide:0:hdd:image" )    /* Release version 2.1a (4/17/98) (Guts 1.25 4/17/98, Main 4/17/98) */
 	DISK_IMAGE( "calspeed", 0, SHA1(08d411c591d4b8bbdd6437ea80d01c4cec8516f8) )
 
 	ROM_REGION16_LE( 0x10000, "dcs", 0 )    /* ADSP-2115 data Version 1.02 */
@@ -2712,7 +2839,7 @@ ROM_START( calspeeda )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )  /* Boot Code Version 1.2 (2/18/98) */
 	ROM_LOAD( "caspd1_2.u32", 0x000000, 0x80000, CRC(0a235e4e) SHA1(b352f10fad786260b58bd344b5002b6ea7aaf76d) )
 
-	DISK_REGION( "drive_0" )    /* Release version 1.0r7a (3/4/98) (Guts 3/3/98, Main 1/19/98) */
+	DISK_REGION( "ide:0:hdd:image" )    /* Release version 1.0r7a (3/4/98) (Guts 3/3/98, Main 1/19/98) */
 	DISK_IMAGE( "calspeda", 0, SHA1(6b1c3a7530195ef7309b06a651b01c8b3ece92c6) )
 
 	ROM_REGION16_LE( 0x10000, "dcs", 0 )    /* ADSP-2115 data Version 1.02 */
@@ -2724,7 +2851,7 @@ ROM_START( vaportrx )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )
 	ROM_LOAD( "vtrxboot.bin", 0x000000, 0x80000, CRC(ee487a6c) SHA1(fb9efda85047cf615f24f7276a9af9fd542f3354) )
 
-	DISK_REGION( "drive_0" )
+	DISK_REGION( "ide:0:hdd:image" )
 	DISK_IMAGE( "vaportrx", 0, SHA1(fe53ca7643d2ed2745086abb7f2243c69678cab1) )
 
 	ROM_REGION16_LE( 0x10000, "dcs", 0 )    /* ADSP-2115 data Version 1.02 */
@@ -2736,7 +2863,7 @@ ROM_START( vaportrxp )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )
 	ROM_LOAD( "vtrxboot.bin", 0x000000, 0x80000, CRC(ee487a6c) SHA1(fb9efda85047cf615f24f7276a9af9fd542f3354) )
 
-	DISK_REGION( "drive_0" ) /* Guts: Apr 10 1998 11:03:14  Main: Apr 10 1998 11:27:44 */
+	DISK_REGION( "ide:0:hdd:image" ) /* Guts: Apr 10 1998 11:03:14  Main: Apr 10 1998 11:27:44 */
 	DISK_IMAGE( "vaportrp", 0, SHA1(6c86637c442ebd6994eee8c0ae0dce343c35dbe9) )
 
 	ROM_REGION16_LE( 0x10000, "dcs", 0 )    /* ADSP-2115 data Version 1.02 */
@@ -2751,7 +2878,7 @@ ROM_START( biofreak )
 	ROM_REGION32_LE( 0x80000, "user1", 0 ) /* Seattle System Boot ROM Version 0.1i Apr 14 1997  14:52:53 */
 	ROM_LOAD( "biofreak.u32", 0x000000, 0x80000, CRC(cefa00bb) SHA1(7e171610ede1e8a448fb8d175f9cb9e7d549de28) )
 
-	DISK_REGION( "drive_0" ) /* Build Date 12/11/97 */
+	DISK_REGION( "ide:0:hdd:image" ) /* Build Date 12/11/97 */
 	DISK_IMAGE( "biofreak", 0, SHA1(711241642f92ded8eaf20c418ea748989183fe10) )
 ROM_END
 
@@ -2763,7 +2890,7 @@ ROM_START( blitz )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )  /* Boot Code Version 1.2 */
 	ROM_LOAD( "blitz1_2.u32", 0x000000, 0x80000, CRC(38dbecf5) SHA1(7dd5a5b3baf83a7f8f877ff4cd3f5e8b5201b36f) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive Version 1.21 */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive Version 1.21 */
 	DISK_IMAGE( "blitz", 0, SHA1(9131c7888e89b3c172780156ed3fe1fe46f78b0a) )
 ROM_END
 
@@ -2775,7 +2902,7 @@ ROM_START( blitz11 )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )  /* Boot Code Version 1.1 */
 	ROM_LOAD( "blitz1_1.u32", 0x000000, 0x80000, CRC(8163ce02) SHA1(89b432d8879052f6c5534ee49599f667f50a010f) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive Version 1.21 */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive Version 1.21 */
 	DISK_IMAGE( "blitz", 0, SHA1(9131c7888e89b3c172780156ed3fe1fe46f78b0a) )
 ROM_END
 
@@ -2787,7 +2914,7 @@ ROM_START( blitz99 )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )  /* Boot Code Version 1.0 */
 	ROM_LOAD( "bltz9910.u32", 0x000000, 0x80000, CRC(777119b2) SHA1(40d255181c2f3a787919c339e83593fd506779a5) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive Version 1.30 */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive Version 1.30 */
 	DISK_IMAGE( "blitz99", 0, SHA1(19877e26ffce81dd525031e9e2b4f83ff982e2d9) )
 ROM_END
 
@@ -2799,7 +2926,7 @@ ROM_START( blitz2k )
 	ROM_REGION32_LE( 0x80000, "user1", 0 )  /* Boot Code Version 1.4 */
 	ROM_LOAD( "bltz2k14.u32", 0x000000, 0x80000, CRC(ac4f0051) SHA1(b8125c17370db7bfd9b783230b4ef3d5b22a2025) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive Version 1.5 */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive Version 1.5 */
 	DISK_IMAGE( "blitz2k", 0, SHA1(e89b7fbd4b4a9854d47ae97493e0afffbd1f69e7) )
 ROM_END
 
@@ -2811,7 +2938,7 @@ ROM_START( carnevil )
 	ROM_REGION32_LE( 0x80000, "user1", 0 ) /* Boot Rom Version 1.9 */
 	ROM_LOAD( "carnevil1_9.u32", 0x000000, 0x80000, CRC(82c07f2e) SHA1(fa51c58022ce251c53bad12fc6ffadb35adb8162) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive v1.0.3  Diagnostics v3.4 / Feb 1 1999 16:00:07 */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive v1.0.3  Diagnostics v3.4 / Feb 1 1999 16:00:07 */
 	DISK_IMAGE( "carnevil", 0, SHA1(5cffb0de63ad36eb01c5951bab04d3f8a9e23e16) )
 ROM_END
 
@@ -2823,7 +2950,7 @@ ROM_START( carnevil1 )
 	ROM_REGION32_LE( 0x80000, "user1", 0 ) /* Boot Rom Version 1.9 */
 	ROM_LOAD( "carnevil1_9.u32", 0x000000, 0x80000, CRC(82c07f2e) SHA1(fa51c58022ce251c53bad12fc6ffadb35adb8162) )
 
-	DISK_REGION( "drive_0" )    /* Hard Drive v1.0.1  Diagnostics v3.3 / Oct 20 1998 11:44:41 */
+	DISK_REGION( "ide:0:hdd:image" )    /* Hard Drive v1.0.1  Diagnostics v3.3 / Oct 20 1998 11:44:41 */
 	DISK_IMAGE( "carnevi1", 0, BAD_DUMP SHA1(94532727512280930a100fe473bf3a938fe2d44f) )
 ROM_END
 
@@ -2835,7 +2962,7 @@ ROM_START( hyprdriv )
 	ROM_REGION32_LE( 0x80000, "user1", 0 ) /* Boot Rom Version 9. */
 	ROM_LOAD( "hyprdrve.u32", 0x000000, 0x80000, CRC(3e18cb80) SHA1(b18cc4253090ee1d65d72a7ec0c426ed08c4f238) )
 
-	DISK_REGION( "drive_0" )    /* Version 1.40  Oct 23 1998  15:16:00 */
+	DISK_REGION( "ide:0:hdd:image" )    /* Version 1.40  Oct 23 1998  15:16:00 */
 	DISK_IMAGE( "hyprdriv", 0, SHA1(8cfa343797575b32f46cc24150024be48963a03e) )
 ROM_END
 
@@ -2847,11 +2974,8 @@ ROM_END
  *
  *************************************/
 
-void seattle_state::init_common(int ioasic, int serialnum, int yearoffs, int config)
+void seattle_state::init_common(int config)
 {
-	/* initialize the subsystems */
-	midway_ioasic_init(machine(),ioasic, serialnum, yearoffs, ioasic_irq);
-
 	/* switch off the configuration */
 	m_board_config = config;
 	switch (config)
@@ -2879,143 +3003,128 @@ void seattle_state::init_common(int ioasic, int serialnum, int yearoffs, int con
 
 DRIVER_INIT_MEMBER(seattle_state,wg3dh)
 {
-	dcs2_init(machine(), 2, 0x3839);
-	init_common(MIDWAY_IOASIC_STANDARD, 310/* others? */, 80, PHOENIX_CONFIG);
+	init_common(PHOENIX_CONFIG);
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x8004413C, 0x0C0054B4, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x80094930, 0x00A2102B, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x80092984, 0x3C028011, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x8004413C, 0x0C0054B4, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80094930, 0x00A2102B, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80092984, 0x3C028011, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,mace)
 {
-	dcs2_init(machine(), 2, 0x3839);
-	init_common(MIDWAY_IOASIC_MACE, 319/* others? */, 80, SEATTLE_CONFIG);
+	init_common(SEATTLE_CONFIG);
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x800108F8, 0x8C420000, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x800108F8, 0x8C420000, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,sfrush)
 {
-	cage_init(machine(), 0x5236);
-	init_common(MIDWAY_IOASIC_STANDARD, 315/* no alternates */, 100, FLAGSTAFF_CONFIG);
+	init_common(FLAGSTAFF_CONFIG);
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x80059F34, 0x3C028012, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x800A5AF4, 0x8E300010, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x8004C260, 0x3C028012, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80059F34, 0x3C028012, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x800A5AF4, 0x8E300010, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x8004C260, 0x3C028012, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,sfrushrk)
 {
-	cage_init(machine(), 0x5329);
-	init_common(MIDWAY_IOASIC_SFRUSHRK, 331/* unknown */, 100, FLAGSTAFF_CONFIG);
+	init_common(FLAGSTAFF_CONFIG);
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x800343E8, 0x3C028012, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x8008F4F0, 0x3C028012, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x800A365C, 0x8E300014, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x80051DAC, 0x3C028012, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x800343E8, 0x3C028012, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x8008F4F0, 0x3C028012, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x800A365C, 0x8E300014, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80051DAC, 0x3C028012, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,calspeed)
 {
-	dcs2_init(machine(), 2, 0x39c0);
-	init_common(MIDWAY_IOASIC_CALSPEED, 328/* others? */, 100, SEATTLE_WIDGET_CONFIG);
-	midway_ioasic_set_auto_ack(1);
+	init_common(SEATTLE_WIDGET_CONFIG);
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x80032534, 0x02221024, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x800B1BE4, 0x8E110014, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80032534, 0x02221024, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x800B1BE4, 0x8E110014, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,vaportrx)
 {
-	dcs2_init(machine(), 2, 0x39c2);
-	init_common(MIDWAY_IOASIC_VAPORTRX, 324/* 334? unknown */, 100, SEATTLE_WIDGET_CONFIG);
+	init_common(SEATTLE_WIDGET_CONFIG);
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x80049F14, 0x3C028020, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x8004859C, 0x3C028020, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x8005922C, 0x8E020014, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80049F14, 0x3C028020, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x8004859C, 0x3C028020, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x8005922C, 0x8E020014, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,biofreak)
 {
-	dcs2_init(machine(), 2, 0x3835);
-	init_common(MIDWAY_IOASIC_STANDARD, 231/* no alternates */, 80, SEATTLE_CONFIG);
-
-	/* speedups */
+	init_common(SEATTLE_CONFIG);
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,blitz)
 {
-	dcs2_init(machine(), 2, 0x39c2);
-	init_common(MIDWAY_IOASIC_BLITZ99, 444/* or 528 */, 80, SEATTLE_CONFIG);
+	init_common(SEATTLE_CONFIG);
 
 	/* for some reason, the code in the ROM appears buggy; this is a small patch to fix it */
 	m_rombase[0x934/4] += 4;
 
 	/* main CPU speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x80135510, 0x3C028024, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x800087DC, 0x8E820010, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80135510, 0x3C028024, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x800087DC, 0x8E820010, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,blitz99)
 {
-	dcs2_init(machine(), 2, 0x0afb);
-	init_common(MIDWAY_IOASIC_BLITZ99, 481/* or 484 or 520 */, 80, SEATTLE_CONFIG);
+	init_common(SEATTLE_CONFIG);
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x8014E41C, 0x3C038025, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x80011F10, 0x8E020018, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x8014E41C, 0x3C038025, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80011F10, 0x8E020018, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,blitz2k)
 {
-	dcs2_init(machine(), 2, 0x0b5d);
-	init_common(MIDWAY_IOASIC_BLITZ99, 494/* or 498 */, 80, SEATTLE_CONFIG);
+	init_common(SEATTLE_CONFIG);
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x8015773C, 0x3C038025, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x80012CA8, 0x8E020018, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x8015773C, 0x3C038025, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80012CA8, 0x8E020018, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,carnevil)
 {
-	dcs2_init(machine(), 2, 0x0af7);
-	init_common(MIDWAY_IOASIC_CARNEVIL, 469/* 469 or 486 or 528 */, 80, SEATTLE_CONFIG);
+	init_common(SEATTLE_CONFIG);
 
 	/* set up the gun */
 	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x16800000, 0x1680001f, read32_delegate(FUNC(seattle_state::carnevil_gun_r),this), write32_delegate(FUNC(seattle_state::carnevil_gun_w),this));
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x8015176C, 0x3C03801A, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x80011FBC, 0x8E020018, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x8015176C, 0x3C03801A, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80011FBC, 0x8E020018, 250);     /* confirmed */
 }
 
 
 DRIVER_INIT_MEMBER(seattle_state,hyprdriv)
 {
-	dcs2_init(machine(), 2, 0x0af7);
-	init_common(MIDWAY_IOASIC_HYPRDRIV, 469/* unknown */, 80, SEATTLE_WIDGET_CONFIG);
+	init_common(SEATTLE_WIDGET_CONFIG);
 
 	/* speedups */
-	mips3drc_add_hotspot(m_maincpu, 0x801643BC, 0x3C03801B, 250);     /* confirmed */
-	mips3drc_add_hotspot(m_maincpu, 0x80011FB8, 0x8E020018, 250);     /* confirmed */
-	//mips3drc_add_hotspot(m_maincpu, 0x80136A80, 0x3C02801D, 250);      /* potential */
+	m_maincpu->mips3drc_add_hotspot(0x801643BC, 0x3C03801B, 250);     /* confirmed */
+	m_maincpu->mips3drc_add_hotspot(0x80011FB8, 0x8E020018, 250);     /* confirmed */
+	//m_maincpu->mips3drc_add_hotspot(0x80136A80, 0x3C02801D, 250);      /* potential */
 }
 
 
@@ -3027,22 +3136,22 @@ DRIVER_INIT_MEMBER(seattle_state,hyprdriv)
  *************************************/
 
 /* Atari */
-GAME( 1996, wg3dh,    0,        phoenixsa,         wg3dh, seattle_state,    wg3dh,    ROT0, "Atari Games",  "Wayne Gretzky's 3D Hockey", GAME_SUPPORTS_SAVE )
-GAME( 1996, mace,     0,        seattle150,        mace, seattle_state,     mace,     ROT0, "Atari Games",  "Mace: The Dark Age (boot ROM 1.0ce, HDD 1.0b)", GAME_SUPPORTS_SAVE )
-GAME( 1997, macea,    mace,     seattle150,        mace, seattle_state,     mace,     ROT0, "Atari Games",  "Mace: The Dark Age (HDD 1.0a)", GAME_SUPPORTS_SAVE )
-GAME( 1996, sfrush,   0,        flagstaff,         sfrush, seattle_state,   sfrush,   ROT0, "Atari Games",  "San Francisco Rush", GAME_SUPPORTS_SAVE )
-GAME( 1996, sfrushrk, 0,        flagstaff,         sfrushrk, seattle_state, sfrushrk, ROT0, "Atari Games",  "San Francisco Rush: The Rock", GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
-GAME( 1998, calspeed, 0,        seattle150_widget, calspeed, seattle_state, calspeed, ROT0, "Atari Games",  "California Speed (Version 2.1a, 4/17/98)", GAME_SUPPORTS_SAVE )
-GAME( 1998, calspeeda,calspeed, seattle150_widget, calspeed, seattle_state, calspeed, ROT0, "Atari Games",  "California Speed (Version 1.0r7a 3/4/98)", GAME_SUPPORTS_SAVE )
-GAME( 1998, vaportrx, 0,        seattle200_widget, vaportrx, seattle_state, vaportrx, ROT0, "Atari Games",  "Vapor TRX", GAME_SUPPORTS_SAVE )
-GAME( 1998, vaportrxp,vaportrx, seattle200_widget, vaportrx, seattle_state, vaportrx, ROT0, "Atari Games",  "Vapor TRX (prototype)", GAME_SUPPORTS_SAVE )
+GAME( 1996, wg3dh,    0,        wg3dh,             wg3dh, seattle_state,    wg3dh,    ROT0, "Atari Games",  "Wayne Gretzky's 3D Hockey", GAME_SUPPORTS_SAVE )
+GAME( 1996, mace,     0,        mace,              mace, seattle_state,     mace,     ROT0, "Atari Games",  "Mace: The Dark Age (boot ROM 1.0ce, HDD 1.0b)", GAME_SUPPORTS_SAVE )
+GAME( 1997, macea,    mace,     mace,              mace, seattle_state,     mace,     ROT0, "Atari Games",  "Mace: The Dark Age (HDD 1.0a)", GAME_SUPPORTS_SAVE )
+GAME( 1996, sfrush,   0,        sfrush,            sfrush, seattle_state,   sfrush,   ROT0, "Atari Games",  "San Francisco Rush", GAME_SUPPORTS_SAVE )
+GAME( 1996, sfrushrk, 0,        sfrushrk,          sfrushrk, seattle_state, sfrushrk, ROT0, "Atari Games",  "San Francisco Rush: The Rock", GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1998, calspeed, 0,        calspeed,          calspeed, seattle_state, calspeed, ROT0, "Atari Games",  "California Speed (Version 2.1a, 4/17/98)", GAME_SUPPORTS_SAVE )
+GAME( 1998, calspeeda,calspeed, calspeed,          calspeed, seattle_state, calspeed, ROT0, "Atari Games",  "California Speed (Version 1.0r7a 3/4/98)", GAME_SUPPORTS_SAVE )
+GAME( 1998, vaportrx, 0,        vaportrx,          vaportrx, seattle_state, vaportrx, ROT0, "Atari Games",  "Vapor TRX", GAME_SUPPORTS_SAVE )
+GAME( 1998, vaportrxp,vaportrx, vaportrx,          vaportrx, seattle_state, vaportrx, ROT0, "Atari Games",  "Vapor TRX (prototype)", GAME_SUPPORTS_SAVE )
 
 /* Midway */
-GAME( 1997, biofreak, 0,        seattle150,        biofreak, seattle_state, biofreak, ROT0, "Midway Games", "BioFreaks (prototype)", GAME_SUPPORTS_SAVE )
-GAME( 1997, blitz,    0,        seattle150,        blitz, seattle_state,    blitz,    ROT0, "Midway Games", "NFL Blitz (boot ROM 1.2)", GAME_SUPPORTS_SAVE )
-GAME( 1997, blitz11,  blitz,    seattle150,        blitz, seattle_state,    blitz,    ROT0, "Midway Games", "NFL Blitz (boot ROM 1.1)", GAME_SUPPORTS_SAVE )
-GAME( 1998, blitz99,  0,        seattle150,        blitz99, seattle_state,  blitz99,  ROT0, "Midway Games", "NFL Blitz '99", GAME_SUPPORTS_SAVE )
-GAME( 1999, blitz2k,  0,        seattle150,        blitz99, seattle_state,  blitz2k,  ROT0, "Midway Games", "NFL Blitz 2000 Gold Edition", GAME_SUPPORTS_SAVE )
-GAME( 1998, carnevil, 0,        seattle150,        carnevil, seattle_state, carnevil, ROT0, "Midway Games", "CarnEvil (v1.0.3)", GAME_SUPPORTS_SAVE )
-GAME( 1998, carnevil1,carnevil, seattle150,        carnevil, seattle_state, carnevil, ROT0, "Midway Games", "CarnEvil (v1.0.1)", GAME_SUPPORTS_SAVE )
-GAME( 1998, hyprdriv, 0,        seattle200_widget, hyprdriv, seattle_state, hyprdriv, ROT0, "Midway Games", "Hyperdrive", GAME_SUPPORTS_SAVE )
+GAME( 1997, biofreak, 0,        biofreak,          biofreak, seattle_state, biofreak, ROT0, "Midway Games", "BioFreaks (prototype)", GAME_SUPPORTS_SAVE )
+GAME( 1997, blitz,    0,        blitz,             blitz, seattle_state,    blitz,    ROT0, "Midway Games", "NFL Blitz (boot ROM 1.2)", GAME_SUPPORTS_SAVE )
+GAME( 1997, blitz11,  blitz,    blitz,             blitz, seattle_state,    blitz,    ROT0, "Midway Games", "NFL Blitz (boot ROM 1.1)", GAME_SUPPORTS_SAVE )
+GAME( 1998, blitz99,  0,        blitz99,           blitz99, seattle_state,  blitz99,  ROT0, "Midway Games", "NFL Blitz '99", GAME_SUPPORTS_SAVE )
+GAME( 1999, blitz2k,  0,        blitz2k,           blitz99, seattle_state,  blitz2k,  ROT0, "Midway Games", "NFL Blitz 2000 Gold Edition", GAME_SUPPORTS_SAVE )
+GAME( 1998, carnevil, 0,        carnevil,          carnevil, seattle_state, carnevil, ROT0, "Midway Games", "CarnEvil (v1.0.3)", GAME_SUPPORTS_SAVE )
+GAME( 1998, carnevil1,carnevil, carnevil,          carnevil, seattle_state, carnevil, ROT0, "Midway Games", "CarnEvil (v1.0.1)", GAME_SUPPORTS_SAVE )
+GAME( 1998, hyprdriv, 0,        hyprdriv,          hyprdriv, seattle_state, hyprdriv, ROT0, "Midway Games", "Hyperdrive", GAME_SUPPORTS_SAVE )

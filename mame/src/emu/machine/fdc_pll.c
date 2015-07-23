@@ -1,6 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #include "fdc_pll.h"
 
-astring fdc_pll_t::tts(attotime t)
+std::string fdc_pll_t::tts(attotime t)
 {
 	char buf[256];
 	bool neg = t.seconds < 0;
@@ -11,7 +13,7 @@ astring fdc_pll_t::tts(attotime t)
 	return buf;
 }
 
-void fdc_pll_t::set_clock(attotime _period)
+void fdc_pll_t::set_clock(const attotime &_period)
 {
 	period = _period;
 	period_adjust_base = period * 0.05;
@@ -19,7 +21,7 @@ void fdc_pll_t::set_clock(attotime _period)
 	max_period = period * 1.25;
 }
 
-void fdc_pll_t::reset(attotime when)
+void fdc_pll_t::reset(const attotime &when)
 {
 	ctime = when;
 	phase_adjust = attotime::zero;
@@ -28,19 +30,19 @@ void fdc_pll_t::reset(attotime when)
 	write_start_time = attotime::never;
 }
 
-void fdc_pll_t::start_writing(attotime tm)
+void fdc_pll_t::start_writing(const attotime &tm)
 {
 	write_start_time = tm;
 	write_position = 0;
 }
 
-void fdc_pll_t::stop_writing(floppy_image_device *floppy, attotime tm)
+void fdc_pll_t::stop_writing(floppy_image_device *floppy, const attotime &tm)
 {
 	commit(floppy, tm);
 	write_start_time = attotime::never;
 }
 
-void fdc_pll_t::commit(floppy_image_device *floppy, attotime tm)
+void fdc_pll_t::commit(floppy_image_device *floppy, const attotime &tm)
 {
 	if(write_start_time.is_never() || tm == write_start_time)
 		return;
@@ -51,7 +53,7 @@ void fdc_pll_t::commit(floppy_image_device *floppy, attotime tm)
 	write_position = 0;
 }
 
-int fdc_pll_t::get_next_bit(attotime &tm, floppy_image_device *floppy, attotime limit)
+int fdc_pll_t::get_next_bit(attotime &tm, floppy_image_device *floppy, const attotime &limit)
 {
 	attotime edge = floppy ? floppy->get_next_transition(ctime) : attotime::never;
 
@@ -59,7 +61,7 @@ int fdc_pll_t::get_next_bit(attotime &tm, floppy_image_device *floppy, attotime 
 
 #if 0
 	if(!edge.is_never())
-		fprintf(stderr, "ctime=%s, transition_time=%s, next=%s, pha=%s\n", tts(ctime).cstr(), tts(edge).cstr(), tts(next).cstr(), tts(phase_adjust).cstr());
+		fprintf(stderr, "ctime=%s, transition_time=%s, next=%s, pha=%s\n", tts(ctime).c_str(), tts(edge).c_str(), tts(next).c_str(), tts(phase_adjust).c_str());
 #endif
 
 	if(next > limit)
@@ -112,7 +114,7 @@ int fdc_pll_t::get_next_bit(attotime &tm, floppy_image_device *floppy, attotime 
 	return 1;
 }
 
-bool fdc_pll_t::write_next_bit(bool bit, attotime &tm, floppy_image_device *floppy, attotime limit)
+bool fdc_pll_t::write_next_bit(bool bit, attotime &tm, floppy_image_device *floppy, const attotime &limit)
 {
 	if(write_start_time.is_never()) {
 		write_start_time = ctime;

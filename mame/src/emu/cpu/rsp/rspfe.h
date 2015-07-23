@@ -1,12 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Ryan Holtz
 /***************************************************************************
 
     rspfe.h
 
     Front-end for RSP recompiler
-
-    Copyright the MESS team
-    Released for general non-commercial use under the MAME license
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 ***************************************************************************/
 
@@ -36,7 +34,7 @@ class rsp_frontend : public drc_frontend
 {
 public:
 	// construction/destruction
-	rsp_frontend(rsp_state &state, UINT32 window_start, UINT32 window_end, UINT32 max_sequence);
+	rsp_frontend(rsp_device &rsp, UINT32 window_start, UINT32 window_end, UINT32 max_sequence);
 
 protected:
 	// required overrides
@@ -50,7 +48,7 @@ private:
 	bool describe_cop2(UINT32 op, opcode_desc &desc);
 
 	// internal state
-	rsp_state &m_context;
+	rsp_device &m_rsp;
 };
 
 

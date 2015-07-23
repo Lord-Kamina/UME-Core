@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #pragma once
 
 #ifndef __N63701X_H__
@@ -56,9 +58,9 @@ public:
 	DECLARE_WRITE8_MEMBER(namco_63701x_w);
 
 private:
+	required_region_ptr<UINT8> m_rom;
 	voice_63701x m_voices[2];
 	sound_stream *m_stream; /* channel assigned by the mixer */
-	UINT8 *m_rom;           /* pointer to sample ROM */
 };
 
 extern const device_type NAMCO_63701X;

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         Orion machine driver by Miodrag Milanovic
@@ -22,8 +24,11 @@
 
 READ8_MEMBER(orion_state::orion_romdisk_porta_r)
 {
-	UINT8 *romdisk = m_region_maincpu->base() + 0x10000;
-	return romdisk[m_romdisk_msb*256+m_romdisk_lsb];
+	UINT16 addr = (m_romdisk_msb << 8) | m_romdisk_lsb;
+	if (m_cart->exists() && addr < m_cart->get_rom_size())
+		return m_cart->read_rom(space, addr);
+	else
+		return 0xff;
 }
 
 WRITE8_MEMBER(orion_state::orion_romdisk_portb_w)
@@ -35,17 +40,6 @@ WRITE8_MEMBER(orion_state::orion_romdisk_portc_w)
 {
 	m_romdisk_msb = data;
 }
-
-I8255A_INTERFACE( orion128_ppi8255_interface_1)
-{
-	DEVCB_DRIVER_MEMBER(orion_state,orion_romdisk_porta_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(orion_state,orion_romdisk_portb_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(orion_state,orion_romdisk_portc_w)
-};
-
 
 MACHINE_START_MEMBER(orion_state,orion128)
 {
@@ -75,7 +69,7 @@ WRITE8_MEMBER(orion_state::orion128_romdisk_w)
 void orion_state::orion_set_video_mode(int width)
 {
 	rectangle visarea(0, width-1, 0, 255);
-	machine().primary_screen->configure(width, 256, visarea, machine().primary_screen->frame_period().attoseconds);
+	machine().first_screen()->configure(width, 256, visarea, machine().first_screen()->frame_period().attoseconds);
 }
 
 WRITE8_MEMBER(orion_state::orion128_video_mode_w)

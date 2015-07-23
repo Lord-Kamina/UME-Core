@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Midway MCR system
@@ -38,57 +40,6 @@ READ8_MEMBER(mcr68_state::zwackery_port_3_r)
 }
 
 
-const pia6821_interface zwackery_pia0_intf =
-{
-	DEVCB_NULL,     /* port A in */
-	DEVCB_INPUT_PORT("IN0"),        /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(mcr68_state,zwackery_pia0_w),       /* port A out */
-	DEVCB_NULL,     /* port B out */
-	DEVCB_NULL,     /* line CA2 out */
-	DEVCB_NULL,     /* port CB2 out */
-	DEVCB_DRIVER_LINE_MEMBER(mcr68_state,zwackery_pia_irq),     /* IRQA */
-	DEVCB_DRIVER_LINE_MEMBER(mcr68_state,zwackery_pia_irq)      /* IRQB */
-};
-
-
-const pia6821_interface zwackery_pia1_intf =
-{
-	DEVCB_DRIVER_MEMBER(mcr68_state,zwackery_port_1_r),     /* port A in */
-	DEVCB_DRIVER_MEMBER(mcr68_state, zwackery_port_2_r),        /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(mcr68_state,zwackery_pia1_w),       /* port A out */
-	DEVCB_NULL,     /* port B out */
-	DEVCB_DRIVER_LINE_MEMBER(mcr68_state,zwackery_ca2_w),       /* line CA2 out */
-	DEVCB_NULL,     /* port CB2 out */
-	DEVCB_NULL,     /* IRQA */
-	DEVCB_NULL      /* IRQB */
-};
-
-
-const pia6821_interface zwackery_pia2_intf =
-{
-	DEVCB_DRIVER_MEMBER(mcr68_state,zwackery_port_3_r),     /* port A in */
-	DEVCB_INPUT_PORT("DSW"),                /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_NULL,     /* port A out */
-	DEVCB_NULL,     /* port B out */
-	DEVCB_NULL,     /* line CA2 out */
-	DEVCB_NULL,     /* port CB2 out */
-	DEVCB_NULL,     /* IRQA */
-	DEVCB_NULL      /* IRQB */
-};
-
-
 
 /*************************************
  *
@@ -106,10 +57,10 @@ MACHINE_START_MEMBER(mcr68_state,mcr68)
 
 		m6840->timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(mcr68_state::counter_fired_callback),this));
 
-		state_save_register_item(machine(), "m6840", NULL, i, m6840->control);
-		state_save_register_item(machine(), "m6840", NULL, i, m6840->latch);
-		state_save_register_item(machine(), "m6840", NULL, i, m6840->count);
-		state_save_register_item(machine(), "m6840", NULL, i, m6840->timer_active);
+		save_item(m6840->control, "m6840/control", i);
+		save_item(m6840->latch, "m6840/latch", i);
+		save_item(m6840->count, "m6840/count", i);
+		save_item(m6840->timer_active, "m6840/timer_active", i);
 	}
 
 	save_item(NAME(m_m6840_status));
@@ -228,7 +179,7 @@ TIMER_CALLBACK_MEMBER(mcr68_state::mcr68_493_callback)
 {
 	m_v493_irq_state = 1;
 	update_mcr68_interrupts();
-	machine().scheduler().timer_set(machine().primary_screen->scan_period(), timer_expired_delegate(FUNC(mcr68_state::mcr68_493_off_callback),this));
+	machine().scheduler().timer_set(m_screen->scan_period(), timer_expired_delegate(FUNC(mcr68_state::mcr68_493_off_callback),this));
 	logerror("--- (INT1) ---\n");
 }
 
@@ -284,7 +235,7 @@ TIMER_CALLBACK_MEMBER(mcr68_state::zwackery_493_callback)
 	pia6821_device *pia = machine().device<pia6821_device>("pia0");
 
 	pia->ca1_w(1);
-	machine().scheduler().timer_set(machine().primary_screen->scan_period(), timer_expired_delegate(FUNC(mcr68_state::zwackery_493_off_callback),this));
+	machine().scheduler().timer_set(m_screen->scan_period(), timer_expired_delegate(FUNC(mcr68_state::zwackery_493_off_callback),this));
 }
 
 

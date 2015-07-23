@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mathis Rosenhauer
 /***************************************************************************
 
     Cinematronics Cosmic Chasm hardware
@@ -18,7 +20,6 @@
 #include "cpu/m68000/m68000.h"
 #include "sound/ay8910.h"
 #include "sound/dac.h"
-#include "video/vector.h"
 #include "machine/6840ptm.h"
 #include "machine/z80ctc.h"
 #include "includes/cchasm.h"
@@ -34,10 +35,10 @@
 static ADDRESS_MAP_START( memmap, AS_PROGRAM, 16, cchasm_state )
 	AM_RANGE(0x000000, 0x00ffff) AM_ROM
 	AM_RANGE(0x040000, 0x04000f) AM_DEVREADWRITE8("6840ptm", ptm6840_device, read, write, 0xff)
-	AM_RANGE(0x050000, 0x050001) AM_WRITE(cchasm_refresh_control_w)
-	AM_RANGE(0x060000, 0x060001) AM_READ_PORT("DSW") AM_WRITE(cchasm_led_w)
+	AM_RANGE(0x050000, 0x050001) AM_WRITE(refresh_control_w)
+	AM_RANGE(0x060000, 0x060001) AM_READ_PORT("DSW") AM_WRITE(led_w)
 	AM_RANGE(0x070000, 0x070001) AM_WRITE(watchdog_reset16_w)
-	AM_RANGE(0xf80000, 0xf800ff) AM_READWRITE(cchasm_io_r,cchasm_io_w)
+	AM_RANGE(0xf80000, 0xf800ff) AM_READWRITE(io_r,io_w)
 	AM_RANGE(0xffb000, 0xffffff) AM_RAM AM_SHARE("ram")
 ADDRESS_MAP_END
 
@@ -52,13 +53,13 @@ static ADDRESS_MAP_START( sound_memmap, AS_PROGRAM, 8, cchasm_state )
 	AM_RANGE(0x4000, 0x43ff) AM_RAM
 	AM_RANGE(0x5000, 0x53ff) AM_RAM
 	AM_RANGE(0x6000, 0x6001) AM_MIRROR(0xf9e) AM_DEVWRITE("ay1", ay8910_device, address_data_w)
-	AM_RANGE(0x6000, 0x6000) AM_MIRROR(0xf9e) AM_READ(cchasm_coin_sound_r)
+	AM_RANGE(0x6000, 0x6000) AM_MIRROR(0xf9e) AM_READ(coin_sound_r)
 	AM_RANGE(0x6001, 0x6001) AM_MIRROR(0xf9e) AM_DEVREAD("ay1", ay8910_device, data_r)
 	AM_RANGE(0x6020, 0x6021) AM_MIRROR(0xf9e) AM_DEVWRITE("ay2", ay8910_device, address_data_w)
 	AM_RANGE(0x6021, 0x6021) AM_MIRROR(0xf9e) AM_DEVREAD("ay2", ay8910_device, data_r)
 	AM_RANGE(0x6040, 0x6040) AM_MIRROR(0xf9e) AM_READWRITE(soundlatch_byte_r, soundlatch3_byte_w)
-	AM_RANGE(0x6041, 0x6041) AM_MIRROR(0xf9e) AM_READWRITE(cchasm_soundlatch2_r, cchasm_soundlatch4_w)
-	AM_RANGE(0x6061, 0x6061) AM_MIRROR(0xf9e) AM_WRITE(cchasm_reset_coin_flag_w)
+	AM_RANGE(0x6041, 0x6041) AM_MIRROR(0xf9e) AM_READWRITE(soundlatch2_r, soundlatch4_w)
+	AM_RANGE(0x6061, 0x6061) AM_MIRROR(0xf9e) AM_WRITE(reset_coin_flag_w)
 	AM_RANGE(0x7041, 0x7041) AM_NOP // TODO
 ADDRESS_MAP_END
 
@@ -66,19 +67,6 @@ static ADDRESS_MAP_START( sound_portmap, AS_IO, 8, cchasm_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x03) AM_DEVREADWRITE("ctc", z80ctc_device, read, write)
 ADDRESS_MAP_END
-
-WRITE_LINE_MEMBER(cchasm_state::cchasm_6840_irq)
-{
-	m_maincpu->set_input_line(4, state ? ASSERT_LINE : CLEAR_LINE);
-}
-
-static const ptm6840_interface cchasm_6840_intf =
-{
-	CCHASM_68K_CLOCK/10,
-	{ 0, CCHASM_68K_CLOCK / 10, 0 },
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_NULL },
-	DEVCB_DRIVER_LINE_MEMBER(cchasm_state,cchasm_6840_irq)
-};
 
 /*************************************
  *
@@ -124,9 +112,9 @@ static INPUT_PORTS_START( cchasm )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_START2 )
 
 	PORT_START("IN3")
-	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_COIN1 ) PORT_CHANGED_MEMBER(DEVICE_SELF, cchasm_state, cchasm_set_coin_flag, 0)
-	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_COIN2 ) PORT_CHANGED_MEMBER(DEVICE_SELF, cchasm_state, cchasm_set_coin_flag, 0)
-	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_COIN3 ) PORT_CHANGED_MEMBER(DEVICE_SELF, cchasm_state, cchasm_set_coin_flag, 0)
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_COIN1 ) PORT_CHANGED_MEMBER(DEVICE_SELF, cchasm_state, set_coin_flag, 0)
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_COIN2 ) PORT_CHANGED_MEMBER(DEVICE_SELF, cchasm_state, set_coin_flag, 0)
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_COIN3 ) PORT_CHANGED_MEMBER(DEVICE_SELF, cchasm_state, set_coin_flag, 0)
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Test 1") PORT_CODE(KEYCODE_F1)
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED ) /* Test 2, not used in cchasm */
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED ) /* Test 3, not used in cchasm */
@@ -156,27 +144,28 @@ static const z80_daisy_config daisy_chain[] =
 static MACHINE_CONFIG_START( cchasm, cchasm_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M68000,CCHASM_68K_CLOCK)    /* 8 MHz (from schematics) */
+	MCFG_CPU_ADD("maincpu", M68000, CCHASM_68K_CLOCK)    /* 8 MHz (from schematics) */
 	MCFG_CPU_PROGRAM_MAP(memmap)
 
-	MCFG_CPU_ADD("audiocpu", Z80,3584229)       /* 3.58  MHz (from schematics) */
+	MCFG_CPU_ADD("audiocpu", Z80, 3584229)       /* 3.58  MHz (from schematics) */
 	MCFG_CPU_CONFIG(daisy_chain)
 	MCFG_CPU_PROGRAM_MAP(sound_memmap)
 	MCFG_CPU_IO_MAP(sound_portmap)
 
-	MCFG_Z80CTC_ADD("ctc", 3584229 /* same as "audiocpu" */, cchasm_ctc_intf)
+	MCFG_DEVICE_ADD("ctc", Z80CTC, 3584229 /* same as "audiocpu" */)
+	MCFG_Z80CTC_INTR_CB(INPUTLINE("audiocpu", INPUT_LINE_IRQ0))
+	MCFG_Z80CTC_ZC1_CB(WRITELINE(cchasm_state, ctc_timer_1_w))
+	MCFG_Z80CTC_ZC2_CB(WRITELINE(cchasm_state, ctc_timer_2_w))
 
 	/* video hardware */
+	MCFG_VECTOR_ADD("vector")
 	MCFG_SCREEN_ADD("screen", VECTOR)
 	MCFG_SCREEN_REFRESH_RATE(40)
 	MCFG_SCREEN_SIZE(400, 300)
 	MCFG_SCREEN_VISIBLE_AREA(0, 1024-1, 0, 768-1)
-	MCFG_SCREEN_UPDATE_STATIC(vector)
-
+	MCFG_SCREEN_UPDATE_DEVICE("vector", vector_device, screen_update)
 
 	/* sound hardware */
-	MCFG_SOUND_START(cchasm)
-
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ay1", AY8910, 1818182)
@@ -192,7 +181,10 @@ static MACHINE_CONFIG_START( cchasm, cchasm_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
 	/* 6840 PTM */
-	MCFG_PTM6840_ADD("6840ptm", cchasm_6840_intf)
+	MCFG_DEVICE_ADD("6840ptm", PTM6840, 0)
+	MCFG_PTM6840_INTERNAL_CLOCK(CCHASM_68K_CLOCK/10)
+	MCFG_PTM6840_EXTERNAL_CLOCKS(0, CCHASM_68K_CLOCK / 10, 0)
+	MCFG_PTM6840_IRQ_CB(INPUTLINE("maincpu", 4))
 MACHINE_CONFIG_END
 
 
@@ -262,5 +254,5 @@ ROM_END
  *
  *************************************/
 
-GAME( 1983, cchasm,  0,      cchasm, cchasm, driver_device, 0, ROT270, "Cinematronics / GCE", "Cosmic Chasm (set 1)", 0 )
-GAME( 1983, cchasm1, cchasm, cchasm, cchasm, driver_device, 0, ROT270, "Cinematronics / GCE", "Cosmic Chasm (set 2)", 0 )
+GAME( 1983, cchasm,  0,      cchasm, cchasm, driver_device, 0, ROT270, "Cinematronics / GCE", "Cosmic Chasm (set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1983, cchasm1, cchasm, cchasm, cchasm, driver_device, 0, ROT270, "Cinematronics / GCE", "Cosmic Chasm (set 2)", GAME_SUPPORTS_SAVE )

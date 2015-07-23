@@ -1,6 +1,8 @@
+// license:GPL-2.0+
+// copyright-holders:Lee Hammerton, Dirk Best
 /***************************************************************************
 
-    SAM Coupe Driver - Written By Lee Hammerton, Dirk Best
+    Miles Gordon Technology SAM Coupe
 
 ***************************************************************************/
 
@@ -298,7 +300,7 @@ void samcoupe_state::machine_start()
 
 	/* schedule our video updates */
 	m_video_update_timer = timer_alloc(TIMER_VIDEO_UPDATE);
-	m_video_update_timer->adjust(machine().primary_screen->time_until_pos(0, 0));
+	m_video_update_timer->adjust(machine().first_screen()->time_until_pos(0, 0));
 }
 
 /***************************************************************************

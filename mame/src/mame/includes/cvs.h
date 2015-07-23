@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Coates, Couriersud
 /***************************************************************************
 
     Century CVS System
@@ -6,6 +8,7 @@
 
 #include "sound/dac.h"
 #include "sound/tms5110.h"
+#include "machine/s2636.h"
 
 #define CVS_S2636_Y_OFFSET     (3)
 #define CVS_S2636_X_OFFSET     (-26)
@@ -23,7 +26,6 @@ public:
 		: driver_device(mconfig, type, tag),
 			m_video_ram(*this, "video_ram"),
 			m_bullet_ram(*this, "bullet_ram"),
-			m_fo_state(*this, "fo_state"),
 			m_cvs_4_bit_dac_data(*this, "4bit_dac"),
 			m_tms5110_ctl_data(*this, "tms5110_ctl"),
 			m_dac3_state(*this, "dac3_state"),
@@ -31,14 +33,19 @@ public:
 			m_audiocpu(*this, "audiocpu"),
 			m_dac2(*this, "dac2"),
 			m_dac3(*this, "dac3"),
-			m_tms5110(*this, "tms")
+			m_tms5110(*this, "tms"),
+			m_s2636_0(*this, "s2636_0"),
+			m_s2636_1(*this, "s2636_1"),
+			m_s2636_2(*this, "s2636_2"),
+			m_gfxdecode(*this, "gfxdecode"),
+			m_screen(*this, "screen"),
+			m_palette(*this, "palette")
 	{
 	}
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_video_ram;
 	required_shared_ptr<UINT8> m_bullet_ram;
-	required_shared_ptr<UINT8> m_fo_state;
 	optional_shared_ptr<UINT8> m_cvs_4_bit_dac_data;
 	optional_shared_ptr<UINT8> m_tms5110_ctl_data;
 	optional_shared_ptr<UINT8> m_dac3_state;
@@ -55,6 +62,7 @@ public:
 	int        m_stars_scroll;
 
 	/* misc */
+	int m_s2650_flag;
 	emu_timer  *m_cvs_393hz_timer;
 	UINT8      m_cvs_393hz_clock;
 
@@ -65,13 +73,15 @@ public:
 	/* devices */
 	required_device<cpu_device> m_maincpu;
 	optional_device<cpu_device> m_audiocpu;
-	device_t *m_speech;
 	optional_device<dac_device> m_dac2;
 	optional_device<dac_device> m_dac3;
 	optional_device<tms5110_device> m_tms5110;
-	device_t *m_s2636_0;
-	device_t *m_s2636_1;
-	device_t *m_s2636_2;
+	optional_device<s2636_device> m_s2636_0;
+	optional_device<s2636_device> m_s2636_1;
+	optional_device<s2636_device> m_s2636_2;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 
 	/* memory */
 	UINT8      m_color_ram[0x400];
@@ -79,6 +89,8 @@ public:
 	UINT8      m_character_ram[3 * 0x800];  /* only half is used, but
                                                by allocating twice the amount,
                                                we can use the same gfx_layout */
+	DECLARE_READ_LINE_MEMBER(speech_rom_read_bit);
+	DECLARE_WRITE_LINE_MEMBER(write_s2650_flag);
 	DECLARE_READ8_MEMBER(cvs_input_r);
 	DECLARE_READ8_MEMBER(cvs_393hz_clock_r);
 	DECLARE_WRITE8_MEMBER(cvs_speech_rom_address_lo_w);

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /**************************************************************************************************
   JPM Impact non-video software
 **************************************************************************************************/
@@ -2139,7 +2141,6 @@ ROM_START( j6reddmn )
 	ROM_LOAD( "reddemonsnd.bin", 0x000000, 0x080000, CRC(4fb1cbff) SHA1(27393e14af18f05df07bcbbab957a684de79dbb1) )
 ROM_END
 
-#if 0
 /* the same as j6dmnjkra?? */
 ROM_START( j6gldday )
 	ROM_REGION( PRGSIZE_REGULAR, "maincpu", 0 )
@@ -2149,8 +2150,6 @@ ROM_START( j6gldday )
 	ROM_REGION( 0x80000, "upd", ROMREGION_ERASE00 )
 	ROM_LOAD( "gdsound.bin", 0x000000, 0x04a018, CRC(796e1b35) SHA1(e9c8e5a350823275c9ba9238781872ea359d5049) )
 ROM_END
-#endif
-
 
 ROM_START( j6dmngz )
 	ROM_REGION( PRGSIZE_REGULAR, "maincpu", 0 )
@@ -7694,6 +7693,7 @@ ROM_END
 
 
 #define j6thril_sound \
+	ROM_REGION( 0x80000, "upd", ROMREGION_ERASE00 ) \
 	ROM_LOAD(  "thlr-snd.bin", 0x0000, 0x020000, CRC(03771692) SHA1(2f42859d09e4354689887f1e40f9fce1eb858e3e) ) /* probably bad */ \
 	ROM_LOAD(  "thrillersnd.bin", 0x0000, 0x080000, CRC(c93bc625) SHA1(ecceddd90a721c39ef3da8cef442c0d78dacaed2) )
 ROM_START( j6thril )
@@ -8147,8 +8147,7 @@ GAME( 199?, j6dmnjkr    , 0         , impctawp, tbirds, driver_device, 0, ROT0, 
 GAME( 199?, j6dmnjkra   , j6dmnjkr  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Demon Jokers (JPM) (IMPACT) (set 2)", GAME_FLAGS )
 GAME( 199?, j6dmnjkrb   , j6dmnjkr  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Demon Jokers (JPM) (IMPACT) (set 3)", GAME_FLAGS )
 GAME( 199?, j6dmnjkrc   , j6dmnjkr  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Demon Jokers (JPM) (IMPACT) (set 4)", GAME_FLAGS )
-// GAME( 199?, j6gldday , 0         , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Golden Day (JPM) (IMPACT)", GAME_FLAGS ) // this is the same as j6dmnjkra
-	GAME( 199?, j6reddmn    , 0         , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Red Demon (JPM) (IMPACT)", GAME_FLAGS ) // the same as Demon Jokers but with a different sound rom?
+GAME( 199?, j6reddmn    , 0         , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Red Demon (JPM) (IMPACT)", GAME_FLAGS ) // the same as Demon Jokers but with a different sound rom?
 
 
 
@@ -8248,6 +8247,8 @@ GAME( 199?, j6gforceb   , j6gforce  , impctawp, tbirds, driver_device, 0, ROT0, 
 GAME( 199?, j6gforcec   , j6gforce  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "G Force (JPM) (IMPACT) (set 4)", GAME_FLAGS )
 GAME( 199?, j6gforced   , j6gforce  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "G Force (JPM) (IMPACT) (15GBP Jackpot)", GAME_FLAGS )
 
+GAME( 199?, j6gldday    , 0         , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Golden Day (JPM) (IMPACT)", GAME_FLAGS ) // this is the same as j6dmnjkra
+
 GAME( 199?, j6gidogh    , 0         , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "G.I. Dough (Ace) (IMPACT)", GAME_FLAGS )
 
 GAME( 199?, j6guab      , 0         , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Give Us A Break (JPM) (IMPACT) (set 1)", GAME_FLAGS )
@@ -8266,12 +8267,12 @@ GAME( 199?, j6gldclb    , 0         , impctawp, tbirds, driver_device, 0, ROT0, 
 GAME( 199?, j6gldclba   , j6gldclb  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Gladiator Club (JPM) (IMPACT) (set 2)", GAME_FLAGS )
 GAME( 199?, j6gldclbb   , j6gldclb  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Gladiator Club (JPM) (IMPACT) (set 3)", GAME_FLAGS )
 
+GAME( 199?, j6gldmin    , 0         , impctawp, tbirds, driver_device, 0, ROT0, "Empire", "Gold Mine (Empire) (IMPACT)", GAME_FLAGS )
+
 GAME( 199?, j6gogold    , 0         , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Go For Gold (JPM) (IMPACT) (set 1)", GAME_FLAGS )
 GAME( 199?, j6gogolda   , j6gogold  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Go For Gold (JPM) (IMPACT) (set 2)", GAME_FLAGS )
 GAME( 199?, j6gogoldb   , j6gogold  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Go For Gold (JPM) (IMPACT) (set 3)", GAME_FLAGS )
 GAME( 199?, j6gogoldc   , j6gogold  , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Go For Gold (JPM) (IMPACT) (set 4)", GAME_FLAGS )
-
-GAME( 199?, j6gldmin    , 0         , impctawp, tbirds, driver_device, 0, ROT0, "Empire", "Gold Mine (Empire) (IMPACT)", GAME_FLAGS )
 
 
 GAME( 199?, j6golddm    , 0         , impctawp, tbirds, driver_device, 0, ROT0, "JPM", "Golden Demons (JPM) (IMPACT) (set 1)", GAME_FLAGS )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         Mikrosha driver by Miodrag Milanovic
@@ -11,9 +13,7 @@
 #include "cpu/i8085/i8085.h"
 #include "sound/wave.h"
 #include "machine/i8255.h"
-#include "machine/8257dma.h"
 #include "machine/pit8253.h"
-#include "video/i8275.h"
 #include "imagedev/cassette.h"
 #include "formats/rk_cas.h"
 #include "includes/radio86.h"
@@ -23,22 +23,34 @@ class mikrosha_state : public radio86_state
 {
 public:
 	mikrosha_state(const machine_config &mconfig, device_type type, const char *tag)
-		: radio86_state(mconfig, type, tag) { }
+		: radio86_state(mconfig, type, tag),
+		m_cart(*this, "cartslot")
+		{ }
 	DECLARE_WRITE_LINE_MEMBER(mikrosha_pit_out2);
+	I8275_DRAW_CHARACTER_MEMBER(display_pixels);
+	DECLARE_MACHINE_RESET(mikrosha);
+
+protected:
+	required_device<generic_slot_device> m_cart;
 };
 
+MACHINE_RESET_MEMBER(mikrosha_state,mikrosha)
+{
+	if (m_cart->exists())
+		m_maincpu->space(AS_PROGRAM).install_read_handler(0x8000, 0x8000+m_cart->get_rom_size()-1, read8_delegate(FUNC(generic_slot_device::read_rom),(generic_slot_device*)m_cart));
+	MACHINE_RESET_CALL_MEMBER(radio86);
+}
 
 /* Address maps */
 static ADDRESS_MAP_START(mikrosha_mem, AS_PROGRAM, 8, mikrosha_state )
 	AM_RANGE( 0x0000, 0x0fff ) AM_RAMBANK("bank1") // First bank
 	AM_RANGE( 0x1000, 0x7fff ) AM_RAM // RAM
-	AM_RANGE( 0x8000, 0xbfff ) AM_READ(radio_cpu_state_r) // Not connected
 	AM_RANGE( 0xc000, 0xc003 ) AM_DEVREADWRITE("ppi8255_1", i8255_device, read, write) AM_MIRROR(0x07fc)
 	AM_RANGE( 0xc800, 0xc803 ) AM_DEVREADWRITE("ppi8255_2", i8255_device, read, write) AM_MIRROR(0x07fc)
 	AM_RANGE( 0xd000, 0xd001 ) AM_DEVREADWRITE("i8275", i8275_device, read, write) AM_MIRROR(0x07fe) // video
 	AM_RANGE( 0xd800, 0xd803 ) AM_DEVREADWRITE("pit8253", pit8253_device, read, write) AM_MIRROR(0x07fc) // Timer
 	AM_RANGE( 0xe000, 0xf7ff ) AM_READ(radio_cpu_state_r) // Not connected
-	AM_RANGE( 0xf800, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, i8257_w)    // DMA
+	AM_RANGE( 0xf800, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, write)    // DMA
 	AM_RANGE( 0xf800, 0xffff ) AM_ROM  // System ROM
 ADDRESS_MAP_END
 
@@ -140,41 +152,31 @@ static INPUT_PORTS_START( mikrosha )
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Shift") PORT_CODE(KEYCODE_LSHIFT) PORT_CODE(KEYCODE_RSHIFT) PORT_CHAR(UCHAR_SHIFT_1)
 INPUT_PORTS_END
 
-/* Machine driver */
-static const cassette_interface mikrosha_cassette_interface =
-{
-	rkm_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_SPEAKER_ENABLED | CASSETTE_MOTOR_ENABLED),
-	"mikrosha_cass",
-	NULL
-};
-
-
 WRITE_LINE_MEMBER(mikrosha_state::mikrosha_pit_out2)
 {
 }
 
-static const struct pit8253_interface mikrosha_pit8253_intf =
+I8275_DRAW_CHARACTER_MEMBER(mikrosha_state::display_pixels)
 {
-	{
-		{
-			0,
-			DEVCB_NULL,
-			DEVCB_NULL
-		},
-		{
-			0,
-			DEVCB_NULL,
-			DEVCB_NULL
-		},
-		{
-			2000000,
-			DEVCB_NULL,
-			DEVCB_DRIVER_LINE_MEMBER(mikrosha_state, mikrosha_pit_out2)
-		}
+	int i;
+	const rgb_t *palette = m_palette->palette()->entry_list_raw();
+	const UINT8 *charmap = m_charmap + (m_mikrosha_font_page & 1) * 0x400;
+	UINT8 pixels = charmap[(linecount & 7) + (charcode << 3)] ^ 0xff;
+	if(linecount == 8)
+		pixels = 0;
+	if (vsp) {
+		pixels = 0;
 	}
-};
+	if (lten) {
+		pixels = 0xff;
+	}
+	if (rvv) {
+		pixels ^= 0xff;
+	}
+	for(i=0;i<6;i++) {
+		bitmap.pix32(y, x + i) = palette[(pixels >> (5-i)) & 1 ? (hlgt ? 2 : 1) : 0];
+	}
+}
 
 /* F4 Character Displayer */
 static const gfx_layout mikrosha_charlayout =
@@ -200,45 +202,69 @@ static MACHINE_CONFIG_START( mikrosha, mikrosha_state )
 	MCFG_CPU_PROGRAM_MAP(mikrosha_mem)
 	MCFG_CPU_IO_MAP(mikrosha_io)
 
-	MCFG_MACHINE_RESET_OVERRIDE(mikrosha_state, radio86 )
+	MCFG_MACHINE_RESET_OVERRIDE(mikrosha_state, mikrosha)
 
-	MCFG_I8255_ADD( "ppi8255_1", mikrosha_ppi8255_interface_1 )
+	MCFG_DEVICE_ADD("ppi8255_1", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(radio86_state, radio86_8255_portb_r2))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(radio86_state, radio86_8255_porta_w2))
+	MCFG_I8255_IN_PORTC_CB(READ8(radio86_state, radio86_8255_portc_r2))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(radio86_state, radio86_8255_portc_w2))
 
-	MCFG_I8255_ADD( "ppi8255_2", mikrosha_ppi8255_interface_2 )
+	MCFG_DEVICE_ADD("ppi8255_2", I8255, 0)
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(radio86_state, mikrosha_8255_font_page_w))
 
-	MCFG_I8275_ADD  ( "i8275", mikrosha_i8275_interface)
+	MCFG_DEVICE_ADD("i8275", I8275, XTAL_16MHz / 12)
+	MCFG_I8275_CHARACTER_WIDTH(6)
+	MCFG_I8275_DRAW_CHARACTER_CALLBACK_OWNER(mikrosha_state, display_pixels)
+	MCFG_I8275_DRQ_CALLBACK(DEVWRITELINE("dma8257",i8257_device, dreq2_w))
 
-	MCFG_PIT8253_ADD( "pit8253", mikrosha_pit8253_intf )
+	MCFG_DEVICE_ADD("pit8253", PIT8253, 0)
+	MCFG_PIT8253_CLK0(0)
+	MCFG_PIT8253_CLK1(0)
+	MCFG_PIT8253_CLK2(2000000)
+	MCFG_PIT8253_OUT2_HANDLER(WRITELINE(mikrosha_state, mikrosha_pit_out2))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_UPDATE_DEVICE("i8275", i8275_device, screen_update)
 	MCFG_SCREEN_REFRESH_RATE(50)
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
 	MCFG_SCREEN_SIZE(78*6, 30*10)
 	MCFG_SCREEN_VISIBLE_AREA(0, 78*6-1, 0, 30*10-1)
 
-	MCFG_GFXDECODE(mikrosha)
-	MCFG_PALETTE_LENGTH(3)
-	MCFG_PALETTE_INIT_OVERRIDE(mikrosha_state,radio86)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", mikrosha)
+	MCFG_PALETTE_ADD("palette", 3)
+	MCFG_PALETTE_INIT_OWNER(mikrosha_state,radio86)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_I8257_ADD("dma8257", XTAL_16MHz / 9, radio86_dma)
+	MCFG_DEVICE_ADD("dma8257", I8257, XTAL_16MHz / 9)
+	MCFG_I8257_OUT_HRQ_CB(WRITELINE(radio86_state, hrq_w))
+	MCFG_I8257_IN_MEMR_CB(READ8(radio86_state, memory_read_byte))
+	MCFG_I8257_OUT_MEMW_CB(WRITE8(radio86_state, memory_write_byte))
+	MCFG_I8257_OUT_IOW_2_CB(DEVWRITE8("i8275", i8275_device, dack_w))
+	MCFG_I8257_REVERSE_RW_MODE(1)
 
-	MCFG_CASSETTE_ADD( "cassette", mikrosha_cassette_interface )
-	MCFG_SOFTWARE_LIST_ADD("cass_list","mikrosha")
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_FORMATS(rkm_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_SPEAKER_ENABLED | CASSETTE_MOTOR_ENABLED)
+	MCFG_CASSETTE_INTERFACE("mikrosha_cass")
+
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "mikrosha_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
+
+	MCFG_SOFTWARE_LIST_ADD("cass_list", "mikrosha_cass")
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "mikrosha_cart")
 MACHINE_CONFIG_END
 
 
 /* ROM definition */
 ROM_START( mikrosha )
 	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
-	ROM_LOAD( "mikrosha.rom", 0xf800, 0x0800, CRC(86A83556) SHA1(94b1baad0a419145939a891ff51f4324e8e4ddd2))
+	ROM_LOAD( "mikrosha.rom", 0xf800, 0x0800, CRC(86a83556) SHA1(94b1baad0a419145939a891ff51f4324e8e4ddd2))
 	ROM_REGION(0x0800, "gfx1",0)
-	ROM_LOAD ("mikrosha.fnt", 0x0000, 0x0800, CRC(B315DA1C) SHA1(b5bf9abc0fff75b1aba709a7f08b23d4a89bb04b))
+	ROM_LOAD ("mikrosha.fnt", 0x0000, 0x0800, CRC(b315da1c) SHA1(b5bf9abc0fff75b1aba709a7f08b23d4a89bb04b))
 ROM_END
 
 ROM_START( m86rk )
@@ -246,7 +272,7 @@ ROM_START( m86rk )
 	ROM_LOAD( "m86rk.bin", 0xf800, 0x0800, CRC(a898d77a) SHA1(c2497bf8434b5028fe0a9fc09be311465d5553a5))
 	ROM_REGION(0x0800, "gfx1",0)
 	/* here should probably be different rom */
-	ROM_LOAD ("mikrosha.fnt", 0x0000, 0x0800, CRC(B315DA1C) SHA1(b5bf9abc0fff75b1aba709a7f08b23d4a89bb04b))
+	ROM_LOAD ("mikrosha.fnt", 0x0000, 0x0800, CRC(b315da1c) SHA1(b5bf9abc0fff75b1aba709a7f08b23d4a89bb04b))
 ROM_END
 
 /* Driver */

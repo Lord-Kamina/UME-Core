@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Michael Strutts, Nicola Salmoria, Tormod Tjaberg, Mirko Buffoni,Lee Taylor, Valerio Verrando, Marco Cassili, Zsolt Vasvari
 /***************************************************************************
 
     Midway 8080-based black and white hardware
@@ -41,10 +43,15 @@ public:
 		m_mb14241(*this,"mb14241"),
 		m_main_ram(*this, "main_ram"),
 		m_colorram(*this, "colorram"),
+		m_colorram2(*this, "colorram2"),
 		m_discrete(*this, "discrete"),
 		m_samples(*this, "samples"),
 		m_samples1(*this, "samples1"),
-		m_samples2(*this, "samples2")
+		m_samples2(*this, "samples2"),
+		m_sn1(*this, "sn1"),
+		m_sn2(*this, "sn2"),
+		m_sn(*this, "snsnd"),
+		m_screen(*this, "screen")
 	{ }
 
 	/* device/memory pointers */
@@ -52,6 +59,7 @@ public:
 	optional_device<mb14241_device> m_mb14241;
 	required_shared_ptr<UINT8> m_main_ram;
 	optional_shared_ptr<UINT8> m_colorram;
+	optional_shared_ptr<UINT8> m_colorram2;
 	optional_device<discrete_device> m_discrete;
 
 	/* sound-related */
@@ -81,9 +89,10 @@ public:
 	optional_device<samples_device> m_samples;
 	optional_device<samples_device> m_samples1;
 	optional_device<samples_device> m_samples2;
-	device_t *m_sn1;
-	device_t *m_sn2;
-	device_t *m_sn;
+	optional_device<sn76477_device> m_sn1;
+	optional_device<sn76477_device> m_sn2;
+	optional_device<sn76477_device> m_sn;
+	required_device<screen_device> m_screen;
 
 	DECLARE_READ8_MEMBER(mw8080bw_shift_result_rev_r);
 	DECLARE_READ8_MEMBER(mw8080bw_reversable_shift_result_r);
@@ -145,6 +154,7 @@ public:
 	DECLARE_MACHINE_START(spcenctr);
 	DECLARE_MACHINE_START(phantom2);
 	DECLARE_MACHINE_START(invaders);
+	DECLARE_SOUND_START(samples);
 	UINT32 screen_update_mw8080bw(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_spcenctr(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_phantom2(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
@@ -179,6 +189,7 @@ public:
 	DECLARE_WRITE8_MEMBER(invad2ct_audio_3_w);
 	DECLARE_WRITE8_MEMBER(invad2ct_audio_4_w);
 	void maze_update_discrete();
+	void maze_write_discrete(UINT8 maze_tone_timing_state);
 	UINT8 vpos_to_vysnc_chain_counter( int vpos );
 	int vysnc_chain_counter_to_vpos( UINT8 counter, int vblank );
 	void mw8080bw_create_interrupt_timer(  );
@@ -236,10 +247,6 @@ MACHINE_CONFIG_EXTERN( mw8080bw_root );
 MACHINE_CONFIG_EXTERN( invaders );
 extern const char layout_invaders[];
 
-UINT8 tornbase_get_cabinet_type(running_machine &machine);
-
-int invaders_is_cabinet_cocktail(running_machine &machine);
-
 /*----------- defined in audio/mw8080bw.c -----------*/
 
 
@@ -252,7 +259,6 @@ MACHINE_CONFIG_EXTERN( tornbase_audio );
 MACHINE_CONFIG_EXTERN( zzzap_audio );
 
 MACHINE_CONFIG_EXTERN( maze_audio );
-void maze_write_discrete(device_t *device, UINT8 maze_tone_timing_state);
 
 MACHINE_CONFIG_EXTERN( boothill_audio );
 

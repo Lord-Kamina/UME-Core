@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Angelo Salese
 /************************************************************************************************
 
     Sharp X1Twin = Sharp X1 + NEC PC Engine All-in-One
@@ -15,7 +17,6 @@
 #include "includes/x1.h"
 
 #include "includes/pce.h"
-#include "video/vdc.h"
 //#include "cpu/h6280/h6280.h"
 //#include "sound/c6280.h"
 
@@ -57,7 +58,7 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( pce_mem , AS_PROGRAM, 8, x1twin_state )
 	AM_RANGE( 0x000000, 0x09FFFF) AM_ROM
 	AM_RANGE( 0x1F0000, 0x1F1FFF) AM_RAM AM_MIRROR(0x6000)
-	AM_RANGE( 0x1FE000, 0x1FE3FF) AM_READWRITE( vdc_0_r, vdc_0_w )
+	AM_RANGE( 0x1FE000, 0x1FE3FF) AM_READWRITE( vdc_r, vdc_w )
 	AM_RANGE( 0x1FE400, 0x1FE7FF) AM_READWRITE( vce_r, vce_w )
 	AM_RANGE( 0x1FE800, 0x1FEBFF) AM_DEVREADWRITE( "c6280", c6280_device, c6280_r, c6280_w )
 	AM_RANGE( 0x1FEC00, 0x1FEFFF) AM_READWRITE( h6280_timer_r, h6280_timer_w )
@@ -66,42 +67,9 @@ static ADDRESS_MAP_START( pce_mem , AS_PROGRAM, 8, x1twin_state )
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( pce_io, AS_IO, 8, x1twin_state )
-	AM_RANGE( 0x00, 0x03) AM_READWRITE( vdc_0_r, vdc_0_w )
+	AM_RANGE( 0x00, 0x03) AM_READWRITE( vdc_r, vdc_w )
 ADDRESS_MAP_END
 #endif
-
-static const wd17xx_interface x1_mb8877a_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	{FLOPPY_0, FLOPPY_1, FLOPPY_2, FLOPPY_3}
-};
-
-static I8255A_INTERFACE( ppi8255_intf )
-{
-	DEVCB_DRIVER_MEMBER(x1_state, x1_porta_r),                      /* Port A read */
-	DEVCB_DRIVER_MEMBER(x1_state, x1_porta_w),                      /* Port A write */
-	DEVCB_DRIVER_MEMBER(x1_state, x1_portb_r),                      /* Port B read */
-	DEVCB_DRIVER_MEMBER(x1_state, x1_portb_w),                      /* Port B write */
-	DEVCB_DRIVER_MEMBER(x1_state, x1_portc_r),                      /* Port C read */
-	DEVCB_DRIVER_MEMBER(x1_state, x1_portc_w)                       /* Port C write */
-};
-
-static MC6845_INTERFACE( mc6845_intf )
-{
-	"x1_screen",    /* screen we are acting on */
-	false,          /* show border area*/
-	8,              /* number of pixels per video memory address */
-	NULL,           /* before pixel update callback */
-	NULL,           /* row update callback */
-	NULL,           /* after pixel update callback */
-	DEVCB_NULL,     /* callback for display state changes */
-	DEVCB_NULL,     /* callback for cursor state changes */
-	DEVCB_NULL,     /* HSYNC callback */
-	DEVCB_NULL,     /* VSYNC callback */
-	NULL            /* update address callback */
-};
 
 /*************************************
  *
@@ -419,49 +387,6 @@ static GFXDECODE_START( x1 )
 	GFXDECODE_ENTRY( "kanji",   0x00000, x1_chars_16x16,  0, 1 )
 GFXDECODE_END
 
-static Z80CTC_INTERFACE( ctc_intf )
-{
-	DEVCB_CPU_INPUT_LINE("x1_cpu", INPUT_LINE_IRQ0),        // interrupt handler
-	DEVCB_DEVICE_LINE_MEMBER("ctc", z80ctc_device, trg3),       // ZC/TO0 callback
-	DEVCB_DEVICE_LINE_MEMBER("ctc", z80ctc_device, trg1),       // ZC/TO1 callback
-	DEVCB_DEVICE_LINE_MEMBER("ctc", z80ctc_device, trg2),       // ZC/TO2 callback
-};
-
-#if 0
-static const z80sio_interface sio_intf =
-{
-	DEVCB_NULL,                 /* interrupt handler */
-	DEVCB_NULL,                 /* DTR changed handler */
-	DEVCB_NULL,                 /* RTS changed handler */
-	DEVCB_NULL,                 /* BREAK changed handler */
-	DEVCB_NULL,                 /* transmit handler */
-	DEVCB_NULL                  /* receive handler */
-};
-#endif
-
-
-static Z80DART_INTERFACE( sio_intf )
-{
-	0, 0, 0, 0,
-
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-
-	DEVCB_CPU_INPUT_LINE("x1_cpu", INPUT_LINE_IRQ0)
-};
-
-
 static const z80_daisy_config x1_daisy[] =
 {
 	{ "x1kb" },
@@ -469,54 +394,9 @@ static const z80_daisy_config x1_daisy[] =
 	{ NULL }
 };
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("P1"),
-	DEVCB_INPUT_PORT("P2"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static const cassette_interface x1_cassette_interface =
-{
-	x1_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	"x1_cass",
-	NULL
-};
-
-static LEGACY_FLOPPY_OPTIONS_START( x1 )
-	LEGACY_FLOPPY_OPTION( img2d, "2d", "2D disk image", basicdsk_identify_default, basicdsk_construct_default, NULL,
-		HEADS([2])
-		TRACKS([40])
-		SECTORS([16])
-		SECTOR_LENGTH([256])
-		FIRST_SECTOR_ID([1]))
-LEGACY_FLOPPY_OPTIONS_END
-
-static const floppy_interface x1_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_DSDD_40,
-	LEGACY_FLOPPY_OPTIONS_NAME(x1),
-	"floppy_5_25",
-	NULL
-};
-
-
-#if 0
-static const c6280_interface c6280_config =
-{
-	"pce_cpu"
-};
-#endif
+static SLOT_INTERFACE_START( x1_floppies )
+	SLOT_INTERFACE("dd", FLOPPY_525_DD)
+SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_START( x1twin, x1twin_state )
 	/* basic machine hardware */
@@ -525,11 +405,21 @@ static MACHINE_CONFIG_START( x1twin, x1twin_state )
 	MCFG_CPU_IO_MAP(x1_io)
 	MCFG_CPU_CONFIG(x1_daisy)
 
-	MCFG_Z80CTC_ADD( "ctc", MAIN_CLOCK/4 , ctc_intf )
+	MCFG_DEVICE_ADD("ctc", Z80CTC, MAIN_CLOCK/4)
+	MCFG_Z80CTC_INTR_CB(INPUTLINE("x1_cpu", INPUT_LINE_IRQ0))
+	MCFG_Z80CTC_ZC0_CB(DEVWRITELINE("ctc", z80ctc_device, trg3))
+	MCFG_Z80CTC_ZC1_CB(DEVWRITELINE("ctc", z80ctc_device, trg1))
+	MCFG_Z80CTC_ZC2_CB(DEVWRITELINE("ctc", z80ctc_device, trg2))
 
 	MCFG_DEVICE_ADD("x1kb", X1_KEYBOARD, 0)
 
-	MCFG_I8255A_ADD( "ppi8255_0", ppi8255_intf )
+	MCFG_DEVICE_ADD("ppi8255_0", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(x1_state, x1_porta_r))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(x1_state, x1_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(x1_state, x1_portb_r))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(x1_state, x1_portb_w))
+	MCFG_I8255_IN_PORTC_CB(READ8(x1_state, x1_portc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(x1_state, x1_portc_w))
 
 	MCFG_MACHINE_START_OVERRIDE(x1twin_state,x1)
 	MCFG_MACHINE_RESET_OVERRIDE(x1twin_state,x1)
@@ -553,22 +443,31 @@ static MACHINE_CONFIG_START( x1twin, x1twin_state )
 	MCFG_SCREEN_ADD("pce_screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
-	MCFG_SCREEN_RAW_PARAMS(PCE_MAIN_CLOCK/2, VDC_WPF, 70, 70 + 512 + 32, VDC_LPF, 14, 14+242)
+	MCFG_SCREEN_RAW_PARAMS(PCE_MAIN_CLOCK/2, HUC6260_WPF, 70, 70 + 512 + 32, HUC6260_LPF, 14, 14+242)
 	MCFG_SCREEN_UPDATE_DRIVER(x1twin_state, screen_update_x1pce)
 
-	MCFG_MC6845_ADD("crtc", H46505, (VDP_CLOCK/48), mc6845_intf) //unknown divider
-	MCFG_PALETTE_LENGTH(0x10+0x1000)
-	MCFG_PALETTE_INIT_OVERRIDE(x1twin_state,x1)
+	MCFG_MC6845_ADD("crtc", H46505, "x1_screen", (VDP_CLOCK/48)) //unknown divider
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
 
-	MCFG_GFXDECODE(x1)
+	MCFG_PALETTE_ADD("palette", 0x10+0x1000)
+	MCFG_PALETTE_INIT_OWNER(x1twin_state,x1)
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", x1)
 
 	MCFG_VIDEO_START_OVERRIDE(x1twin_state,x1)
 
-	MCFG_MB8877_ADD("fdc",x1_mb8877a_interface)
+	MCFG_MB8877_ADD("fdc", MAIN_CLOCK / 16)
 
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom")
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", x1_floppies, "dd", x1_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", x1_floppies, "dd", x1_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:2", x1_floppies, "dd", x1_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:3", x1_floppies, "dd", x1_state::floppy_formats)
+
+	MCFG_SOFTWARE_LIST_ADD("flop_list","x1_flop")
+
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "x1_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	MCFG_SPEAKER_ADD("x1_l",-0.2, 0.0, 1.0)
 	MCFG_SPEAKER_ADD("x1_r",0.2, 0.0, 1.0)
@@ -579,7 +478,8 @@ static MACHINE_CONFIG_START( x1twin, x1twin_state )
 
 	/* TODO:is the AY mono or stereo? Also volume balance isn't right. */
 	MCFG_SOUND_ADD("ay", AY8910, MAIN_CLOCK/8)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("P1"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("P2"))
 	MCFG_SOUND_ROUTE(0, "x1_l",  0.25)
 	MCFG_SOUND_ROUTE(0, "x1_r", 0.25)
 	MCFG_SOUND_ROUTE(1, "x1_l",  0.5)
@@ -588,15 +488,16 @@ static MACHINE_CONFIG_START( x1twin, x1twin_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "x1_l", 0.25)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "x1_r", 0.10)
 
-	MCFG_CASSETTE_ADD("cassette",x1_cassette_interface)
-	MCFG_SOFTWARE_LIST_ADD("cass_list","x1_cass")
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(x1_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("x1_cass")
 
-	MCFG_LEGACY_FLOPPY_4_DRIVES_ADD(x1_floppy_interface)
-	MCFG_SOFTWARE_LIST_ADD("flop_list","x1_flop")
+	MCFG_SOFTWARE_LIST_ADD("cass_list","x1_cass")
 
 #if 0
 	MCFG_SOUND_ADD("c6280", C6280, PCE_MAIN_CLOCK/6)
-//  MCFG_SOUND_CONFIG(c6280_config)
+	MCFG_C6280_CPU("pce_cpu")
 	MCFG_SOUND_ROUTE(0, "pce_l", 0.5)
 	MCFG_SOUND_ROUTE(1, "pce_r", 0.5)
 #endif
@@ -634,9 +535,6 @@ ROM_START( x1twin )
 	ROM_LOAD("kanji2.rom", 0x08000, 0x8000, BAD_DUMP CRC(e710628a) SHA1(103bbe459dc8da27a9400aa45b385255c18fcc75) )
 	ROM_LOAD("kanji3.rom", 0x10000, 0x8000, BAD_DUMP CRC(8cae13ae) SHA1(273f3329c70b332f6a49a3a95e906bbfe3e9f0a1) )
 	ROM_LOAD("kanji1.rom", 0x18000, 0x8000, BAD_DUMP CRC(5874f70b) SHA1(dad7ada1b70c45f1e9db11db273ef7b385ef4f17) )
-
-	ROM_REGION( 0x1000000, "cart_img", ROMREGION_ERASE00 )
-	ROM_CART_LOAD("cart", 0x0000, 0xffffff, ROM_OPTIONAL | ROM_NOMIRROR)
 ROM_END
 
 COMP( 1986, x1twin,    x1,     0,       x1twin,      x1twin, x1_state,         x1_kanji,"Sharp",  "X1 Twin (CZ-830C)",    GAME_NOT_WORKING )

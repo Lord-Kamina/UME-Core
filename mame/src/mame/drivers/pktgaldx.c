@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Bryan McPhail
 /*
 
 Pocket Gal Deluxe
@@ -55,11 +57,8 @@ bootleg todo:
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
 #include "includes/decocrpt.h"
-#include "includes/decoprot.h"
-#include "video/deco16ic.h"
 #include "sound/okim6295.h"
 #include "includes/pktgaldx.h"
-#include "video/decocomn.h"
 
 /**********************************************************************************/
 
@@ -70,26 +69,48 @@ WRITE16_MEMBER(pktgaldx_state::pktgaldx_oki_bank_w)
 
 /**********************************************************************************/
 
+READ16_MEMBER( pktgaldx_state::pktgaldx_protection_region_f_104_r )
+{
+	int real_address = 0 + (offset *2);
+	UINT8 cs = 0;
+	UINT16 data = m_deco104->read_data( real_address&0x7fff, mem_mask, cs );
+	return data;
+}
+
+WRITE16_MEMBER( pktgaldx_state::pktgaldx_protection_region_f_104_w )
+{
+	int real_address = 0 + (offset *2);
+	UINT8 cs = 0;
+	m_deco104->write_data( space, real_address&0x7fff, data, mem_mask, cs );
+}
+
+
 static ADDRESS_MAP_START( pktgaldx_map, AS_PROGRAM, 16, pktgaldx_state )
 	AM_RANGE(0x000000, 0x07ffff) AM_ROM
 
-	AM_RANGE(0x100000, 0x100fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf1_data_r, deco16ic_pf1_data_w)
-	AM_RANGE(0x102000, 0x102fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf2_data_r, deco16ic_pf2_data_w)
+	AM_RANGE(0x100000, 0x100fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf1_data_r, pf1_data_w)
+	AM_RANGE(0x102000, 0x102fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf2_data_r, pf2_data_w)
 	AM_RANGE(0x110000, 0x1107ff) AM_RAM AM_SHARE("pf1_rowscroll")
 	AM_RANGE(0x112000, 0x1127ff) AM_RAM AM_SHARE("pf2_rowscroll")
 
 	AM_RANGE(0x120000, 0x1207ff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0x130000, 0x130fff) AM_RAM_DEVWRITE_LEGACY("deco_common", decocomn_nonbuffered_palette_w) AM_SHARE("paletteram")
+	AM_RANGE(0x130000, 0x130fff) AM_RAM_DEVWRITE("deco_common", decocomn_device, nonbuffered_palette_w) AM_SHARE("paletteram")
 
 	AM_RANGE(0x140000, 0x14000f) AM_DEVWRITE8("oki1", okim6295_device, write, 0x00ff)
 	AM_RANGE(0x140006, 0x140007) AM_DEVREAD8("oki1", okim6295_device, read, 0x00ff)
 	AM_RANGE(0x150000, 0x15000f) AM_DEVWRITE8("oki2", okim6295_device, write, 0x00ff)
 	AM_RANGE(0x150006, 0x150007) AM_DEVREAD8("oki2", okim6295_device, read, 0x00ff)
 
-	AM_RANGE(0x161800, 0x16180f) AM_DEVWRITE_LEGACY("tilegen1", deco16ic_pf_control_w)
+	AM_RANGE(0x161800, 0x16180f) AM_DEVWRITE("tilegen1", deco16ic_device, pf_control_w)
 	AM_RANGE(0x164800, 0x164801) AM_WRITE(pktgaldx_oki_bank_w)
-	AM_RANGE(0x167800, 0x167fff) AM_READWRITE_LEGACY(deco16_104_pktgaldx_prot_r,deco16_104_pktgaldx_prot_w) AM_SHARE("prot16ram")
+
+	AM_RANGE(0x167800, 0x167fff) AM_READWRITE(pktgaldx_protection_region_f_104_r,pktgaldx_protection_region_f_104_w) AM_SHARE("prot16ram") /* Protection device */
+
 	AM_RANGE(0x170000, 0x17ffff) AM_RAM
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 16, pktgaldx_state )
+	AM_RANGE(0x000000, 0x07ffff) AM_ROM AM_SHARE("decrypted_opcodes")
 ADDRESS_MAP_END
 
 
@@ -150,7 +171,7 @@ static ADDRESS_MAP_START( pktgaldb_map, AS_PROGRAM, 16, pktgaldx_state )
 
 	AM_RANGE(0x300000, 0x30000f) AM_RAM // ??
 
-	AM_RANGE(0x330000, 0x330bff) AM_RAM_WRITE(paletteram_xbgr_word_be_w) AM_SHARE("paletteram") // extra colours?
+	AM_RANGE(0x330000, 0x330bff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette") // extra colours?
 ADDRESS_MAP_END
 
 
@@ -288,33 +309,14 @@ static GFXDECODE_START( bootleg )
 GFXDECODE_END
 
 
-static int pktgaldx_bank_callback( const int bank )
+DECO16IC_BANK_CB_MEMBER(pktgaldx_state::bank_callback)
 {
 	return ((bank >> 4) & 0x7) * 0x1000;
 }
 
-static const decocomn_interface pktgaldx_decocomn_intf =
-{
-	"screen",
-};
-
-static const deco16ic_interface pktgaldx_deco16ic_tilegen1_intf =
-{
-	"screen",
-	0, 1,
-	0x0f, 0x0f, /* trans masks (default values) */
-	0, 16, /* color base (default values) */
-	0x0f, 0x0f, /* color masks (default values) */
-	NULL,
-	pktgaldx_bank_callback,
-	0,1,
-};
-
-
 
 void pktgaldx_state::machine_start()
 {
-	decoprot_reset(machine());
 }
 
 static MACHINE_CONFIG_START( pktgaldx, pktgaldx_state )
@@ -322,6 +324,7 @@ static MACHINE_CONFIG_START( pktgaldx, pktgaldx_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, 14000000)
 	MCFG_CPU_PROGRAM_MAP(pktgaldx_map)
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pktgaldx_state,  irq6_line_hold)
 
 
@@ -332,16 +335,39 @@ static MACHINE_CONFIG_START( pktgaldx, pktgaldx_state )
 	MCFG_SCREEN_SIZE(40*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pktgaldx_state, screen_update_pktgaldx)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(4096)
-	MCFG_GFXDECODE(pktgaldx)
+	MCFG_PALETTE_ADD("palette", 4096)
+	MCFG_PALETTE_FORMAT(XBGR)
 
-	MCFG_DECOCOMN_ADD("deco_common", pktgaldx_decocomn_intf)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pktgaldx)
 
-	MCFG_DECO16IC_ADD("tilegen1", pktgaldx_deco16ic_tilegen1_intf)
+	MCFG_DECOCOMN_ADD("deco_common")
+	MCFG_DECOCOMN_PALETTE("palette")
+
+	MCFG_DEVICE_ADD("tilegen1", DECO16IC, 0)
+	MCFG_DECO16IC_SPLIT(0)
+	MCFG_DECO16IC_WIDTH12(1)
+	MCFG_DECO16IC_PF1_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF2_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF1_COL_BANK(0x00)
+	MCFG_DECO16IC_PF2_COL_BANK(0x10)
+	MCFG_DECO16IC_PF1_COL_MASK(0x0f)
+	MCFG_DECO16IC_PF2_COL_MASK(0x0f)
+	MCFG_DECO16IC_BANK1_CB(pktgaldx_state, bank_callback)
+	MCFG_DECO16IC_BANK2_CB(pktgaldx_state, bank_callback)
+	MCFG_DECO16IC_PF12_8X8_BANK(0)
+	MCFG_DECO16IC_PF12_16X16_BANK(1)
+	MCFG_DECO16IC_GFXDECODE("gfxdecode")
+	MCFG_DECO16IC_PALETTE("palette")
 
 	MCFG_DEVICE_ADD("spritegen", DECO_SPRITE, 0)
-	decospr_device::set_gfx_region(*device, 2);
+	MCFG_DECO_SPRITE_GFX_REGION(2)
+	MCFG_DECO_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_DECO_SPRITE_PALETTE("palette")
+
+	MCFG_DECO104_ADD("ioprot104")
+	MCFG_DECO146_SET_INTERFACE_SCRAMBLE(8,9,  4,5,6,7    ,1,0,3,2) // hopefully this is correct, nothing else uses this arrangement!
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -371,9 +397,12 @@ static MACHINE_CONFIG_START( pktgaldb, pktgaldx_state )
 	MCFG_SCREEN_SIZE(40*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pktgaldx_state, screen_update_pktgaldb)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(4096)
-	MCFG_GFXDECODE(bootleg)
+	MCFG_PALETTE_ADD("palette", 4096)
+	MCFG_PALETTE_FORMAT(XBGR)
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", bootleg)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -450,7 +479,7 @@ ROM_END
 DRIVER_INIT_MEMBER(pktgaldx_state,pktgaldx)
 {
 	deco56_decrypt_gfx(machine(), "gfx1");
-	deco102_decrypt_cpu(machine(), "maincpu", 0x42ba, 0x00, 0x00);
+	deco102_decrypt_cpu((UINT16 *)memregion("maincpu")->base(), m_decrypted_opcodes, 0x80000, 0x42ba, 0x00, 0x00);
 }
 
 GAME( 1992, pktgaldx,  0,        pktgaldx, pktgaldx, pktgaldx_state, pktgaldx,  ROT0, "Data East Corporation", "Pocket Gal Deluxe (Euro v3.00)", GAME_SUPPORTS_SAVE )

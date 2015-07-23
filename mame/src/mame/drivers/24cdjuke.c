@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /*
 
  Midcoin 24 CD Coin-operated Jukebox
@@ -73,7 +75,7 @@ public:
 	required_ioport m_io_row1;
 	required_ioport m_io_row2;
 	required_ioport m_io_row3;
-	required_memory_region m_charset;
+	required_region_ptr<UINT16> m_charset;
 
 	virtual void machine_start();
 	virtual void machine_reset();
@@ -82,7 +84,7 @@ public:
 	DECLARE_WRITE8_MEMBER(kb_col_w);
 	DECLARE_WRITE8_MEMBER(digit_w);
 
-	DECLARE_READ8_MEMBER(rand_r){ return machine().rand(); }
+	DECLARE_READ8_MEMBER(unknown_r) { return machine().rand(); }
 
 private:
 	UINT8 m_kb_col;
@@ -112,9 +114,7 @@ WRITE8_MEMBER(midcoin24cdjuke_state::kb_col_w)
 
 WRITE8_MEMBER(midcoin24cdjuke_state::digit_w)
 {
-	UINT8* charset = (UINT8*)(*m_charset);
-	UINT16 char_offset = (((data & 0x60) << 1) | (data & 0x1f)) << 1;
-	UINT16 char_data = ((charset[char_offset + 1] << 8) | charset[char_offset]);
+	UINT16 char_data = m_charset[((data & 0x60) << 1) | (data & 0x1f)];
 
 	char_data = BITSWAP16(char_data, 13,11,9,15,14,10,12,8,7,6,5,4,3,2,1,0);
 
@@ -134,7 +134,7 @@ static ADDRESS_MAP_START( midcoin24cdjuke_io, AS_IO, 8, midcoin24cdjuke_state )
 	AM_RANGE(0x04, 0x07) AM_DEVREADWRITE("ic11", i8255_device, read, write)
 	AM_RANGE(0x08, 0x0b) AM_DEVREADWRITE("ic25", i8255_device, read, write)
 	AM_RANGE(0x0c, 0x0c) AM_WRITENOP
-	AM_RANGE(0x10, 0x1f) AM_READ(rand_r)
+	AM_RANGE(0x10, 0x1f) AM_READ(unknown_r)
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START( midcoin24cdjuke )
@@ -272,36 +272,6 @@ void midcoin24cdjuke_state::machine_reset()
 {
 }
 
-static I8255A_INTERFACE( ppi8255_intf_1 )
-{
-	DEVCB_INPUT_PORT("MD1"),        // Port A read
-	DEVCB_NULL,                     // Port A write
-	DEVCB_INPUT_PORT("MD2"),        // Port B read
-	DEVCB_NULL,                     // Port B write
-	DEVCB_INPUT_PORT("MD3"),        // Port C write
-	DEVCB_NULL                      // Port C read
-};
-
-static I8255A_INTERFACE( ppi8255_intf_2 )
-{
-	DEVCB_NULL,                     // Port A read
-	DEVCB_NULL,                     // Port A write
-	DEVCB_INPUT_PORT("PB"),         // Port B read
-	DEVCB_NULL,                     // Port B write
-	DEVCB_DRIVER_MEMBER(midcoin24cdjuke_state, kb_row_r), // Port C read
-	DEVCB_DRIVER_MEMBER(midcoin24cdjuke_state, kb_col_w)  // Port C write
-};
-
-static I8255A_INTERFACE( ppi8255_intf_3 )
-{
-	DEVCB_NULL,                     // Port A read
-	DEVCB_NULL,                     // Port A write
-	DEVCB_NULL,                     // Port B read
-	DEVCB_UNMAPPED,                 // Port B write
-	DEVCB_INPUT_PORT("MD4"),        // Port C read
-	DEVCB_NULL                      // Port C write
-};
-
 
 static MACHINE_CONFIG_START( midcoin24cdjuke, midcoin24cdjuke_state )
 	/* basic machine hardware */
@@ -312,18 +282,27 @@ static MACHINE_CONFIG_START( midcoin24cdjuke, midcoin24cdjuke_state )
 
 	MCFG_DEFAULT_LAYOUT(layout_24cdjuke)
 
-	MCFG_I8255A_ADD( "ic11", ppi8255_intf_1 )
-	MCFG_I8255A_ADD( "ic25", ppi8255_intf_2 )
-	MCFG_I8255A_ADD( "ic31", ppi8255_intf_3 )
-MACHINE_CONFIG_END
+	MCFG_DEVICE_ADD("ic11", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(IOPORT("MD1"))
+	MCFG_I8255_IN_PORTB_CB(IOPORT("MD2"))
+	MCFG_I8255_IN_PORTC_CB(IOPORT("MD3"))
 
+	MCFG_DEVICE_ADD("ic25", I8255A, 0)
+	MCFG_I8255_IN_PORTB_CB(IOPORT("PB"))
+	MCFG_I8255_IN_PORTC_CB(READ8(midcoin24cdjuke_state, kb_row_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(midcoin24cdjuke_state, kb_col_w))
+
+	MCFG_DEVICE_ADD("ic31", I8255A, 0)
+	MCFG_I8255_OUT_PORTB_CB(LOGGER("PPI8255 - unmapped write port B", 0))
+	MCFG_I8255_IN_PORTC_CB(IOPORT("MD4"))
+MACHINE_CONFIG_END
 
 
 ROM_START( 24cdjuke )
 	ROM_REGION( 0x4000, "maincpu", 0 )
 	ROM_LOAD( "1.ic5", 0x0000, 0x4000,  CRC(df2419ad) SHA1(dd9dd85011d46581dccabcfdb5959a8b018df937)  )
 
-	ROM_REGION( 0x200, "charset", 0 )
+	ROM_REGION16_LE( 0x200, "charset", 0 )
 	ROM_LOAD16_BYTE( "dm74ls471n.ic20", 0x000, 0x100, CRC(d05765e6) SHA1(119ec6ca1a4afa0ea6ab1020ba2a8b02fd434e3f) )
 	ROM_LOAD16_BYTE( "dm74ls471n.ic21", 0x001, 0x100, CRC(e12d5a04) SHA1(be52ee4e4a5ea225fce39c759645a7cf49cea370) )
 

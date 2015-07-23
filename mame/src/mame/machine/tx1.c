@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /***************************************************************************
 
     Tatsumi TX-1/Buggy Boy machine hardware
@@ -6,6 +8,7 @@
 
 #include "emu.h"
 #include "debugger.h"
+#include "cpu/i86/i86.h"
 #include "includes/tx1.h"
 
 
@@ -117,7 +120,7 @@ static void sn_multiply(running_machine &machine)
 		}
 		default:
 		{
-			mame_printf_debug("sn74s516 ??? multiply: %x\n", SN74S516.code);
+			osd_printf_debug("sn74s516 ??? multiply: %x\n", SN74S516.code);
 		}
 	}
 
@@ -134,9 +137,9 @@ static void sn_divide(running_machine &machine)
 
 	if (SN74S516.X == 0)
 	{
-		mame_printf_debug("%s:SN74S516 tried to divide by zero\n", machine.describe_context());
-		SN74S516.ZW.Z = (INT16)0xffff;
-		SN74S516.ZW.W = 0xffff;
+		osd_printf_debug("%s:SN74S516 tried to divide by zero\n", machine.describe_context());
+		SN74S516.ZW.as16bit.Z = (INT16)0xffff;
+		SN74S516.ZW.as16bit.W = 0xffff;
 		SN74S516.ZWfl = 0;
 		return;
 	}
@@ -157,13 +160,13 @@ static void sn_divide(running_machine &machine)
 		}
 		case 0x6664:
 		{
-			Z = SN74S516.ZW.W / SN74S516.X;
-			W = SN74S516.ZW.W % SN74S516.X;
+			Z = SN74S516.ZW.as16bit.W / SN74S516.X;
+			W = SN74S516.ZW.as16bit.W % SN74S516.X;
 			break;
 		}
 		default:
 		{
-			mame_printf_debug("SN74S516 unhandled divide type: %x\n", SN74S516.code);
+			osd_printf_debug("SN74S516 unhandled divide type: %x\n", SN74S516.code);
 		}
 	}
 
@@ -171,8 +174,8 @@ static void sn_divide(running_machine &machine)
 	if (Z > 0xffff)
 		Z |= 0xff00;
 
-	SN74S516.ZW.Z = Z;
-	SN74S516.ZW.W = W;
+	SN74S516.ZW.as16bit.Z = Z;
+	SN74S516.ZW.as16bit.W = W;
 	SN74S516.ZWfl = 0;
 }
 
@@ -202,9 +205,9 @@ static void kick_sn74s516(running_machine &machine, UINT16 *data, const int ins)
 
 #define LOAD_X      (SN74S516.X = *data)
 #define LOAD_Y      (SN74S516.Y = *data)
-#define LOAD_Z      (SN74S516.ZW.Z = *data)
-#define LOAD_W      (SN74S516.ZW.W = *data)
-#define READ_ZW     *data = SN74S516.ZWfl ? SN74S516.ZW.W : SN74S516.ZW.Z; \
+#define LOAD_Z      (SN74S516.ZW.as16bit.Z = *data)
+#define LOAD_W      (SN74S516.ZW.as16bit.W = *data)
+#define READ_ZW     *data = SN74S516.ZWfl ? SN74S516.ZW.as16bit.W : SN74S516.ZW.as16bit.Z; \
 					SN74S516.ZWfl ^= 1;
 
 #define UPDATE_SEQUENCE (SN74S516.code = (SN74S516.code << 4) | ins)
@@ -281,7 +284,7 @@ static void kick_sn74s516(running_machine &machine, UINT16 *data, const int ins)
 			if (SN74S516.code == 0x6666)
 			{
 				CLEAR_SEQUENCE;
-				mame_printf_debug("%s:Code 6666: PROMADDR:%x\n", machine.describe_context(), math.promaddr);
+				osd_printf_debug("%s:Code 6666: PROMADDR:%x\n", machine.describe_context(), math.promaddr);
 			}
 
 			UPDATE_SEQUENCE;
@@ -356,14 +359,14 @@ static void kick_sn74s516(running_machine &machine, UINT16 *data, const int ins)
 			else if (ins == 7)
 			{
 				/* 6667 = Load X, Load Z, Load W, Clear Z */
-				SN74S516.ZW.Z = 0;
+				SN74S516.ZW.as16bit.Z = 0;
 				sn74s516_update(machine, ins);
 			}
 			break;
 		}
 		default:
 		{
-			mame_printf_debug("Unknown SN74S516 state. %x\n", SN74S516.code);
+			osd_printf_debug("Unknown SN74S516 state. %x\n", SN74S516.code);
 		}
 	}
 
@@ -676,7 +679,7 @@ READ16_MEMBER(tx1_state::tx1_math_r)
 			else if (math.mux == TX1_SEL_PSSEN)
 			{
 				// WRONG!!!!
-				mame_printf_debug("Math Read with PSSEN!\n");
+				osd_printf_debug("Math Read with PSSEN!\n");
 				math.ppshift = math.retval;
 			}
 
@@ -928,7 +931,7 @@ READ16_MEMBER(tx1_state::tx1_spcs_ram_r)
 /* Should never occur */
 WRITE16_MEMBER(tx1_state::tx1_spcs_ram_w)
 {
-	mame_printf_debug("Write to /SPCS RAM?");
+	osd_printf_debug("Write to /SPCS RAM?");
 	COMBINE_DATA(&m_math_ram[offset]);
 }
 
@@ -952,7 +955,7 @@ enum
 	BB_MUX_DPROE,
 	BB_MUX_PPOE,
 	BB_MUX_INSCL,
-	BB_MUX_ILDEN,
+	BB_MUX_ILDEN
 };
 
 #define BB_SET_INS0_BIT do { if (!(ins & 0x4) && math.i0ff) ins |= math.i0ff;} while(0)
@@ -1003,7 +1006,7 @@ static void buggyboy_update_state(running_machine &machine)
 		else if (math.mux == BB_MUX_PPSEN)
 		{
 			// TODO: Needed?
-			//mame_printf_debug("/PPSEN with INS: %x\n", math.promaddr);
+			//osd_printf_debug("/PPSEN with INS: %x\n", math.promaddr);
 			//math.ppshift = lastval;//math.cpulatch;
 		}
 
@@ -1237,13 +1240,13 @@ WRITE16_MEMBER(tx1_state::buggyboy_math_w)
 		}
 		else
 		{
-			mame_printf_debug("BB_DSEL was not 3 for P->S load!\n");
+			osd_printf_debug("BB_DSEL was not 3 for P->S load!\n");
 			debugger_break(machine());
 		}
 	}
 	else
 	{
-		mame_printf_debug("Buggy Boy unknown math state!\n");
+		osd_printf_debug("Buggy Boy unknown math state!\n");
 		debugger_break(machine());
 	}
 
@@ -1403,10 +1406,16 @@ READ16_MEMBER(tx1_state::buggyboy_spcs_ram_r)
 
 MACHINE_RESET_MEMBER(tx1_state,buggyboy)
 {
+	// TODO: This is connected to the /BUSACK line of the Z80
+	m_maincpu->set_input_line(INPUT_LINE_TEST, ASSERT_LINE);
+
 	memset(&m_math, 0, sizeof(m_math));
 }
 
 MACHINE_RESET_MEMBER(tx1_state,tx1)
 {
+	// TODO: This is connected to the /BUSACK line of the Z80
+	m_maincpu->set_input_line(INPUT_LINE_TEST, ASSERT_LINE);
+
 	memset(&m_math, 0, sizeof(m_math));
 }

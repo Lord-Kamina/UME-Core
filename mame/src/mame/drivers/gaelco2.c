@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia
 /***************************************************************************
 
     Gaelco CG-1V/GAE1 based games
 
-    Driver by Manuel Abadia <manu@teleline.es>
+    Driver by Manuel Abadia <emumanu+mame@gmail.com>
 
     Known games that run on this hardware:
     ======================================
@@ -20,7 +22,7 @@
 ***************************************************************************/
 
 #include "emu.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "sound/gaelco.h"
 #include "rendlay.h"
 #include "includes/gaelco2.h"
@@ -147,12 +149,6 @@ static INPUT_PORTS_START( maniacsq )
 	PORT_BIT( 0xffc0, IP_ACTIVE_LOW, IPT_UNKNOWN )
 INPUT_PORTS_END
 
-static const gaelcosnd_interface maniacsq_snd_interface =
-{
-	"gfx1",                                 /* memory region */
-	{ 0*0x0080000, 1*0x0080000, 0, 0 },     /* start of each ROM bank */
-};
-
 static MACHINE_CONFIG_START( maniacsq, gaelco2_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, 26000000/2)     /* 13 MHz? */
@@ -169,17 +165,19 @@ static MACHINE_CONFIG_START( maniacsq, gaelco2_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 320-1, 16, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gaelco2_state, screen_update_gaelco2)
 	MCFG_SCREEN_VBLANK_DEVICE("spriteram", buffered_spriteram16_device, vblank_copy_rising)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(0x0080000)
-	MCFG_PALETTE_LENGTH(4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", 0x0080000)
+	MCFG_PALETTE_ADD("palette", 4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
 
 	MCFG_VIDEO_START_OVERRIDE(gaelco2_state,gaelco2)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	MCFG_GAELCO_GAE1_ADD("gaelco", 0)
-	MCFG_SOUND_CONFIG(maniacsq_snd_interface)
+	MCFG_DEVICE_ADD("gaelco", GAELCO_GAE1, 0)
+	MCFG_GAELCO_SND_DATA("gfx1")
+	MCFG_GAELCO_BANKS(0 * 0x0080000, 1 * 0x0080000, 0, 0)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -249,7 +247,7 @@ static INPUT_PORTS_START( bang )
 	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_SERVICE1 )
 	PORT_BIT( 0x0010, IP_ACTIVE_LOW, IPT_START1 )
 	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_START2 )
-	PORT_BIT( 0x0040, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit) /* bit 6 is EEPROM data (DOUT) */
+	PORT_BIT( 0x0040, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read) /* bit 6 is EEPROM data (DOUT) */
 	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_SPECIAL )  /* bit 7 is EEPROM ready */
 
 	PORT_START("LIGHT0_X")
@@ -265,32 +263,13 @@ static INPUT_PORTS_START( bang )
 	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_Y ) PORT_CROSSHAIR(Y, 1.0, -6.0 / 240, 0) PORT_SENSITIVITY(35) PORT_KEYDELTA(15) PORT_PLAYER(2)
 INPUT_PORTS_END
 
-static const gaelcosnd_interface bang_snd_interface =
-{
-	"gfx1",                                                 /* memory region */
-	{ 0*0x0200000, 1*0x0200000, 2*0x0200000, 3*0x0200000 }  /* start of each ROM bank */
-};
-
-static const eeprom_interface gaelco2_eeprom_interface =
-{
-	8,              /* address bits */
-	16,             /* data bits */
-	"*110",         /* read command */
-	"*101",         /* write command */
-	"*111",         /* erase command */
-	"*10000xxxxxx", /* lock command */
-	"*10011xxxxxx", /* unlock command */
-//  "*10001xxxxxx", /* write all */
-//  "*10010xxxxxx", /* erase all */
-};
-
 static MACHINE_CONFIG_START( bang, gaelco2_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, 30000000/2)         /* 15 MHz */
 	MCFG_CPU_PROGRAM_MAP(bang_map)
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", gaelco2_state, bang_irq, "screen", 0, 1)
 
-	MCFG_EEPROM_ADD("eeprom", gaelco2_eeprom_interface)
+	MCFG_EEPROM_SERIAL_93C66_ADD("eeprom")
 
 	/* video hardware */
 	MCFG_BUFFERED_SPRITERAM16_ADD("spriteram")
@@ -302,17 +281,19 @@ static MACHINE_CONFIG_START( bang, gaelco2_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 320-1, 16, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gaelco2_state, screen_update_gaelco2)
 	MCFG_SCREEN_VBLANK_DEVICE("spriteram", buffered_spriteram16_device, vblank_copy_rising)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(0x0200000)
-	MCFG_PALETTE_LENGTH(4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", 0x0200000)
+	MCFG_PALETTE_ADD("palette", 4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
 
 	MCFG_VIDEO_START_OVERRIDE(gaelco2_state,gaelco2)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	MCFG_GAELCO_CG1V_ADD("gaelco", 0)
-	MCFG_SOUND_CONFIG(bang_snd_interface)
+	MCFG_DEVICE_ADD("gaelco", GAELCO_CG1V, 0)
+	MCFG_GAELCO_SND_DATA("gfx1")
+	MCFG_GAELCO_BANKS(0 * 0x0200000, 1 * 0x0200000, 2 * 0x0200000, 3 * 0x0200000)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -521,12 +502,6 @@ static INPUT_PORTS_START( alighunt )
 	PORT_BIT( 0xffc0, IP_ACTIVE_LOW, IPT_UNKNOWN )
 INPUT_PORTS_END
 
-static const gaelcosnd_interface alighunt_snd_interface =
-{
-	"gfx1",                                                 /* memory region */
-	{ 0*0x0400000, 1*0x0400000, 2*0x0400000, 3*0x0400000 }  /* start of each ROM bank */
-};
-
 static MACHINE_CONFIG_START( alighunt, gaelco2_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, 24000000/2)         /* 12 MHz */
@@ -543,17 +518,19 @@ static MACHINE_CONFIG_START( alighunt, gaelco2_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 320-1, 16, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gaelco2_state, screen_update_gaelco2)
 	MCFG_SCREEN_VBLANK_DEVICE("spriteram", buffered_spriteram16_device, vblank_copy_rising)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(0x0400000)
-	MCFG_PALETTE_LENGTH(4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", 0x0400000)
+	MCFG_PALETTE_ADD("palette", 4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
 
 	MCFG_VIDEO_START_OVERRIDE(gaelco2_state,gaelco2)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	MCFG_GAELCO_GAE1_ADD("gaelco", 0)
-	MCFG_SOUND_CONFIG(alighunt_snd_interface)
+	MCFG_DEVICE_ADD("gaelco", GAELCO_GAE1, 0)
+	MCFG_GAELCO_SND_DATA("gfx1")
+	MCFG_GAELCO_BANKS(0 * 0x0400000, 1 * 0x0400000, 2 * 0x0400000, 3 * 0x0400000)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -763,12 +740,6 @@ static INPUT_PORTS_START( touchgo )
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SERVICE4 ) PORT_TOGGLE
 INPUT_PORTS_END
 
-static const gaelcosnd_interface touchgo_snd_interface =
-{
-	"gfx1",                                 /* memory region */
-	{ 0*0x0400000, 1*0x0400000, 0, 0 }      /* start of each ROM bank */
-};
-
 static MACHINE_CONFIG_START( touchgo, gaelco2_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, 32000000/2)         /* 16 MHz */
@@ -777,8 +748,8 @@ static MACHINE_CONFIG_START( touchgo, gaelco2_state )
 
 	/* video hardware */
 	MCFG_BUFFERED_SPRITERAM16_ADD("spriteram")
-	MCFG_GFXDECODE(0x0400000)
-	MCFG_PALETTE_LENGTH(4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", 0x0400000)
+	MCFG_PALETTE_ADD("palette", 4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
 	MCFG_DEFAULT_LAYOUT(layout_dualhsxs)
 
 	MCFG_SCREEN_ADD("lscreen", RASTER)
@@ -787,6 +758,7 @@ static MACHINE_CONFIG_START( touchgo, gaelco2_state )
 	MCFG_SCREEN_SIZE(64*16, 32*16)
 	MCFG_SCREEN_VISIBLE_AREA(0, 480-1, 16, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gaelco2_state, screen_update_gaelco2_left)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_SCREEN_ADD("rscreen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(59.1)
@@ -795,6 +767,7 @@ static MACHINE_CONFIG_START( touchgo, gaelco2_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 480-1, 16, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gaelco2_state, screen_update_gaelco2_right)
 	MCFG_SCREEN_VBLANK_DEVICE("spriteram", buffered_spriteram16_device, vblank_copy_rising)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(gaelco2_state,gaelco2_dual)
 
@@ -802,8 +775,10 @@ static MACHINE_CONFIG_START( touchgo, gaelco2_state )
 	/* the chip is stereo, but the game sound is mono because the right channel
 	   output is for cabinet 1 and the left channel output is for cabinet 2 */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-	MCFG_GAELCO_GAE1_ADD("gaelco", 0)
-	MCFG_SOUND_CONFIG(touchgo_snd_interface)
+
+	MCFG_DEVICE_ADD("gaelco", GAELCO_GAE1, 0)
+	MCFG_GAELCO_SND_DATA("gfx1")
+	MCFG_GAELCO_BANKS(0 * 0x0400000, 1 * 0x0400000, 0, 0)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -951,15 +926,9 @@ static INPUT_PORTS_START( snowboar )
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_SERVICE1 )
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_START1 )
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_START2 )
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)   /* bit 6 is EEPROM data (DOUT) */
-	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_SPECIAL )    /* bit 7 is EEPROM ready */
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)   /* bit 6 is EEPROM data (DOUT) */
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_SPECIAL )
 INPUT_PORTS_END
-
-static const gaelcosnd_interface snowboar_snd_interface =
-{
-	"gfx1",                                 /* memory region */
-	{ 0*0x0400000, 1*0x0400000, 0, 0 }      /* start of each ROM bank */
-};
 
 static MACHINE_CONFIG_START( snowboar, gaelco2_state )
 	/* basic machine hardware */
@@ -967,7 +936,7 @@ static MACHINE_CONFIG_START( snowboar, gaelco2_state )
 	MCFG_CPU_PROGRAM_MAP(snowboar_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", gaelco2_state,  irq6_line_hold)
 
-	MCFG_EEPROM_ADD("eeprom", gaelco2_eeprom_interface)
+	MCFG_EEPROM_SERIAL_93C66_ADD("eeprom")
 
 	/* video hardware */
 	MCFG_BUFFERED_SPRITERAM16_ADD("spriteram")
@@ -979,17 +948,19 @@ static MACHINE_CONFIG_START( snowboar, gaelco2_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 384-1, 16, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gaelco2_state, screen_update_gaelco2)
 	MCFG_SCREEN_VBLANK_DEVICE("spriteram", buffered_spriteram16_device, vblank_copy_rising)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(0x0400000)
-	MCFG_PALETTE_LENGTH(4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", 0x0400000)
+	MCFG_PALETTE_ADD("palette", 4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
 
 	MCFG_VIDEO_START_OVERRIDE(gaelco2_state,gaelco2)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	MCFG_GAELCO_CG1V_ADD("gaelco", 0)
-	MCFG_SOUND_CONFIG(snowboar_snd_interface)
+	MCFG_DEVICE_ADD("gaelco", GAELCO_CG1V, 0)
+	MCFG_GAELCO_SND_DATA("gfx1")
+	MCFG_GAELCO_BANKS(0 * 0x0400000, 1 * 0x0400000, 0, 0)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -1196,24 +1167,18 @@ static INPUT_PORTS_START( wrally2 )
 	PORT_BIT( 0xff, 0x8A, IPT_PADDLE_V ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(25) PORT_KEYDELTA(25) PORT_REVERSE PORT_NAME("P2 Wheel")
 INPUT_PORTS_END
 
-static const gaelcosnd_interface wrally2_snd_interface =
-{
-	"gfx1",                             /* memory region */
-	{ 0*0x0200000, 1*0x0200000, 0, 0 }  /* start of each ROM bank */
-};
-
 static MACHINE_CONFIG_START( wrally2, gaelco2_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, 26000000/2)         /* 13 MHz */
 	MCFG_CPU_PROGRAM_MAP(wrally2_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("lscreen", gaelco2_state,  irq6_line_hold)
 
-	MCFG_EEPROM_ADD("eeprom", gaelco2_eeprom_interface)
+	MCFG_EEPROM_SERIAL_93C66_ADD("eeprom")
 
 	/* video hardware */
 	MCFG_BUFFERED_SPRITERAM16_ADD("spriteram")
-	MCFG_GFXDECODE(0x0200000)
-	MCFG_PALETTE_LENGTH(4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", 0x0200000)
+	MCFG_PALETTE_ADD("palette", 4096*16 - 16)   /* game's palette is 4096 but we allocate 15 more for shadows & highlights */
 	MCFG_DEFAULT_LAYOUT(layout_dualhsxs)
 
 	MCFG_SCREEN_ADD("lscreen", RASTER)
@@ -1222,6 +1187,7 @@ static MACHINE_CONFIG_START( wrally2, gaelco2_state )
 	MCFG_SCREEN_SIZE(384, 32*16)
 	MCFG_SCREEN_VISIBLE_AREA(0, 384-1, 16, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gaelco2_state, screen_update_gaelco2_left)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_SCREEN_ADD("rscreen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(59.1)
@@ -1230,6 +1196,7 @@ static MACHINE_CONFIG_START( wrally2, gaelco2_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 384-1, 16, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gaelco2_state, screen_update_gaelco2_right)
 	MCFG_SCREEN_VBLANK_DEVICE("spriteram", buffered_spriteram16_device, vblank_copy_rising)
+	MCFG_SCREEN_PALETTE("palette")
 
 
 	MCFG_VIDEO_START_OVERRIDE(gaelco2_state,gaelco2_dual)
@@ -1238,8 +1205,10 @@ static MACHINE_CONFIG_START( wrally2, gaelco2_state )
 	/* the chip is stereo, but the game sound is mono because the right channel
 	   output is for cabinet 1 and the left channel output is for cabinet 2 */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-	MCFG_GAELCO_GAE1_ADD("gaelco", 0)
-	MCFG_SOUND_CONFIG(wrally2_snd_interface)
+
+	MCFG_DEVICE_ADD("gaelco", GAELCO_GAE1, 0)
+	MCFG_GAELCO_SND_DATA("gfx1")
+	MCFG_GAELCO_BANKS(0 * 0x0200000, 1 * 0x0200000, 0, 0)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END

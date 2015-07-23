@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*****************************************************************************
 
   74148 8-line-to-3-line priority encoder
@@ -41,48 +43,57 @@
 #ifndef TTL74148_H
 #define TTL74148_H
 
-#include "devlegcy.h"
 
+typedef device_delegate<void (void)> ttl74148_output_delegate;
 
-struct ttl74148_config
-{
-	void (*output_cb)(device_t *device);
-};
+#define TTL74148_OUTPUT_CB(_name) void _name(void)
 
-
-#define MCFG_74148_ADD(_tag, _config) \
-	MCFG_DEVICE_ADD(_tag, TTL74148, 0) \
-	MCFG_DEVICE_CONFIG(_config)
-
-
-/* must call ttl74148_update() after setting the inputs */
-void ttl74148_update(device_t *device);
-
-void ttl74148_input_line_w(device_t *device, int input_line, int data);
-void ttl74148_enable_input_w(device_t *device, int data);
-int  ttl74148_output_r(device_t *device);
-int  ttl74148_output_valid_r(device_t *device);
-int  ttl74148_enable_output_r(device_t *device);
 
 class ttl74148_device : public device_t
 {
 public:
 	ttl74148_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	~ttl74148_device() { global_free(m_token); }
+	~ttl74148_device() {}
 
-	// access to legacy token
-	void *token() const { assert(m_token != NULL); return m_token; }
+	static void set_output_callback(device_t &device, ttl74148_output_delegate callback) { downcast<ttl74148_device &>(device).m_output_cb = callback; }
+
+	/* must call update() after setting the inputs */
+	void update();
+
+	void input_line_w(int input_line, int data);
+	void enable_input_w(int data);
+	int  output_r();
+	int  output_valid_r();
+	int  enable_output_r();
+
 protected:
 	// device-level overrides
-	virtual void device_config_complete();
 	virtual void device_start();
 	virtual void device_reset();
 private:
 	// internal state
-	void *m_token;
+	ttl74148_output_delegate m_output_cb;
+
+	/* inputs */
+	int m_input_lines[8]; /* pins 1-4,10-13 */
+	int m_enable_input;   /* pin 5 */
+
+	/* outputs */
+	int m_output;         /* pins 6,7,9 */
+	int m_output_valid;   /* pin 14 */
+	int m_enable_output;  /* pin 15 */
+
+	/* internals */
+	int m_last_output;
+	int m_last_output_valid;
+	int m_last_enable_output;
 };
 
 extern const device_type TTL74148;
+
+
+#define MCFG_74148_OUTPUT_CB(_class, _method) \
+	ttl74148_device::set_output_callback(*device, ttl74148_output_delegate(&_class::_method, #_class "::" #_method, downcast<_class *>(owner)));
 
 
 #endif

@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     tms32031.c
 
     TMS32031/2 emulator
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -96,9 +67,9 @@ const int LVFLAG    = 0x0020;
 const int LUFFLAG   = 0x0040;
 const int OVMFLAG   = 0x0080;
 const int RMFLAG    = 0x0100;
-const int CFFLAG    = 0x0400;
-const int CEFLAG    = 0x0800;
-const int CCFLAG    = 0x1000;
+//const int CFFLAG    = 0x0400;
+//const int CEFLAG    = 0x0800;
+//const int CCFLAG    = 0x1000;
 const int GIEFLAG   = 0x2000;
 
 
@@ -291,15 +262,13 @@ tms3203x_device::tms3203x_device(const machine_config &mconfig, device_type type
 		m_irq_pending(false),
 		m_is_idling(false),
 		m_icount(0),
-		m_irq_callback(0),
 		m_program(0),
-		m_direct(0)
+		m_direct(0),
+		m_mcbl_mode(false),
+		m_xf0_cb(*this),
+		m_xf1_cb(*this),
+		m_iack_cb(*this)
 {
-	m_mcbl_mode = false;
-	m_xf0_w = NULL;
-	m_xf1_w = NULL;
-	m_iack_w = NULL;
-
 	// initialize remaining state
 	memset(&m_r, 0, sizeof(m_r));
 
@@ -350,18 +319,6 @@ tms3203x_device::~tms3203x_device()
 
 
 //-------------------------------------------------
-//  static_set_config - set the configuration
-//  structure
-//-------------------------------------------------
-
-void tms3203x_device::static_set_config(device_t &device, const tms3203x_config &config)
-{
-	tms3203x_device &tms = downcast<tms3203x_device &>(device);
-	static_cast<tms3203x_config &>(tms) = config;
-}
-
-
-//-------------------------------------------------
 //  rom_region - return a pointer to the device's
 //  internal ROM region
 //-------------------------------------------------
@@ -382,7 +339,7 @@ const rom_entry *tms3203x_device::device_rom_region() const
 
 inline UINT32 tms3203x_device::ROPCODE(offs_t pc)
 {
-	return m_direct->read_decrypted_dword(pc << 2);
+	return m_direct->read_dword(pc << 2);
 }
 
 
@@ -418,6 +375,11 @@ void tms3203x_device::device_start()
 	// find address spaces
 	m_program = &space(AS_PROGRAM);
 	m_direct = &m_program->direct();
+
+	// resolve devcb handlers
+	m_xf0_cb.resolve_safe();
+	m_xf1_cb.resolve_safe();
+	m_iack_cb.resolve_safe();
 
 	// set up the internal boot loader ROM
 	m_bootrom = reinterpret_cast<UINT32*>(memregion(shortname())->base());
@@ -532,7 +494,6 @@ void tms3203x_device::state_import(const device_state_entry &entry)
 
 		default:
 			fatalerror("CPU_IMPORT_STATE(tms3203x) called for unexpected value\n");
-			break;
 	}
 }
 
@@ -559,7 +520,6 @@ void tms3203x_device::state_export(const device_state_entry &entry)
 
 		default:
 			fatalerror("CPU_IMPORT_STATE(tms3203x) called for unexpected value\n");
-			break;
 	}
 }
 
@@ -569,7 +529,7 @@ void tms3203x_device::state_export(const device_state_entry &entry)
 //  for the debugger
 //-------------------------------------------------
 
-void tms3203x_device::state_string_export(const device_state_entry &entry, astring &string)
+void tms3203x_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
@@ -581,12 +541,12 @@ void tms3203x_device::state_string_export(const device_state_entry &entry, astri
 		case TMS3203X_R5F:
 		case TMS3203X_R6F:
 		case TMS3203X_R7F:
-			string.printf("%12g", m_r[TMR_R0 + (entry.index() - TMS3203X_R0F)].as_double());
+			strprintf(str, "%12g", m_r[TMR_R0 + (entry.index() - TMS3203X_R0F)].as_double());
 			break;
 
 		case STATE_GENFLAGS:
 			UINT32 temp = m_r[TMR_ST].i32[0];
-			string.printf("%c%c%c%c%c%c%c%c",
+			strprintf(str, "%c%c%c%c%c%c%c%c",
 				(temp & 0x80) ? 'O':'.',
 				(temp & 0x40) ? 'U':'.',
 				(temp & 0x20) ? 'V':'.',

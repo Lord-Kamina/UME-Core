@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         Homebrew Z80 Computer by Kun-Szabo Marton
@@ -292,9 +294,10 @@ static MACHINE_CONFIG_START( homez80, homez80_state )
 	MCFG_SCREEN_UPDATE_DRIVER(homez80_state, screen_update)
 	MCFG_SCREEN_SIZE(344, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 344-1, 0, 32*8-1)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(black_and_white)
-	MCFG_GFXDECODE( homez80 )
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", homez80 )
 MACHINE_CONFIG_END
 
 /* ROM definition */

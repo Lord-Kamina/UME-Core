@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi
 /***************************************************************************
 
 Truco Clemente (c) 1991 Miky SRL
@@ -36,13 +38,13 @@ Daughterboard: Custom made, plugged in the 2 roms and Z80 mainboard sockets.
 #include "includes/trucocl.h"
 
 
-void trucocl_state::palette_init()
+PALETTE_INIT_MEMBER(trucocl_state, trucocl)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
 	for (i = 0;i < 32;i++)
-		palette_set_color_rgb(machine(),i,pal4bit(color_prom[i] >> 0),pal4bit(color_prom[i+32] >> 0),pal4bit(color_prom[i+32] >> 4));
+		palette.set_pen_color(i,pal4bit(color_prom[i] >> 0),pal4bit(color_prom[i+32] >> 0),pal4bit(color_prom[i+32] >> 4));
 }
 
 WRITE8_MEMBER(trucocl_state::trucocl_videoram_w)
@@ -73,11 +75,11 @@ TILE_GET_INFO_MEMBER(trucocl_state::get_bg_tile_info)
 
 void trucocl_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(trucocl_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,  8, 8, 32, 32 );
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(trucocl_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,  8, 8, 32, 32 );
 }
 
 UINT32 trucocl_state::screen_update_trucocl(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

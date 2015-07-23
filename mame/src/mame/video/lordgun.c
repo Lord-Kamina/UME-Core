@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /*************************************************************************************************************
 
                                                 -= IGS Lord Of Gun =-
@@ -50,7 +52,7 @@ WRITE16_MEMBER(lordgun_state::lordgun_paletteram_w)
 {
 	COMBINE_DATA(&m_generic_paletteram_16[offset]);
 	for (int pri = 0; pri < 8; pri++)
-		palette_set_color_rgb(machine(), offset+0x800*pri, pal4bit(data >> 0), pal4bit(data >> 4), pal4bit(data >> 8));
+		m_palette->set_pen_color(offset+0x800*pri, pal4bit(data >> 0), pal4bit(data >> 4), pal4bit(data >> 8));
 }
 
 
@@ -66,7 +68,7 @@ inline void lordgun_state::get_tile_info(tile_data &tileinfo, tilemap_memory_ind
 	UINT16 attr = m_vram[_N_][tile_index * 2 + 0 ];
 	UINT16 code = m_vram[_N_][ tile_index * 2 + 1 ];
 	UINT16 pri  = (attr & 0x0e00) >> 9;
-	SET_TILE_INFO_MEMBER( _N_, code, ((attr & 0x0030) >> 4) + 0x10 + 0x4 * ((_N_ + 1) & 3) + pri*0x800/0x40, TILE_FLIPXY(attr >> 14));
+	SET_TILE_INFO_MEMBER(_N_, code, ((attr & 0x0030) >> 4) + 0x10 + 0x4 * ((_N_ + 1) & 3) + pri*0x800/0x40, TILE_FLIPXY(attr >> 14));
 }
 
 TILE_GET_INFO_MEMBER(lordgun_state::get_tile_info_0){ get_tile_info(tileinfo, tile_index, 0); }
@@ -95,20 +97,20 @@ WRITE16_MEMBER(lordgun_state::lordgun_vram_3_w){ lordgun_vram_w(offset, data, me
 void lordgun_state::video_start()
 {
 	int i;
-	int w = machine().primary_screen->width();
-	int h = machine().primary_screen->height();
+	int w = m_screen->width();
+	int h = m_screen->height();
 
 	// 0x800 x 200
-	m_tilemap[0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lordgun_state::get_tile_info_0),this), TILEMAP_SCAN_ROWS,8,8, 0x100, 0x40 );
+	m_tilemap[0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lordgun_state::get_tile_info_0),this), TILEMAP_SCAN_ROWS,8,8, 0x100, 0x40 );
 
 	// 0x800 x 200
-	m_tilemap[1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lordgun_state::get_tile_info_1),this), TILEMAP_SCAN_ROWS,16,16, 0x80,0x20 );
+	m_tilemap[1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lordgun_state::get_tile_info_1),this), TILEMAP_SCAN_ROWS,16,16, 0x80,0x20 );
 
 	// 0x800 x 200
-	m_tilemap[2] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lordgun_state::get_tile_info_2),this), TILEMAP_SCAN_ROWS,32,32, 0x40,0x10 );
+	m_tilemap[2] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lordgun_state::get_tile_info_2),this), TILEMAP_SCAN_ROWS,32,32, 0x40,0x10 );
 
 	// 0x200 x 100
-	m_tilemap[3] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lordgun_state::get_tile_info_3),this), TILEMAP_SCAN_ROWS,8,8, 0x40,0x20 );
+	m_tilemap[3] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lordgun_state::get_tile_info_3),this), TILEMAP_SCAN_ROWS,8,8, 0x40,0x20 );
 
 	m_tilemap[0]->set_scroll_rows(1);
 	m_tilemap[0]->set_scroll_cols(1);
@@ -174,7 +176,7 @@ float lordgun_crosshair_mapper(ioport_field *field, float linear_value)
 {
 	int x = linear_value - 0x3c;
 
-	if ( (x < 0) || (x > sizeof(lordgun_gun_x_table)/sizeof(lordgun_gun_x_table[0])) )
+	if ( (x < 0) || (x > ARRAY_LENGTH(lordgun_gun_x_table)) )
 		x = 0;
 
 	return lordgun_gun_x_table[x] * 1.0f / 0x1BF;
@@ -186,7 +188,7 @@ void lordgun_state::lorddgun_calc_gun_scr(int i)
 
 	int x = ioport(gunnames[i])->read() - 0x3c;
 
-	if ( (x < 0) || (x > sizeof(lordgun_gun_x_table)/sizeof(lordgun_gun_x_table[0])) )
+	if ( (x < 0) || (x > ARRAY_LENGTH(lordgun_gun_x_table)) )
 		x = 0;
 
 	m_gun[i].scr_x = lordgun_gun_x_table[x];
@@ -195,7 +197,7 @@ void lordgun_state::lorddgun_calc_gun_scr(int i)
 
 void lordgun_state::lordgun_update_gun(int i)
 {
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	m_gun[i].hw_x = ioport(gunnames[i])->read();
 	m_gun[i].hw_y = ioport(gunnames[i+2])->read();
@@ -273,7 +275,7 @@ void lordgun_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect
 		{
 			for (x = x0; x != x1; x += dx)
 			{
-				drawgfx_transpen(   bitmap, cliprect, machine().gfx[4],
+				m_gfxdecode->gfx(4)->transpen(bitmap,cliprect,
 									code, color + pri * 0x800/0x40,
 									flipx, flipy,
 									sx + x * 0x10, sy + y * 0x10,
@@ -332,7 +334,7 @@ UINT32 lordgun_state::screen_update_lordgun(screen_device &screen, bitmap_ind16 
 
 	if (m_whitescreen)
 	{
-		bitmap.fill(get_white_pen(machine()), cliprect);
+		bitmap.fill(m_palette->white_pen(), cliprect);
 		return 0;
 	}
 
@@ -364,10 +366,10 @@ UINT32 lordgun_state::screen_update_lordgun(screen_device &screen, bitmap_ind16 
 	for (l = 0; l < 5; l++)
 		m_bitmaps[l]->fill(trans_pen, cliprect);
 
-	if (layers_ctrl & 1)    m_tilemap[0]->draw(*m_bitmaps[0], cliprect, 0, 0);
-	if (layers_ctrl & 2)    m_tilemap[1]->draw(*m_bitmaps[1], cliprect, 0, 0);
-	if (layers_ctrl & 4)    m_tilemap[2]->draw(*m_bitmaps[2], cliprect, 0, 0);
-	if (layers_ctrl & 8)    m_tilemap[3]->draw(*m_bitmaps[3], cliprect, 0, 0);
+	if (layers_ctrl & 1)    m_tilemap[0]->draw(screen, *m_bitmaps[0], cliprect, 0, 0);
+	if (layers_ctrl & 2)    m_tilemap[1]->draw(screen, *m_bitmaps[1], cliprect, 0, 0);
+	if (layers_ctrl & 4)    m_tilemap[2]->draw(screen, *m_bitmaps[2], cliprect, 0, 0);
+	if (layers_ctrl & 8)    m_tilemap[3]->draw(screen, *m_bitmaps[3], cliprect, 0, 0);
 	if (layers_ctrl & 16)   draw_sprites(*m_bitmaps[4], cliprect);
 
 	// copy to screen bitmap

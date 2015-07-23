@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Atronic Russian Video Fruit Machines */
 /*
  From 1999? (documentation is dated August 99)
@@ -68,8 +70,9 @@ static MACHINE_CONFIG_START( atronic, atronic_state )
 	MCFG_SCREEN_UPDATE_DRIVER(atronic_state, screen_update)
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 32*8-1)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_PALETTE_ADD("palette", 8)
 
 MACHINE_CONFIG_END
 

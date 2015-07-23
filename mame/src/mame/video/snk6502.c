@@ -1,6 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Dan Boris
 /***************************************************************************
 
-  video.c
+  snk6502.c
 
   Functions to emulate the video hardware of the machine.
 
@@ -10,8 +12,8 @@
 #include "includes/snk6502.h"
 
 
-#define TOTAL_COLORS(m,gfxn) ((m).gfx[gfxn]->colors() * (m).gfx[gfxn]->granularity())
-#define COLOR(m,gfxn,offs) ((m).config().m_gfxdecodeinfo[gfxn].color_codes_start + offs)
+#define TOTAL_COLORS(gfxn) (m_gfxdecode->gfx(gfxn)->colors() * m_gfxdecode->gfx(gfxn)->granularity())
+#define COLOR(gfxn,offs) (m_gfxdecode->gfx(gfxn)->colorbase() + offs)
 
 
 
@@ -27,7 +29,7 @@ PALETTE_INIT_MEMBER(snk6502_state,snk6502)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int bit0, bit1, bit2, r, g, b;
 
@@ -55,73 +57,69 @@ PALETTE_INIT_MEMBER(snk6502_state,snk6502)
 
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		m_palette[i] = MAKE_RGB(r, g, b);
+		m_palette_val[i] = rgb_t(r, g, b);
 
 		color_prom++;
 	}
 
 	m_backcolor = 0;    /* background color can be changed by the game */
 
-	for (i = 0; i < TOTAL_COLORS(machine(),0); i++)
-		palette_set_color(machine(), COLOR(machine(), 0, i), m_palette[i]);
+	for (i = 0; i < TOTAL_COLORS(0); i++)
+		palette.set_pen_color(COLOR(0, i), m_palette_val[i]);
 
-	for (i = 0; i < TOTAL_COLORS(machine(),1); i++)
+	for (i = 0; i < TOTAL_COLORS(1); i++)
 	{
 		if (i % 4 == 0)
-			palette_set_color(machine(), COLOR(machine(), 1, i), m_palette[4 * m_backcolor + 0x20]);
+			palette.set_pen_color(COLOR(1, i), m_palette_val[4 * m_backcolor + 0x20]);
 		else
-			palette_set_color(machine(), COLOR(machine(), 1, i), m_palette[i + 0x20]);
+			palette.set_pen_color(COLOR(1, i), m_palette_val[i + 0x20]);
 	}
 }
 
-WRITE8_MEMBER(snk6502_state::snk6502_videoram_w)
+WRITE8_MEMBER(snk6502_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(snk6502_state::snk6502_videoram2_w)
+WRITE8_MEMBER(snk6502_state::videoram2_w)
 {
 	m_videoram2[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(snk6502_state::snk6502_colorram_w)
+WRITE8_MEMBER(snk6502_state::colorram_w)
 {
 	m_colorram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(snk6502_state::snk6502_charram_w)
+WRITE8_MEMBER(snk6502_state::charram_w)
 {
 	if (m_charram[offset] != data)
 	{
 		m_charram[offset] = data;
-		machine().gfx[0]->mark_dirty((offset/8) % 256);
+		m_gfxdecode->gfx(0)->mark_dirty((offset/8) % 256);
 	}
 }
 
 
-WRITE8_MEMBER(snk6502_state::snk6502_flipscreen_w)
+WRITE8_MEMBER(snk6502_state::flipscreen_w)
 {
-	int bank;
-
 	/* bits 0-2 select background color */
 
 	if (m_backcolor != (data & 7))
 	{
-		int i;
-
 		m_backcolor = data & 7;
 
-		for (i = 0;i < 32;i += 4)
-			palette_set_color(machine(), COLOR(machine(), 1, i), m_palette[4 * m_backcolor + 0x20]);
+		for (int i = 0;i < 32;i += 4)
+			m_palette->set_pen_color(COLOR(1, i), m_palette_val[4 * m_backcolor + 0x20]);
 	}
 
 	/* bit 3 selects char bank */
 
-	bank = (~data & 0x08) >> 3;
+	int bank = (~data & 0x08) >> 3;
 
 	if (m_charbank != bank)
 	{
@@ -138,12 +136,12 @@ WRITE8_MEMBER(snk6502_state::snk6502_flipscreen_w)
 	}
 }
 
-WRITE8_MEMBER(snk6502_state::snk6502_scrollx_w)
+WRITE8_MEMBER(snk6502_state::scrollx_w)
 {
 	m_bg_tilemap->set_scrollx(0, data);
 }
 
-WRITE8_MEMBER(snk6502_state::snk6502_scrolly_w)
+WRITE8_MEMBER(snk6502_state::scrolly_w)
 {
 	m_bg_tilemap->set_scrolly(0, data);
 }
@@ -167,12 +165,18 @@ TILE_GET_INFO_MEMBER(snk6502_state::get_fg_tile_info)
 
 VIDEO_START_MEMBER(snk6502_state,snk6502)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk6502_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk6502_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk6502_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk6502_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 
-	machine().gfx[0]->set_source(m_charram);
+	m_gfxdecode->gfx(0)->set_source(m_charram);
+	machine().save().register_postload(save_prepost_delegate(FUNC(snk6502_state::postload), this));
+}
+
+void snk6502_state::postload()
+{
+	m_gfxdecode->gfx(0)->mark_all_dirty();
 }
 
 VIDEO_START_MEMBER(snk6502_state,pballoon)
@@ -184,10 +188,10 @@ VIDEO_START_MEMBER(snk6502_state,pballoon)
 }
 
 
-UINT32 snk6502_state::screen_update_snk6502(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 snk6502_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -198,7 +202,7 @@ PALETTE_INIT_MEMBER(snk6502_state,satansat)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int bit0, bit1, bit2, r, g, b;
 
@@ -226,22 +230,22 @@ PALETTE_INIT_MEMBER(snk6502_state,satansat)
 
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		m_palette[i] = MAKE_RGB(r, g, b);
+		m_palette_val[i] = rgb_t(r, g, b);
 
 		color_prom++;
 	}
 
 	m_backcolor = 0;    /* background color can be changed by the game */
 
-	for (i = 0; i < TOTAL_COLORS(machine(),0); i++)
-		palette_set_color(machine(), COLOR(machine(), 0, i), m_palette[4 * (i % 4) + (i / 4)]);
+	for (i = 0; i < TOTAL_COLORS(0); i++)
+		palette.set_pen_color(COLOR(0, i), m_palette_val[4 * (i % 4) + (i / 4)]);
 
-	for (i = 0; i < TOTAL_COLORS(machine(),1); i++)
+	for (i = 0; i < TOTAL_COLORS(1); i++)
 	{
 		if (i % 4 == 0)
-			palette_set_color(machine(), COLOR(machine(), 1, i), m_palette[m_backcolor + 0x10]);
+			palette.set_pen_color(COLOR(1, i), m_palette_val[m_backcolor + 0x10]);
 		else
-			palette_set_color(machine(), COLOR(machine(), 1, i), m_palette[4 * (i % 4) + (i / 4) + 0x10]);
+			palette.set_pen_color(COLOR(1, i), m_palette_val[4 * (i % 4) + (i / 4) + 0x10]);
 	}
 }
 
@@ -267,12 +271,10 @@ WRITE8_MEMBER(snk6502_state::satansat_backcolor_w)
 
 	if (m_backcolor != (data & 0x03))
 	{
-		int i;
-
 		m_backcolor = data & 0x03;
 
-		for (i = 0; i < 16; i += 4)
-			palette_set_color(machine(), COLOR(machine(), 1, i), m_palette[m_backcolor + 0x10]);
+		for (int i = 0; i < 16; i += 4)
+			m_palette->set_pen_color(COLOR(1, i), m_palette_val[m_backcolor + 0x10]);
 	}
 }
 
@@ -294,10 +296,11 @@ TILE_GET_INFO_MEMBER(snk6502_state::satansat_get_fg_tile_info)
 
 VIDEO_START_MEMBER(snk6502_state,satansat)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk6502_state::satansat_get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(snk6502_state::satansat_get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk6502_state::satansat_get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(snk6502_state::satansat_get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 
-	machine().gfx[0]->set_source(m_charram);
+	m_gfxdecode->gfx(0)->set_source(m_charram);
+	machine().save().register_postload(save_prepost_delegate(FUNC(snk6502_state::postload), this));
 }

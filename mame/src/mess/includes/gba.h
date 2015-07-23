@@ -1,9 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont,Ryan Holtz
 #ifndef _GBA_H_
 #define _GBA_H_
 
 #include "audio/gb.h"
 #include "machine/intelfsh.h"
-#include "machine/gba_slot.h"
+#include "bus/gba/gba_slot.h"
 #include "sound/dac.h"
 
 #define DISPSTAT_VBL            0x0001
@@ -138,9 +140,10 @@ public:
 		m_lbdac(*this, "direct_b_left"),
 		m_rbdac(*this, "direct_b_right"),
 		m_gbsound(*this, "custom"),
-		m_cartslot(*this, "cartslot"),
+		m_cart(*this, "cartslot"),
 		m_region_maincpu(*this, "maincpu"),
-		m_io_in0(*this, "IN0")
+		m_io_inputs(*this, "INPUTS"),
+		m_bios_hack(*this, "SKIP_CHECK")
 	{ }
 
 	required_device<cpu_device> m_maincpu;
@@ -152,7 +155,7 @@ public:
 	required_device<dac_device> m_lbdac;
 	required_device<dac_device> m_rbdac;
 	required_device<gameboy_sound_device> m_gbsound;
-	required_device<gba_cart_slot_device> m_cartslot;
+	required_device<gba_cart_slot_device> m_cart;
 
 	void request_irq(UINT32 int_type);
 	void dma_exec(FPTR ch);
@@ -245,7 +248,7 @@ public:
 	DECLARE_DRIVER_INIT(gbadv);
 	virtual void machine_start();
 	virtual void machine_reset();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(gba);
 	TIMER_CALLBACK_MEMBER(dma_complete);
 	TIMER_CALLBACK_MEMBER(timer_expire);
 	TIMER_CALLBACK_MEMBER(handle_irq);
@@ -267,8 +270,9 @@ public:
 	void draw_modes(int mode, int submode, int y, UINT32* line0, UINT32* line1, UINT32* line2, UINT32* line3, UINT32* lineOBJ, UINT32* lineOBJWin, UINT32* lineMix, int bpp);
 
 protected:
-	required_memory_region m_region_maincpu;
-	required_ioport m_io_in0;
+	required_region_ptr<UINT32> m_region_maincpu;
+	required_ioport m_io_inputs;
+	required_ioport m_bios_hack;
 };
 
 

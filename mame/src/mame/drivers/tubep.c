@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Jarek Burczynski
 /***************************************************************************
 
 Tube Panic
@@ -322,16 +324,16 @@ TIMER_CALLBACK_MEMBER(tubep_state::tubep_scanline_callback)
 	}
 
 
-	machine().primary_screen->update_partial(machine().primary_screen->vpos());
+	m_screen->update_partial(m_screen->vpos());
 
 	//debug
-	logerror("scanline=%3i scrgetvpos(0)=%3i\n",scanline,machine().primary_screen->vpos());
+	logerror("scanline=%3i scrgetvpos(0)=%3i\n",scanline,m_screen->vpos());
 
 	scanline++;
 	if (scanline >= 264)
 		scanline = 0;
 
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(scanline), scanline);
+	m_interrupt_timer->adjust(m_screen->time_until_pos(scanline), scanline);
 }
 
 
@@ -363,7 +365,7 @@ MACHINE_START_MEMBER(tubep_state,tubep)
 
 MACHINE_RESET_MEMBER(tubep_state,tubep)
 {
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(0));
+	m_interrupt_timer->adjust(m_screen->time_until_pos(0));
 }
 
 
@@ -503,15 +505,15 @@ TIMER_CALLBACK_MEMBER(tubep_state::rjammer_scanline_callback)
 	}
 
 
-	machine().primary_screen->update_partial(machine().primary_screen->vpos());
+	m_screen->update_partial(m_screen->vpos());
 
-	logerror("scanline=%3i scrgetvpos(0)=%3i\n", scanline, machine().primary_screen->vpos());
+	logerror("scanline=%3i scrgetvpos(0)=%3i\n", scanline, m_screen->vpos());
 
 	scanline++;
 	if (scanline >= 264)
 		scanline = 0;
 
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(scanline), scanline);
+	m_interrupt_timer->adjust(m_screen->time_until_pos(scanline), scanline);
 }
 
 
@@ -525,7 +527,7 @@ MACHINE_START_MEMBER(tubep_state,rjammer)
 
 MACHINE_RESET_MEMBER(tubep_state,rjammer)
 {
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(0));
+	m_interrupt_timer->adjust(m_screen->time_until_pos(0));
 }
 
 
@@ -847,51 +849,6 @@ static INPUT_PORTS_START( rjammer )
 INPUT_PORTS_END
 
 
-
-/*************************************
- *
- *  Sound definitions
- *
- *************************************/
-
-static const ay8910_interface ay8910_interface_1 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(tubep_state,ay8910_portA_0_w), /* write port A */
-	DEVCB_DRIVER_MEMBER(tubep_state,ay8910_portB_0_w)  /* write port B */
-};
-
-static const ay8910_interface ay8910_interface_2 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(tubep_state,ay8910_portA_1_w), /* write port A */
-	DEVCB_DRIVER_MEMBER(tubep_state,ay8910_portB_1_w)  /* write port B */
-};
-
-static const ay8910_interface ay8910_interface_3 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(tubep_state,ay8910_portA_2_w), /* write port A */
-	DEVCB_DRIVER_MEMBER(tubep_state,ay8910_portB_2_w)  /* write port B */
-};
-
-static const msm5205_interface msm5205_config =
-{
-	DEVCB_DRIVER_LINE_MEMBER(tubep_state,rjammer_adpcm_vck),          /* VCK function */
-	MSM5205_S48_4B              /* 8 KHz (changes at run time) */
-};
-
-
-
 /*************************************
  *
  *  Machine driver
@@ -927,10 +884,11 @@ static MACHINE_CONFIG_START( tubep, tubep_state )
 	MCFG_SCREEN_SIZE(256, 264)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tubep_state, screen_update_tubep)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(32 + 256*64)
+	MCFG_PALETTE_ADD("palette", 32 + 256*64)
 
-	MCFG_PALETTE_INIT_OVERRIDE(tubep_state,tubep)
+	MCFG_PALETTE_INIT_OWNER(tubep_state,tubep)
 	MCFG_VIDEO_START_OVERRIDE(tubep_state,tubep)
 	MCFG_VIDEO_RESET_OVERRIDE(tubep_state,tubep)
 
@@ -938,15 +896,18 @@ static MACHINE_CONFIG_START( tubep, tubep_state )
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ay1", AY8910, 19968000 / 8 / 2)
-	MCFG_SOUND_CONFIG(ay8910_interface_1)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(tubep_state, ay8910_portA_0_w)) /* write port A */
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(tubep_state, ay8910_portB_0_w)) /* write port B */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 
 	MCFG_SOUND_ADD("ay2", AY8910, 19968000 / 8 / 2)
-	MCFG_SOUND_CONFIG(ay8910_interface_2)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(tubep_state, ay8910_portA_1_w)) /* write port A */
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(tubep_state, ay8910_portB_1_w)) /* write port B */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 
 	MCFG_SOUND_ADD("ay3", AY8910, 19968000 / 8 / 2)
-	MCFG_SOUND_CONFIG(ay8910_interface_3)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(tubep_state, ay8910_portA_2_w)) /* write port A */
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(tubep_state, ay8910_portB_2_w)) /* write port B */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 MACHINE_CONFIG_END
 
@@ -987,10 +948,11 @@ static MACHINE_CONFIG_START( rjammer, tubep_state )
 	MCFG_SCREEN_SIZE(256, 264)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tubep_state, screen_update_rjammer)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(64)
+	MCFG_PALETTE_ADD("palette", 64)
 
-	MCFG_PALETTE_INIT_OVERRIDE(tubep_state,rjammer)
+	MCFG_PALETTE_INIT_OWNER(tubep_state,rjammer)
 	MCFG_VIDEO_START_OVERRIDE(tubep_state,tubep)
 	MCFG_VIDEO_RESET_OVERRIDE(tubep_state,tubep)
 
@@ -998,19 +960,23 @@ static MACHINE_CONFIG_START( rjammer, tubep_state )
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ay1", AY8910, 19968000 / 8 / 2)
-	MCFG_SOUND_CONFIG(ay8910_interface_1)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(tubep_state, ay8910_portA_0_w)) /* write port A */
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(tubep_state, ay8910_portB_0_w)) /* write port B */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 
 	MCFG_SOUND_ADD("ay2", AY8910, 19968000 / 8 / 2)
-	MCFG_SOUND_CONFIG(ay8910_interface_2)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(tubep_state, ay8910_portA_1_w)) /* write port A */
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(tubep_state, ay8910_portB_1_w)) /* write port B */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 
 	MCFG_SOUND_ADD("ay3", AY8910, 19968000 / 8 / 2)
-	MCFG_SOUND_CONFIG(ay8910_interface_3)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(tubep_state, ay8910_portA_2_w)) /* write port A */
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(tubep_state, ay8910_portB_2_w)) /* write port B */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 
 	MCFG_SOUND_ADD("msm", MSM5205, 384000)
-	MCFG_SOUND_CONFIG(msm5205_config)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(tubep_state, rjammer_adpcm_vck))          /* VCK function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)              /* 8 KHz (changes at run time) */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 

@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Sebastien Volpe, Tomasz Slanina, David Haywood
 /*
     Super Real Mahjong P6 (JPN Ver.)
     (c)1996 Seta
@@ -79,7 +81,9 @@ public:
 		m_chrram(*this, "chrram"),
 		m_dmaram(*this, "dmaram"),
 		m_video_regs(*this, "video_regs"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	UINT16* m_tileram;
 	required_shared_ptr<UINT16> m_sprram;
@@ -105,11 +109,14 @@ public:
 	DECLARE_WRITE16_MEMBER(paletteram_w);
 	DECLARE_READ16_MEMBER(srmp6_irq_ack_r);
 	DECLARE_DRIVER_INIT(INIT);
+	virtual void machine_start();
 	virtual void video_start();
 	UINT32 screen_update_srmp6(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	void update_palette();
 	UINT32 process(UINT8 b,UINT32 dst_offset);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 #define VERBOSE 0
@@ -134,9 +141,9 @@ void srmp6_state::update_palette()
 
 	for(i = 0; i < 0x800; i++)
 	{
-		r = m_generic_paletteram_16[i] >>  0 & 0x1F;
-		g = m_generic_paletteram_16[i] >>  5 & 0x1F;
-		b = m_generic_paletteram_16[i] >> 10 & 0x1F;
+		r = m_palette->basemem().read16(i) >>  0 & 0x1F;
+		g = m_palette->basemem().read16(i) >>  5 & 0x1F;
+		b = m_palette->basemem().read16(i) >> 10 & 0x1F;
 
 		if(brg < 0) {
 			r += (r * brg) >> 5;
@@ -154,7 +161,7 @@ void srmp6_state::update_palette()
 			b += ((0x1F - b) * brg) >> 5;
 			if(b > 0x1F) b = 0x1F;
 		}
-		palette_set_color(machine(), i, MAKE_RGB(r << 3, g << 3, b << 3));
+		m_palette->set_pen_color(i, rgb_t(r << 3, g << 3, b << 3));
 	}
 }
 
@@ -165,8 +172,8 @@ void srmp6_state::video_start()
 	m_sprram_old = auto_alloc_array_clear(machine(), UINT16, 0x80000/2);
 
 	/* create the char set (gfx will then be updated dynamically from RAM) */
-	machine().gfx[0] = auto_alloc(machine(), gfx_element(machine(), tiles8x8_layout, (UINT8*)m_tileram, machine().total_colors() / 256, 0));
-	machine().gfx[0]->set_granularity(256);
+	m_gfxdecode->set_gfx(0, global_alloc(gfx_element(m_palette, tiles8x8_layout, (UINT8*)m_tileram, 0, m_palette->entries() / 256, 0)));
+	m_gfxdecode->gfx(0)->set_granularity(256);
 
 	m_brightness = 0x60;
 }
@@ -273,7 +280,7 @@ UINT32 srmp6_state::screen_update_srmp6(screen_device &screen, bitmap_rgb32 &bit
 						else
 							yb=y+(height-yw-1)*8+global_y;
 
-						drawgfx_alpha(bitmap,cliprect,machine().gfx[0],tileno,global_pal,flip_x,flip_y,xb,yb,0,alpha);
+						m_gfxdecode->gfx(0)->alpha(bitmap,cliprect,tileno,global_pal,flip_x,flip_y,xb,yb,0,alpha);
 						tileno++;
 					}
 				}
@@ -302,6 +309,11 @@ UINT32 srmp6_state::screen_update_srmp6(screen_device &screen, bitmap_rgb32 &bit
     Main CPU memory handlers
 ***************************************************************************/
 
+void srmp6_state::machine_start()
+{
+	membank("bank1")->configure_entries(0, 16, memregion("nile")->base(), 0x200000);
+}
+
 WRITE16_MEMBER(srmp6_state::srmp6_input_select_w)
 {
 	m_input_select = data & 0x0f;
@@ -309,7 +321,7 @@ WRITE16_MEMBER(srmp6_state::srmp6_input_select_w)
 
 READ16_MEMBER(srmp6_state::srmp6_inputs_r)
 {
-	if (offset == 0)            // DSW
+	if (offset == 0) // DSW
 		return ioport("DSW")->read();
 
 	switch (m_input_select) // inputs
@@ -330,9 +342,8 @@ WRITE16_MEMBER(srmp6_state::video_regs_w)
 	{
 		case 0x5e/2: // bank switch, used by ROM check
 		{
-			const UINT8 *rom = memregion("nile")->base();
 			LOG(("%x\n",data));
-			membank("bank1")->set_base((UINT16 *)(rom + (data & 0x0f)*0x200000));
+			membank("bank1")->set_entry(data & 0x0f);
 			break;
 		}
 
@@ -385,7 +396,7 @@ UINT32 srmp6_state::process(UINT8 b,UINT32 dst_offset)
 		for(i=0;i<rle;++i)
 		{
 			tram[dst_offset + m_destl] = m_lastb;
-			machine().gfx[0]->mark_dirty((dst_offset + m_destl)/0x40);
+			m_gfxdecode->gfx(0)->mark_dirty((dst_offset + m_destl)/0x40);
 
 			dst_offset++;
 			++l;
@@ -399,7 +410,7 @@ UINT32 srmp6_state::process(UINT8 b,UINT32 dst_offset)
 		m_lastb2 = m_lastb;
 		m_lastb = b;
 		tram[dst_offset + m_destl] = b;
-		machine().gfx[0]->mark_dirty((dst_offset + m_destl)/0x40);
+		m_gfxdecode->gfx(0)->mark_dirty((dst_offset + m_destl)/0x40);
 
 		return 1;
 	}
@@ -502,7 +513,7 @@ WRITE16_MEMBER(srmp6_state::paletteram_w)
 	INT8 r, g, b;
 	int brg = m_brightness - 0x60;
 
-	paletteram_xBBBBBGGGGGRRRRR_word_w(space, offset, data, mem_mask);
+	m_palette->write(space, offset, data, mem_mask);
 
 	if(brg)
 	{
@@ -527,7 +538,7 @@ WRITE16_MEMBER(srmp6_state::paletteram_w)
 			if(b > 0x1F) b = 0x1F;
 		}
 
-		palette_set_color(machine(), offset, MAKE_RGB(r << 3, g << 3, b << 3));
+		m_palette->set_pen_color(offset, rgb_t(r << 3, g << 3, b << 3));
 	}
 }
 
@@ -540,11 +551,11 @@ READ16_MEMBER(srmp6_state::srmp6_irq_ack_r)
 static ADDRESS_MAP_START( srmp6_map, AS_PROGRAM, 16, srmp6_state )
 	AM_RANGE(0x000000, 0x0fffff) AM_ROM
 	AM_RANGE(0x200000, 0x23ffff) AM_RAM                 // work RAM
-	AM_RANGE(0x600000, 0x7fffff) AM_ROMBANK("bank1")        // banked ROM (used by ROM check)
+	AM_RANGE(0x600000, 0x7fffff) AM_ROMBANK("bank1")    // banked ROM (used by ROM check)
 	AM_RANGE(0x800000, 0x9fffff) AM_ROM AM_REGION("user1", 0)
 
 	AM_RANGE(0x300000, 0x300005) AM_READWRITE(srmp6_inputs_r, srmp6_input_select_w)     // inputs
-	AM_RANGE(0x480000, 0x480fff) AM_RAM_WRITE(paletteram_w) AM_SHARE("paletteram")
+	AM_RANGE(0x480000, 0x480fff) AM_RAM_WRITE(paletteram_w) AM_SHARE("palette")
 	AM_RANGE(0x4d0000, 0x4d0001) AM_READ(srmp6_irq_ack_r)
 
 	// OBJ RAM: checked [$400000-$47dfff]
@@ -675,8 +686,10 @@ static MACHINE_CONFIG_START( srmp6, srmp6_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 42*8-1, 0*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(srmp6_state, screen_update_srmp6)
 
-	MCFG_PALETTE_LENGTH(0x800)
+	MCFG_PALETTE_ADD("palette", 0x800)
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
 
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", empty)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -717,5 +730,4 @@ ROM_END
     Game driver(s)
 ***************************************************************************/
 
-/*GAME( YEAR,NAME,PARENT,MACHINE,INPUT,CLASS,INIT,MONITOR,COMPANY,FULLNAME,FLAGS)*/
 GAME( 1995, srmp6, 0, srmp6, srmp6, driver_device, 0, ROT0, "Seta", "Super Real Mahjong P6 (Japan)", GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND)

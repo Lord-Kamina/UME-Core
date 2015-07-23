@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /* Sega System 32 Protection related functions */
 
 #include "emu.h"
@@ -37,16 +39,14 @@ void segas32_state::decrypt_ga2_protrom()
 {
 	int i;
 	UINT8 *rom = memregion("mcu")->base();
-	UINT8* temp = auto_alloc_array(machine(), UINT8, 0x100000);
+	dynamic_buffer temp(0x100000);
 
 	// make copy of ROM so original can be overwritten
-	memcpy(temp, rom, 0x10000);
+	memcpy(&temp[0], rom, 0x10000);
 
 	// unscramble the address lines
 	for(i = 0; i < 0x10000; i++)
 		rom[i] = temp[BITSWAP16(i, 14, 11, 15, 12, 13, 4, 3, 7, 5, 10, 2, 8, 9, 6, 1, 0)];
-
-	auto_free(machine(), temp);
 }
 
 WRITE16_MEMBER(segas32_state::ga2_dpram_w)
@@ -205,9 +205,9 @@ WRITE16_MEMBER(segas32_state::brival_protection_w)
  ******************************************************************************
  ******************************************************************************/
 
-void darkedge_fd1149_vblank(device_t *device)
+void segas32_state::darkedge_fd1149_vblank()
 {
-	address_space &space = device->memory().space(AS_PROGRAM);
+	address_space &space = m_maincpu->space(AS_PROGRAM);
 
 	space.write_word(0x20f072, 0);
 	space.write_word(0x20f082, 0);
@@ -241,9 +241,9 @@ READ16_MEMBER(segas32_state::darkedge_protection_r)
  ******************************************************************************
  ******************************************************************************/
 
-void f1lap_fd1149_vblank(device_t *device)
+void segas32_state::f1lap_fd1149_vblank()
 {
-	address_space &space = device->memory().space(AS_PROGRAM);
+	address_space &space = m_maincpu->space(AS_PROGRAM);
 
 	space.write_byte(0x20F7C6, 0);
 

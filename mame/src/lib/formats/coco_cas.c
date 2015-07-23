@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /**************************************************************************
 
     coco_cas.c
@@ -31,6 +33,7 @@
 
 **************************************************************************/
 
+#include "emu.h" // PAIR
 #include "coco_cas.h"
 
 #define COCO_WAVESAMPLES_HEADER     (1.0)
@@ -39,24 +42,6 @@
 
 //some games load with only 5s, but most games need 15s
 #define ALICE32_WAVESAMPLES_HEADER  (15.0)
-
-// PAIR is an endian-safe union useful for representing 32-bit CPU registers
-union PAIR
-{
-#ifdef LSB_FIRST
-	struct { UINT8 l,h,h2,h3; } b;
-	struct { UINT16 l,h; } w;
-	struct { INT8 l,h,h2,h3; } sb;
-	struct { INT16 l,h; } sw;
-#else
-	struct { UINT8 h3,h2,h,l; } b;
-	struct { INT8 h3,h2,h,l; } sb;
-	struct { UINT16 h,l; } w;
-	struct { INT16 h,l; } sw;
-#endif
-	UINT32 d;
-	INT32 sd;
-};
 
 static int synccount;
 

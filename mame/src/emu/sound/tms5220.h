@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Frank Palazzolo, Aaron Giles, Jonathan Gevaryahu, Raphael Nabet, Couriersud, Michael Zapf
 #pragma once
 
 #ifndef __TMS5220_H__
@@ -17,11 +19,11 @@
 
 /* IRQ callback function, active low, i.e. state=0 */
 #define MCFG_TMS52XX_IRQ_HANDLER(_devcb) \
-	devcb = &tms5220_device::set_irq_handler(*device, DEVCB2_##_devcb);
+	devcb = &tms5220_device::set_irq_handler(*device, DEVCB_##_devcb);
 
 /* Ready callback function, active low, i.e. state=0 */
 #define MCFG_TMS52XX_READYQ_HANDLER(_devcb) \
-	devcb = &tms5220_device::set_readyq_handler(*device, DEVCB2_##_devcb);
+	devcb = &tms5220_device::set_readyq_handler(*device, DEVCB_##_devcb);
 
 #define MCFG_TMS52XX_SPEECHROM(_tag) \
 	tms5220_device::set_speechrom_tag(*device, _tag);
@@ -31,11 +33,11 @@ class tms5220_device : public device_t,
 {
 public:
 	tms5220_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	tms5220_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	tms5220_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 
 	// static configuration helpers
-	template<class _Object> static devcb2_base &set_irq_handler(device_t &device, _Object object) { return downcast<tms5220_device &>(device).m_irq_handler.set_callback(object); }
-	template<class _Object> static devcb2_base &set_readyq_handler(device_t &device, _Object object) { return downcast<tms5220_device &>(device).m_readyq_handler.set_callback(object); }
+	template<class _Object> static devcb_base &set_irq_handler(device_t &device, _Object object) { return downcast<tms5220_device &>(device).m_irq_handler.set_callback(object); }
+	template<class _Object> static devcb_base &set_readyq_handler(device_t &device, _Object object) { return downcast<tms5220_device &>(device).m_readyq_handler.set_callback(object); }
 	static void set_speechrom_tag(device_t &device, const char *_tag) { downcast<tms5220_device &>(device).m_speechrom_tag = _tag; }
 
 	/* Control lines - once written to will switch interface into
@@ -73,7 +75,7 @@ protected:
 private:
 	void register_for_save_states();
 	void data_write(int data);
-	void update_status_and_ints();
+	void update_fifo_status_and_ints();
 	int extract_bits(int count);
 	int status_read();
 	int ready_read();
@@ -156,7 +158,7 @@ private:
 	/* TODO/NOTE: the current interpolation period, counts 1,2,3,4,5,6,7,0 for divide by 8,8,8,4,4,2,2,1 */
 	UINT8 m_IP;               /* the current interpolation period */
 	UINT8 m_inhibit;          /* If 1, interpolation is inhibited until the DIV1 period */
-	UINT8 m_tms5220c_rate;    /* only relevant for tms5220C's multi frame rate feature; is the actual 4 bit value written on a 0x2* or 0x0* command */
+	UINT8 m_c_variant_rate;    /* only relevant for tms5220C's multi frame rate feature; is the actual 4 bit value written on a 0x2* or 0x0* command */
 	UINT16 m_pitch_count;     /* pitch counter; provides chirp rom address */
 
 	INT32 m_u[11];
@@ -197,8 +199,8 @@ private:
 	emu_timer *m_timer_io_ready;
 
 	/* callbacks */
-	devcb2_write_line m_irq_handler;
-	devcb2_write_line m_readyq_handler;
+	devcb_write_line m_irq_handler;
+	devcb_write_line m_readyq_handler;
 	const char *m_speechrom_tag;
 	speechrom_device *m_speechrom;
 };
@@ -216,16 +218,16 @@ protected:
 
 extern const device_type TMS5220C;
 
-class tmc0285_device : public tms5220_device
+class cd2501e_device : public tms5220_device
 {
 public:
-	tmc0285_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+	cd2501e_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 protected:
 	// device-level overrides
 	virtual void device_start();
 };
 
-extern const device_type TMC0285;
+extern const device_type CD2501E;
 
 class tms5200_device : public tms5220_device
 {
@@ -237,5 +239,16 @@ protected:
 };
 
 extern const device_type TMS5200;
+
+class cd2501ecd_device : public tms5220_device
+{
+public:
+	cd2501ecd_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+protected:
+	// device-level overrides
+	virtual void device_start();
+};
+
+extern const device_type CD2501ECD;
 
 #endif

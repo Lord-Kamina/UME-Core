@@ -1,37 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Sega 16-bit common hardware
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -75,7 +46,9 @@ sega_16bit_common_base::sega_16bit_common_base(const machine_config &mconfig, de
 	: driver_device(mconfig, type, tag),
 		m_paletteram(*this, "paletteram"),
 		m_open_bus_recurse(false),
-		m_palette_entries(0)
+		m_palette_entries(0),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette")
 {
 	palette_init();
 }
@@ -186,9 +159,9 @@ WRITE16_MEMBER( sega_16bit_common_base::paletteram_w )
 	int b = ((newval >> 14) & 0x01) | ((newval >> 7) & 0x1e);
 
 	// normal colors
-	palette_set_color_rgb(machine(), offset + 0 * m_palette_entries, m_palette_normal[r],  m_palette_normal[g],  m_palette_normal[b]);
-	palette_set_color_rgb(machine(), offset + 1 * m_palette_entries, m_palette_shadow[r],  m_palette_shadow[g],  m_palette_shadow[b]);
-	palette_set_color_rgb(machine(), offset + 2 * m_palette_entries, m_palette_hilight[r], m_palette_hilight[g], m_palette_hilight[b]);
+	m_palette->set_pen_color(offset + 0 * m_palette_entries, m_palette_normal[r],  m_palette_normal[g],  m_palette_normal[b]);
+	m_palette->set_pen_color(offset + 1 * m_palette_entries, m_palette_shadow[r],  m_palette_shadow[g],  m_palette_shadow[b]);
+	m_palette->set_pen_color(offset + 2 * m_palette_entries, m_palette_hilight[r], m_palette_hilight[g], m_palette_hilight[b]);
 }
 
 
@@ -202,10 +175,11 @@ WRITE16_MEMBER( sega_16bit_common_base::paletteram_w )
 //-------------------------------------------------
 
 sega_315_5195_mapper_device::sega_315_5195_mapper_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, SEGA_315_5195_MEM_MAPPER, "Sega 315-5195 Memory Mapper", tag, owner, clock),
+	: device_t(mconfig, SEGA_315_5195_MEM_MAPPER, "Sega 315-5195 Memory Mapper", tag, owner, clock, "sega_315_5195", __FILE__),
 		m_cputag(NULL),
 		m_cpu(NULL),
 		m_space(NULL),
+		m_decrypted_space(NULL),
 		m_curregion(0)
 {
 }
@@ -257,7 +231,7 @@ WRITE8_MEMBER( sega_315_5195_mapper_device::write )
 	// wraps every 32 bytes
 	offset &= 0x1f;
 
-if (LOG_MEMORY_MAP) mame_printf_debug("(Write %02X = %02X)\n", offset, data);
+if (LOG_MEMORY_MAP) osd_printf_debug("(Write %02X = %02X)\n", offset, data);
 
 	// remember the previous value and swap in the new one
 	UINT8 oldval = m_regs[offset];
@@ -381,16 +355,16 @@ READ8_MEMBER( sega_315_5195_mapper_device::read )
 //  map_as_rom - map a region as ROM data
 //-------------------------------------------------
 
-void sega_315_5195_mapper_device::map_as_rom(UINT32 offset, UINT32 length, offs_t mirror, const char *bank_name, offs_t rgnoffset, write16_delegate whandler)
+void sega_315_5195_mapper_device::map_as_rom(UINT32 offset, UINT32 length, offs_t mirror, const char *bank_name, const char *decrypted_bank_name, offs_t rgnoffset, write16_delegate whandler)
 {
 	// determine parameters
 	region_info info;
 	compute_region(info, m_curregion, length, mirror, offset);
 	if (LOG_MEMORY_MAP)
 	{
-		mame_printf_debug("Map %06X-%06X (%06X) as ROM+%06X(%s)", info.start, info.end, info.mirror, rgnoffset, bank_name);
-		if (!whandler.isnull()) mame_printf_debug(" with handler=%s", whandler.name());
-		mame_printf_debug("\n");
+		osd_printf_debug("Map %06X-%06X (%06X) as ROM+%06X(%s)", info.start, info.end, info.mirror, rgnoffset, bank_name);
+		if (!whandler.isnull()) osd_printf_debug(" with handler=%s", whandler.name());
+		osd_printf_debug("\n");
 	}
 
 	// don't map if the start is past the end of the ROM region
@@ -404,14 +378,17 @@ void sega_315_5195_mapper_device::map_as_rom(UINT32 offset, UINT32 length, offs_
 
 		// map now
 		m_space->install_read_bank(info.start, romend, 0, info.mirror, bank_name);
+		if (m_decrypted_space)
+			m_decrypted_space->install_read_bank(info.start, romend, 0, info.mirror, decrypted_bank_name);
 
 		// configure the bank
 		memory_bank *bank = owner()->membank(bank_name);
+		memory_bank *decrypted_bank = owner()->membank(decrypted_bank_name);
 		UINT8 *memptr = m_cpu->region()->base() + rgnoffset;
 		bank->set_base(memptr);
 
 		// remember this bank, and decrypt if necessary
-		m_banks[m_curregion].set(bank, info.start, romend, rgnoffset, memptr);
+		m_banks[m_curregion].set(bank, decrypted_bank, info.start, romend, rgnoffset, memptr);
 	}
 
 	// either install a write handler if provided or unmap the region
@@ -438,9 +415,9 @@ void sega_315_5195_mapper_device::map_as_ram(UINT32 offset, UINT32 length, offs_
 	compute_region(info, m_curregion, length, mirror, offset);
 	if (LOG_MEMORY_MAP)
 	{
-		mame_printf_debug("Map %06X-%06X (%06X) as RAM(%s)", info.start, info.end, info.mirror, bank_share_name);
-		if (!whandler.isnull()) mame_printf_debug(" with handler=%s", whandler.name());
-		mame_printf_debug("\n");
+		osd_printf_debug("Map %06X-%06X (%06X) as RAM(%s)", info.start, info.end, info.mirror, bank_share_name);
+		if (!whandler.isnull()) osd_printf_debug(" with handler=%s", whandler.name());
+		osd_printf_debug("\n");
 	}
 
 	// map now
@@ -473,10 +450,10 @@ void sega_315_5195_mapper_device::map_as_handler(UINT32 offset, UINT32 length, o
 	compute_region(info, m_curregion, length, mirror, offset);
 	if (LOG_MEMORY_MAP)
 	{
-		mame_printf_debug("Map %06X-%06X (%06X) as handler", info.start, info.end, info.mirror);
-		if (!rhandler.isnull()) mame_printf_debug(" read=%s", rhandler.name());
-		if (!whandler.isnull()) mame_printf_debug(" write=%s", whandler.name());
-		mame_printf_debug("\n");
+		osd_printf_debug("Map %06X-%06X (%06X) as handler", info.start, info.end, info.mirror);
+		if (!rhandler.isnull()) osd_printf_debug(" read=%s", rhandler.name());
+		if (!whandler.isnull()) osd_printf_debug(" write=%s", whandler.name());
+		osd_printf_debug("\n");
 	}
 
 	// install read/write handlers
@@ -551,6 +528,8 @@ void sega_315_5195_mapper_device::device_start()
 	if (m_space == NULL)
 		throw emu_fatalerror("Unable to find program address space on device '%s'", m_cputag);
 
+	m_decrypted_space = m_cpu->has_space(AS_DECRYPTED_OPCODES) ? &m_cpu->space(AS_DECRYPTED_OPCODES) : NULL;
+
 	// register for saves
 	save_item(NAME(m_regs));
 }
@@ -598,7 +577,7 @@ void sega_315_5195_mapper_device::compute_region(region_info &info, UINT8 index,
 
 void sega_315_5195_mapper_device::update_mapping()
 {
-	if (LOG_MEMORY_MAP) mame_printf_debug("----\nRemapping:\n");
+	if (LOG_MEMORY_MAP) osd_printf_debug("----\nRemapping:\n");
 
 	// first reset everything back to the beginning
 	m_space->install_readwrite_handler(0x000000, 0xffffff, read8_delegate(FUNC(sega_315_5195_mapper_device::read), this), write8_delegate(FUNC(sega_315_5195_mapper_device::write), this), 0x00ff);
@@ -624,12 +603,12 @@ void sega_315_5195_mapper_device::update_mapping()
 
 sega_315_5195_mapper_device::decrypt_bank::decrypt_bank()
 	: m_bank(NULL),
+		m_decrypted_bank(NULL),
 		m_start(0),
 		m_end(0),
 		m_rgnoffs(~0),
 		m_srcptr(NULL),
-		m_fd1089(NULL),
-		m_fd1094_cache(NULL)
+		m_fd1089(NULL)
 {
 	// invalidate all states
 	reset();
@@ -642,8 +621,6 @@ sega_315_5195_mapper_device::decrypt_bank::decrypt_bank()
 
 sega_315_5195_mapper_device::decrypt_bank::~decrypt_bank()
 {
-	// delete any allocated cache
-	global_free(m_fd1094_cache);
 }
 
 
@@ -658,18 +635,17 @@ void sega_315_5195_mapper_device::decrypt_bank::set_decrypt(fd1089_base_device *
 	m_fd1089 = fd1089;
 
 	// clear out all fd1094 stuff
-	delete m_fd1094_cache;
-	m_fd1094_cache = NULL;
+	m_fd1094_cache.reset();
 }
 
 void sega_315_5195_mapper_device::decrypt_bank::set_decrypt(fd1094_device *fd1094)
 {
 	// set the fd1094 pointer and allocate a decryption cache
-	m_fd1094_cache = global_alloc(fd1094_decryption_cache(*fd1094));
+	m_fd1094_cache.reset(global_alloc(fd1094_decryption_cache(*fd1094)));
 
 	// clear out all fd1089 stuff
 	m_fd1089 = NULL;
-	m_fd1089_decrypted.reset();
+	m_fd1089_decrypted.clear();
 }
 
 
@@ -678,7 +654,7 @@ void sega_315_5195_mapper_device::decrypt_bank::set_decrypt(fd1094_device *fd109
 //  a change
 //-------------------------------------------------
 
-void sega_315_5195_mapper_device::decrypt_bank::set(memory_bank *bank, offs_t start, offs_t end, offs_t rgnoffs, UINT8 *src)
+void sega_315_5195_mapper_device::decrypt_bank::set(memory_bank *bank, memory_bank *decrypted_bank, offs_t start, offs_t end, offs_t rgnoffs, UINT8 *src)
 {
 	// ignore if not encrypted
 	if (m_fd1089 == NULL && m_fd1094_cache == NULL)
@@ -693,6 +669,7 @@ void sega_315_5195_mapper_device::decrypt_bank::set(memory_bank *bank, offs_t st
 
 	// update to the current state
 	m_bank = bank;
+	m_decrypted_bank = decrypted_bank;
 	m_start = start;
 	m_end = end;
 	m_rgnoffs = rgnoffs;
@@ -722,13 +699,13 @@ void sega_315_5195_mapper_device::decrypt_bank::update()
 	if (m_fd1089 != NULL)
 	{
 		m_fd1089_decrypted.resize((m_end + 1 - m_start) / 2);
-		m_fd1089->decrypt(m_start, m_end + 1 - m_start, m_rgnoffs, m_fd1089_decrypted, reinterpret_cast<UINT16 *>(m_srcptr));
-		m_bank->set_base_decrypted(m_fd1089_decrypted);
+		m_fd1089->decrypt(m_start, m_end + 1 - m_start, m_rgnoffs, &m_fd1089_decrypted[0], reinterpret_cast<UINT16 *>(m_srcptr));
+		m_decrypted_bank->set_base(&m_fd1089_decrypted[0]);
 	}
 
 	// fd1094 case
 	if (m_fd1094_cache != NULL)
-		m_bank->set_base_decrypted(m_fd1094_cache->decrypted_opcodes(m_fd1094_cache->fd1094().state()));
+		m_decrypted_bank->set_base(m_fd1094_cache->decrypted_opcodes(m_fd1094_cache->fd1094().state()));
 }
 
 
@@ -742,7 +719,7 @@ void sega_315_5195_mapper_device::decrypt_bank::update()
 //-------------------------------------------------
 
 sega_315_5248_multiplier_device::sega_315_5248_multiplier_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, SEGA_315_5248_MULTIPLIER, "Sega 315-5248 Multiplier", tag, owner, clock)
+	: device_t(mconfig, SEGA_315_5248_MULTIPLIER, "Sega 315-5248 Multiplier", tag, owner, clock, "sega_315_5248", __FILE__)
 {
 }
 
@@ -810,7 +787,7 @@ void sega_315_5248_multiplier_device::device_reset()
 //-------------------------------------------------
 
 sega_315_5249_divider_device::sega_315_5249_divider_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, SEGA_315_5248_MULTIPLIER, "Sega 315-5249 Divider", tag, owner, clock)
+	: device_t(mconfig, SEGA_315_5248_MULTIPLIER, "Sega 315-5249 Divider", tag, owner, clock, "sega_315_5249", __FILE__)
 {
 }
 
@@ -955,7 +932,7 @@ void sega_315_5249_divider_device::execute(int mode)
 //-------------------------------------------------
 
 sega_315_5250_compare_timer_device::sega_315_5250_compare_timer_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, SEGA_315_5250_COMPARE_TIMER, "Sega 315-5250 Compare/Timer", tag, owner, clock)
+	: device_t(mconfig, SEGA_315_5250_COMPARE_TIMER, "Sega 315-5250 Compare/Timer", tag, owner, clock, "sega_315_5250", __FILE__)
 {
 }
 

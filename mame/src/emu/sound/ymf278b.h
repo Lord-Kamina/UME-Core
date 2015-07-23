@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, Olivier Galibert, hap
 #pragma once
 
 #ifndef __YMF278B_H__
@@ -8,27 +10,34 @@
 #define YMF278B_STD_CLOCK (33868800)            /* standard clock for OPL4 */
 
 #define MCFG_YMF278B_IRQ_HANDLER(_devcb) \
-	devcb = &ymf278b_device::set_irq_handler(*device, DEVCB2_##_devcb);
+	devcb = &ymf278b_device::set_irq_handler(*device, DEVCB_##_devcb);
 
 class ymf278b_device : public device_t,
-									public device_sound_interface
+						public device_sound_interface,
+						public device_memory_interface
 {
 public:
 	ymf278b_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
 	// static configuration helpers
-	template<class _Object> static devcb2_base &set_irq_handler(device_t &device, _Object object) { return downcast<ymf278b_device &>(device).m_irq_handler.set_callback(object); }
+	template<class _Object> static devcb_base &set_irq_handler(device_t &device, _Object object) { return downcast<ymf278b_device &>(device).m_irq_handler.set_callback(object); }
 
 	DECLARE_READ8_MEMBER( read );
 	DECLARE_WRITE8_MEMBER( write );
+
+	void ymf262_update_request();
 
 protected:
 	// device-level overrides
 	virtual void device_config_complete();
 	virtual void device_start();
 	virtual void device_reset();
+	virtual void device_stop();
 
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
+
+	// device_memory_interface overrides
+	virtual const address_space_config *memory_space_config(address_spacenum spacenum = AS_0) const { return (spacenum == AS_0) ? &m_space_config : NULL; }
 
 	// sound stream update overrides
 	virtual void sound_stream_update(sound_stream &stream, stream_sample_t **inputs, stream_sample_t **outputs, int samples);
@@ -75,8 +84,6 @@ private:
 		int num;        /* slot number (for debug only) */
 	};
 
-	void write_memory(UINT32 offset, UINT8 data);
-	UINT8 read_memory(UINT32 offset);
 	int compute_rate(YMF278BSlot *slot, int val);
 	UINT32 compute_decay_env_vol_step(YMF278BSlot *slot, int val);
 	void compute_freq_step(YMF278BSlot *slot);
@@ -85,7 +92,7 @@ private:
 	void A_w(UINT8 reg, UINT8 data);
 	void B_w(UINT8 reg, UINT8 data);
 	void retrigger_note(YMF278BSlot *slot);
-	void C_w(UINT8 reg, UINT8 data, int init);
+	void C_w(UINT8 reg, UINT8 data);
 	void timer_busy_start(int is_pcm);
 	void precompute_rate_tables();
 	void register_save_state();
@@ -120,12 +127,18 @@ private:
 	INT32 m_mix_level[8];
 
 	emu_timer *m_timer_a, *m_timer_b;
-	const UINT8 *m_rom;
-	UINT32 m_romsize;
 	int m_clock;
 
 	sound_stream * m_stream;
-	devcb2_write_line m_irq_handler;
+	INT32 *m_mix_buffer;
+	direct_read_data * m_direct;
+	const address_space_config m_space_config;
+	devcb_write_line m_irq_handler;
+	UINT8 m_last_fm_data;
+
+	// ymf262
+	void *m_ymf262;
+	sound_stream * m_stream_ymf262;
 };
 
 extern const device_type YMF278B;

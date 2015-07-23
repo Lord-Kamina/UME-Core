@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Hard Drivin' video hardware
@@ -28,7 +30,7 @@
  *
  *************************************/
 
-VIDEO_START_MEMBER(harddriv_state,harddriv)
+void harddriv_state::init_video()
 {
 	UINT32 *destmask, mask;
 	int i;
@@ -95,18 +97,16 @@ VIDEO_START_MEMBER(harddriv_state,harddriv)
  *
  *************************************/
 
-void hdgsp_write_to_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_TO_SHIFTREG_CB_MEMBER(harddriv_state::hdgsp_write_to_shiftreg)
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-
 	/* access to the 1bpp/2bpp area */
 	if (address >= 0x02000000 && address <= 0x020fffff)
 	{
 		address -= 0x02000000;
-		address >>= state->m_gsp_multisync;
-		address &= state->m_vram_mask;
-		address &= ~((512*8 >> state->m_gsp_multisync) - 1);
-		state->m_gsp_shiftreg_source = &state->m_gsp_vram[address];
+		address >>= m_gsp_multisync;
+		address &= m_vram_mask;
+		address &= ~((512*8 >> m_gsp_multisync) - 1);
+		m_gsp_shiftreg_source = &m_gsp_vram[address];
 	}
 
 	/* access to normal VRAM area */
@@ -114,30 +114,28 @@ void hdgsp_write_to_shiftreg(address_space &space, UINT32 address, UINT16 *shift
 	{
 		address -= 0xff800000;
 		address /= 8;
-		address &= state->m_vram_mask;
+		address &= m_vram_mask;
 		address &= ~511;
-		state->m_gsp_shiftreg_source = &state->m_gsp_vram[address];
+		m_gsp_shiftreg_source = &m_gsp_vram[address];
 	}
 	else
 		logerror("Unknown shiftreg write %08X\n", address);
 }
 
 
-void hdgsp_read_from_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_FROM_SHIFTREG_CB_MEMBER(harddriv_state::hdgsp_read_from_shiftreg)
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-
-	if (!state->m_shiftreg_enable)
+	if (!m_shiftreg_enable)
 		return;
 
 	/* access to the 1bpp/2bpp area */
 	if (address >= 0x02000000 && address <= 0x020fffff)
 	{
 		address -= 0x02000000;
-		address >>= state->m_gsp_multisync;
-		address &= state->m_vram_mask;
-		address &= ~((512*8 >> state->m_gsp_multisync) - 1);
-		memmove(&state->m_gsp_vram[address], state->m_gsp_shiftreg_source, 512*8 >> state->m_gsp_multisync);
+		address >>= m_gsp_multisync;
+		address &= m_vram_mask;
+		address &= ~((512*8 >> m_gsp_multisync) - 1);
+		memmove(&m_gsp_vram[address], m_gsp_shiftreg_source, 512*8 >> m_gsp_multisync);
 	}
 
 	/* access to normal VRAM area */
@@ -145,9 +143,9 @@ void hdgsp_read_from_shiftreg(address_space &space, UINT32 address, UINT16 *shif
 	{
 		address -= 0xff800000;
 		address /= 8;
-		address &= state->m_vram_mask;
+		address &= m_vram_mask;
 		address &= ~511;
-		memmove(&state->m_gsp_vram[address], state->m_gsp_shiftreg_source, 512);
+		memmove(&m_gsp_vram[address], m_gsp_shiftreg_source, 512);
 	}
 	else
 		logerror("Unknown shiftreg read %08X\n", address);
@@ -161,11 +159,12 @@ void hdgsp_read_from_shiftreg(address_space &space, UINT32 address, UINT16 *shif
  *
  *************************************/
 
-static void update_palette_bank(running_machine &machine, int newbank)
+void harddriv_state::update_palette_bank(int newbank)
 {
-	harddriv_state *state = machine.driver_data<harddriv_state>();
-	machine.primary_screen->update_partial(machine.primary_screen->vpos());
-	state->m_gfx_palettebank = newbank;
+	screen_device &scr = m_gsp->screen();
+
+	scr.update_partial(scr.vpos());
+	m_gfx_palettebank = newbank;
 }
 
 
@@ -176,21 +175,19 @@ static void update_palette_bank(running_machine &machine, int newbank)
  *
  *************************************/
 
-READ16_HANDLER( hdgsp_control_lo_r )
+READ16_MEMBER( harddriv_state::hdgsp_control_lo_r )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-	return state->m_gsp_control_lo[offset];
+	return m_gsp_control_lo[offset];
 }
 
 
-WRITE16_HANDLER( hdgsp_control_lo_w )
+WRITE16_MEMBER( harddriv_state::hdgsp_control_lo_w )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-	int oldword = state->m_gsp_control_lo[offset];
+	int oldword = m_gsp_control_lo[offset];
 	int newword;
 
-	COMBINE_DATA(&state->m_gsp_control_lo[offset]);
-	newword = state->m_gsp_control_lo[offset];
+	COMBINE_DATA(&m_gsp_control_lo[offset]);
+	newword = m_gsp_control_lo[offset];
 
 	if (oldword != newword && offset != 0)
 		logerror("GSP:gsp_control_lo(%X)=%04X\n", offset, newword);
@@ -204,47 +201,46 @@ WRITE16_HANDLER( hdgsp_control_lo_w )
  *
  *************************************/
 
-READ16_HANDLER( hdgsp_control_hi_r )
+READ16_MEMBER( harddriv_state::hdgsp_control_hi_r )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-	return state->m_gsp_control_hi[offset];
+	return m_gsp_control_hi[offset];
 }
 
 
-WRITE16_HANDLER( hdgsp_control_hi_w )
+WRITE16_MEMBER( harddriv_state::hdgsp_control_hi_w )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
 	int val = (offset >> 3) & 1;
 
-	int oldword = state->m_gsp_control_hi[offset];
+	int oldword = m_gsp_control_hi[offset];
 	int newword;
 
-	COMBINE_DATA(&state->m_gsp_control_hi[offset]);
-	newword = state->m_gsp_control_hi[offset];
+	COMBINE_DATA(&m_gsp_control_hi[offset]);
+	newword = m_gsp_control_hi[offset];
+	screen_device &scr = m_gsp->screen();
 
 	switch (offset & 7)
 	{
 		case 0x00:
-			state->m_shiftreg_enable = val;
+			m_shiftreg_enable = val;
 			break;
 
 		case 0x01:
-			data = data & (15 >> state->m_gsp_multisync);
-			space.machine().primary_screen->update_partial(space.machine().primary_screen->vpos() - 1);
-			state->m_gfx_finescroll = data;
+			data = data & (15 >> m_gsp_multisync);
+			scr.update_partial(scr.vpos() - 1);
+			m_gfx_finescroll = data;
 			break;
 
 		case 0x02:
-			update_palette_bank(space.machine(), (state->m_gfx_palettebank & ~1) | val);
+			update_palette_bank((m_gfx_palettebank & ~1) | val);
 			break;
 
 		case 0x03:
-			update_palette_bank(space.machine(), (state->m_gfx_palettebank & ~2) | (val << 1));
+			update_palette_bank((m_gfx_palettebank & ~2) | (val << 1));
 			break;
 
 		case 0x04:
-			if (space.machine().total_colors() >= 256 * 8)
-				update_palette_bank(space.machine(), (state->m_gfx_palettebank & ~4) | (val << 2));
+			if (m_palette->entries() >= 256 * 8)
+				update_palette_bank((m_gfx_palettebank & ~4) | (val << 2));
 			break;
 
 		case 0x07:
@@ -266,18 +262,17 @@ WRITE16_HANDLER( hdgsp_control_hi_w )
  *
  *************************************/
 
-READ16_HANDLER( hdgsp_vram_2bpp_r )
+READ16_MEMBER( harddriv_state::hdgsp_vram_2bpp_r )
 {
 	return 0;
 }
 
 
-WRITE16_HANDLER( hdgsp_vram_1bpp_w )
+WRITE16_MEMBER( harddriv_state::hdgsp_vram_1bpp_w )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-	UINT32 *dest = (UINT32 *)&state->m_gsp_vram[offset * 16];
-	UINT32 *mask = &state->m_mask_table[data * 4];
-	UINT32 color = state->m_gsp_control_lo[0] & 0xff;
+	UINT32 *dest = (UINT32 *)&m_gsp_vram[offset * 16];
+	UINT32 *mask = &m_mask_table[data * 4];
+	UINT32 color = m_gsp_control_lo[0] & 0xff;
 	UINT32 curmask;
 
 	color |= color << 8;
@@ -301,12 +296,11 @@ WRITE16_HANDLER( hdgsp_vram_1bpp_w )
 }
 
 
-WRITE16_HANDLER( hdgsp_vram_2bpp_w )
+WRITE16_MEMBER( harddriv_state::hdgsp_vram_2bpp_w )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-	UINT32 *dest = (UINT32 *)&state->m_gsp_vram[offset * 8];
-	UINT32 *mask = &state->m_mask_table[data * 2];
-	UINT32 color = state->m_gsp_control_lo[0];
+	UINT32 *dest = (UINT32 *)&m_gsp_vram[offset * 8];
+	UINT32 *mask = &m_mask_table[data * 2];
+	UINT32 color = m_gsp_control_lo[0];
 	UINT32 curmask;
 
 	color |= color << 16;
@@ -328,38 +322,33 @@ WRITE16_HANDLER( hdgsp_vram_2bpp_w )
  *
  *************************************/
 
-INLINE void gsp_palette_change(running_machine &machine, int offset)
+inline void harddriv_state::gsp_palette_change(int offset)
 {
-	harddriv_state *state = machine.driver_data<harddriv_state>();
-	int red = (state->m_gsp_paletteram_lo[offset] >> 8) & 0xff;
-	int green = state->m_gsp_paletteram_lo[offset] & 0xff;
-	int blue = state->m_gsp_paletteram_hi[offset] & 0xff;
-	palette_set_color(machine, offset, MAKE_RGB(red, green, blue));
+	int red = (m_gsp_paletteram_lo[offset] >> 8) & 0xff;
+	int green = m_gsp_paletteram_lo[offset] & 0xff;
+	int blue = m_gsp_paletteram_hi[offset] & 0xff;
+	m_palette->set_pen_color(offset, rgb_t(red, green, blue));
 }
 
 
-READ16_HANDLER( hdgsp_paletteram_lo_r )
+READ16_MEMBER( harddriv_state::hdgsp_paletteram_lo_r )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-
 	/* note that the palette is only accessed via the first 256 entries */
 	/* others are selected via the palette bank */
-	offset = state->m_gfx_palettebank * 0x100 + (offset & 0xff);
+	offset = m_gfx_palettebank * 0x100 + (offset & 0xff);
 
-	return state->m_gsp_paletteram_lo[offset];
+	return m_gsp_paletteram_lo[offset];
 }
 
 
-WRITE16_HANDLER( hdgsp_paletteram_lo_w )
+WRITE16_MEMBER( harddriv_state::hdgsp_paletteram_lo_w )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-
 	/* note that the palette is only accessed via the first 256 entries */
 	/* others are selected via the palette bank */
-	offset = state->m_gfx_palettebank * 0x100 + (offset & 0xff);
+	offset = m_gfx_palettebank * 0x100 + (offset & 0xff);
 
-	COMBINE_DATA(&state->m_gsp_paletteram_lo[offset]);
-	gsp_palette_change(space.machine(), offset);
+	COMBINE_DATA(&m_gsp_paletteram_lo[offset]);
+	gsp_palette_change(offset);
 }
 
 
@@ -370,28 +359,24 @@ WRITE16_HANDLER( hdgsp_paletteram_lo_w )
  *
  *************************************/
 
-READ16_HANDLER( hdgsp_paletteram_hi_r )
+READ16_MEMBER( harddriv_state::hdgsp_paletteram_hi_r )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-
 	/* note that the palette is only accessed via the first 256 entries */
 	/* others are selected via the palette bank */
-	offset = state->m_gfx_palettebank * 0x100 + (offset & 0xff);
+	offset = m_gfx_palettebank * 0x100 + (offset & 0xff);
 
-	return state->m_gsp_paletteram_hi[offset];
+	return m_gsp_paletteram_hi[offset];
 }
 
 
-WRITE16_HANDLER( hdgsp_paletteram_hi_w )
+WRITE16_MEMBER( harddriv_state::hdgsp_paletteram_hi_w )
 {
-	harddriv_state *state = space.machine().driver_data<harddriv_state>();
-
 	/* note that the palette is only accessed via the first 256 entries */
 	/* others are selected via the palette bank */
-	offset = state->m_gfx_palettebank * 0x100 + (offset & 0xff);
+	offset = m_gfx_palettebank * 0x100 + (offset & 0xff);
 
-	COMBINE_DATA(&state->m_gsp_paletteram_hi[offset]);
-	gsp_palette_change(space.machine(), offset);
+	COMBINE_DATA(&m_gsp_paletteram_hi[offset]);
+	gsp_palette_change(offset);
 }
 
 
@@ -422,32 +407,36 @@ static void display_speedups(void)
 }
 
 
-void harddriv_scanline_driver(screen_device &screen, bitmap_ind16 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_IND16_CB_MEMBER(harddriv_state::scanline_driver)
 {
-	harddriv_state *state = screen.machine().driver_data<harddriv_state>();
-	UINT8 *vram_base = &state->m_gsp_vram[(params->rowaddr << 12) & state->m_vram_mask];
+	UINT8 *vram_base = &m_gsp_vram[(params->rowaddr << 12) & m_vram_mask];
+
+	if (!vram_base) return;
+
 	UINT16 *dest = &bitmap.pix16(scanline);
-	int coladdr = (params->yoffset << 9) + ((params->coladdr & 0xff) << 4) - 15 + (state->m_gfx_finescroll & 0x0f);
+	int coladdr = (params->yoffset << 9) + ((params->coladdr & 0xff) << 4) - 15 + (m_gfx_finescroll & 0x0f);
 	int x;
 
 	for (x = params->heblnk; x < params->hsblnk; x++)
-		dest[x] = state->m_gfx_palettebank * 256 + vram_base[BYTE_XOR_LE(coladdr++ & 0xfff)];
+		dest[x] = m_gfx_palettebank * 256 + vram_base[BYTE_XOR_LE(coladdr++ & 0xfff)];
 
 	if (scanline == screen.visible_area().max_y)
 		display_speedups();
 }
 
 
-void harddriv_scanline_multisync(screen_device &screen, bitmap_ind16 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_IND16_CB_MEMBER(harddriv_state::scanline_multisync)
 {
-	harddriv_state *state = screen.machine().driver_data<harddriv_state>();
-	UINT8 *vram_base = &state->m_gsp_vram[(params->rowaddr << 11) & state->m_vram_mask];
+	UINT8 *vram_base = &m_gsp_vram[(params->rowaddr << 11) & m_vram_mask];
+
+	if (!vram_base) return;
+
 	UINT16 *dest = &bitmap.pix16(scanline);
-	int coladdr = (params->yoffset << 9) + ((params->coladdr & 0xff) << 3) - 7 + (state->m_gfx_finescroll & 0x07);
+	int coladdr = (params->yoffset << 9) + ((params->coladdr & 0xff) << 3) - 7 + (m_gfx_finescroll & 0x07);
 	int x;
 
 	for (x = params->heblnk; x < params->hsblnk; x++)
-		dest[x] = state->m_gfx_palettebank * 256 + vram_base[BYTE_XOR_LE(coladdr++ & 0x7ff)];
+		dest[x] = m_gfx_palettebank * 256 + vram_base[BYTE_XOR_LE(coladdr++ & 0x7ff)];
 
 	if (scanline == screen.visible_area().max_y)
 		display_speedups();

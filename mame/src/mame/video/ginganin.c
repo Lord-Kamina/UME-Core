@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /**************************************************************************
 
                             Ginga NinkyouDen
@@ -78,8 +80,7 @@ TILE_GET_INFO_MEMBER(ginganin_state::get_bg_tile_info)
 {
 	UINT8 *gfx = memregion("gfx5")->base();
 	int code = gfx[2 * tile_index + 0] * 256 + gfx[2 * tile_index + 1];
-	SET_TILE_INFO_MEMBER(
-			BG_GFX,
+	SET_TILE_INFO_MEMBER(BG_GFX,
 			code,
 			code >> 12,
 			0);
@@ -95,8 +96,7 @@ TILE_GET_INFO_MEMBER(ginganin_state::get_bg_tile_info)
 TILE_GET_INFO_MEMBER(ginganin_state::get_fg_tile_info)
 {
 	UINT16 code = m_fgram[tile_index];
-	SET_TILE_INFO_MEMBER(
-			FG_GFX,
+	SET_TILE_INFO_MEMBER(FG_GFX,
 			code,
 			code >> 12,
 			0);
@@ -118,8 +118,7 @@ WRITE16_MEMBER(ginganin_state::ginganin_fgram16_w)
 TILE_GET_INFO_MEMBER(ginganin_state::get_txt_tile_info)
 {
 	UINT16 code = m_txtram[tile_index];
-	SET_TILE_INFO_MEMBER(
-			TXT_GFX,
+	SET_TILE_INFO_MEMBER(TXT_GFX,
 			code,
 			code >> 12,
 			0);
@@ -134,9 +133,9 @@ WRITE16_MEMBER(ginganin_state::ginganin_txtram16_w)
 
 void ginganin_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ginganin_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, BG_NX, BG_NY);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ginganin_state::get_fg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, FG_NX, FG_NY);
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ginganin_state::get_txt_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, TXT_NX, TXT_NY);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ginganin_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, BG_NX, BG_NY);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ginganin_state::get_fg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, FG_NX, FG_NY);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ginganin_state::get_txt_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, TXT_NX, TXT_NY);
 
 	m_fg_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_transparent_pen(15);
@@ -228,7 +227,7 @@ void ginganin_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprec
 			flipy = !flipy;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[3],
+		m_gfxdecode->gfx(3)->transpen(bitmap,cliprect,
 				code & 0x3fff,
 				attr >> 12,
 				flipx, flipy,
@@ -271,16 +270,16 @@ if (machine().input().code_pressed(KEYCODE_Z))
 
 
 	if (layers_ctrl1 & 1)
-		m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	else
 		bitmap.fill(0, cliprect);
 
 	if (layers_ctrl1 & 2)
-		m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	if (layers_ctrl1 & 8)
 		draw_sprites(bitmap, cliprect);
 	if (layers_ctrl1 & 4)
-		m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }

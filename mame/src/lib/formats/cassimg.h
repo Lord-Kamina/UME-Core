@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /*********************************************************************
 
     cassimg.h
@@ -10,7 +12,7 @@
 #define CASSIMG_H
 
 #include "osdcore.h"
-#include "pool.h"
+#include "coretmpl.h"
 #include "ioprocs.h"
 
 #ifndef LOG_FORMATS
@@ -69,11 +71,7 @@ typedef enum
 }
 casserr_t;
 
-struct sample_block
-{
-	INT32 *block;
-	size_t sample_count;
-};
+typedef std::vector<INT32> sample_block;
 
 struct CassetteOptions
 {
@@ -94,14 +92,12 @@ struct cassette_image
 {
 	const struct CassetteFormat *format;
 	struct io_generic io;
-	object_pool *pool;
 
 	int channels;
 	int flags;
 	UINT32 sample_frequency;
 
-	struct sample_block *blocks;
-	size_t block_count;
+	std::vector<sample_block *> blocks;
 	size_t sample_count;
 };
 

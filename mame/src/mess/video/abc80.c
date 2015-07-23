@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /*****************************************************************************
  *
  * video/abc80.c
@@ -30,8 +32,8 @@ static const gfx_layout charlayout =
 //-------------------------------------------------
 
 static GFXDECODE_START( abc80 )
-	GFXDECODE_ENTRY( "chargen", 0,     charlayout, 0, 2 ) // normal characters
-	GFXDECODE_ENTRY( "chargen", 0x500, charlayout, 0, 2 ) // graphics characters
+	GFXDECODE_ENTRY( "chargen", 0,     charlayout, 0, 1 ) // normal characters
+	GFXDECODE_ENTRY( "chargen", 0x500, charlayout, 0, 1 ) // graphics characters
 GFXDECODE_END
 
 
@@ -135,7 +137,7 @@ void abc80_state::update_screen(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 				color ^= (cursor & m_blink);
 				color &= blank;
 
-				bitmap.pix32(y, x) = RGB_MONOCHROME_WHITE[color];
+				bitmap.pix32(y, x) = m_palette->pen(color);
 
 				data <<= 1;
 			}
@@ -158,10 +160,6 @@ void abc80_state::update_screen(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 }
 
 
-//-------------------------------------------------
-//  VIDEO_START( abc80 )
-//-------------------------------------------------
-
 void abc80_state::video_start()
 {
 	screen_device *screen = machine().device<screen_device>(SCREEN_TAG);
@@ -177,20 +175,12 @@ void abc80_state::video_start()
 	m_vsync_on_timer->adjust(screen->time_until_pos(0, 0), 0, screen->frame_period());
 
 	m_vsync_off_timer = timer_alloc(TIMER_ID_VSYNC_OFF);
-	m_vsync_on_timer->adjust(screen->time_until_pos(16, 0), 0, screen->frame_period());
+	m_vsync_off_timer->adjust(screen->time_until_pos(16, 0), 0, screen->frame_period());
 
 	// allocate memory
 	m_video_ram.allocate(0x400);
-
-	// register for state saving
-	save_item(NAME(m_blink));
-	save_item(NAME(m_latch));
 }
 
-
-//-------------------------------------------------
-//  SCREEN_UPDATE_IND16( abc80 )
-//-------------------------------------------------
 
 UINT32 abc80_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
@@ -208,7 +198,8 @@ MACHINE_CONFIG_FRAGMENT( abc80_video )
 	MCFG_SCREEN_ADD(SCREEN_TAG, RASTER)
 	MCFG_SCREEN_UPDATE_DRIVER(abc80_state, screen_update)
 
-	MCFG_GFXDECODE(abc80)
-
 	MCFG_SCREEN_RAW_PARAMS(XTAL_11_9808MHz/2, ABC80_HTOTAL, ABC80_HBEND, ABC80_HBSTART, ABC80_VTOTAL, ABC80_VBEND, ABC80_VBSTART)
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", abc80)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 MACHINE_CONFIG_END

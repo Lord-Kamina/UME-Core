@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli, Bryan McPhail
 /***************************************************************
 
  Pro Yakyuu Nyuudan Test Tryout (JPN Ver.)
@@ -9,12 +11,11 @@
 #include "includes/tryout.h"
 
 
-void tryout_state::palette_init()
+PALETTE_INIT_MEMBER(tryout_state, tryout)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
-	int i;
 
-	for (i = 0;i < machine().total_colors();i++)
+	for (int i = 0;i < palette.entries();i++)
 	{
 		int bit0,bit1,bit2,r,g,b;
 
@@ -34,19 +35,16 @@ void tryout_state::palette_init()
 		bit2 = (color_prom[i] >> 7) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		palette_set_color(machine(),i,MAKE_RGB(r,g,b));
+		palette.set_pen_color(i,rgb_t(r,g,b));
 	}
 }
 
 TILE_GET_INFO_MEMBER(tryout_state::get_fg_tile_info)
 {
-	UINT8 *videoram = m_videoram;
-	int code, attr, color;
-
-	code = videoram[tile_index];
-	attr = videoram[tile_index + 0x400];
+	int code = m_videoram[tile_index];
+	int attr = m_videoram[tile_index + 0x400];
 	code |= ((attr & 0x03) << 8);
-	color = ((attr & 0x4)>>2)+6;
+	int color = ((attr & 0x4)>>2)+6;
 
 	SET_TILE_INFO_MEMBER(0, code, color, 0);
 }
@@ -56,19 +54,18 @@ TILE_GET_INFO_MEMBER(tryout_state::get_bg_tile_info)
 	SET_TILE_INFO_MEMBER(2, m_vram[tile_index] & 0x7f, 2, 0);
 }
 
-READ8_MEMBER(tryout_state::tryout_vram_r)
+READ8_MEMBER(tryout_state::vram_r)
 {
 	return m_vram[offset]; // debug only
 }
 
-WRITE8_MEMBER(tryout_state::tryout_videoram_w)
+WRITE8_MEMBER(tryout_state::videoram_w)
 {
-	UINT8 *videoram = m_videoram;
-	videoram[offset] = data;
+	m_videoram[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset & 0x3ff);
 }
 
-WRITE8_MEMBER(tryout_state::tryout_vram_w)
+WRITE8_MEMBER(tryout_state::vram_w)
 {
 	/*  There are eight banks of vram - in bank 0 the first 0x400 bytes
 	is reserved for the tilemap.  In banks 2, 4 and 6 the game never
@@ -133,15 +130,15 @@ WRITE8_MEMBER(tryout_state::tryout_vram_w)
 		break;
 	}
 
-	machine().gfx[2]->mark_dirty((offset-0x400/64)&0x7f);
+	m_gfxdecode->gfx(2)->mark_dirty((offset-0x400/64)&0x7f);
 }
 
-WRITE8_MEMBER(tryout_state::tryout_vram_bankswitch_w)
+WRITE8_MEMBER(tryout_state::vram_bankswitch_w)
 {
 	m_vram_bank = data;
 }
 
-WRITE8_MEMBER(tryout_state::tryout_flipscreen_w)
+WRITE8_MEMBER(tryout_state::flipscreen_w)
 {
 	flip_screen_set(data & 1);
 }
@@ -159,39 +156,41 @@ TILEMAP_MAPPER_MEMBER(tryout_state::get_bg_memory_offset)
 //  else
 		a= (7 - (row & 7)) + ((0x8 - (row & 0x8)) << 4) + ((col & 0xf) << 3) + (( (  (col & 0x10) ) ) << 4) + ((( (col & 0x20))) << 4);
 
-//  mame_printf_debug("%d %d -> %d\n",col,row, a);
+//  osd_printf_debug("%d %d -> %d\n",col,row, a);
 	return a;
 }
 
 void tryout_state::video_start()
 {
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tryout_state::get_fg_tile_info),this),tilemap_mapper_delegate(FUNC(tryout_state::get_fg_memory_offset),this),8,8,32,32);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tryout_state::get_bg_tile_info),this),tilemap_mapper_delegate(FUNC(tryout_state::get_bg_memory_offset),this),16,16,64,16);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tryout_state::get_fg_tile_info),this),tilemap_mapper_delegate(FUNC(tryout_state::get_fg_memory_offset),this),8,8,32,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tryout_state::get_bg_tile_info),this),tilemap_mapper_delegate(FUNC(tryout_state::get_bg_memory_offset),this),16,16,64,16);
 
 	m_vram=auto_alloc_array(machine(), UINT8, 8 * 0x800);
 	m_vram_gfx=auto_alloc_array(machine(), UINT8, 0x6000);
 
-	machine().gfx[2]->set_source(m_vram_gfx);
+	m_gfxdecode->gfx(2)->set_source(m_vram_gfx);
 
 	m_fg_tilemap->set_transparent_pen(0);
+
+	save_item(NAME(m_vram_bank));
+	save_pointer(NAME(m_vram), 8 * 0x800);
+	save_pointer(NAME(m_vram_gfx), 0x6000);
 }
 
 void tryout_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 {
-	UINT8 *spriteram = m_spriteram;
-	UINT8 *spriteram_2 = m_spriteram2;
 	int offs,fx,fy,x,y,color,sprite,inc;
 
 	for (offs = 0;offs < 0x7f;offs += 4)
 	{
-		if (!(spriteram[offs]&1))
+		if (!(m_spriteram[offs]&1))
 			continue;
 
-		sprite = spriteram[offs+1] + ((spriteram_2[offs]&7)<<8);
-		x = spriteram[offs+3]-3;
-		y = spriteram[offs+2];
-		color = 0;//(spriteram[offs] & 8)>>3;
-		fx = (spriteram[offs] & 8)>>3;
+		sprite = m_spriteram[offs+1] + ((m_spriteram2[offs]&7)<<8);
+		x = m_spriteram[offs+3]-3;
+		y = m_spriteram[offs+2];
+		color = 0;//(m_spriteram[offs] & 8)>>3;
+		fx = (m_spriteram[offs] & 8)>>3;
 		fy = 0;
 		inc = 16;
 
@@ -207,26 +206,26 @@ void tryout_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 		}
 
 		/* Double Height */
-		if(spriteram[offs] & 0x10)
+		if(m_spriteram[offs] & 0x10)
 		{
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				sprite,
 				color,fx,fy,x,y + inc,0);
 
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				sprite+1,
 				color,fx,fy,x,y,0);
 		}
 		else
 		{
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				sprite,
 				color,fx,fy,x,y,0);
 		}
 	}
 }
 
-UINT32 tryout_state::screen_update_tryout(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 tryout_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int scrollx = 0;
 
@@ -246,12 +245,12 @@ UINT32 tryout_state::screen_update_tryout(screen_device &screen, bitmap_ind16 &b
 	if(!(m_gfx_control[0] & 0x8)) // screen disable
 	{
 		/* TODO: Color might be different, needs a video from an original pcb. */
-		bitmap.fill(machine().pens[0x10], cliprect);
+		bitmap.fill(m_palette->pen(0x10), cliprect);
 	}
 	else
 	{
-		m_bg_tilemap->draw(bitmap, cliprect, 0,0);
-		m_fg_tilemap->draw(bitmap, cliprect, 0,0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0,0);
 		draw_sprites(bitmap,cliprect);
 	}
 

@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     RCA CDP1862 Video Display Controller emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -62,7 +61,7 @@ inline void cdp1862_device::initialize_palette()
 		g = (i & 1) ? luma : 0;
 		b = (i & 2) ? luma : 0;
 
-		m_palette[i] = MAKE_RGB(r, g, b);
+		m_palette[i] = rgb_t(r, g, b);
 	}
 }
 
@@ -77,7 +76,8 @@ inline void cdp1862_device::initialize_palette()
 //-------------------------------------------------
 
 cdp1862_device::cdp1862_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, CDP1862, "CDP1862", tag, owner, clock),
+	: device_t(mconfig, CDP1862, "CDP1862", tag, owner, clock, "cdp1862", __FILE__),
+		device_video_interface(mconfig, *this),
 		m_read_rd(*this),
 		m_read_bd(*this),
 		m_read_gd(*this)
@@ -97,7 +97,6 @@ void cdp1862_device::device_start()
 	m_read_gd.resolve_safe(0);
 
 	// find devices
-	m_screen = machine().device<screen_device>(m_screen_tag);
 	m_screen->register_screen_bitmap(m_bitmap);
 
 	// init palette

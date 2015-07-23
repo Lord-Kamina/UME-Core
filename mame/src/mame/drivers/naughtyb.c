@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Brad Oliver,Sal and John Bugliarisi,Paul Priest
 /***************************************************************************
 
 Naughty Boy driver by Sal and John Bugliarisi.
@@ -105,7 +107,6 @@ TODO:
 #include "emu.h"
 #include "cpu/z80/z80.h"
 #include "sound/tms36xx.h"
-#include "audio/pleiads.h"
 #include "includes/naughtyb.h"
 
 #define CLOCK_XTAL 12000000
@@ -250,8 +251,8 @@ static ADDRESS_MAP_START( naughtyb_map, AS_PROGRAM, 8, naughtyb_state )
 	AM_RANGE(0x8800, 0x8fff) AM_RAM AM_SHARE("videoram2")
 	AM_RANGE(0x9000, 0x97ff) AM_WRITE(naughtyb_videoreg_w)
 	AM_RANGE(0x9800, 0x9fff) AM_RAM AM_SHARE("scrollreg")
-	AM_RANGE(0xa000, 0xa7ff) AM_DEVWRITE_LEGACY("cust", pleiads_sound_control_a_w)
-	AM_RANGE(0xa800, 0xafff) AM_DEVWRITE_LEGACY("cust", pleiads_sound_control_b_w)
+	AM_RANGE(0xa000, 0xa7ff) AM_DEVWRITE("naughtyb_custom", naughtyb_sound_device, control_a_w)
+	AM_RANGE(0xa800, 0xafff) AM_DEVWRITE("naughtyb_custom", naughtyb_sound_device, control_b_w)
 	AM_RANGE(0xb000, 0xb7ff) AM_READ(in0_port_r)    // IN0
 	AM_RANGE(0xb800, 0xbfff) AM_READ(dsw0_port_r)   // DSW0
 ADDRESS_MAP_END
@@ -263,8 +264,8 @@ static ADDRESS_MAP_START( popflame_map, AS_PROGRAM, 8, naughtyb_state )
 	AM_RANGE(0x8800, 0x8fff) AM_RAM AM_SHARE("videoram2")
 	AM_RANGE(0x9000, 0x97ff) AM_WRITE(popflame_videoreg_w)
 	AM_RANGE(0x9800, 0x9fff) AM_RAM AM_SHARE("scrollreg")
-	AM_RANGE(0xa000, 0xa7ff) AM_DEVWRITE_LEGACY("cust", pleiads_sound_control_a_w)
-	AM_RANGE(0xa800, 0xafff) AM_DEVWRITE_LEGACY("cust", pleiads_sound_control_b_w)
+	AM_RANGE(0xa000, 0xa7ff) AM_DEVWRITE("popflame_custom", popflame_sound_device, control_a_w)
+	AM_RANGE(0xa800, 0xafff) AM_DEVWRITE("popflame_custom", popflame_sound_device, control_b_w)
 	AM_RANGE(0xb000, 0xb7ff) AM_READ(in0_port_r)    // IN0
 	AM_RANGE(0xb800, 0xbfff) AM_READ(dsw0_port_r)   // DSW0
 ADDRESS_MAP_END
@@ -403,22 +404,6 @@ static GFXDECODE_START( naughtyb )
 GFXDECODE_END
 
 
-
-static const tms36xx_interface tms3615_interface =
-{
-	TMS3615,    /* TMS36xx subtype */
-	/*
-	 * Decay times of the voices; NOTE: it's unknown if
-	 * the the TMS3615 mixes more than one voice internally.
-	 * A wav taken from Pop Flamer sounds like there
-	 * are at least no 'odd' harmonics (5 1/3' and 2 2/3')
-	 */
-	{0.15,0.20,0,0,0,0}
-
-};
-
-
-
 static MACHINE_CONFIG_START( naughtyb, naughtyb_state )
 
 	/* basic machine hardware */
@@ -431,21 +416,26 @@ static MACHINE_CONFIG_START( naughtyb, naughtyb_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(36*8, 28*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 36*8-1, 0*8, 28*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(naughtyb_state, screen_update_naughtyb)
+	MCFG_SCREEN_UPDATE_DRIVER(naughtyb_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(naughtyb)
-	MCFG_PALETTE_LENGTH(256)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", naughtyb)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(naughtyb_state, naughtyb)
 
 	/* sound hardware */
 	/* uses the TMS3615NS for sound */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_TMS36XX_ADD("tms", 350)
-	MCFG_SOUND_CONFIG(tms3615_interface)
+	MCFG_TMS36XX_TYPE(TMS3615)
+	MCFG_TMS36XX_DECAY_TIMES(0.15, 0.20, 0, 0, 0, 0)
+	// NOTE: it's unknown if the TMS3615 mixes more than one voice internally.
+	// A wav taken from Pop Flamer sounds like there are at least no 'odd'
+	// harmonics (5 1/3' and 2 2/3')
 	MCFG_SOUND_ROUTE(0, "mono", 0.60)
 
-	MCFG_SOUND_ADD("cust", NAUGHTYB, 0)
+	MCFG_SOUND_ADD("naughtyb_custom", NAUGHTYB, 0)
 	MCFG_SOUND_ROUTE(0, "mono", 0.40)
 MACHINE_CONFIG_END
 
@@ -463,20 +453,26 @@ static MACHINE_CONFIG_START( popflame, naughtyb_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(36*8, 28*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 36*8-1, 0*8, 28*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(naughtyb_state, screen_update_naughtyb)
+	MCFG_SCREEN_UPDATE_DRIVER(naughtyb_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(naughtyb)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", naughtyb)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(naughtyb_state, naughtyb)
 
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_TMS36XX_ADD("tms", 350)
-	MCFG_SOUND_CONFIG(tms3615_interface)
+	MCFG_TMS36XX_TYPE(TMS3615)
+	MCFG_TMS36XX_DECAY_TIMES(0.15, 0.20, 0, 0, 0, 0)
+	// NOTE: it's unknown if the TMS3615 mixes more than one voice internally.
+	// A wav taken from Pop Flamer sounds like there are at least no 'odd'
+	// harmonics (5 1/3' and 2 2/3')
 	MCFG_SOUND_ROUTE(0, "mono", 0.60)
 
-	MCFG_SOUND_ADD("cust", POPFLAME, 0)
+	MCFG_SOUND_ADD("popflame_custom", POPFLAME, 0)
 	MCFG_SOUND_ROUTE(0, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -836,6 +832,10 @@ DRIVER_INIT_MEMBER(naughtyb_state,popflame)
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x9090, 0x9090, read8_delegate(FUNC(naughtyb_state::popflame_protection_r),this));
 
 	m_maincpu->space(AS_PROGRAM).install_write_handler(0xb000, 0xb0ff, write8_delegate(FUNC(naughtyb_state::popflame_protection_w),this));
+	
+	save_item(NAME(m_popflame_prot_seed));
+	save_item(NAME(m_r_index));
+	save_item(NAME(m_prot_count));
 }
 
 
@@ -864,18 +864,20 @@ DRIVER_INIT_MEMBER(naughtyb_state,trvmstr)
 {
 	/* install questions' handlers  */
 	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xc000, 0xc002, read8_delegate(FUNC(naughtyb_state::trvmstr_questions_r),this), write8_delegate(FUNC(naughtyb_state::trvmstr_questions_w),this));
+	
+	save_item(NAME(m_question_offset));
 }
 
 
-GAME( 1982, naughtyb, 0,        naughtyb, naughtyb, driver_device, 0,        ROT90, "Jaleco", "Naughty Boy", 0 )
-GAME( 1982, naughtyba,naughtyb, naughtyb, naughtyb, driver_device, 0,        ROT90, "bootleg", "Naughty Boy (bootleg)", 0 )
-GAME( 1982, naughtybc,naughtyb, naughtyb, naughtyb, driver_device, 0,        ROT90, "Jaleco (Cinematronics license)", "Naughty Boy (Cinematronics)", 0 )
-GAME( 1982, popflame, 0,        popflame, naughtyb, naughtyb_state, popflame, ROT90, "Jaleco", "Pop Flamer (protected)", 0 )
-GAME( 1982, popflamea,popflame, popflame, naughtyb, driver_device, 0,        ROT90, "Jaleco", "Pop Flamer (not protected)", 0 )
-GAME( 1982, popflameb,popflame, popflame, naughtyb, driver_device, 0,        ROT90, "Jaleco", "Pop Flamer (hack?)", 0 )
-GAME( 1982, popflamen,popflame, naughtyb, naughtyb, driver_device, 0,        ROT90, "Jaleco", "Pop Flamer (bootleg on Naughty Boy PCB)", 0 )
-GAME( 1985, trvmstr,  0,        naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "Enerdyne Technologies Inc.", "Trivia Master (set 1)", 0 )
-GAME( 1985, trvmstra, trvmstr,  naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "Enerdyne Technologies Inc.", "Trivia Master (set 2)", 0 )
-GAME( 1985, trvmstrb, trvmstr,  naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "Enerdyne Technologies Inc.", "Trivia Master (set 3)", 0 )
-GAME( 1985, trvmstrc, trvmstr,  naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "Enerdyne Technologies Inc.", "Trivia Master (set 4)", 0 )
-GAME( 1985, trvgns,   trvmstr,  naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "bootleg", "Trivia Genius", 0 )
+GAME( 1982, naughtyb, 0,        naughtyb, naughtyb, driver_device, 0,        ROT90, "Jaleco", "Naughty Boy", GAME_SUPPORTS_SAVE )
+GAME( 1982, naughtyba,naughtyb, naughtyb, naughtyb, driver_device, 0,        ROT90, "bootleg", "Naughty Boy (bootleg)", GAME_SUPPORTS_SAVE )
+GAME( 1982, naughtybc,naughtyb, naughtyb, naughtyb, driver_device, 0,        ROT90, "Jaleco (Cinematronics license)", "Naughty Boy (Cinematronics)", GAME_SUPPORTS_SAVE )
+GAME( 1982, popflame, 0,        popflame, naughtyb, naughtyb_state, popflame, ROT90, "Jaleco", "Pop Flamer (protected)", GAME_SUPPORTS_SAVE )
+GAME( 1982, popflamea,popflame, popflame, naughtyb, driver_device, 0,        ROT90, "Jaleco", "Pop Flamer (not protected)", GAME_SUPPORTS_SAVE )
+GAME( 1982, popflameb,popflame, popflame, naughtyb, driver_device, 0,        ROT90, "Jaleco", "Pop Flamer (hack?)", GAME_SUPPORTS_SAVE )
+GAME( 1982, popflamen,popflame, naughtyb, naughtyb, driver_device, 0,        ROT90, "Jaleco", "Pop Flamer (bootleg on Naughty Boy PCB)", GAME_SUPPORTS_SAVE )
+GAME( 1985, trvmstr,  0,        naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "Enerdyne Technologies Inc.", "Trivia Master (set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1985, trvmstra, trvmstr,  naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "Enerdyne Technologies Inc.", "Trivia Master (set 2)", GAME_SUPPORTS_SAVE )
+GAME( 1985, trvmstrb, trvmstr,  naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "Enerdyne Technologies Inc.", "Trivia Master (set 3)", GAME_SUPPORTS_SAVE )
+GAME( 1985, trvmstrc, trvmstr,  naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "Enerdyne Technologies Inc.", "Trivia Master (set 4)", GAME_SUPPORTS_SAVE )
+GAME( 1985, trvgns,   trvmstr,  naughtyb, trvmstr, naughtyb_state,  trvmstr,  ROT90, "bootleg", "Trivia Genius", GAME_SUPPORTS_SAVE )

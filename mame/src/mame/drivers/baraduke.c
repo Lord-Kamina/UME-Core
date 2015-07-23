@@ -1,9 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia
 /***************************************************************************
 
 Baraduke    (c) 1985 Namco
 Metro-Cross (c) 1985 Namco
 
-Driver by Manuel Abadia <manu@teleline.es>
+Driver by Manuel Abadia <emumanu+mame@gmail.com>
 
 The sprite and tilemap generator ICs are the same as in Namco System 86, but
 System 86 has two tilemap generators instead of one.
@@ -108,7 +110,6 @@ DIP locations verified for:
 #include "emu.h"
 #include "cpu/m6809/m6809.h"
 #include "cpu/m6800/m6800.h"
-#include "sound/namco.h"
 #include "includes/baraduke.h"
 
 
@@ -163,7 +164,7 @@ WRITE8_MEMBER(baraduke_state::baraduke_irq_ack_w)
 static ADDRESS_MAP_START( baraduke_map, AS_PROGRAM, 8, baraduke_state )
 	AM_RANGE(0x0000, 0x1fff) AM_READWRITE(baraduke_spriteram_r,baraduke_spriteram_w) AM_SHARE("spriteram")  /* Sprite RAM */
 	AM_RANGE(0x2000, 0x3fff) AM_READWRITE(baraduke_videoram_r,baraduke_videoram_w) AM_SHARE("videoram") /* Video RAM */
-	AM_RANGE(0x4000, 0x43ff) AM_DEVREADWRITE_LEGACY("namco", namcos1_cus30_r,namcos1_cus30_w)       /* PSG device, shared RAM */
+	AM_RANGE(0x4000, 0x43ff) AM_DEVREADWRITE("namco", namco_cus30_device, namcos1_cus30_r, namcos1_cus30_w)       /* PSG device, shared RAM */
 	AM_RANGE(0x4800, 0x4fff) AM_READWRITE(baraduke_textram_r,baraduke_textram_w) AM_SHARE("textram")/* video RAM (text layer) */
 	AM_RANGE(0x8000, 0x8000) AM_WRITE(watchdog_reset_w)         /* watchdog reset */
 	AM_RANGE(0x8800, 0x8800) AM_WRITE(baraduke_irq_ack_w)       /* irq acknowledge */
@@ -178,10 +179,10 @@ READ8_MEMBER(baraduke_state::soundkludge_r)
 }
 
 static ADDRESS_MAP_START( mcu_map, AS_PROGRAM, 8, baraduke_state )
-	AM_RANGE(0x0000, 0x001f) AM_READWRITE_LEGACY(m6801_io_r,m6801_io_w)/* internal registers */
+	AM_RANGE(0x0000, 0x001f) AM_DEVREADWRITE("mcu", hd63701_cpu_device, m6801_io_r,m6801_io_w)/* internal registers */
 	AM_RANGE(0x0080, 0x00ff) AM_RAM                             /* built in RAM */
 	AM_RANGE(0x1105, 0x1105) AM_READ(soundkludge_r)             /* cures speech */
-	AM_RANGE(0x1000, 0x13ff) AM_DEVREADWRITE_LEGACY("namco", namcos1_cus30_r, namcos1_cus30_w) /* PSG device, shared RAM */
+	AM_RANGE(0x1000, 0x13ff) AM_DEVREADWRITE("namco", namco_cus30_device, namcos1_cus30_r, namcos1_cus30_w) /* PSG device, shared RAM */
 	AM_RANGE(0x8000, 0xbfff) AM_ROM                             /* MCU external ROM */
 	AM_RANGE(0x8000, 0x8000) AM_WRITENOP                        /* watchdog reset? */
 	AM_RANGE(0x8800, 0x8800) AM_WRITENOP                        /* irq acknoledge? */
@@ -365,22 +366,14 @@ GFXDECODE_END
 
 
 
-static const namco_interface namco_config =
-{
-	8,                  /* number of voices */
-	0                   /* stereo */
-};
-
-
-
 static MACHINE_CONFIG_START( baraduke, baraduke_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M6809,49152000/32)
+	MCFG_CPU_ADD("maincpu", M6809, XTAL_49_152MHz/32)
 	MCFG_CPU_PROGRAM_MAP(baraduke_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", baraduke_state,  irq0_line_assert)
 
-	MCFG_CPU_ADD("mcu", HD63701,49152000/8)
+	MCFG_CPU_ADD("mcu", HD63701, XTAL_49_152MHz/8)
 	MCFG_CPU_PROGRAM_MAP(mcu_map)
 	MCFG_CPU_IO_MAP(mcu_port_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", baraduke_state,  irq0_line_hold)
@@ -389,22 +382,20 @@ static MACHINE_CONFIG_START( baraduke, baraduke_state )
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_REFRESH_RATE(60.606060)
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
-	MCFG_SCREEN_SIZE(64*8, 32*8)
-	MCFG_SCREEN_VISIBLE_AREA(0*8, 36*8-1, 2*8, 30*8-1)
+	MCFG_SCREEN_RAW_PARAMS(XTAL_49_152MHz/8, 384, 0, 36*8, 264, 2*8, 30*8)
 	MCFG_SCREEN_UPDATE_DRIVER(baraduke_state, screen_update_baraduke)
 	MCFG_SCREEN_VBLANK_DRIVER(baraduke_state, screen_eof_baraduke)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(baraduke)
-	MCFG_PALETTE_LENGTH(2048)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", baraduke)
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_INIT_OWNER(baraduke_state, baraduke)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SOUND_ADD("namco", NAMCO_CUS30, 49152000/2048)
-	MCFG_SOUND_CONFIG(namco_config)
+	MCFG_SOUND_ADD("namco", NAMCO_CUS30, XTAL_49_152MHz/2048)
+	MCFG_NAMCO_AUDIO_VOICES(8)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 

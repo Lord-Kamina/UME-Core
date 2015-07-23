@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Raster Elite Tickee Tickats hardware
@@ -40,20 +42,28 @@ public:
 
 	tickee_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_oki(*this, "oki"),
+		m_screen(*this, "screen"),
 		m_tlc34076(*this, "tlc34076"),
 		m_vram(*this, "vram"),
-		m_control(*this, "control"),
-		m_maincpu(*this, "maincpu"),
-		m_oki(*this, "oki") { }
+		m_control(*this, "control") { }
 
+	required_device<cpu_device> m_maincpu;
+	optional_device<okim6295_device> m_oki;
+	required_device<screen_device> m_screen;
 	required_device<tlc34076_device> m_tlc34076;
+
 	required_shared_ptr<UINT16> m_vram;
 	optional_shared_ptr<UINT16> m_control;
+
 	emu_timer *m_setup_gun_timer;
 	int m_beamxadd;
 	int m_beamyadd;
 	int m_palette_bank;
 	UINT8 m_gunx[2];
+	void get_crosshair_xy(int player, int &x, int &y);
+
 	DECLARE_WRITE16_MEMBER(rapidfir_transparent_w);
 	DECLARE_READ16_MEMBER(rapidfir_transparent_r);
 	DECLARE_WRITE16_MEMBER(tickee_control_w);
@@ -70,8 +80,11 @@ public:
 	TIMER_CALLBACK_MEMBER(trigger_gun_interrupt);
 	TIMER_CALLBACK_MEMBER(clear_gun_interrupt);
 	TIMER_CALLBACK_MEMBER(setup_gun_interrupts);
-	required_device<cpu_device> m_maincpu;
-	optional_device<okim6295_device> m_oki;
+
+	TMS340X0_TO_SHIFTREG_CB_MEMBER(rapidfir_to_shiftreg);
+	TMS340X0_FROM_SHIFTREG_CB_MEMBER(rapidfir_from_shiftreg);
+	TMS340X0_SCANLINE_RGB32_CB_MEMBER(scanline_update);
+	TMS340X0_SCANLINE_RGB32_CB_MEMBER(rapidfir_scanline_update);
 
 protected:
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
@@ -89,12 +102,12 @@ protected:
  *
  *************************************/
 
-INLINE void get_crosshair_xy(running_machine &machine, int player, int *x, int *y)
+inline void tickee_state::get_crosshair_xy(int player, int &x, int &y)
 {
-	const rectangle &visarea = machine.primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
-	*x = (((machine.root_device().ioport(player ? "GUNX2" : "GUNX1")->read() & 0xff) * visarea.width()) >> 8) + visarea.min_x;
-	*y = (((machine.root_device().ioport(player ? "GUNY2" : "GUNY1")->read() & 0xff) * visarea.height()) >> 8) + visarea.min_y;
+	x = (((ioport(player ? "GUNX2" : "GUNX1")->read() & 0xff) * visarea.width()) >> 8) + visarea.min_x;
+	y = (((ioport(player ? "GUNY2" : "GUNY1")->read() & 0xff) * visarea.height()) >> 8) + visarea.min_y;
 }
 
 
@@ -127,7 +140,7 @@ void tickee_state::device_timer(emu_timer &timer, device_timer_id id, int param,
 TIMER_CALLBACK_MEMBER(tickee_state::trigger_gun_interrupt)
 {
 	int which = param & 1;
-	int beamx = (machine().primary_screen->hpos()/2)-58;
+	int beamx = (m_screen->hpos()/2)-58;
 
 	/* once we're ready to fire, set the X coordinate and assert the line */
 	m_gunx[which] = beamx;
@@ -149,7 +162,7 @@ TIMER_CALLBACK_MEMBER(tickee_state::setup_gun_interrupts)
 	int beamx, beamy;
 
 	/* set a timer to do this again next frame */
-	m_setup_gun_timer->adjust(machine().primary_screen->time_until_pos(0));
+	m_setup_gun_timer->adjust(m_screen->time_until_pos(0));
 
 	/* only do work if the palette is flashed */
 	if (m_control)
@@ -157,14 +170,14 @@ TIMER_CALLBACK_MEMBER(tickee_state::setup_gun_interrupts)
 			return;
 
 	/* generate interrupts for player 1's gun */
-	get_crosshair_xy(machine(), 0, &beamx, &beamy);
-	timer_set(machine().primary_screen->time_until_pos(beamy + m_beamyadd, beamx + m_beamxadd), TIMER_TRIGGER_GUN_INTERRUPT, 0);
-	timer_set(machine().primary_screen->time_until_pos(beamy + m_beamyadd + 1, beamx + m_beamxadd), TIMER_CLEAR_GUN_INTERRUPT, 0);
+	get_crosshair_xy(0, beamx, beamy);
+	timer_set(m_screen->time_until_pos(beamy + m_beamyadd, beamx + m_beamxadd), TIMER_TRIGGER_GUN_INTERRUPT, 0);
+	timer_set(m_screen->time_until_pos(beamy + m_beamyadd + 1, beamx + m_beamxadd), TIMER_CLEAR_GUN_INTERRUPT, 0);
 
 	/* generate interrupts for player 2's gun */
-	get_crosshair_xy(machine(), 1, &beamx, &beamy);
-	timer_set(machine().primary_screen->time_until_pos(beamy + m_beamyadd, beamx + m_beamxadd), TIMER_TRIGGER_GUN_INTERRUPT, 1);
-	timer_set(machine().primary_screen->time_until_pos(beamy + m_beamyadd + 1, beamx + m_beamxadd), TIMER_CLEAR_GUN_INTERRUPT, 1);
+	get_crosshair_xy(1, beamx, beamy);
+	timer_set(m_screen->time_until_pos(beamy + m_beamyadd, beamx + m_beamxadd), TIMER_TRIGGER_GUN_INTERRUPT, 1);
+	timer_set(m_screen->time_until_pos(beamy + m_beamyadd + 1, beamx + m_beamxadd), TIMER_CLEAR_GUN_INTERRUPT, 1);
 }
 
 
@@ -179,7 +192,7 @@ VIDEO_START_MEMBER(tickee_state,tickee)
 {
 	/* start a timer going on the first scanline of every frame */
 	m_setup_gun_timer = timer_alloc(TIMER_SETUP_GUN_INTERRUPTS);
-	m_setup_gun_timer->adjust(machine().primary_screen->time_until_pos(0));
+	m_setup_gun_timer->adjust(m_screen->time_until_pos(0));
 }
 
 
@@ -190,17 +203,16 @@ VIDEO_START_MEMBER(tickee_state,tickee)
  *
  *************************************/
 
-static void scanline_update(screen_device &screen, bitmap_rgb32 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_RGB32_CB_MEMBER(tickee_state::scanline_update)
 {
-	tickee_state *state = screen.machine().driver_data<tickee_state>();
-	UINT16 *src = &state->m_vram[(params->rowaddr << 8) & 0x3ff00];
+	UINT16 *src = &m_vram[(params->rowaddr << 8) & 0x3ff00];
 	UINT32 *dest = &bitmap.pix32(scanline);
-	const rgb_t *pens = state->m_tlc34076->get_pens();
+	const rgb_t *pens = m_tlc34076->get_pens();
 	int coladdr = params->coladdr << 1;
 	int x;
 
 	/* blank palette: fill with pen 255 */
-	if (state->m_control[2])
+	if (m_control[2])
 	{
 		for (x = params->heblnk; x < params->hsblnk; x++)
 			dest[x] = pens[0xff];
@@ -216,16 +228,15 @@ static void scanline_update(screen_device &screen, bitmap_rgb32 &bitmap, int sca
 }
 
 
-static void rapidfir_scanline_update(screen_device &screen, bitmap_rgb32 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_RGB32_CB_MEMBER(tickee_state::rapidfir_scanline_update)
 {
-	tickee_state *state = screen.machine().driver_data<tickee_state>();
-	UINT16 *src = &state->m_vram[(params->rowaddr << 8) & 0x3ff00];
+	UINT16 *src = &m_vram[(params->rowaddr << 8) & 0x3ff00];
 	UINT32 *dest = &bitmap.pix32(scanline);
-	const rgb_t *pens = state->m_tlc34076->get_pens();
+	const rgb_t *pens = m_tlc34076->get_pens();
 	int coladdr = params->coladdr << 1;
 	int x;
 
-	if (state->m_palette_bank)
+	if (m_palette_bank)
 	{
 		/* blank palette: fill with pen 255 */
 		for (x = params->heblnk; x < params->hsblnk; x += 2)
@@ -286,19 +297,17 @@ READ16_MEMBER(tickee_state::rapidfir_transparent_r)
 }
 
 
-static void rapidfir_to_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_TO_SHIFTREG_CB_MEMBER(tickee_state::rapidfir_to_shiftreg)
 {
-	tickee_state *state = space.machine().driver_data<tickee_state>();
 	if (address < 0x800000)
-		memcpy(shiftreg, &state->m_vram[TOWORD(address)], TOBYTE(0x2000));
+		memcpy(shiftreg, &m_vram[TOWORD(address)], TOBYTE(0x2000));
 }
 
 
-static void rapidfir_from_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_FROM_SHIFTREG_CB_MEMBER(tickee_state::rapidfir_from_shiftreg)
 {
-	tickee_state *state = space.machine().driver_data<tickee_state>();
 	if (address < 0x800000)
-		memcpy(&state->m_vram[TOWORD(address)], shiftreg, TOBYTE(0x2000));
+		memcpy(&m_vram[TOWORD(address)], shiftreg, TOBYTE(0x2000));
 }
 
 
@@ -429,7 +438,7 @@ static ADDRESS_MAP_START( tickee_map, AS_PROGRAM, 16, tickee_state )
 	AM_RANGE(0x04200100, 0x0420011f) AM_DEVWRITE8("ym2", ay8910_device, address_data_w, 0x00ff)
 	AM_RANGE(0x04400000, 0x0440007f) AM_WRITE(tickee_control_w) AM_SHARE("control")
 	AM_RANGE(0x04400040, 0x0440004f) AM_READ_PORT("IN2")
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("maincpu", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0xc0000240, 0xc000025f) AM_WRITENOP        /* seems to be a bug in their code */
 	AM_RANGE(0xff000000, 0xffffffff) AM_ROM AM_REGION("user1", 0)
 ADDRESS_MAP_END
@@ -446,7 +455,7 @@ static ADDRESS_MAP_START( ghoshunt_map, AS_PROGRAM, 16, tickee_state )
 	AM_RANGE(0x04300100, 0x0430010f) AM_DEVREAD8("ym2", ay8910_device, data_r, 0x00ff)
 	AM_RANGE(0x04300100, 0x0430011f) AM_DEVWRITE8("ym2", ay8910_device, address_data_w, 0x00ff)
 	AM_RANGE(0x04500000, 0x0450007f) AM_WRITE(tickee_control_w) AM_SHARE("control")
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("maincpu", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0xc0000240, 0xc000025f) AM_WRITENOP        /* seems to be a bug in their code */
 	AM_RANGE(0xff000000, 0xffffffff) AM_ROM AM_REGION("user1", 0)
 ADDRESS_MAP_END
@@ -462,7 +471,7 @@ static ADDRESS_MAP_START( mouseatk_map, AS_PROGRAM, 16, tickee_state )
 	AM_RANGE(0x04200100, 0x0420010f) AM_DEVREADWRITE8("oki", okim6295_device, read, write, 0x00ff)
 	AM_RANGE(0x04400000, 0x0440007f) AM_WRITE(tickee_control_w) AM_SHARE("control")
 	AM_RANGE(0x04400040, 0x0440004f) AM_READ_PORT("IN2") // ?
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("maincpu", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0xc0000240, 0xc000025f) AM_WRITENOP        /* seems to be a bug in their code */
 	AM_RANGE(0xff000000, 0xffffffff) AM_ROM AM_REGION("user1", 0)
 ADDRESS_MAP_END
@@ -472,7 +481,7 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( rapidfir_map, AS_PROGRAM, 16, tickee_state )
 	AM_RANGE(0x00000000, 0x007fffff) AM_RAM AM_SHARE("vram")
 	AM_RANGE(0x02000000, 0x027fffff) AM_READWRITE(rapidfir_transparent_r, rapidfir_transparent_w)
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("maincpu", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0xfc000000, 0xfc00000f) AM_READ(rapidfir_gun1_r)
 	AM_RANGE(0xfc000100, 0xfc00010f) AM_READ(rapidfir_gun2_r)
 	AM_RANGE(0xfc000400, 0xfc00040f) AM_READ(ffff_r)
@@ -724,71 +733,6 @@ static INPUT_PORTS_START( rapidfir )
 	PORT_BIT( 0xff, 0x80, IPT_LIGHTGUN_Y ) PORT_CROSSHAIR(Y, 1.0, 0.0, 0) PORT_SENSITIVITY(70) PORT_KEYDELTA(10) PORT_PLAYER(2)
 INPUT_PORTS_END
 
-
-
-/*************************************
- *
- *  Sound interfaces
- *
- *************************************/
-
-static const ay8910_interface ay8910_interface_1 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSW"),
-	DEVCB_INPUT_PORT("IN1"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static const ay8910_interface ay8910_interface_2 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("IN0"),
-	DEVCB_INPUT_PORT("IN2"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
-
-/*************************************
- *
- *  34010 configuration
- *
- *************************************/
-
-static const tms34010_config tms_config =
-{
-	FALSE,                          /* halt on reset */
-	"screen",                       /* the screen operated on */
-	VIDEO_CLOCK/2,                  /* pixel clock */
-	1,                              /* pixels per clock */
-	NULL,                           /* scanline callback (indexed16) */
-	scanline_update,                /* scanline callback (rgb32) */
-	NULL,                           /* generate interrupt */
-	NULL,                           /* write to shiftreg function */
-	NULL                            /* read from shiftreg function */
-};
-
-
-static const tms34010_config rapidfir_tms_config =
-{
-	FALSE,                          /* halt on reset */
-	"screen",                       /* the screen operated on */
-	VIDEO_CLOCK/2,                  /* pixel clock */
-	1,                              /* pixels per clock */
-	NULL,                           /* scanline callback (indexed16) */
-	rapidfir_scanline_update,       /* scanline callback (rgb32) */
-	NULL,                           /* generate interrupt */
-	rapidfir_to_shiftreg,           /* write to shiftreg function */
-	rapidfir_from_shiftreg          /* read from shiftreg function */
-};
-
-
-
 /*************************************
  *
  *  Machine drivers
@@ -799,8 +743,11 @@ static MACHINE_CONFIG_START( tickee, tickee_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", TMS34010, XTAL_40MHz)
-	MCFG_CPU_CONFIG(tms_config)
 	MCFG_CPU_PROGRAM_MAP(tickee_map)
+	MCFG_TMS340X0_HALT_ON_RESET(FALSE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(VIDEO_CLOCK/2) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(1) /* pixels per clock */
+	MCFG_TMS340X0_SCANLINE_RGB32_CB(tickee_state, scanline_update) /* scanline callback (rgb32) */
 
 	MCFG_MACHINE_RESET_OVERRIDE(tickee_state,tickee)
 	MCFG_NVRAM_ADD_1FILL("nvram")
@@ -815,17 +762,19 @@ static MACHINE_CONFIG_START( tickee, tickee_state )
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(VIDEO_CLOCK/2, 444, 0, 320, 233, 0, 200)
-	MCFG_SCREEN_UPDATE_STATIC(tms340x0_rgb32)
+	MCFG_SCREEN_UPDATE_DEVICE("maincpu", tms34010_device, tms340x0_rgb32)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ym1", YM2149, VIDEO_CLOCK/8)
-	MCFG_SOUND_CONFIG(ay8910_interface_1)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSW"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("IN1"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
 	MCFG_SOUND_ADD("ym2", YM2149, VIDEO_CLOCK/8)
-	MCFG_SOUND_CONFIG(ay8910_interface_2)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("IN0"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("IN2"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 
@@ -842,8 +791,13 @@ static MACHINE_CONFIG_START( rapidfir, tickee_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", TMS34010, XTAL_50MHz)
-	MCFG_CPU_CONFIG(rapidfir_tms_config)
 	MCFG_CPU_PROGRAM_MAP(rapidfir_map)
+	MCFG_TMS340X0_HALT_ON_RESET(FALSE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(VIDEO_CLOCK/2) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(1) /* pixels per clock */
+	MCFG_TMS340X0_SCANLINE_RGB32_CB(tickee_state, rapidfir_scanline_update)       /* scanline callback (rgb32) */
+	MCFG_TMS340X0_TO_SHIFTREG_CB(tickee_state, rapidfir_to_shiftreg)           /* write to shiftreg function */
+	MCFG_TMS340X0_FROM_SHIFTREG_CB(tickee_state, rapidfir_from_shiftreg)          /* read from shiftreg function */
 
 	MCFG_MACHINE_RESET_OVERRIDE(tickee_state,rapidfir)
 	MCFG_NVRAM_ADD_1FILL("nvram")
@@ -855,7 +809,7 @@ static MACHINE_CONFIG_START( rapidfir, tickee_state )
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(VIDEO_CLOCK/2, 444, 0, 320, 233, 0, 200)
-	MCFG_SCREEN_UPDATE_STATIC(tms340x0_rgb32)
+	MCFG_SCREEN_UPDATE_DEVICE("maincpu", tms34010_device, tms340x0_rgb32)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -869,8 +823,11 @@ static MACHINE_CONFIG_START( mouseatk, tickee_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", TMS34010, XTAL_40MHz)
-	MCFG_CPU_CONFIG(tms_config)
 	MCFG_CPU_PROGRAM_MAP(mouseatk_map)
+	MCFG_TMS340X0_HALT_ON_RESET(FALSE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(VIDEO_CLOCK/2) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(1) /* pixels per clock */
+	MCFG_TMS340X0_SCANLINE_RGB32_CB(tickee_state, scanline_update) /* scanline callback (rgb32) */
 
 	MCFG_MACHINE_RESET_OVERRIDE(tickee_state,tickee)
 	MCFG_NVRAM_ADD_1FILL("nvram")
@@ -883,13 +840,14 @@ static MACHINE_CONFIG_START( mouseatk, tickee_state )
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(VIDEO_CLOCK/2, 444, 0, 320, 233, 0, 200)
-	MCFG_SCREEN_UPDATE_STATIC(tms340x0_rgb32)
+	MCFG_SCREEN_UPDATE_DEVICE("maincpu", tms34010_device, tms340x0_rgb32)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ym", YM2149, OKI_CLOCK)
-	MCFG_SOUND_CONFIG(ay8910_interface_1)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSW"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("IN1"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
 	MCFG_OKIM6295_ADD("oki", OKI_CLOCK, OKIM6295_PIN7_HIGH)

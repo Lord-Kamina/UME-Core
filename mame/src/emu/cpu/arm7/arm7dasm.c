@@ -1,21 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Steve Ellenoff,R. Belmont,Ryan Holtz
 /*****************************************************************************
  *
  *   arm7dasm.c
  *   Portable ARM7TDMI Core Emulator - Disassembler
  *
  *   Copyright Steve Ellenoff, all rights reserved.
- *
- *   - This source code is released as freeware for non-commercial purposes.
- *   - You are free to use and redistribute this code in modified or
- *     unmodified form, provided you list me in the credits.
- *   - If you modify this source code, you must add a notice to each modified
- *     source file that it has been changed.  If you're a nice person, you
- *     will clearly mark each change too.  :)
- *   - If you wish to use this for commercial purposes, please contact me at
- *     sellenoff@hotmail.com
- *   - The author of this copywritten work reserves the right to change the
- *     terms of its usage and license at any time, including retroactively
- *   - This entire notice must remain in the source code.
  *
  *  This work is based on:
  *  #1) 'Atmel Corporation ARM7TDMI (Thumb) Datasheet - January 1999'
@@ -975,6 +965,10 @@ static UINT32 thumb_disasm( char *pBuf, UINT32 pc, UINT16 opcode )
 										pBuf += sprintf( pBuf, "BX R%d", rd );
 										if (rd == 14)
 											dasmflags = DASMFLAG_STEP_OUT;
+										break;
+									case 0x2:
+										rd = ( opcode & THUMB_HIREG_RS ) >> THUMB_HIREG_RS_SHIFT;
+										pBuf += sprintf( pBuf, "BLX R%d", rd );
 										break;
 									default:
 										sprintf( pBuf, "INVALID %04x", opcode);

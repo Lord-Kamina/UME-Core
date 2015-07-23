@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi, Roberto Fresca
 /***************************************************************************
 
 Tehkan World Cup - (c) Tehkan 1985
@@ -15,40 +17,40 @@ robbiex@rocketmail.com
 #include "includes/tehkanwc.h"
 
 
-WRITE8_MEMBER(tehkanwc_state::tehkanwc_videoram_w)
+WRITE8_MEMBER(tehkanwc_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(tehkanwc_state::tehkanwc_colorram_w)
+WRITE8_MEMBER(tehkanwc_state::colorram_w)
 {
 	m_colorram[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(tehkanwc_state::tehkanwc_videoram2_w)
+WRITE8_MEMBER(tehkanwc_state::videoram2_w)
 {
 	m_videoram2[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset / 2);
 }
 
-WRITE8_MEMBER(tehkanwc_state::tehkanwc_scroll_x_w)
+WRITE8_MEMBER(tehkanwc_state::scroll_x_w)
 {
 	m_scroll_x[offset] = data;
 }
 
-WRITE8_MEMBER(tehkanwc_state::tehkanwc_scroll_y_w)
+WRITE8_MEMBER(tehkanwc_state::scroll_y_w)
 {
 	m_bg_tilemap->set_scrolly(0, data);
 }
 
-WRITE8_MEMBER(tehkanwc_state::tehkanwc_flipscreen_x_w)
+WRITE8_MEMBER(tehkanwc_state::flipscreen_x_w)
 {
 	flip_screen_x_set(data & 0x40);
 }
 
-WRITE8_MEMBER(tehkanwc_state::tehkanwc_flipscreen_y_w)
+WRITE8_MEMBER(tehkanwc_state::flipscreen_y_w)
 {
 	flip_screen_y_set(data & 0x40);
 }
@@ -87,13 +89,17 @@ TILE_GET_INFO_MEMBER(tehkanwc_state::get_fg_tile_info)
 
 void tehkanwc_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tehkanwc_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tehkanwc_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
 			16, 8, 32, 32);
 
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tehkanwc_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tehkanwc_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS,
 			8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
+
+	save_item(NAME(m_scroll_x));
+	save_item(NAME(m_led0));
+	save_item(NAME(m_led1));
 }
 
 /*
@@ -123,18 +129,15 @@ void tehkanwc_state::gridiron_draw_led(bitmap_ind16 &bitmap, const rectangle &cl
 
 void tehkanwc_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	UINT8 *spriteram = m_spriteram;
-	int offs;
-
-	for (offs = 0;offs < m_spriteram.bytes();offs += 4)
+	for (int offs = 0;offs < m_spriteram.bytes();offs += 4)
 	{
-		int attr = spriteram[offs + 1];
-		int code = spriteram[offs] + ((attr & 0x08) << 5);
+		int attr = m_spriteram[offs + 1];
+		int code = m_spriteram[offs] + ((attr & 0x08) << 5);
 		int color = attr & 0x07;
 		int flipx = attr & 0x40;
 		int flipy = attr & 0x80;
-		int sx = spriteram[offs + 2] + ((attr & 0x20) << 3) - 128;
-		int sy = spriteram[offs + 3];
+		int sx = m_spriteram[offs + 2] + ((attr & 0x20) << 3) - 128;
+		int sy = m_spriteram[offs + 3];
 
 		if (flip_screen_x())
 		{
@@ -148,18 +151,18 @@ void tehkanwc_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 			flipy = !flipy;
 		}
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 			code, color, flipx, flipy, sx, sy, 0);
 	}
 }
 
-UINT32 tehkanwc_state::screen_update_tehkanwc(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 tehkanwc_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	m_bg_tilemap->set_scrollx(0, m_scroll_x[0] + 256 * m_scroll_x[1]);
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
-	m_fg_tilemap->draw(bitmap, cliprect, 1, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 1, 0);
 	gridiron_draw_led(bitmap, cliprect, m_led0, 0);
 	gridiron_draw_led(bitmap, cliprect, m_led1, 1);
 	return 0;

@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Curt Coder,Dirk Best
 /***************************************************************************
 
     Epson PX-8
@@ -50,7 +52,7 @@ enum
 	GAH40M_CTLR1 = 0,
 	GAH40M_CMDR,
 	GAH40M_CTLR2,
-	GAH40M_IER = 4,
+	GAH40M_IER = 4
 };
 
 enum
@@ -518,8 +520,8 @@ static ADDRESS_MAP_START( px8_io, AS_IO, 8, px8_state )
 	AM_RANGE(0x00, 0x07) AM_READWRITE(gah40m_r, gah40m_w)
 	AM_RANGE(0x0c, 0x0c) AM_DEVREADWRITE(I8251_TAG, i8251_device, data_r, data_w)
 	AM_RANGE(0x0d, 0x0d) AM_DEVREADWRITE(I8251_TAG, i8251_device, status_r, control_w)
-//  AM_RANGE(0x0e, 0x0e) AM_DEVREADWRITE_LEGACY(SED1320_TAG, sed1330_status_r, sed1330_data_w)
-//  AM_RANGE(0x0f, 0x0f) AM_DEVREADWRITE_LEGACY(SED1320_TAG, sed1330_data_r, sed1330_command_w)
+//  AM_RANGE(0x0e, 0x0e) AM_DEVREADWRITE(SED1320_TAG, sed1330_device, status_r, data_w)
+//  AM_RANGE(0x0f, 0x0f) AM_DEVREADWRITE(SED1320_TAG, sed1330_device, data_r, command_w)
 ADDRESS_MAP_END
 
 /*-------------------------------------------------
@@ -682,19 +684,11 @@ INPUT_PORTS_END
     VIDEO
 ***************************************************************************/
 
-/*-------------------------------------------------
-    PALETTE_INIT( px8 )
--------------------------------------------------*/
-
-void px8_state::palette_init()
+PALETTE_INIT_MEMBER(px8_state, px8)
 {
-	palette_set_color_rgb(machine(), 0, 0xa5, 0xad, 0xa5);
-	palette_set_color_rgb(machine(), 1, 0x31, 0x39, 0x10);
+	palette.set_pen_color(0, 0xa5, 0xad, 0xa5);
+	palette.set_pen_color(1, 0x31, 0x39, 0x10);
 }
-
-/*-------------------------------------------------
-    SCREEN_UPDATE_IND16( px8 )
--------------------------------------------------*/
 
 UINT32 px8_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
@@ -725,40 +719,6 @@ static const gfx_layout px8_charlayout =
 static GFXDECODE_START( px8 )
 	GFXDECODE_ENTRY( SED1320_TAG, 0x0000, px8_charlayout, 0, 1 )
 GFXDECODE_END
-
-/***************************************************************************
-    DEVICE CONFIGURATION
-***************************************************************************/
-
-/*-------------------------------------------------
-    i8251_interface i8251_intf
--------------------------------------------------*/
-
-static const i8251_interface i8251_intf =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-/*-------------------------------------------------
-    cassette_interface px8_cassette_interface
--------------------------------------------------*/
-
-static const cassette_interface px8_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	NULL,
-	NULL
-};
 
 /***************************************************************************
     MACHINE INITIALIZATION
@@ -816,9 +776,11 @@ static MACHINE_CONFIG_START( px8, px8_state )
 	MCFG_SCREEN_UPDATE_DRIVER(px8_state, screen_update)
 	MCFG_SCREEN_SIZE(480, 64)
 	MCFG_SCREEN_VISIBLE_AREA(0, 479, 0, 63)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(px8)
-	MCFG_PALETTE_LENGTH(2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", px8)
+	MCFG_PALETTE_ADD("palette", 2)
+	MCFG_PALETTE_INIT_OWNER(px8_state, px8)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -826,19 +788,24 @@ static MACHINE_CONFIG_START( px8, px8_state )
 	MCFG_SOUND_ROUTE(0, "mono", 0.25)
 
 	/* cartridge */
-	MCFG_CARTSLOT_ADD("capsule1")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin,rom")
+	MCFG_GENERIC_CARTSLOT_ADD("capsule1", generic_plain_slot, NULL)
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
-	MCFG_CARTSLOT_ADD("capsule2")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin,rom")
+	MCFG_GENERIC_CARTSLOT_ADD("capsule2", generic_plain_slot, NULL)
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* devices */
-	MCFG_I8251_ADD(I8251_TAG, i8251_intf)
-	MCFG_CASSETTE_ADD("cassette", px8_cassette_interface)
+	MCFG_DEVICE_ADD(I8251_TAG, I8251, 0)
+
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("64K")
+
+	// software
+	MCFG_SOFTWARE_LIST_ADD("epson_cpm_list", "epson_cpm")
 MACHINE_CONFIG_END
 
 /***************************************************************************
@@ -855,10 +822,6 @@ ROM_START( px8 )
 
 	ROM_REGION( 0x0800, SED1320_TAG, 0 )
 	ROM_LOAD( "font.rom", 0x0000, 0x0800, CRC(5b52edbd) SHA1(38197edf301bb2843bea040536af545f76b3d44f) )
-
-	ROM_REGION( 0x10000, "capsule", 0 )
-	ROM_CART_LOAD( "capsule2", 0x0000, 0x8000, ROM_NOMIRROR )
-	ROM_CART_LOAD( "capsule1", 0x8000, 0x8000, ROM_NOMIRROR )
 
 	ROM_REGION( 0x1000, HD6303_TAG, 0 )
 	ROM_LOAD( "hd6303 slave cpu internal rom.13d", 0x0000, 0x1000, NO_DUMP )

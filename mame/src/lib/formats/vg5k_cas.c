@@ -1,8 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /********************************************************************
 
     Support for VG-5000 .k7 cassette images
 
 ********************************************************************/
+#include <assert.h>
+
 #include "vg5k_cas.h"
 
 

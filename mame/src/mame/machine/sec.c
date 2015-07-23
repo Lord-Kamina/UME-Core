@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Serial Electronic Counter (SEC) */
 
 #include "emu.h"
@@ -106,7 +108,7 @@ void SEC::Do_Command(void)
 	switch ( m_request[0] )
 	{
 		case SEC_REQUEST_VERSION:    Cmd_Get_Ver(); break;
-		case SEC_REQUE$T_STATUS:     Cmd_Get_Sta(); break;
+		case SEC_REQUEST_STATUS:     Cmd_Get_Sta(); break;
 		case SEC_REQUEST_MARKET:     Cmd_Get_Mrk(); break;
 		case SEC_REQEUST_LAST_ERROR: Cmd_Get_Err(); break;
 		case SEC_REQUEST_FINGERPRNT: Cmd_Get_Fpr(); break;

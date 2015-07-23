@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Angelo Salese
 /***************************************************************************
 
     Nintendo Super System
@@ -158,9 +160,11 @@ Game Name            IC1             IC1 Type    IC3            IC3 Type    Jump
 -------------------------------------------------------------------------------------------------------
 Super Mario World    NSS-MW-0_PRG    LH534J      NSS-R_IC3_MW   27C256      CL1 CL2 CL3 CL4 CL5 - Short
                                                                             SL1 SL2 SL3 SL4 SL5 - Open
+Super Mario World    NSS-R__IC1__MW  ?LH534J?    NSS-R_IC3_MW   27C256      CL1 CL2 CL3 CL4 CL5 - Short
+                                                                            SL1 SL2 SL3 SL4 SL5 - Open
 Super Tennis         NSS-ST-0        LH534J      NSS-R_IC3_ST   27C256      CL1 CL2 CL3 CL4 CL5 - Short
                                                                             SL1 SL2 SL3 SL4 SL5 - Open
-Super Soccer         NSS-R_IC1_FS    TC574000    NSS-R_IC3_FS   27C256      CL1 CL2 CL3 CL4 CL5 - Open
+Super Soccer         NSS-R__IC1__FS  TC574000    NSS-R_IC3_FS   27C256      CL1 CL2 CL3 CL4 CL5 - Open
                                                                             SL1 SL2 SL3 SL4 SL5 - Short
 -------------------------------------------------------------------------------------------------------
 Note - By setting the jumpers to 'Super Soccer', the other 2 games can use standard EPROMs if required.
@@ -299,12 +303,17 @@ public:
 		: snes_state(mconfig, type, tag),
 		m_m50458(*this,"m50458"),
 		m_s3520cf(*this, "s3520cf"),
-		m_rp5h01(*this,"rp5h01")
-		{ }
+		m_rp5h01(*this,"rp5h01"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette")
+	{ }
 
 	required_device<m50458_device> m_m50458;
 	required_device<s3520cf_device> m_s3520cf;
 	required_device<rp5h01_device> m_rp5h01;
+	required_device<screen_device> m_screen;
+	optional_device<palette_device> m_palette;
+
 	UINT8 m_wram_wp_flag;
 	UINT8 *m_wram;
 	UINT8 m_nmi_enable;
@@ -463,13 +472,9 @@ READ8_MEMBER(nss_state::nss_prot_r)
 
 	if (m_cart_sel == 0)
 	{
-		m_rp5h01->enable_w(space, 0, 0);
-		data |= ((~m_rp5h01->counter_r(space, 0)) << 4) & 0x10;  /* D4 */
-		data |= ((m_rp5h01->data_r(space, 0)) << 3) & 0x08;      /* D3 */
-		m_rp5h01->enable_w(space, 0, 1);
+		data |= ((~m_rp5h01->counter_r()) << 4) & 0x10;  /* D4 */
+		data |= (m_rp5h01->data_r() << 3) & 0x08;        /* D3 */
 	}
-	else
-		m_rp5h01->enable_w(space, 0, 1);
 
 	return data;
 }
@@ -478,14 +483,10 @@ WRITE8_MEMBER(nss_state::nss_prot_w)
 {
 	if (m_cart_sel == 0)
 	{
-		m_rp5h01->enable_w(space, 0, 0);
-		m_rp5h01->test_w(space, 0, data & 0x10);     /* D4 */
-		m_rp5h01->clock_w(space, 0, data & 0x08);        /* D3 */
-		m_rp5h01->cs_w(space, 0, ~data & 0x01);
-		m_rp5h01->enable_w(space, 0, 1);
+		m_rp5h01->test_w(data & 0x10);     /* D4 */
+		m_rp5h01->clock_w(data & 0x08);    /* D3 */
+		m_rp5h01->cs_w(~data & 0x01);
 	}
-	else
-		m_rp5h01->enable_w(space, 0, 1);
 
 	ioport("EEPROMOUT")->write(data, 0xff);
 }
@@ -515,13 +516,13 @@ READ8_MEMBER(nss_state::port_00_r)
 	UINT8 res;
 
 	res = (m_joy_flag) << 7;
-	res|= (machine().primary_screen->vblank() & 1) << 6;
-	res|= (((ioport("SERIAL1_DATA1_H")->read() & 0x80) >> 7) << 5);
-	res|= (((ioport("SERIAL1_DATA1_L")->read() & 0x80) >> 7) << 4);
-	res|= (((ioport("SERIAL1_DATA1_H")->read() & 0x04) >> 2) << 3);
-	res|= (((ioport("SERIAL1_DATA1_H")->read() & 0x08) >> 3) << 2);
-	res|= (((ioport("SERIAL1_DATA1_H")->read() & 0x02) >> 1) << 1);
-	res|= (((ioport("SERIAL1_DATA1_H")->read() & 0x01) >> 0) << 0);
+	res|= (m_screen->vblank() & 1) << 6;
+	res|= (BIT(ioport("SERIAL1_DATA1")->read(), 15) << 5);
+	res|= (BIT(ioport("SERIAL1_DATA1")->read(),  7) << 4);
+	res|= (BIT(ioport("SERIAL1_DATA1")->read(), 10) << 3);
+	res|= (BIT(ioport("SERIAL1_DATA1")->read(), 11) << 2);
+	res|= (BIT(ioport("SERIAL1_DATA1")->read(),  9) << 1);
+	res|= (BIT(ioport("SERIAL1_DATA1")->read(),  8) << 0);
 
 	return res;
 }
@@ -671,45 +672,41 @@ static INPUT_PORTS_START( snes )
 	PORT_BIT( 0xfe, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("s3520cf", s3520cf_device, read_bit)
 
-	PORT_START("SERIAL1_DATA1_L")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("P1 Button A") PORT_PLAYER(1)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_NAME("P1 Button X") PORT_PLAYER(1)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_NAME("P1 Button L") PORT_PLAYER(1)
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME("P1 Button R") PORT_PLAYER(1)
-	PORT_START("SERIAL1_DATA1_H")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P1 Button B") PORT_PLAYER(1)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_NAME("P1 Button Y") PORT_PLAYER(1)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SERVICE1 ) PORT_NAME("P1 Select")
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_START1 ) PORT_NAME("P1 Start")
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_PLAYER(1)
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_PLAYER(1)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_PLAYER(1)
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(1)
+	PORT_START("SERIAL1_DATA1")
+	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P1 Button B") PORT_PLAYER(1)
+	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_NAME("P1 Button Y") PORT_PLAYER(1)
+	PORT_BIT( 0x2000, IP_ACTIVE_HIGH, IPT_SERVICE1 ) PORT_NAME("P1 Select")
+	PORT_BIT( 0x1000, IP_ACTIVE_HIGH, IPT_START1 ) PORT_NAME("P1 Start")
+	PORT_BIT( 0x0800, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_PLAYER(1)
+	PORT_BIT( 0x0400, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_PLAYER(1)
+	PORT_BIT( 0x0200, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_PLAYER(1)
+	PORT_BIT( 0x0100, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(1)
+	PORT_BIT( 0x0080, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("P1 Button A") PORT_PLAYER(1)
+	PORT_BIT( 0x0040, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_NAME("P1 Button X") PORT_PLAYER(1)
+	PORT_BIT( 0x0020, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_NAME("P1 Button L") PORT_PLAYER(1)
+	PORT_BIT( 0x0010, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME("P1 Button R") PORT_PLAYER(1)
+	PORT_BIT( 0x000f, IP_ACTIVE_HIGH, IPT_UNUSED )
 
-	PORT_START("SERIAL2_DATA1_L")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("P2 Button A") PORT_PLAYER(2)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_NAME("P2 Button X") PORT_PLAYER(2)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_NAME("P2 Button L") PORT_PLAYER(2)
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME("P2 Button R") PORT_PLAYER(2)
-	PORT_START("SERIAL2_DATA1_H")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P2 Button B") PORT_PLAYER(2)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_NAME("P2 Button Y") PORT_PLAYER(2)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SERVICE2 ) PORT_NAME("P2 Select")
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_START2 ) PORT_NAME("P2 Start")
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_PLAYER(2)
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_PLAYER(2)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_PLAYER(2)
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(2)
+	PORT_START("SERIAL2_DATA1")
+	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME("P2 Button B") PORT_PLAYER(2)
+	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_NAME("P2 Button Y") PORT_PLAYER(2)
+	PORT_BIT( 0x2000, IP_ACTIVE_HIGH, IPT_SERVICE2 ) PORT_NAME("P2 Select")
+	PORT_BIT( 0x1000, IP_ACTIVE_HIGH, IPT_START2 ) PORT_NAME("P2 Start")
+	PORT_BIT( 0x0800, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_PLAYER(2)
+	PORT_BIT( 0x0400, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_PLAYER(2)
+	PORT_BIT( 0x0200, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_PLAYER(2)
+	PORT_BIT( 0x0100, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(2)
+	PORT_BIT( 0x0080, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_NAME("P2 Button A") PORT_PLAYER(2)
+	PORT_BIT( 0x0040, IP_ACTIVE_HIGH, IPT_BUTTON5 ) PORT_NAME("P2 Button X") PORT_PLAYER(2)
+	PORT_BIT( 0x0020, IP_ACTIVE_HIGH, IPT_BUTTON6 ) PORT_NAME("P2 Button L") PORT_PLAYER(2)
+	PORT_BIT( 0x0010, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME("P2 Button R") PORT_PLAYER(2)
+	PORT_BIT( 0x000f, IP_ACTIVE_HIGH, IPT_UNUSED )
 
-	PORT_START("SERIAL1_DATA2_L")
-	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
-	PORT_START("SERIAL1_DATA2_H")
-	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_START("SERIAL1_DATA2")
+	PORT_BIT( 0xffff, IP_ACTIVE_HIGH, IPT_UNUSED )
 
-	PORT_START("SERIAL2_DATA2_L")
-	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
-	PORT_START("SERIAL2_DATA2_H")
-	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_START("SERIAL2_DATA2")
+	PORT_BIT( 0xffff, IP_ACTIVE_HIGH, IPT_UNUSED )
 
 	PORT_START("DSW")
 	PORT_DIPNAME( 0x03, 0x00, DEF_STR( Difficulty ) )
@@ -800,14 +797,15 @@ void nss_state::machine_reset()
 	m_maincpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 	m_soundcpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 
+	/* reset the security chip */
+	m_rp5h01->enable_w(1);
+	m_rp5h01->enable_w(0);
+	m_rp5h01->reset_w(0);
+	m_rp5h01->reset_w(1);
+
 	m_game_over_flag = 1;
 	m_joy_flag = 1;
 }
-
-static M50458_INTERFACE( m50458_intf )
-{
-	"osd"
-};
 
 static MACHINE_CONFIG_START( nss, nss_state )
 
@@ -826,7 +824,7 @@ static MACHINE_CONFIG_START( nss, nss_state )
 	MCFG_CPU_IO_MAP(bios_io_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", nss_state,  nss_vblank_irq)
 
-	MCFG_M50458_ADD("m50458",m50458_intf,4000000) /* TODO: correct clock */
+	MCFG_M50458_ADD("m50458", 4000000, "osd") /* TODO: correct clock */
 	MCFG_S3520CF_ADD("s3520cf") /* RTC */
 	MCFG_RP5H01_ADD("rp5h01")
 	MCFG_M6M80011AP_ADD("m6m80011ap")
@@ -845,6 +843,10 @@ static MACHINE_CONFIG_START( nss, nss_state )
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(DOTCLK_NTSC, SNES_HTOTAL, 0, SNES_SCR_WIDTH, SNES_VTOTAL_NTSC, 0, SNES_SCR_HEIGHT_NTSC)
 	MCFG_SCREEN_UPDATE_DRIVER( snes_state, screen_update )
+
+	MCFG_DEVICE_ADD("ppu", SNES_PPU, 0)
+	MCFG_SNES_PPU_OPENBUS_CB(READ8(snes_state, snes_open_bus_r))
+	MCFG_VIDEO_SET_SCREEN("screen")
 
 	// NSS
 	MCFG_SCREEN_ADD("osd", RASTER)
@@ -866,9 +868,11 @@ MACHINE_CONFIG_END
 	ROM_LOAD("spc700.rom", 0, 0x40, CRC(44bb3a40) SHA1(97e352553e94242ae823547cd853eecda55c20f0) ) \
 	ROM_REGION(0x8000,         "bios",  0)      /* Bios CPU */ \
 	ROM_SYSTEM_BIOS( 0, "single", "Nintendo Super System (Single Cart BIOS)" ) \
-	ROMX_LOAD("nss-ic14.02", 0x00000, 0x8000, CRC(e06cb58f) SHA1(62f507e91a2797919a78d627af53f029c7d81477), ROM_BIOS(1) )   /* bios */ \
+	ROMX_LOAD("nss-ic14.02.ic14", 0x00000, 0x8000, CRC(e06cb58f) SHA1(62f507e91a2797919a78d627af53f029c7d81477), ROM_BIOS(1) )   /* bios */ \
 	ROM_SYSTEM_BIOS( 1, "multi", "Nintendo Super System (Multi Cart BIOS)" ) \
-	ROMX_LOAD("nss-c.dat"  , 0x00000, 0x8000, CRC(a8e202b3) SHA1(b7afcfe4f5cf15df53452dc04be81929ced1efb2), ROM_BIOS(2) )   /* bios */
+	ROMX_LOAD("nss-c.ic14"  , 0x00000, 0x8000, CRC(a8e202b3) SHA1(b7afcfe4f5cf15df53452dc04be81929ced1efb2), ROM_BIOS(2) )   /* bios */ \
+	ROM_SYSTEM_BIOS( 2, "single3", "Nintendo Super System (Single Cart BIOS v3, hack?)" ) \
+	ROMX_LOAD("nss-v3.ic14" , 0x00000, 0x8000, CRC(ac385b53) SHA1(e3942f9d508c3c8074c3c3941376c37ca68b8e54), ROM_BIOS(3) )   /* bios */
 
 
 ROM_START( nss )
@@ -877,8 +881,6 @@ ROM_START( nss )
 
 	/* instruction / data rom for bios */
 	ROM_REGION( 0x8000, "ibios_rom", ROMREGION_ERASEFF )
-
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
 ROM_END
 
 ROM_START( nss_actr )
@@ -891,8 +893,8 @@ ROM_START( nss_actr )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "act-rais.ic8", 0x0000, 0x8000, CRC(08b38ce6) SHA1(4cbb7fd28d98ffef0f17747201625883af954e3a) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(4b74ac55) SHA1(51ea71b06367b4956a4b737385e2d4d15bd43980) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(4b74ac55) SHA1(51ea71b06367b4956a4b737385e2d4d15bd43980) )
 ROM_END
 
 ROM_START( nss_con3 )
@@ -906,7 +908,7 @@ ROM_START( nss_con3 )
 	ROM_LOAD( "contra3.ic8", 0x0000, 0x8000, CRC(0fbfa23b) SHA1(e7a1a78a58c64297e7b9623350ec57aed8035a4f) )
 
 	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(e97e4b00) SHA1(70e8382a93137353f5d0b905db2e9af50c52ce0b) )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(e97e4b00) SHA1(70e8382a93137353f5d0b905db2e9af50c52ce0b) )
 ROM_END
 
 ROM_START( nss_adam )
@@ -919,8 +921,8 @@ ROM_START( nss_adam )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "addams.ic8", 0x0000, 0x8000, CRC(57c7f72c) SHA1(2e3642b4b5438f6c535d6d1eb668e1663062cf78) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(154d10c2) SHA1(6829e149c341b753ee9bc72055c0634db4e81884) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(154d10c2) SHA1(6829e149c341b753ee9bc72055c0634db4e81884) )
 ROM_END
 
 ROM_START( nss_aten )
@@ -933,8 +935,8 @@ ROM_START( nss_aten )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "amtennis.ic8", 0x0000, 0x8000, CRC(d2cd3926) SHA1(49fc253b1b9497ef1374c7db0bd72c163ffb07e7) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010,CRC(3e640fa2) SHA1(ac530610a9d4979f070d5f57dfd4886c530aa20f) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10,CRC(3e640fa2) SHA1(ac530610a9d4979f070d5f57dfd4886c530aa20f) )
 ROM_END
 
 ROM_START( nss_rob3 )
@@ -947,8 +949,8 @@ ROM_START( nss_rob3 )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "robocop3.ic8", 0x0000, 0x8000, CRC(90d13c51) SHA1(6751dab14b7d178350ac333f07dd2c3852e4ae23) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(eb9a75de) SHA1(58f028c3f28eb4155215f4e154323e01e0fd4297) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(eb9a75de) SHA1(58f028c3f28eb4155215f4e154323e01e0fd4297) )
 ROM_END
 
 ROM_START( nss_ncaa )
@@ -961,8 +963,8 @@ ROM_START( nss_ncaa )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "ncaa.ic8", 0x0000, 0x8000, CRC(b9fa28d5) SHA1(bc538bcff5c19eae4becc6582b5c111d287b76fa) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(a2e9ad5b) SHA1(a41f82451fc185f8e989a0d4f38700dc7813bb50) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(a2e9ad5b) SHA1(a41f82451fc185f8e989a0d4f38700dc7813bb50) )
 ROM_END
 
 ROM_START( nss_skin )
@@ -975,8 +977,8 @@ ROM_START( nss_skin )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "skins.ic8", 0x0000, 0x8000, CRC(9f33d5ce) SHA1(4d279ad3665bd94c7ca9cb2778572bed42c5b298) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(86f8cd1d) SHA1(d567d194058568f4ae32b7726e433918b06bca54) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(86f8cd1d) SHA1(d567d194058568f4ae32b7726e433918b06bca54) )
 ROM_END
 
 ROM_START( nss_lwep )
@@ -989,8 +991,8 @@ ROM_START( nss_lwep )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "nss-lw.ic8", 0x0000, 0x8000, CRC(1acc1d5d) SHA1(4c8b100ac5847915aaf3b5bfbcb4f632606c97de) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(e9755c14) SHA1(d8dbebf3536dcbd18c50ba11a6b729dc7085f74b) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(e9755c14) SHA1(d8dbebf3536dcbd18c50ba11a6b729dc7085f74b) )
 ROM_END
 
 ROM_START( nss_ssoc )
@@ -1002,21 +1004,23 @@ ROM_START( nss_ssoc )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "s-soccer.ic3", 0x0000, 0x8000, CRC(c09211c3) SHA1(b274a57f93ae0a8774664df3d3615fb7dbecfa2e) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(e41c4204) SHA1(529ca7df78ecf154a095dc1b627783c43c817a45) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(e41c4204) SHA1(529ca7df78ecf154a095dc1b627783c43c817a45) )
 ROM_END
 
 ROM_START( nss_smw )
 	NSS_BIOS
 	ROM_REGION( 0x100000, "user3", 0 )
 	ROM_LOAD( "nss-mw-0_prg.ic1", 0x000000, 0x80000, CRC(c46766f2) SHA1(06a6efc246c6fdb83efab1d402d61d2179a84494) )
+	// Note: this rom appears with 2 variations: LH534J mask rom with "NSS-MW-0 // PRG" silkscreen
+	// or ?LH534J mask rom? with "NSS-R // IC1 // MW" label sticker
 
 	/* instruction / data rom for bios */
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
-	ROM_LOAD( "mw.ic3", 0x0000, 0x8000, CRC(f2c5466e) SHA1(e116f01342fcf359498ed8750741c139093b1fb2) )
+	ROM_LOAD( "nss-r__ic3__mw.ic3", 0x0000, 0x8000, CRC(f2c5466e) SHA1(e116f01342fcf359498ed8750741c139093b1fb2) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(fd700dca) SHA1(6805cefb1856c3498b7a7a049c0d09858afac47c) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(fd700dca) SHA1(6805cefb1856c3498b7a7a049c0d09858afac47c) ) // Labeled "MW" on yellow sticker
 ROM_END
 
 ROM_START( nss_fzer )
@@ -1028,8 +1032,8 @@ ROM_START( nss_fzer )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "fz.ic7", 0x0000, 0x8000, CRC(48ae570d) SHA1(934f9fec47dcf9e49936388968d2db50c69950da) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(9650a7d0) SHA1(59d57ab2720cff3a24105a7250560c41def45acc) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(9650a7d0) SHA1(59d57ab2720cff3a24105a7250560c41def45acc) )
 ROM_END
 
 ROM_START( nss_sten )
@@ -1041,21 +1045,18 @@ ROM_START( nss_sten )
 	ROM_REGION( 0x8000, "ibios_rom", 0 )
 	ROM_LOAD( "st.ic3", 0x0000, 0x8000, CRC(8880596e) SHA1(ec6d68fc2f51f7d94f496cd72cf898db65324542) )
 
-	ROM_REGION( 0x10, "rp5h01", ROMREGION_ERASE00 )
-	ROM_LOAD( "security.prm", 0x000000, 0x000010, CRC(2fd8475b) SHA1(38af97734649b90e0ea74cb1daeaa431e4295eb9) )
+	ROM_REGION( 0x10, "rp5h01", 0 )
+	ROM_LOAD( "security.prm", 0x00, 0x10, CRC(2fd8475b) SHA1(38af97734649b90e0ea74cb1daeaa431e4295eb9) )
 ROM_END
 
 DRIVER_INIT_MEMBER(nss_state,nss)
 {
 	UINT8 *PROM = memregion("rp5h01")->base();
-	int i;
 
-	DRIVER_INIT_CALL(snes);
-
-	for(i=0;i<0x10;i++)
+	for (int i = 0; i < 0x10; i++)
 		PROM[i] = BITSWAP8(PROM[i],0,1,2,3,4,5,6,7) ^ 0xff;
 
-
+	DRIVER_INIT_CALL(snes);
 }
 
 GAME( 199?, nss,       0,     nss,      snes, snes_state,    snes,    ROT0, "Nintendo",                    "Nintendo Super System BIOS", GAME_IS_BIOS_ROOT )

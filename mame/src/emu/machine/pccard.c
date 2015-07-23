@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 #include "pccard.h"
 
 READ16_MEMBER( pccard_interface::read_memory )

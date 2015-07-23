@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Mogura Desse */
 
 #include "emu.h"
@@ -10,33 +12,34 @@ class mogura_state : public driver_device
 public:
 	mogura_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_dac1(*this, "dac1"),
+		m_dac2(*this, "dac2"),
 		m_gfxram(*this, "gfxram"),
 		m_tileram(*this, "tileram"),
-		m_maincpu(*this, "maincpu"){ }
+		m_gfxdecode(*this, "gfxdecode")
+	{ }
 
-	/* memory pointers */
+	required_device<cpu_device> m_maincpu;
+	required_device<dac_device> m_dac1;
+	required_device<dac_device> m_dac2;
 	required_shared_ptr<UINT8> m_gfxram;
 	required_shared_ptr<UINT8> m_tileram;
+	required_device<gfxdecode_device> m_gfxdecode;
 
-	/* video-related */
 	tilemap_t *m_tilemap;
-
-	/* devices */
-	required_device<cpu_device> m_maincpu;
-	dac_device *m_dac1;
-	dac_device *m_dac2;
 	DECLARE_WRITE8_MEMBER(mogura_tileram_w);
 	DECLARE_WRITE8_MEMBER(mogura_dac_w);
 	DECLARE_WRITE8_MEMBER(mogura_gfxram_w);
 	TILE_GET_INFO_MEMBER(get_mogura_tile_info);
 	virtual void machine_start();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(mogura);
 	UINT32 screen_update_mogura(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 };
 
 
-void mogura_state::palette_init()
+PALETTE_INIT_MEMBER(mogura_state, mogura)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i, j;
@@ -62,7 +65,7 @@ void mogura_state::palette_init()
 		bit2 = BIT(color_prom[i], 7);
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		palette_set_color(machine(), j, MAKE_RGB(r, g, b));
+		palette.set_pen_color(j, rgb_t(r, g, b));
 		j += 4;
 		if (j > 31) j -= 31;
 	}
@@ -74,8 +77,7 @@ TILE_GET_INFO_MEMBER(mogura_state::get_mogura_tile_info)
 	int code = m_tileram[tile_index];
 	int attr = m_tileram[tile_index + 0x800];
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			code,
 			(attr >> 1) & 7,
 			0);
@@ -84,8 +86,8 @@ TILE_GET_INFO_MEMBER(mogura_state::get_mogura_tile_info)
 
 void mogura_state::video_start()
 {
-	machine().gfx[0]->set_source(m_gfxram);
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(mogura_state::get_mogura_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_gfxdecode->gfx(0)->set_source(m_gfxram);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(mogura_state::get_mogura_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
 }
 
 UINT32 mogura_state::screen_update_mogura(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
@@ -96,12 +98,12 @@ UINT32 mogura_state::screen_update_mogura(screen_device &screen, bitmap_ind16 &b
 	rectangle clip = visarea;
 	clip.max_x = 256 - 1;
 	m_tilemap->set_scrollx(0, 256);
-	m_tilemap->draw(bitmap, clip, 0, 0);
+	m_tilemap->draw(screen, bitmap, clip, 0, 0);
 
 	clip.min_x = 256;
 	clip.max_x = 512 - 1;
 	m_tilemap->set_scrollx(0, -128);
-	m_tilemap->draw(bitmap, clip, 0, 0);
+	m_tilemap->draw(screen, bitmap, clip, 0, 0);
 
 	return 0;
 }
@@ -123,7 +125,7 @@ WRITE8_MEMBER(mogura_state::mogura_gfxram_w)
 {
 	m_gfxram[offset] = data ;
 
-	machine().gfx[0]->mark_dirty(offset / 16);
+	m_gfxdecode->gfx(0)->mark_dirty(offset / 16);
 }
 
 
@@ -203,9 +205,6 @@ static MACHINE_CONFIG_START( mogura, mogura_state )
 	MCFG_CPU_IO_MAP(mogura_io_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", mogura_state,  irq0_line_hold)
 
-
-	MCFG_GFXDECODE(mogura)
-
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60) // ?
@@ -213,9 +212,11 @@ static MACHINE_CONFIG_START( mogura, mogura_state )
 	MCFG_SCREEN_SIZE(512, 512)
 	MCFG_SCREEN_VISIBLE_AREA(0, 320-1, 0, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(mogura_state, screen_update_mogura)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(32)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", mogura)
+	MCFG_PALETTE_ADD("palette", 32)
+	MCFG_PALETTE_INIT_OWNER(mogura_state, mogura)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -226,6 +227,7 @@ static MACHINE_CONFIG_START( mogura, mogura_state )
 	MCFG_DAC_ADD("dac2")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.50)
 MACHINE_CONFIG_END
+
 
 ROM_START( mogura )
 	ROM_REGION( 0x10000, "maincpu", 0 )

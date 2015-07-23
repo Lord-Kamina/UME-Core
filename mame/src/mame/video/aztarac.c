@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mathis Rosenhauer
 /*************************************************************************
 
     Centuri Aztarac hardware
@@ -5,11 +7,10 @@
 *************************************************************************/
 
 #include "emu.h"
-#include "video/vector.h"
 #include "includes/aztarac.h"
 
-#define AVECTOR(m, x, y, color, intensity) \
-vector_add_point (m, m_xcenter + ((x) << 16), m_ycenter - ((y) << 16), color, intensity)
+#define AVECTOR(x, y, color, intensity) \
+m_vector->add_point (m_xcenter + ((x) << 16), m_ycenter - ((y) << 16), color, intensity)
 
 
 
@@ -22,19 +23,18 @@ inline void aztarac_state::read_vectorram(UINT16 *vectorram, int addr, int *x, i
 	if (*y & 0x200) *y |= 0xfffffc00;
 }
 
-WRITE16_MEMBER(aztarac_state::aztarac_ubr_w)
+WRITE16_MEMBER(aztarac_state::ubr_w)
 {
-	UINT16 *vectorram = m_vectorram;
 	int x, y, c, intensity, xoffset, yoffset, color;
 	int defaddr, objaddr=0, ndefs;
 
 	if (data) /* data is the global intensity (always 0xff in Aztarac). */
 	{
-		vector_clear_list();
+		m_vector->clear_list();
 
 		while (1)
 		{
-			read_vectorram(vectorram, objaddr, &xoffset, &yoffset, &c);
+			read_vectorram(m_vectorram, objaddr, &xoffset, &yoffset, &c);
 			objaddr++;
 
 			if (c & 0x4000)
@@ -43,9 +43,9 @@ WRITE16_MEMBER(aztarac_state::aztarac_ubr_w)
 			if ((c & 0x2000) == 0)
 			{
 				defaddr = (c >> 1) & 0x7ff;
-				AVECTOR (machine(), xoffset, yoffset, 0, 0);
+				AVECTOR (xoffset, yoffset, 0, 0);
 
-				read_vectorram(vectorram, defaddr, &x, &ndefs, &c);
+				read_vectorram(m_vectorram, defaddr, &x, &ndefs, &c);
 				ndefs++;
 
 				if (c & 0xff00)
@@ -56,11 +56,11 @@ WRITE16_MEMBER(aztarac_state::aztarac_ubr_w)
 					while (ndefs--)
 					{
 						defaddr++;
-						read_vectorram(vectorram, defaddr, &x, &y, &c);
+						read_vectorram(m_vectorram, defaddr, &x, &y, &c);
 						if ((c & 0xff00) == 0)
-							AVECTOR (machine(), x + xoffset, y + yoffset, 0, 0);
+							AVECTOR (x + xoffset, y + yoffset, 0, 0);
 						else
-							AVECTOR (machine(), x + xoffset, y + yoffset, color, intensity);
+							AVECTOR (x + xoffset, y + yoffset, color, intensity);
 					}
 				}
 				else
@@ -69,9 +69,9 @@ WRITE16_MEMBER(aztarac_state::aztarac_ubr_w)
 					while (ndefs--)
 					{
 						defaddr++;
-						read_vectorram(vectorram, defaddr, &x, &y, &c);
+						read_vectorram(m_vectorram, defaddr, &x, &y, &c);
 						color = VECTOR_COLOR222(c & 0x3f);
-						AVECTOR (machine(), x + xoffset, y + yoffset, color, c >> 8);
+						AVECTOR (x + xoffset, y + yoffset, color, c >> 8);
 					}
 				}
 			}
@@ -82,7 +82,7 @@ WRITE16_MEMBER(aztarac_state::aztarac_ubr_w)
 
 void aztarac_state::video_start()
 {
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	int xmin = visarea.min_x;
 	int ymin = visarea.min_y;
@@ -91,6 +91,4 @@ void aztarac_state::video_start()
 
 	m_xcenter=((xmax + xmin) / 2) << 16;
 	m_ycenter=((ymax + ymin) / 2) << 16;
-
-	VIDEO_START_CALL_LEGACY(vector);
 }

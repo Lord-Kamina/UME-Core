@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*** m6805: Portable 6805 emulator ******************************************
 
     m6805.c (Also supports hd68705 and hd63705 variants)
@@ -51,14 +53,14 @@
 /* opcodes. In case of system with memory mapped I/O, this function can be  */
 /* used to greatly speed up emulation                                       */
 /****************************************************************************/
-#define M6805_RDOP(addr) ((unsigned)m_direct->read_decrypted_byte(addr))
+#define M6805_RDOP(addr) ((unsigned)m_direct->read_byte(addr))
 
 /****************************************************************************/
 /* M6805_RDOP_ARG() is identical to M6805_RDOP() but it's used for reading  */
 /* opcode arguments. This difference can be used to support systems that    */
 /* use different encoding mechanisms for opcodes and opcode arguments       */
 /****************************************************************************/
-#define M6805_RDOP_ARG(addr) ((unsigned)m_direct->read_raw_byte(addr))
+#define M6805_RDOP_ARG(addr) ((unsigned)m_direct->read_byte(addr))
 
 #define SP_MASK m_sp_mask   /* stack pointer mask */
 #define SP_LOW  m_sp_low    /* stack pointer low water mark */
@@ -86,6 +88,7 @@
 /* macros to access memory */
 #define IMMBYTE(b) {b = M_RDOP_ARG(PC++);}
 #define IMMWORD(w) {w.d = 0; w.b.h = M_RDOP_ARG(PC); w.b.l = M_RDOP_ARG(PC+1); PC+=2;}
+#define SKIPBYTE() {M_RDOP_ARG(PC++);}
 
 #define PUSHBYTE(b) wr_s_handler_b(&b)
 #define PUSHWORD(w) wr_s_handler_w(&w)
@@ -192,7 +195,7 @@ const UINT8 m6805_base_device::m_flags8d[256]= /* decrement */
 #define IDX1BYTE(b) {INDEXED1; b = RM(EAD);}
 #define IDX2BYTE(b) {INDEXED2; b = RM(EAD);}
 /* Macros for branch instructions */
-#define BRANCH(f) { UINT8 t; IMMBYTE(t); if(f) { PC += SIGNED(t); if (t == 0xfe) { /* speed up busy loops */ if(m_icount > 0) m_icount = 0; } } }
+#define BRANCH(f) { UINT8 t; IMMBYTE(t); if(f) { PC += SIGNED(t); } }
 
 /* what they say it is ... */
 const UINT8 m6805_base_device::m_cycles1[] =
@@ -406,16 +409,22 @@ void m6805_base_device::interrupt()
 //  m6809_base_device - constructor
 //-------------------------------------------------
 
-m6805_base_device::m6805_base_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock, const device_type type, const char *name, UINT32 addr_width)
-	: cpu_device(mconfig, type, name, tag, owner, clock),
+m6805_base_device::m6805_base_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock, const device_type type, const char *name, UINT32 addr_width, const char *shortname, const char *source)
+	: cpu_device(mconfig, type, name, tag, owner, clock, shortname, source),
 	m_program_config("program", ENDIANNESS_BIG, 8, addr_width)
 {
 }
 
 void m6805_base_device::device_start()
 {
+	m_program = &space(AS_PROGRAM);
+	m_direct = &m_program->direct();
+
+	// set our instruction counter
+	m_icountptr = &m_icount;
+
 	// register our state for the debugger
-	astring tempstr;
+	std::string tempstr;
 	state_add(STATE_GENPC,     "GENPC",     m_pc.w.l).noshow();
 	state_add(STATE_GENFLAGS,  "GENFLAGS",  m_cc).callimport().callexport().formatstr("%8s").noshow();
 	state_add(M6805_A,         "A",         m_a).mask(0xff);
@@ -424,6 +433,10 @@ void m6805_base_device::device_start()
 	state_add(M6805_X,         "X",         m_x).mask(0xff);
 	state_add(M6805_CC,        "CC",        m_cc).mask(0xff);
 
+	// register for savestates
+	save_item(NAME(EA));
+	save_item(NAME(SP_MASK));
+	save_item(NAME(SP_LOW));
 	save_item(NAME(A));
 	save_item(NAME(PC));
 	save_item(NAME(S));
@@ -431,13 +444,7 @@ void m6805_base_device::device_start()
 	save_item(NAME(CC));
 	save_item(NAME(m_pending_interrupts));
 	save_item(NAME(m_irq_state));
-
-	m_program = &space(AS_PROGRAM);
-	m_direct = &m_program->direct();
-
-	// set our instruction counter
-	m_icountptr = &m_icount;
-	m_icount = 50000;
+	save_item(NAME(m_nmi_state));
 }
 
 
@@ -455,8 +462,6 @@ void m6805_base_device::device_reset()
 
 	memset(m_irq_state, 0, sizeof(int) * 9);
 	m_nmi_state = 0;
-
-	m_icount = 50000;
 
 	m_program = &space(AS_PROGRAM);
 	m_direct = &m_program->direct();
@@ -489,12 +494,12 @@ const address_space_config *m6805_base_device::memory_space_config(address_space
 //  for the debugger
 //-------------------------------------------------
 
-void m6805_base_device::state_string_export(const device_state_entry &entry, astring &string)
+void m6805_base_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case STATE_GENFLAGS:
-			string.printf("%c%c%c%c%c%c%c%c",
+			strprintf(str, "%c%c%c%c%c%c%c%c",
 				(m_cc & 0x80) ? '?' : '.',
 				(m_cc & 0x40) ? '?' : '.',
 				(m_cc & 0x20) ? '?' : '.',
@@ -557,7 +562,7 @@ void m6805_device::execute_set_input(int inputnum, int state)
 	}
 }
 
-#include "6805ops.c"
+#include "6805ops.inc"
 
 //-------------------------------------------------
 //  execute_clocks_to_cycles - convert the raw

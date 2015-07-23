@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Brad Oliver, Nicola Salmoria
 /*************************************************************************
 
     Atari Battle Zone hardware
@@ -9,7 +11,7 @@
 #include "sound/discrete.h"
 
 #define BZONE_MASTER_CLOCK (XTAL_12_096MHz)
-#define BZONE_CLOCK_3KHZ  (MASTER_CLOCK / 4096)
+#define BZONE_CLOCK_3KHZ   ((double)BZONE_MASTER_CLOCK / 4096)
 
 class bzone_state : public driver_device
 {

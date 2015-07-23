@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*******************************************************************************
 
   Global Games 'Stealth' Hardware
@@ -7,7 +9,8 @@
   Motherboard contains very few major components
 
   Missing sound roms? (or is sound data in the program roms?)
-  NOTE: VFD is guessed as 16 segment, need to know more
+  NOTE: VFD is guessed as Samsung 16 segment, like other Global products
+  need to know more
 *******************************************************************************/
 
 
@@ -28,10 +31,9 @@ public:
 		{ }
 
 	required_device<cpu_device> m_maincpu;
-	optional_device<roc10937_t> m_vfd;
+	optional_device<s16lf01_t> m_vfd;
 
 // serial vfd
-	int m_alpha_clock;
 
 	DECLARE_WRITE16_MEMBER(vfd_w);
 
@@ -41,23 +43,11 @@ public:
 
 WRITE16_MEMBER(globalfr_state::vfd_w)
 {
-//  if(!(data & 0x20)) need to find reset
+//  m_vfd->(data & 0x20) need to find reset
 	{
-		int clock = (data & 0x40) != 0;
-		int datline = (data & 0x80);
-		if (m_alpha_clock != clock)
-		{
-			if (!m_alpha_clock)
-			{
-				m_vfd->shift_data(datline?1:0);
-			}
-		}
-		m_alpha_clock = clock;
+		m_vfd->sclk((data&0x40));
+		m_vfd->data(!(data&0x80));
 	}
-//  else
-//  {
-//      m_vfd->reset();
-//  }
 }
 
 static ADDRESS_MAP_START( globalfr_map, AS_PROGRAM, 16, globalfr_state )
@@ -75,9 +65,9 @@ INPUT_PORTS_END
 
 static MACHINE_CONFIG_START( globalfr, globalfr_state )
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M37710, 4000000)
+	MCFG_CPU_ADD("maincpu", M37702S1, 4000000)
 	MCFG_CPU_PROGRAM_MAP(globalfr_map)
-	MCFG_ROC10937_ADD("vfd",0,RIGHT_TO_LEFT)
+	MCFG_S16LF01_ADD("vfd",0)
 	MCFG_DEFAULT_LAYOUT(layout_globalfr)
 MACHINE_CONFIG_END
 

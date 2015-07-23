@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, Raphael Nabet, R. Belmont
 /*****************************************************************************
  *
  * includes/mac.h
@@ -14,17 +16,23 @@
 #include "machine/ram.h"
 #include "machine/egret.h"
 #include "machine/cuda.h"
-#include "machine/nubus.h"
+#include "bus/nubus/nubus.h"
+#include "bus/macpds/macpds.h"
 #include "machine/ncr539x.h"
 #include "machine/ncr5380.h"
 #include "machine/mackbd.h"
 #include "machine/macrtc.h"
 #include "sound/asc.h"
 #include "sound/awacs.h"
+#include "cpu/m68000/m68000.h"
 
 #define MAC_SCREEN_NAME "screen"
-#define MAC_539X_1_TAG "scsi:539x_1"
-#define MAC_539X_2_TAG "scsi:539x_2"
+#define MAC_539X_1_TAG "539x_1"
+#define MAC_539X_2_TAG "539x_2"
+#define MACKBD_TAG "mackbd"
+
+// uncomment to run i8021 keyboard in original Mac/512(e)/Plus
+//#define MAC_USE_EMULATED_KBD (1)
 
 // model helpers
 #define ADB_IS_BITBANG  ((mac->m_model == MODEL_MAC_SE || mac->m_model == MODEL_MAC_CLASSIC) || (mac->m_model >= MODEL_MAC_II && mac->m_model <= MODEL_MAC_IICI) || (mac->m_model == MODEL_MAC_SE30) || (mac->m_model == MODEL_MAC_QUADRA_700))
@@ -33,8 +41,6 @@
 #define ADB_IS_EGRET_NONCLASS   (mac->m_model >= MODEL_MAC_LC && mac->m_model <= MODEL_MAC_CLASSIC_II) || ((mac->m_model >= MODEL_MAC_IISI) && (mac->m_model <= MODEL_MAC_IIVI))
 #define ADB_IS_CUDA     ((m_model >= MODEL_MAC_COLOR_CLASSIC && m_model <= MODEL_MAC_LC_580) || ((m_model >= MODEL_MAC_QUADRA_660AV) && (m_model <= MODEL_MAC_QUADRA_630)) || (m_model >= MODEL_MAC_POWERMAC_6100))
 #define ADB_IS_CUDA_NONCLASS        ((mac->m_model >= MODEL_MAC_COLOR_CLASSIC && mac->m_model <= MODEL_MAC_LC_580) || ((mac->m_model >= MODEL_MAC_QUADRA_660AV) && (mac->m_model <= MODEL_MAC_QUADRA_630)) || (mac->m_model >= MODEL_MAC_POWERMAC_6100))
-#define ADB_IS_PM_VIA1  (m_model >= MODEL_MAC_PORTABLE && m_model <= MODEL_MAC_PB100)
-#define ADB_IS_PM_VIA2  (m_model >= MODEL_MAC_PB140 && m_model <= MODEL_MAC_PBDUO_270c)
 #define ADB_IS_PM_VIA1_CLASS    (m_model >= MODEL_MAC_PORTABLE && m_model <= MODEL_MAC_PB100)
 #define ADB_IS_PM_VIA2_CLASS    (m_model >= MODEL_MAC_PB140 && m_model <= MODEL_MAC_PBDUO_270c)
 #define ADB_IS_PM_CLASS ((m_model >= MODEL_MAC_PORTABLE && m_model <= MODEL_MAC_PB100) || (m_model >= MODEL_MAC_PB140 && m_model <= MODEL_MAC_PBDUO_270c))
@@ -137,11 +143,6 @@ enum model_t
 
 /*----------- defined in machine/mac.c -----------*/
 
-extern const via6522_interface mac_via6522_intf;
-extern const via6522_interface mac_via6522_2_intf;
-extern const via6522_interface mac_via6522_adb_intf;
-
-void mac_asc_irq(device_t *device, int state);
 void mac_fdc_set_enable_lines(device_t *device, int enable_mask);
 
 /*----------- defined in audio/mac.c -----------*/
@@ -199,10 +200,9 @@ public:
 		m_egret(*this, EGRET_TAG),
 		m_cuda(*this, CUDA_TAG),
 		m_ram(*this, RAM_TAG),
-		m_screen(*this, MAC_SCREEN_NAME),
 		m_539x_1(*this, MAC_539X_1_TAG),
 		m_539x_2(*this, MAC_539X_2_TAG),
-		m_ncr5380(*this, "scsi:ncr5380"),
+		m_ncr5380(*this, "ncr5380"),
 		m_mackbd(*this, MACKBD_TAG),
 		m_rtc(*this,"rtc"),
 		m_mouse0(*this, "MOUSE0"),
@@ -217,8 +217,12 @@ public:
 		m_key6(*this, "KEY6"),
 		m_montype(*this, "MONTYPE"),
 		m_vram(*this,"vram"),
-		m_vram16(*this,"vram16")
-		{ }
+		m_vram16(*this,"vram16"),
+		m_via2_ca1_hack(0),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette")
+	{
+	}
 
 	required_device<cpu_device> m_maincpu;
 	required_device<via6522_device> m_via1;
@@ -228,7 +232,6 @@ public:
 	optional_device<egret_device> m_egret;
 	optional_device<cuda_device> m_cuda;
 	required_device<ram_device> m_ram;
-	optional_device<screen_device> m_screen;
 	optional_device<ncr539x_device> m_539x_1;
 	optional_device<ncr539x_device> m_539x_2;
 	optional_device<ncr5380_device> m_ncr5380;
@@ -252,6 +255,7 @@ public:
 	UINT32 m_se30_vbl_enable;
 	UINT8 m_nubus_irq_state;
 
+#ifndef MAC_USE_EMULATED_KBD
 	/* used to store the reply to most keyboard commands */
 	int m_keyboard_reply;
 
@@ -264,12 +268,13 @@ public:
 	int m_kbd_shift_reg;
 	int m_kbd_shift_count;
 
-	/* keyboard matrix to detect transition */
-	int m_key_matrix[7];
-
 	/* keycode buffer (used for keypad/arrow key transition) */
 	int m_keycode_buf[2];
 	int m_keycode_buf_index;
+#endif
+
+	/* keyboard matrix to detect transition - macadb needs to stop relying on this */
+	int m_key_matrix[7];
 
 	int m_mouse_bit_x;
 	int m_mouse_bit_y;
@@ -287,6 +292,10 @@ public:
 	INT32 m_adb_streaming, m_adb_stream_ptr;
 	INT32 m_adb_linestate;
 	bool  m_adb_srqflag;
+#define kADBKeyBufSize 32
+		UINT8 m_adb_keybuf[kADBKeyBufSize];
+		UINT8 m_adb_keybuf_start;
+		UINT8 m_adb_keybuf_end;
 
 	// Portable/PB100 Power Manager IC comms (chapter 4, "Guide to the Macintosh Family Hardware", second edition)
 	UINT8 m_pm_data_send, m_pm_data_recv, m_pm_ack, m_pm_req, m_pm_cmd[32], m_pm_out[32], m_pm_dptr, m_pm_sptr, m_pm_slen, m_pm_state;
@@ -320,7 +329,7 @@ public:
 	void set_memory_overlay(int overlay);
 	void scc_mouse_irq( int x, int y );
 	void nubus_slot_interrupt(UINT8 slot, UINT32 state);
-	void set_scc_interrupt(bool value);
+	DECLARE_WRITE_LINE_MEMBER(set_scc_interrupt);
 	void set_via_interrupt(int value);
 	void set_via2_interrupt(int value);
 	void field_interrupts();
@@ -408,6 +417,7 @@ public:
 	DECLARE_WRITE_LINE_MEMBER(adb_linechange_w);
 
 	DECLARE_WRITE_LINE_MEMBER(mac_scsi_irq);
+	DECLARE_WRITE_LINE_MEMBER(mac_asc_irq);
 
 	DECLARE_DIRECT_UPDATE_MEMBER(overlay_opbaseoverride);
 private:
@@ -442,6 +452,9 @@ private:
 	// HMC for x100 PowerMacs
 	UINT64 m_hmc_reg, m_hmc_shiftout;
 
+	int m_via2_ca1_hack;
+	optional_device<screen_device> m_screen;
+	optional_device<palette_device> m_palette;
 public:
 	emu_timer *m_scanline_timer;
 	emu_timer *m_adb_timer;
@@ -499,24 +512,37 @@ public:
 	UINT32 screen_update_macsonora(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_macpbwd(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(mac_rbv_vbl);
+#ifndef MAC_USE_EMULATED_KBD
 	TIMER_CALLBACK_MEMBER(kbd_clock);
 	TIMER_CALLBACK_MEMBER(inquiry_timeout_func);
+#endif
 	TIMER_CALLBACK_MEMBER(mac_6015_tick);
 	TIMER_CALLBACK_MEMBER(mac_scanline_tick);
 	TIMER_CALLBACK_MEMBER(dafb_vbl_tick);
 	TIMER_CALLBACK_MEMBER(dafb_cursor_tick);
-	DECLARE_READ8_MEMBER(mac_via_in_cb2);
-	DECLARE_WRITE8_MEMBER(mac_via_out_cb2);
-	DECLARE_READ8_MEMBER(mac_adb_via_in_cb2);
-	DECLARE_WRITE8_MEMBER(mac_adb_via_out_cb2);
+	DECLARE_WRITE_LINE_MEMBER(mac_via_out_cb2);
+	DECLARE_WRITE_LINE_MEMBER(mac_adb_via_out_cb2);
 	DECLARE_READ8_MEMBER(mac_via_in_a);
 	DECLARE_READ8_MEMBER(mac_via_in_b);
 	DECLARE_WRITE8_MEMBER(mac_via_out_a);
 	DECLARE_WRITE8_MEMBER(mac_via_out_b);
+	DECLARE_READ8_MEMBER(mac_via_in_a_pmu);
+	DECLARE_READ8_MEMBER(mac_via_in_b_pmu);
+	DECLARE_WRITE8_MEMBER(mac_via_out_a_pmu);
+	DECLARE_WRITE8_MEMBER(mac_via_out_b_pmu);
+	DECLARE_WRITE8_MEMBER(mac_via_out_b_bbadb);
+	DECLARE_WRITE8_MEMBER(mac_via_out_b_egadb);
+	DECLARE_WRITE8_MEMBER(mac_via_out_b_cdadb);
+	DECLARE_READ8_MEMBER(mac_via_in_b_via2pmu);
+	DECLARE_WRITE8_MEMBER(mac_via_out_b_via2pmu);
 	DECLARE_READ8_MEMBER(mac_via2_in_a);
 	DECLARE_READ8_MEMBER(mac_via2_in_b);
 	DECLARE_WRITE8_MEMBER(mac_via2_out_a);
 	DECLARE_WRITE8_MEMBER(mac_via2_out_b);
+	DECLARE_READ8_MEMBER(mac_via2_in_a_pmu);
+	DECLARE_READ8_MEMBER(mac_via2_in_b_pmu);
+	DECLARE_WRITE8_MEMBER(mac_via2_out_a_pmu);
+	DECLARE_WRITE8_MEMBER(mac_via2_out_b_pmu);
 	DECLARE_WRITE_LINE_MEMBER(mac_kbd_clk_in);
 	void mac_state_load();
 	DECLARE_WRITE_LINE_MEMBER(mac_via_irq);

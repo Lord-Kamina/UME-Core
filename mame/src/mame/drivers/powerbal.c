@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Pierpaolo Prazzoli
 /*
 
 Power Balls  (c) 1994 Playmark
@@ -15,7 +17,7 @@ Magic Sticks:
 
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "sound/okim6295.h"
 #include "includes/playmark.h"
 
@@ -30,7 +32,7 @@ public:
 	int         m_tilebank;
 	int         m_bg_yoffset;
 
-	optional_device<eeprom_device> m_eeprom;
+	optional_device<eeprom_serial_93cxx_device> m_eeprom;
 
 	DECLARE_DRIVER_INIT(powerbal);
 	DECLARE_DRIVER_INIT(magicstk);
@@ -47,28 +49,15 @@ public:
 };
 
 
-static const eeprom_interface eeprom_intf =
-{
-	6,              /* address bits */
-	16,             /* data bits */
-	"*110",         /*  read command */
-	"*101",         /* write command */
-	0,              /* erase command */
-	"*10000xxxx",   /* lock command */
-	"*10011xxxx",   /* unlock command */
-	0,              /* enable_multi_read */
-	5               /* reset_delay (otherwise wbeachvl will hang when saving settings) */
-};
-
 WRITE16_MEMBER(powerbal_state::magicstk_coin_eeprom_w)
 {
 	if (ACCESSING_BITS_0_7)
 	{
 		coin_counter_w(machine(), 0, data & 0x20);
 
-		m_eeprom->set_cs_line((data & 8) ? CLEAR_LINE : ASSERT_LINE);
-		m_eeprom->write_bit(data & 2);
-		m_eeprom->set_clock_line((data & 4) ? CLEAR_LINE : ASSERT_LINE);
+		m_eeprom->cs_write((data & 8) ? ASSERT_LINE : CLEAR_LINE);
+		m_eeprom->di_write((data & 2) >> 1);
+		m_eeprom->clk_write((data & 4) ? CLEAR_LINE : ASSERT_LINE);
 	}
 }
 
@@ -100,7 +89,7 @@ WRITE16_MEMBER(powerbal_state::oki_banking)
 
 static ADDRESS_MAP_START( magicstk_main_map, AS_PROGRAM, 16, powerbal_state )
 	AM_RANGE(0x000000, 0x03ffff) AM_ROM
-	AM_RANGE(0x088000, 0x0883ff) AM_RAM_WRITE(bigtwin_paletteram_w) AM_SHARE("paletteram")
+	AM_RANGE(0x088000, 0x0883ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x094000, 0x094001) AM_WRITENOP
 	AM_RANGE(0x094002, 0x094003) AM_WRITENOP
 	AM_RANGE(0x094004, 0x094005) AM_WRITE(tile_banking_w)
@@ -119,7 +108,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( powerbal_main_map, AS_PROGRAM, 16, powerbal_state )
 	AM_RANGE(0x000000, 0x07ffff) AM_ROM
-	AM_RANGE(0x088000, 0x0883ff) AM_RAM_WRITE(bigtwin_paletteram_w) AM_SHARE("paletteram")
+	AM_RANGE(0x088000, 0x0883ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x094000, 0x094001) AM_WRITENOP
 	AM_RANGE(0x094002, 0x094003) AM_WRITENOP
 	AM_RANGE(0x094004, 0x094005) AM_WRITE(tile_banking_w)
@@ -244,7 +233,7 @@ static INPUT_PORTS_START( magicstk )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
 	PORT_START("IN2")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)   /* EEPROM data */
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)   /* EEPROM data */
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN )
@@ -341,7 +330,7 @@ static INPUT_PORTS_START( hotminda )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
 	PORT_START("IN2")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)   /* EEPROM data */
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)   /* EEPROM data */
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN )
@@ -414,7 +403,7 @@ void powerbal_state::draw_sprites_powerbal(bitmap_ind16 &bitmap, const rectangle
 {
 	UINT16 *spriteram = m_spriteram;
 	int offs;
-	int height = machine().gfx[0]->height();
+	int height = m_gfxdecode->gfx(0)->height();
 
 	for (offs = 4; offs < m_spriteram.bytes() / 2; offs += 4)
 	{
@@ -430,7 +419,7 @@ void powerbal_state::draw_sprites_powerbal(bitmap_ind16 &bitmap, const rectangle
 		code = spriteram[offs + 2];
 		color = (spriteram[offs + 1] & 0xf000) >> 12;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				code,
 				color,
 				flipx,0,
@@ -440,7 +429,7 @@ void powerbal_state::draw_sprites_powerbal(bitmap_ind16 &bitmap, const rectangle
 
 VIDEO_START_MEMBER(powerbal_state,powerbal)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(powerbal_state::powerbal_get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(powerbal_state::powerbal_get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
 
 	m_xoffset = -20;
 
@@ -449,7 +438,7 @@ VIDEO_START_MEMBER(powerbal_state,powerbal)
 
 UINT32 powerbal_state::screen_update_powerbal(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites_powerbal(bitmap, cliprect);
 	return 0;
 }
@@ -514,9 +503,11 @@ static MACHINE_CONFIG_START( powerbal, powerbal_state )
 	MCFG_SCREEN_SIZE(128*8, 64*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 0*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(powerbal_state, screen_update_powerbal)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(powerbal)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", powerbal)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_FORMAT(RRRRGGGGBBBBRGBx)
 
 	MCFG_VIDEO_START_OVERRIDE(powerbal_state,powerbal)
 
@@ -534,8 +525,8 @@ static MACHINE_CONFIG_START( magicstk, powerbal_state )
 	MCFG_CPU_PROGRAM_MAP(magicstk_main_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", powerbal_state, irq2_line_hold)
 
-	MCFG_EEPROM_ADD("eeprom", eeprom_intf)
-	MCFG_EEPROM_DEFAULT_VALUE(0)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_DEFAULT_VALUE(0)
 
 	MCFG_MACHINE_START_OVERRIDE(powerbal_state,powerbal)
 	MCFG_MACHINE_RESET_OVERRIDE(powerbal_state,powerbal)
@@ -547,9 +538,11 @@ static MACHINE_CONFIG_START( magicstk, powerbal_state )
 	MCFG_SCREEN_SIZE(128*8, 64*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 0*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(powerbal_state, screen_update_powerbal)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(powerbal)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", powerbal)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_FORMAT(RRRRGGGGBBBBRGBx)
 
 	MCFG_VIDEO_START_OVERRIDE(powerbal_state,powerbal)
 

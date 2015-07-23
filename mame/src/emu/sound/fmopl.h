@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Jarek Burczynski
 #pragma once
 
 #ifndef __FMOPL_H__
@@ -32,7 +34,7 @@ typedef INT8 OPLSAMPLE;
 #endif
 */
 
-typedef void (*OPL_TIMERHANDLER)(void *param,int timer,attotime period);
+typedef void (*OPL_TIMERHANDLER)(void *param,int timer,const attotime &period);
 typedef void (*OPL_IRQHANDLER)(void *param,int irq);
 typedef void (*OPL_UPDATEHANDLER)(void *param,int min_interval_us);
 typedef void (*OPL_PORTHANDLER_W)(void *param,unsigned char data);

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Uki
 /******************************************************************************
 
 Himeshikibu (C) 1989 Hi-Soft
@@ -22,7 +24,7 @@ TILE_GET_INFO_MEMBER(himesiki_state::get_bg_tile_info)
 
 void himesiki_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(himesiki_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(himesiki_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
 }
 
 WRITE8_MEMBER(himesiki_state::himesiki_bg_ram_w)
@@ -78,7 +80,7 @@ void himesiki_state::himesiki_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 				y -= 0x100;
 		}
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code, col, fx, fy, x, y, 15);
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code, col, fx, fy, x, y, 15);
 	}
 
 	for (offs = 0; offs < 0x100; offs += 4)
@@ -107,7 +109,7 @@ void himesiki_state::himesiki_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 		if (y > 0xf0)
 			y -= 0x100;
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[2], code, col, f, f, x, y, 15);
+		m_gfxdecode->gfx(2)->transpen(bitmap,cliprect, code, col, f, f, x, y, 15);
 	}
 }
 
@@ -116,7 +118,7 @@ UINT32 himesiki_state::screen_update_himesiki(screen_device &screen, bitmap_ind1
 	int x = -(m_scrollx[0] << 8 | m_scrollx[1]) & 0x1ff;
 	m_bg_tilemap->set_scrolldx(x, x);
 
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
 	himesiki_draw_sprites(bitmap, cliprect);
 
 	return 0;

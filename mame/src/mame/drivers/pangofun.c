@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* It's a standard 486 PC motherboard, gfx card etc. with expansion ROM board
 
  probably impossible to emulate right now due to the bad / missing (blank when read) rom
@@ -166,7 +168,6 @@ INPUT_PORTS_END
 
 void pangofun_state::machine_start()
 {
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(pangofun_state::irq_callback),this));
 }
 
 static MACHINE_CONFIG_START( pangofun, pangofun_state )
@@ -174,6 +175,7 @@ static MACHINE_CONFIG_START( pangofun, pangofun_state )
 	MCFG_CPU_ADD("maincpu", I486, 25000000 )    /* I486 ?? Mhz (25 according to POST) */
 	MCFG_CPU_PROGRAM_MAP(pcat_map)
 	MCFG_CPU_IO_MAP(pcat_io)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("pic8259_1", pic8259_device, inta_cb)
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD( pcvideo_vga )

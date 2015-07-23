@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Phil Stroffolino, Mirko Buffoni
 /***************************************************************************
 
     System 16 / 18 bootleg video
@@ -150,9 +152,9 @@ WRITE16_MEMBER(segas1x_bootleg_state::sys16_paletteram_w)
 		//gh = combine_6_weights(m_weights[1][1], g0, g1, g2, g3, g4, 1);
 		//bh = combine_6_weights(m_weights[1][2], b0, b1, b2, b3, b4, 1);
 
-		palette_set_color(machine(), offset, MAKE_RGB(r, g, b) );
+		m_palette->set_pen_color(offset, rgb_t(r, g, b) );
 
-		palette_set_color(machine(), offset + machine().total_colors()/2, MAKE_RGB(rs,gs,bs));
+		m_palette->set_pen_color(offset + m_palette->entries()/2, rgb_t(rs,gs,bs));
 	}
 }
 #endif
@@ -238,8 +240,7 @@ TILE_GET_INFO_MEMBER(segas1x_bootleg_state::get_bg_tile_info)
 	int data = source[tile_index%(64*32)];
 	int tile_number = (data & 0xfff) + 0x1000 * ((data & m_tilebank_switch) ? m_tile_bank1 : m_tile_bank0);
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			(data >> 6) & 0x7f,
 			0);
@@ -251,8 +252,7 @@ TILE_GET_INFO_MEMBER(segas1x_bootleg_state::get_fg_tile_info)
 	int data = source[tile_index % (64 * 32)];
 	int tile_number = (data & 0xfff) + 0x1000 * ((data & m_tilebank_switch) ? m_tile_bank1 : m_tile_bank0);
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			(data >> 6) & 0x7f,
 			0);
@@ -264,8 +264,7 @@ TILE_GET_INFO_MEMBER(segas1x_bootleg_state::get_bg2_tile_info)
 	int data = source[tile_index % (64 * 32)];
 	int tile_number = (data & 0xfff) + 0x1000 * ((data & 0x1000) ? m_tile_bank1 : m_tile_bank0);
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			(data >> 6) & 0x7f,
 			0);
@@ -277,8 +276,7 @@ TILE_GET_INFO_MEMBER(segas1x_bootleg_state::get_fg2_tile_info)
 	int data = source[tile_index % (64 * 32)];
 	int tile_number = (data & 0xfff) + 0x1000 * ((data & 0x1000) ? m_tile_bank1 : m_tile_bank0);
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			(data >> 6) & 0x7f,
 			0);
@@ -330,16 +328,14 @@ TILE_GET_INFO_MEMBER(segas1x_bootleg_state::get_text_tile_info)
 
 	if (!m_shinobl_kludge)
 	{
-		SET_TILE_INFO_MEMBER(
-				0,
+		SET_TILE_INFO_MEMBER(0,
 				(tile_number & 0x1ff) + m_tile_bank0 * 0x1000,
 				(tile_number >> 9) % 8,
 				0);
 	}
 	else
 	{
-		SET_TILE_INFO_MEMBER(
-				0,
+		SET_TILE_INFO_MEMBER(0,
 				(tile_number & 0xff)  + m_tile_bank0 * 0x1000,
 				(tile_number >> 8) % 8,
 				0);
@@ -376,19 +372,19 @@ VIDEO_START_MEMBER(segas1x_bootleg_state,system16)
 		);
 
 	if (!m_bg1_trans)
-		m_background = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
+		m_background = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
 			8,8,
 			64*2,32*2 );
 	else
-		m_background = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
+		m_background = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
 			8,8,
 			64*2,32*2 );
 
-	m_foreground = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_fg_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
+	m_foreground = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_fg_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
 		8,8,
 		64*2,32*2 );
 
-	m_text_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_text_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_text_map),this),
+	m_text_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_text_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_text_map),this),
 		8,8,
 		40,28 );
 
@@ -429,11 +425,11 @@ VIDEO_START_MEMBER(segas1x_bootleg_state,system18old)
 
 	m_bg1_trans = 1;
 
-	m_background2 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_bg2_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
+	m_background2 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_bg2_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
 		8,8,
 		64*2,32*2 );
 
-	m_foreground2 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_fg2_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
+	m_foreground2 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_fg2_tile_info),this), tilemap_mapper_delegate(FUNC(segas1x_bootleg_state::sys16_bg_map),this),
 		8,8,
 		64*2,32*2 );
 
@@ -485,8 +481,7 @@ TILE_GET_INFO_MEMBER(segas1x_bootleg_state::get_s16a_bootleg_tile_infotxt)
 	data = m_textram[tile_index];
 	tile_number = data & 0x1ff;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			((data >> 9) & 0x7),
 			0);
@@ -500,8 +495,7 @@ TILE_GET_INFO_MEMBER(segas1x_bootleg_state::get_s16a_bootleg_tile_info0)
 	tile_number = data & 0x1fff;
 
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			(data >> 6) & 0x7f,
 			0);
@@ -514,8 +508,7 @@ TILE_GET_INFO_MEMBER(segas1x_bootleg_state::get_s16a_bootleg_tile_info1)
 	data = m_bg1_tileram[tile_index];
 	tile_number = data & 0x1fff;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			(data >> 6) & 0x7f,
 			0);
@@ -566,11 +559,11 @@ VIDEO_START_MEMBER(segas1x_bootleg_state,s16a_bootleg)
 
 
 
-	m_text_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_s16a_bootleg_tile_infotxt),this), TILEMAP_SCAN_ROWS, 8,8, 64,32 );
+	m_text_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_s16a_bootleg_tile_infotxt),this), TILEMAP_SCAN_ROWS, 8,8, 64,32 );
 
 	// the system16a bootlegs have simple tilemaps instead of the paged system
-	m_bg_tilemaps[0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_s16a_bootleg_tile_info0),this), TILEMAP_SCAN_ROWS, 8,8, 64,32 );
-	m_bg_tilemaps[1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_s16a_bootleg_tile_info1),this), TILEMAP_SCAN_ROWS, 8,8, 64,32 );
+	m_bg_tilemaps[0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_s16a_bootleg_tile_info0),this), TILEMAP_SCAN_ROWS, 8,8, 64,32 );
+	m_bg_tilemaps[1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas1x_bootleg_state::get_s16a_bootleg_tile_info1),this), TILEMAP_SCAN_ROWS, 8,8, 64,32 );
 
 	m_text_tilemap->set_transparent_pen(0);
 	m_bg_tilemaps[0]->set_transparent_pen(0);
@@ -606,7 +599,7 @@ UINT32 segas1x_bootleg_state::screen_update_s16a_bootleg(screen_device &screen, 
 	int offset_bg0x = 187;
 	int offset_bg0y = 0;
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	// start the sprites drawing
 	m_sprites->draw_async(cliprect);
@@ -626,12 +619,12 @@ UINT32 segas1x_bootleg_state::screen_update_s16a_bootleg(screen_device &screen, 
 		m_bg_tilemaps[0]->set_scrollx(0, m_fg_scrollx + offset_bg0x);
 		m_bg_tilemaps[0]->set_scrolly(0, m_fg_scrolly + offset_bg0y + m_fore_yscroll);
 
-		m_bg_tilemaps[0]->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-		m_bg_tilemaps[1]->draw(bitmap, cliprect, 0, 0);
+		m_bg_tilemaps[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		m_bg_tilemaps[1]->draw(screen, bitmap, cliprect, 0, 0);
 
 		m_text_tilemap->set_scrolly(0, m_text_yscroll);
 
-		m_text_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_text_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	}
 	else if ((m_tilemapselect & 0xff) == 0x21)
 	{
@@ -640,12 +633,12 @@ UINT32 segas1x_bootleg_state::screen_update_s16a_bootleg(screen_device &screen, 
 		m_bg_tilemaps[1]->set_scrollx(0, m_fg_scrollx + 187 );
 		m_bg_tilemaps[1]->set_scrolly(0, m_fg_scrolly + 1 + m_fore_yscroll );
 
-		m_bg_tilemaps[1]->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-		m_bg_tilemaps[0]->draw(bitmap, cliprect, 0, 0);
+		m_bg_tilemaps[1]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		m_bg_tilemaps[0]->draw(screen, bitmap, cliprect, 0, 0);
 
 		m_text_tilemap->set_scrolly(0, m_text_yscroll);
 
-		m_text_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_text_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	}
 
 	// mix in sprites
@@ -655,7 +648,7 @@ UINT32 segas1x_bootleg_state::screen_update_s16a_bootleg(screen_device &screen, 
 		{
 			UINT16 *dest = &bitmap.pix(y);
 			UINT16 *src = &sprites.pix(y);
-//          UINT8 *pri = &machine().priority_bitmap.pix(y);
+//          UINT8 *pri = &screen.priority().pix(y);
 			for (int x = rect->min_x; x <= rect->max_x; x++)
 			{
 				// only process written pixels
@@ -668,7 +661,7 @@ UINT32 segas1x_bootleg_state::screen_update_s16a_bootleg(screen_device &screen, 
 					{
 						// if the color is set to maximum, shadow pixels underneath us
 						if ((pix & 0x03f0) == 0x03f0)
-							dest[x] += (m_paletteram[dest[x]] & 0x8000) ? machine().total_colors()*2 : machine().total_colors();
+							dest[x] += (m_paletteram[dest[x]] & 0x8000) ? m_palette_entries*2 : m_palette_entries;
 
 						// otherwise, just add in sprite palette base
 						else
@@ -693,7 +686,7 @@ UINT32 segas1x_bootleg_state::screen_update_s16a_bootleg_passht4b(screen_device 
 	int offset_bg0x = 5;
 	int offset_bg0y = 32;
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	// start the sprites drawing
 	m_sprites->draw_async(cliprect);
@@ -713,9 +706,9 @@ UINT32 segas1x_bootleg_state::screen_update_s16a_bootleg_passht4b(screen_device 
 		m_bg_tilemaps[0]->set_scrollx(0, (m_fg_scrollx ^ 0x7) + offset_bg0x);
 		m_bg_tilemaps[0]->set_scrolly(0, m_fg_scrolly + offset_bg0y);
 
-		m_bg_tilemaps[0]->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-		m_bg_tilemaps[1]->draw(bitmap, cliprect, 0, 0);
-		m_text_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg_tilemaps[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		m_bg_tilemaps[1]->draw(screen, bitmap, cliprect, 0, 0);
+		m_text_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	}
 
 	// mix in sprites
@@ -725,7 +718,7 @@ UINT32 segas1x_bootleg_state::screen_update_s16a_bootleg_passht4b(screen_device 
 		{
 			UINT16 *dest = &bitmap.pix(y);
 			UINT16 *src = &sprites.pix(y);
-//          UINT8 *pri = &machine().priority_bitmap.pix(y);
+//          UINT8 *pri = &screen.priority().pix(y);
 			for (int x = rect->min_x; x <= rect->max_x; x++)
 			{
 				// only process written pixels
@@ -738,7 +731,7 @@ UINT32 segas1x_bootleg_state::screen_update_s16a_bootleg_passht4b(screen_device 
 					{
 						// if the color is set to maximum, shadow pixels underneath us
 						if ((pix & 0x03f0) == 0x03f0)
-							dest[x] += (m_paletteram[dest[x]] & 0x8000) ? machine().total_colors()*2 : machine().total_colors();
+							dest[x] += (m_paletteram[dest[x]] & 0x8000) ? m_palette_entries*2 : m_palette_entries;
 
 						// otherwise, just add in sprite palette base
 						else
@@ -768,7 +761,7 @@ UINT32 segas1x_bootleg_state::screen_update_system16(screen_device &screen, bitm
 
 	update_page();
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	m_background->set_scrollx(0, -320 - m_bg_scrollx);
 	m_background->set_scrolly(0, -256 + m_bg_scrolly + m_back_yscroll);
@@ -779,20 +772,20 @@ UINT32 segas1x_bootleg_state::screen_update_system16(screen_device &screen, bitm
 	m_text_layer->set_scrolly(0, 0 + m_text_yscroll);
 
 	/* Background */
-	m_background->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0x00);
+	m_background->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0x00);
 
 	/* Foreground */
-	m_foreground->draw(bitmap, cliprect, 0, 0x03);
-	m_foreground->draw(bitmap, cliprect, 1, 0x07);
+	m_foreground->draw(screen, bitmap, cliprect, 0, 0x03);
+	m_foreground->draw(screen, bitmap, cliprect, 1, 0x07);
 
 
 	/* Text Layer */
 	if (m_textlayer_lo_max != 0)
 	{
-		m_text_layer->draw(bitmap, cliprect, 1, 7);// needed for Body Slam
+		m_text_layer->draw(screen, bitmap, cliprect, 1, 7);// needed for Body Slam
 	}
 
-	m_text_layer->draw(bitmap, cliprect, 0, 0xf);
+	m_text_layer->draw(screen, bitmap, cliprect, 0, 0xf);
 
 	//draw_sprites(machine(), bitmap, cliprect,0);
 
@@ -804,7 +797,7 @@ UINT32 segas1x_bootleg_state::screen_update_system16(screen_device &screen, bitm
 		{
 			UINT16 *dest = &bitmap.pix(y);
 			UINT16 *src = &sprites.pix(y);
-//          UINT8 *pri = &machine().priority_bitmap.pix(y);
+//          UINT8 *pri = &screen.priority().pix(y);
 			for (int x = rect->min_x; x <= rect->max_x; x++)
 			{
 				// only process written pixels
@@ -817,7 +810,7 @@ UINT32 segas1x_bootleg_state::screen_update_system16(screen_device &screen, bitm
 					{
 						// if the color is set to maximum, shadow pixels underneath us
 						if ((pix & 0x03f0) == 0x03f0)
-							dest[x] += (m_paletteram[dest[x]] & 0x8000) ? machine().total_colors()*2 : machine().total_colors();
+							dest[x] += (m_paletteram[dest[x]] & 0x8000) ? m_palette_entries*2 : m_palette_entries;
 
 						// otherwise, just add in sprite palette base
 						else
@@ -835,7 +828,7 @@ UINT32 segas1x_bootleg_state::screen_update_system18old(screen_device &screen, b
 {
 	if (!m_refreshenable)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		return 0;
 	}
 
@@ -844,21 +837,21 @@ UINT32 segas1x_bootleg_state::screen_update_system18old(screen_device &screen, b
 
 	update_page();
 
-	machine().priority_bitmap.fill(0);
+	screen.priority().fill(0);
 
 	bitmap.fill(0, cliprect);
 
-	m_background->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-	m_background->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE | 1, 0);   //??
-	m_background->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE | 2, 0);   //??
-	m_background->draw(bitmap, cliprect, 1, 0x1);
-	m_background->draw(bitmap, cliprect, 2, 0x3);
+	m_background->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+	m_background->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE | 1, 0);   //??
+	m_background->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE | 2, 0);   //??
+	m_background->draw(screen, bitmap, cliprect, 1, 0x1);
+	m_background->draw(screen, bitmap, cliprect, 2, 0x3);
 
-	m_foreground->draw(bitmap, cliprect, 0, 0x3);
-	m_foreground->draw(bitmap, cliprect, 1, 0x7);
+	m_foreground->draw(screen, bitmap, cliprect, 0, 0x3);
+	m_foreground->draw(screen, bitmap, cliprect, 1, 0x7);
 
-	m_text_layer->draw(bitmap, cliprect, 1, 0x7);
-	m_text_layer->draw(bitmap, cliprect, 0, 0xf);
+	m_text_layer->draw(screen, bitmap, cliprect, 1, 0x7);
+	m_text_layer->draw(screen, bitmap, cliprect, 0, 0xf);
 
 	// mix in sprites
 	bitmap_ind16 &sprites = m_sprites->bitmap();
@@ -867,7 +860,7 @@ UINT32 segas1x_bootleg_state::screen_update_system18old(screen_device &screen, b
 		{
 			UINT16 *dest = &bitmap.pix(y);
 			UINT16 *src = &sprites.pix(y);
-//          UINT8 *pri = &machine().priority_bitmap.pix(y);
+//          UINT8 *pri = &screen.priority().pix(y);
 			for (int x = rect->min_x; x <= rect->max_x; x++)
 			{
 				// only process written pixels
@@ -880,7 +873,7 @@ UINT32 segas1x_bootleg_state::screen_update_system18old(screen_device &screen, b
 					{
 						// if the color is set to maximum, shadow pixels underneath us
 						if ((pix & 0x03f0) == 0x03f0)
-							dest[x] += (m_paletteram[dest[x]] & 0x8000) ? machine().total_colors()*2 : machine().total_colors();
+							dest[x] += (m_paletteram[dest[x]] & 0x8000) ? m_palette_entries*2 : m_palette_entries;
 
 						// otherwise, just add in sprite palette base
 						else

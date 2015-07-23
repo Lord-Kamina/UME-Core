@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /*
 
 Osborne 4 Vixen
@@ -68,7 +70,7 @@ Notes:
 
 void vixen_state::update_interrupt()
 {
-	int state = (m_cmd_d1 && m_fdint) || m_vsync || (!m_enb_srq_int && !m_srq) || (!m_enb_atn_int && !m_atn) || (!m_enb_xmt_int && m_txrdy) || (!m_enb_rcv_int && m_rxrdy);
+	int state = (m_cmd_d1 && m_fdint) || m_vsync;// || (!m_enb_srq_int && !m_srq) || (!m_enb_atn_int && !m_atn) || (!m_enb_xmt_int && m_txrdy) || (!m_enb_rcv_int && m_rxrdy);
 
 	m_maincpu->set_input_line(INPUT_LINE_IRQ0, state ? ASSERT_LINE : CLEAR_LINE);
 }
@@ -293,7 +295,7 @@ ADDRESS_MAP_END
 //-------------------------------------------------
 
 INPUT_PORTS_START( vixen )
-	PORT_START("Y0")
+	PORT_START("KEY.0")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD )
@@ -303,7 +305,7 @@ INPUT_PORTS_START( vixen )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD )
 
-	PORT_START("Y1")
+	PORT_START("KEY.1")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD )
@@ -313,7 +315,7 @@ INPUT_PORTS_START( vixen )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD )
 
-	PORT_START("Y2")
+	PORT_START("KEY.2")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD )
@@ -323,7 +325,7 @@ INPUT_PORTS_START( vixen )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD )
 
-	PORT_START("Y3")
+	PORT_START("KEY.3")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD )
@@ -333,7 +335,7 @@ INPUT_PORTS_START( vixen )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD )
 
-	PORT_START("Y4")
+	PORT_START("KEY.4")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD )
@@ -343,7 +345,7 @@ INPUT_PORTS_START( vixen )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD )
 
-	PORT_START("Y5")
+	PORT_START("KEY.5")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD )
@@ -353,7 +355,7 @@ INPUT_PORTS_START( vixen )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD )
 
-	PORT_START("Y6")
+	PORT_START("KEY.6")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD )
@@ -363,7 +365,7 @@ INPUT_PORTS_START( vixen )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD )
 
-	PORT_START("Y7")
+	PORT_START("KEY.7")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD )
@@ -394,10 +396,6 @@ TIMER_DEVICE_CALLBACK_MEMBER(vixen_state::vsync_tick)
 }
 
 
-//-------------------------------------------------
-//  VIDEO_START( vixen )
-//-------------------------------------------------
-
 void vixen_state::video_start()
 {
 	// register for state saving
@@ -413,6 +411,8 @@ void vixen_state::video_start()
 
 UINT32 vixen_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
+	const pen_t *pen = m_palette->pens();
+
 	for (int txadr = 0; txadr < 26; txadr++)
 	{
 		for (int scan = 0; scan < 10; scan++)
@@ -420,7 +420,7 @@ UINT32 vixen_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, c
 			for (int chadr = 0; chadr < 128; chadr++)
 			{
 				UINT16 sync_addr = (txadr << 7) | chadr;
-				UINT8 sync_data = m_sync_rom->base()[sync_addr];
+				UINT8 sync_data = m_sync_rom[sync_addr];
 				int blank = BIT(sync_data, 4);
 				/*
 				int clrchadr = BIT(sync_data, 7);
@@ -450,13 +450,13 @@ UINT32 vixen_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, c
 					reverse = BIT(video_data, 7);
 				}
 
-				UINT8 char_data = m_char_rom->base()[char_addr];
+				UINT8 char_data = m_char_rom[char_addr];
 
 				for (int x = 0; x < 8; x++)
 				{
 					int color = (BIT(char_data, 7 - x) ^ reverse) & !blank;
 
-					bitmap.pix32((txadr * 10) + scan, (chadr * 8) + x) = RGB_MONOCHROME_AMBER[color];
+					bitmap.pix32((txadr * 10) + scan, (chadr * 8) + x) = pen[color];
 				}
 			}
 		}
@@ -488,21 +488,15 @@ DISCRETE_SOUND_END
 //**************************************************************************
 
 //-------------------------------------------------
-//  I8155_INTERFACE( i8155_intf )
+//  I8155 interface
 //-------------------------------------------------
 
 READ8_MEMBER( vixen_state::i8155_pa_r )
 {
 	UINT8 data = 0xff;
 
-	if (!BIT(m_col, 0)) data &= m_y0->read();
-	if (!BIT(m_col, 1)) data &= m_y1->read();
-	if (!BIT(m_col, 2)) data &= m_y2->read();
-	if (!BIT(m_col, 3)) data &= m_y3->read();
-	if (!BIT(m_col, 4)) data &= m_y4->read();
-	if (!BIT(m_col, 5)) data &= m_y5->read();
-	if (!BIT(m_col, 6)) data &= m_y6->read();
-	if (!BIT(m_col, 7)) data &= m_y7->read();
+	for (int i = 0; i < 8; i++)
+		if (!BIT(m_col, i)) data &= m_key[i]->read();
 
 	return data;
 }
@@ -547,23 +541,11 @@ WRITE8_MEMBER( vixen_state::i8155_pc_w )
 	m_256 = BIT(data, 4);
 
 	// beep enable
-	discrete_sound_w(m_discrete, space, NODE_01, BIT(data, 5));
+	m_discrete->write(space, NODE_01, BIT(data, 5));
 }
 
-static I8155_INTERFACE( i8155_intf )
-{
-	DEVCB_DRIVER_MEMBER(vixen_state, i8155_pa_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(vixen_state, i8155_pb_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(vixen_state, i8155_pc_w),
-	DEVCB_NULL
-};
-
-
 //-------------------------------------------------
-//  I8155_INTERFACE( io_i8155_intf )
+//  I8155 IO interface
 //-------------------------------------------------
 
 WRITE8_MEMBER( vixen_state::io_i8155_pb_w )
@@ -635,24 +617,12 @@ WRITE8_MEMBER( vixen_state::io_i8155_pc_w )
 
 WRITE_LINE_MEMBER( vixen_state::io_i8155_to_w )
 {
-	if (m_int_clk && !state)
+	if (m_int_clk)
 	{
-		m_usart->transmit_clock();
-		m_usart->receive_clock();
+		m_usart->write_txc(state);
+		m_usart->write_rxc(state);
 	}
 }
-
-static I8155_INTERFACE( io_i8155_intf )
-{
-	DEVCB_NULL,
-	DEVCB_DEVICE_MEMBER(IEEE488_TAG, ieee488_device, dio_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(vixen_state, io_i8155_pb_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(vixen_state, io_i8155_pc_w),
-	DEVCB_DRIVER_LINE_MEMBER(vixen_state, io_i8155_to_w)
-};
-
 
 //-------------------------------------------------
 //  i8251_interface usart_intf
@@ -669,20 +639,6 @@ WRITE_LINE_MEMBER( vixen_state::txrdy_w )
 	m_txrdy = state;
 	update_interrupt();
 }
-
-static const i8251_interface usart_intf =
-{
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, serial_port_device, rx),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, serial_port_device, tx),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, rs232_port_device, dsr_r),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, rs232_port_device, dtr_w),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, rs232_port_device, rts_w),
-	DEVCB_DRIVER_LINE_MEMBER(vixen_state, rxrdy_w),
-	DEVCB_DRIVER_LINE_MEMBER(vixen_state, txrdy_w),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 
 //-------------------------------------------------
 //  IEEE488_INTERFACE( ieee488_intf )
@@ -704,25 +660,11 @@ static SLOT_INTERFACE_START( vixen_floppies )
 	SLOT_INTERFACE( "525dd", FLOPPY_525_DD )
 SLOT_INTERFACE_END
 
-void vixen_state::fdc_intrq_w(bool state)
+WRITE_LINE_MEMBER( vixen_state::fdc_intrq_w )
 {
 	m_fdint = state;
 	update_interrupt();
 }
-
-
-//-------------------------------------------------
-//  rs232_port_interface rs232_intf
-//-------------------------------------------------
-
-static const rs232_port_interface rs232_intf =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
 
 
 
@@ -747,20 +689,17 @@ IRQ_CALLBACK_MEMBER(vixen_state::vixen_int_ack)
 
 void vixen_state::machine_start()
 {
-	// interrupt callback
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(vixen_state::vixen_int_ack),this));
-
 	// configure memory banking
 	UINT8 *ram = m_ram->pointer();
 
 	membank("bank1")->configure_entry(0, ram);
-	membank("bank1")->configure_entry(1, m_rom->base());
+	membank("bank1")->configure_entry(1, m_rom);
 
 	membank("bank2")->configure_entry(0, ram);
 	membank("bank2")->configure_entry(1, m_video_ram);
 
 	membank("bank3")->configure_entry(0, m_video_ram);
-	membank("bank3")->configure_entry(1, m_rom->base());
+	membank("bank3")->configure_entry(1, m_rom);
 
 	membank("bank4")->configure_entry(0, m_video_ram);
 
@@ -772,10 +711,6 @@ void vixen_state::machine_start()
 	save_item(NAME(m_fdint));
 }
 
-
-//-------------------------------------------------
-//  MACHINE_RESET( vixen )
-//-------------------------------------------------
 
 void vixen_state::machine_reset()
 {
@@ -815,30 +750,53 @@ static MACHINE_CONFIG_START( vixen, vixen_state )
 	MCFG_CPU_ADD(Z8400A_TAG, Z80, XTAL_23_9616MHz/6)
 	MCFG_CPU_PROGRAM_MAP(vixen_mem)
 	MCFG_CPU_IO_MAP(vixen_io)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(vixen_state,vixen_int_ack)
 
 	// video hardware
 	MCFG_SCREEN_ADD(SCREEN_TAG, RASTER)
 	MCFG_SCREEN_UPDATE_DRIVER(vixen_state, screen_update)
 	MCFG_SCREEN_RAW_PARAMS(XTAL_23_9616MHz/2, 96*8, 0*8, 81*8, 27*10, 0*10, 26*10)
+
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("vsync", vixen_state, vsync_tick, SCREEN_TAG, 26*10, 27*10)
+
+	MCFG_PALETTE_ADD_MONOCHROME_AMBER("palette")
 
 	// sound hardware
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD(DISCRETE_TAG, DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(vixen)
+	MCFG_DISCRETE_INTF(vixen)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.20)
 
 	// devices
-	MCFG_I8155_ADD(P8155H_TAG, XTAL_23_9616MHz/6, i8155_intf)
-	MCFG_I8155_ADD(P8155H_IO_TAG, XTAL_23_9616MHz/6, io_i8155_intf)
-	MCFG_I8251_ADD(P8251A_TAG, usart_intf)
-	MCFG_FD1797x_ADD(FDC1797_TAG, XTAL_23_9616MHz/24)
+	MCFG_DEVICE_ADD(P8155H_TAG, I8155, XTAL_23_9616MHz/6)
+	MCFG_I8155_IN_PORTA_CB(READ8(vixen_state, i8155_pa_r))
+	MCFG_I8155_OUT_PORTB_CB(WRITE8(vixen_state, i8155_pb_w))
+	MCFG_I8155_OUT_PORTC_CB(WRITE8(vixen_state, i8155_pc_w))
+
+	MCFG_DEVICE_ADD(P8155H_IO_TAG, I8155, XTAL_23_9616MHz/6)
+	MCFG_I8155_OUT_PORTA_CB(DEVWRITE8(IEEE488_TAG, ieee488_device, dio_w))
+	MCFG_I8155_OUT_PORTB_CB(WRITE8(vixen_state, io_i8155_pb_w))
+	MCFG_I8155_OUT_PORTC_CB(WRITE8(vixen_state, io_i8155_pc_w))
+	MCFG_I8155_OUT_TIMEROUT_CB(WRITELINE(vixen_state, io_i8155_to_w))
+
+	MCFG_DEVICE_ADD(P8251A_TAG, I8251, 0)
+	MCFG_I8251_TXD_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_txd))
+	MCFG_I8251_DTR_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_dtr))
+	MCFG_I8251_RTS_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_rts))
+	MCFG_I8251_RXRDY_HANDLER(WRITELINE(vixen_state, rxrdy_w))
+	MCFG_I8251_TXRDY_HANDLER(WRITELINE(vixen_state, txrdy_w))
+
+	MCFG_RS232_PORT_ADD(RS232_TAG, default_rs232_devices, NULL)
+	MCFG_RS232_RXD_HANDLER(DEVWRITELINE(P8251A_TAG, i8251_device, write_rxd))
+	MCFG_RS232_DSR_HANDLER(DEVWRITELINE(P8251A_TAG, i8251_device, write_dsr))
+
+	MCFG_FD1797_ADD(FDC1797_TAG, XTAL_23_9616MHz/24)
+	MCFG_WD_FDC_INTRQ_CALLBACK(WRITELINE(vixen_state, fdc_intrq_w))
 	MCFG_FLOPPY_DRIVE_ADD(FDC1797_TAG":0", vixen_floppies, "525dd", floppy_image_device::default_floppy_formats)
 	MCFG_FLOPPY_DRIVE_ADD(FDC1797_TAG":1", vixen_floppies, "525dd", floppy_image_device::default_floppy_formats)
 	MCFG_IEEE488_BUS_ADD()
 	MCFG_IEEE488_SRQ_CALLBACK(WRITELINE(vixen_state, srq_w))
 	MCFG_IEEE488_ATN_CALLBACK(WRITELINE(vixen_state, atn_w))
-	MCFG_RS232_PORT_ADD(RS232_TAG, rs232_intf, default_rs232_devices, NULL)
 
 	/* software lists */
 	MCFG_SOFTWARE_LIST_ADD("disk_list", "vixen")
@@ -896,7 +854,7 @@ DIRECT_UPDATE_MEMBER(vixen_state::vixen_direct_update_handler)
 			m_reset = 0;
 		}
 
-		direct.explicit_configure(0xf000, 0xffff, 0xfff, m_rom->base());
+		direct.explicit_configure(0xf000, 0xffff, 0xfff, m_rom);
 
 		return ~0;
 	}

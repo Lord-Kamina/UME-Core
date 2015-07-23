@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /*
 
 Luxor ABC 80
@@ -63,14 +65,11 @@ Notes:
 
     TODO:
 
-    - cassette interrupt routine samples the latch too soon
     - proper keyboard controller emulation
-    - MyAB 80-column card
+    - MyAB TKN80 80-column card
     - GeJo 80-column card
     - Mikrodatorn 64K expansion
     - floppy
-    - printer
-    - IEC
     - Metric ABC CAD 1000
 
 */
@@ -80,13 +79,10 @@ Notes:
 
 
 //**************************************************************************
-//  MACROS / CONSTANTS
+//  CONSTANTS
 //**************************************************************************
 
-#define MMU_XM      0x01
-#define MMU_ROM     0x02
-#define MMU_VRAMS   0x04
-#define MMU_RAM     0x08
+#define LOG 0
 
 
 
@@ -158,7 +154,7 @@ WRITE8_MEMBER( abc80_state::write )
 
 WRITE_LINE_MEMBER( abc80_state::vco_voltage_w )
 {
-	sn76477_vco_voltage_w(m_psg, state ? 2.5 : 0);
+	m_psg->vco_voltage_w(state ? 2.5 : 0);
 }
 
 
@@ -184,14 +180,14 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( abc80_io, AS_IO, 8, abc80_state )
 	ADDRESS_MAP_UNMAP_HIGH
 	ADDRESS_MAP_GLOBAL_MASK(0x17)
-	AM_RANGE(0x00, 0x00) AM_DEVREADWRITE(ABCBUS_TAG, abcbus_slot_device, inp_r, utp_w)
-	AM_RANGE(0x01, 0x01) AM_DEVREADWRITE(ABCBUS_TAG, abcbus_slot_device, stat_r, cs_w)
-	AM_RANGE(0x02, 0x02) AM_DEVWRITE(ABCBUS_TAG, abcbus_slot_device, c1_w)
-	AM_RANGE(0x03, 0x03) AM_DEVWRITE(ABCBUS_TAG, abcbus_slot_device, c2_w)
-	AM_RANGE(0x04, 0x04) AM_DEVWRITE(ABCBUS_TAG, abcbus_slot_device, c3_w)
-	AM_RANGE(0x05, 0x05) AM_DEVWRITE(ABCBUS_TAG, abcbus_slot_device, c4_w)
+	AM_RANGE(0x00, 0x00) AM_DEVREADWRITE(ABCBUS_TAG, abcbus_slot_t, inp_r, out_w)
+	AM_RANGE(0x01, 0x01) AM_DEVREADWRITE(ABCBUS_TAG, abcbus_slot_t, stat_r, cs_w)
+	AM_RANGE(0x02, 0x02) AM_DEVWRITE(ABCBUS_TAG, abcbus_slot_t, c1_w)
+	AM_RANGE(0x03, 0x03) AM_DEVWRITE(ABCBUS_TAG, abcbus_slot_t, c2_w)
+	AM_RANGE(0x04, 0x04) AM_DEVWRITE(ABCBUS_TAG, abcbus_slot_t, c3_w)
+	AM_RANGE(0x05, 0x05) AM_DEVWRITE(ABCBUS_TAG, abcbus_slot_t, c4_w)
 	AM_RANGE(0x06, 0x06) AM_WRITE_PORT("SN76477")
-	AM_RANGE(0x07, 0x07) AM_DEVREAD(ABCBUS_TAG, abcbus_slot_device, rst_r)
+	AM_RANGE(0x07, 0x07) AM_DEVREAD(ABCBUS_TAG, abcbus_slot_t, rst_r)
 	AM_RANGE(0x10, 0x13) AM_MIRROR(0x04) AM_DEVREADWRITE(Z80PIO_TAG, z80pio_device, read_alt, write_alt)
 ADDRESS_MAP_END
 
@@ -227,14 +223,14 @@ static INPUT_PORTS_START( abc80 )
 	PORT_DIPUNKNOWN_DIPLOC( 0x80, IP_ACTIVE_LOW, "SW2:8" )
 
 	PORT_START("SN76477")
-	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE(SN76477_TAG, sn76477_enable_w)
+	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE_MEMBER(SN76477_TAG, sn76477_device, enable_w)
 	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, abc80_state, vco_voltage_w)
-	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE(SN76477_TAG, sn76477_vco_w)
-	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE(SN76477_TAG, sn76477_mixer_b_w)
-	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE(SN76477_TAG, sn76477_mixer_a_w)
-	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE(SN76477_TAG, sn76477_mixer_c_w)
-	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE(SN76477_TAG, sn76477_envelope_2_w)
-	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE(SN76477_TAG, sn76477_envelope_1_w)
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE_MEMBER(SN76477_TAG, sn76477_device, vco_w)
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE_MEMBER(SN76477_TAG, sn76477_device, mixer_b_w)
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE_MEMBER(SN76477_TAG, sn76477_device, mixer_a_w)
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE_MEMBER(SN76477_TAG, sn76477_device, mixer_c_w)
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE_MEMBER(SN76477_TAG, sn76477_device, envelope_2_w)
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_SPECIAL) PORT_WRITE_LINE_DEVICE_MEMBER(SN76477_TAG, sn76477_device, envelope_1_w)
 INPUT_PORTS_END
 
 
@@ -244,32 +240,7 @@ INPUT_PORTS_END
 //**************************************************************************
 
 //-------------------------------------------------
-//  sn76477_interface csg_intf
-//-------------------------------------------------
-
-static const sn76477_interface csg_intf =
-{
-	RES_K(47),      //  4  noise_res        R26 47k
-	RES_K(330),     //  5  filter_res       R24 330k
-	CAP_P(390),     //  6  filter_cap       C52 390p
-	RES_K(47),      //  7  decay_res        R23 47k
-	CAP_U(10),      //  8  attack_decay_cap C50 10u/35V
-	RES_K(2.2),     // 10  attack_res       R21 2.2k
-	RES_K(33),      // 11  amplitude_res    R19 33k
-	RES_K(10),      // 12  feedback_res     R18 10k
-	0,              // 16  vco_voltage      0V or 2.5V
-	CAP_N(10) ,     // 17  vco_cap          C48 10n
-	RES_K(100),     // 18  vco_res          R20 100k
-	0,              // 19  pitch_voltage    N/C
-	RES_K(220),     // 20  slf_res          R22 220k
-	CAP_U(1),       // 21  slf_cap          C51 1u/35V
-	CAP_U(0.1),     // 23  oneshot_cap      C53 0.1u
-	RES_K(330)      // 24  oneshot_res      R25 330k
-};
-
-
-//-------------------------------------------------
-//  Z80PIO_INTERFACE( pio_intf )
+//  Z80PIO
 //-------------------------------------------------
 
 READ8_MEMBER( abc80_state::pio_pa_r )
@@ -298,7 +269,7 @@ READ8_MEMBER( abc80_state::pio_pa_r )
 	data |= (m_key_strobe << 7);
 
 	return data;
-};
+}
 
 READ8_MEMBER( abc80_state::pio_pb_r )
 {
@@ -320,7 +291,7 @@ READ8_MEMBER( abc80_state::pio_pb_r )
 	UINT8 data = 0;
 
 	// receive data
-	data |= m_rs232->rx();
+	data |= m_rs232->rxd_r();
 
 	// clear to send
 	data |= m_rs232->cts_r() << 1;
@@ -331,10 +302,10 @@ READ8_MEMBER( abc80_state::pio_pb_r )
 	// cassette data
 	data |= m_tape_in_latch << 7;
 
-	//logerror("read tape latch %u\n", m_tape_in_latch);
+	if (LOG) logerror("%s %s read tape latch %u\n", machine().time().as_string(), machine().describe_context(), m_tape_in_latch);
 
 	return data;
-};
+}
 
 WRITE8_MEMBER( abc80_state::pio_pb_w )
 {
@@ -354,21 +325,23 @@ WRITE8_MEMBER( abc80_state::pio_pb_w )
 	*/
 
 	// transmit data
-	m_rs232->tx(BIT(data, 3));
+	m_rs232->write_txd(BIT(data, 3));
 
 	// request to send
-	m_rs232->rts_w(BIT(data, 4));
+	m_rs232->write_rts(BIT(data, 4));
 
 	// cassette motor
 	if (BIT(data, 5))
 	{
+		if (!m_motor) if (LOG) logerror("%s %s started cassette motor\n", machine().time().as_string(), machine().describe_context());
 		m_cassette->change_state(CASSETTE_MOTOR_ENABLED, CASSETTE_MASK_MOTOR);
-		m_cassette_timer->enable(true);
+		m_motor = true;
 	}
 	else
 	{
+		if (m_motor) if (LOG) logerror("%s %s stopped cassette motor\n", machine().time().as_string(), machine().describe_context());
 		m_cassette->change_state(CASSETTE_MOTOR_DISABLED, CASSETTE_MASK_MOTOR);
-		m_cassette_timer->enable(false);
+		m_motor = false;
 	}
 
 	// cassette data
@@ -377,48 +350,23 @@ WRITE8_MEMBER( abc80_state::pio_pb_w )
 	// cassette input latch
 	if (BIT(data, 6))
 	{
-		//logerror("clear tape in latch\n");
+		if (LOG) logerror("%s %s clear tape in latch\n", machine().time().as_string(), machine().describe_context());
 
 		m_tape_in_latch = 1;
 
-		m_pio->port_b_write(m_tape_in_latch << 7);
+		m_pio->pb7_w(m_tape_in_latch);
 	}
-};
-
-static Z80PIO_INTERFACE( pio_intf )
-{
-	DEVCB_CPU_INPUT_LINE(Z80_TAG, INPUT_LINE_IRQ0), /* callback when change interrupt status */
-	DEVCB_DRIVER_MEMBER(abc80_state, pio_pa_r),     /* port A read callback */
-	DEVCB_NULL,                                     /* port A write callback */
-	DEVCB_NULL,                                     /* portA ready active callback */
-	DEVCB_DRIVER_MEMBER(abc80_state, pio_pb_r),     /* port B read callback */
-	DEVCB_DRIVER_MEMBER(abc80_state, pio_pb_w),     /* port B write callback */
-	DEVCB_NULL                                      /* portB ready active callback */
-};
+}
 
 
 //-------------------------------------------------
-//  Z80PIO_INTERFACE( pio_intf )
+//  Z80 Daisy Chain
 //-------------------------------------------------
 
 static const z80_daisy_config abc80_daisy_chain[] =
 {
 	{ Z80PIO_TAG },
 	{ NULL }
-};
-
-
-//-------------------------------------------------
-//  cassette_interface abc80_cassette_interface
-//-------------------------------------------------
-
-static const cassette_interface abc80_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_MUTED),
-	NULL,
-	NULL
 };
 
 
@@ -444,25 +392,12 @@ WRITE8_MEMBER( abc80_state::kbd_w )
 	timer_set(attotime::from_msec(50), TIMER_ID_FAKE_KEYBOARD_CLEAR);
 }
 
-static ASCII_KEYBOARD_INTERFACE( keyboard_intf )
-{
-	DEVCB_DRIVER_MEMBER(abc80_state, kbd_w)
-};
-
-
-//-------------------------------------------------
-//  rs232_port_interface rs232_intf
-//-------------------------------------------------
-
-static const rs232_port_interface rs232_intf =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
+/*
+DEVICE_INPUT_DEFAULTS_START( abc830_slow )
+    DEVICE_INPUT_DEFAULTS("SW1", 0x0f, 0x03)
+    DEVICE_INPUT_DEFAULTS("S1", 0x01, 0x01)
+DEVICE_INPUT_DEFAULTS_END
+*/
 
 
 //**************************************************************************
@@ -485,12 +420,16 @@ void abc80_state::device_timer(emu_timer &timer, device_timer_id id, int param, 
 
 	case TIMER_ID_CASSETTE:
 		{
-			int tape_in = m_cassette->input() > 0;
-			//logerror("tape bit %u\n", tape_in);
+			if (!m_motor) return;
 
-			if (m_tape_in_latch && !m_tape_in && tape_in)
+			int tape_in = m_cassette->input() > 0;
+
+			if (m_tape_in != tape_in)
+				if (LOG) logerror("%s tape flank %u\n", machine().time().as_string(), tape_in);
+
+			if (m_tape_in_latch && (m_tape_in != tape_in))
 			{
-				//logerror("-------- set tape in latch\n");
+				if (LOG) logerror("%s set tape in latch\n", machine().time().as_string());
 				m_tape_in_latch = 0;
 
 				m_pio->port_b_write(m_tape_in_latch << 7);
@@ -505,10 +444,12 @@ void abc80_state::device_timer(emu_timer &timer, device_timer_id id, int param, 
 		break;
 
 	case TIMER_ID_VSYNC_ON:
+		if (LOG) logerror("%s vsync 1\n", machine().time().as_string());
 		m_maincpu->set_input_line(INPUT_LINE_NMI, ASSERT_LINE);
 		break;
 
 	case TIMER_ID_VSYNC_OFF:
+		if (LOG) logerror("%s vsync 0\n", machine().time().as_string());
 		m_maincpu->set_input_line(INPUT_LINE_NMI, CLEAR_LINE);
 		break;
 
@@ -530,14 +471,42 @@ void abc80_state::machine_start()
 	// start timers
 	m_cassette_timer = timer_alloc(TIMER_ID_CASSETTE);
 	m_cassette_timer->adjust(attotime::from_hz(44100), 0, attotime::from_hz(44100));
-	m_cassette_timer->enable(false);
 
 	// register for state saving
 	save_item(NAME(m_key_data));
 	save_item(NAME(m_key_strobe));
 	save_item(NAME(m_pio_astb));
+	save_item(NAME(m_latch));
+	save_item(NAME(m_blink));
+	save_item(NAME(m_motor));
 	save_item(NAME(m_tape_in));
 	save_item(NAME(m_tape_in_latch));
+}
+
+QUICKLOAD_LOAD_MEMBER( abc80_state, bac )
+{
+	address_space &space = m_maincpu->space(AS_PROGRAM);
+
+	offs_t address = space.read_byte(BOFA + 1) << 8 | space.read_byte(BOFA);
+	if (LOG) logerror("BOFA %04x\n",address);
+
+	dynamic_buffer data;
+	data.resize(quickload_size);
+	image.fread(&data[0], quickload_size);
+	for (int i = 1; i < quickload_size; i++)
+		space.write_byte(address++, data[i]);
+
+	offs_t eofa = address;
+	space.write_byte(EOFA, eofa & 0xff);
+	space.write_byte(EOFA + 1, eofa >> 8);
+	if (LOG) logerror("EOFA %04x\n",address);
+
+	offs_t head = address + 1;
+	space.write_byte(HEAD, head & 0xff);
+	space.write_byte(HEAD + 1, head >> 8);
+	if (LOG) logerror("HEAD %04x\n",address);
+
+	return IMAGE_INIT_PASS;
 }
 
 
@@ -563,24 +532,49 @@ static MACHINE_CONFIG_START( abc80, abc80_state )
 	// sound hardware
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD(SN76477_TAG, SN76477, 0)
-	MCFG_SOUND_CONFIG(csg_intf)
+	MCFG_SN76477_NOISE_PARAMS(RES_K(47), RES_K(330), CAP_P(390)) // noise + filter: R26 47k - R24 330k - C52 390p
+	MCFG_SN76477_DECAY_RES(RES_K(47))                   //  decay_res: R23 47k
+	MCFG_SN76477_ATTACK_PARAMS(CAP_U(10), RES_K(2.2))   // attack_decay_cap + attack_res: C50 10u/35V - R21 2.2k
+	MCFG_SN76477_AMP_RES(RES_K(33))                     // amplitude_res: R19 33k
+	MCFG_SN76477_FEEDBACK_RES(RES_K(10))                // feedback_res: R18 10k
+	MCFG_SN76477_VCO_PARAMS(0, CAP_N(10), RES_K(100))   // VCO volt + cap + res: 0V or 2.5V - C48 10n - R20 100k
+	MCFG_SN76477_PITCH_VOLTAGE(0)                       // pitch_voltage: N/C
+	MCFG_SN76477_SLF_PARAMS(CAP_U(1), RES_K(220))       // slf caps + res: C51 1u/35V - R22 220k
+	MCFG_SN76477_ONESHOT_PARAMS(CAP_U(0.1), RES_K(330)) // oneshot caps + res: C53 0.1u - R25 330k
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
+
+	MCFG_SOUND_WAVE_ADD(WAVE_TAG, CASSETTE_TAG)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	// devices
-	MCFG_Z80PIO_ADD(Z80PIO_TAG, XTAL_11_9808MHz/2/2, pio_intf)
-	MCFG_CASSETTE_ADD("cassette", abc80_cassette_interface)
-	MCFG_ABC80_KEYBOARD_ADD(WRITELINE(abc80_state, keydown_w))
-	MCFG_ABCBUS_SLOT_ADD(ABCBUS_TAG, abcbus_cards, "slow")
-	MCFG_DEVICE_CARD_DEVICE_INPUT_DEFAULTS("slow", abc830_slow)
-	MCFG_RS232_PORT_ADD(RS232_TAG, rs232_intf, default_rs232_devices, NULL)
-	MCFG_ASCII_KEYBOARD_ADD(KEYBOARD_TAG, keyboard_intf)
+	MCFG_DEVICE_ADD(Z80PIO_TAG, Z80PIO, XTAL_11_9808MHz/2/2)
+	MCFG_Z80PIO_OUT_INT_CB(INPUTLINE(Z80_TAG, INPUT_LINE_IRQ0))
+	MCFG_Z80PIO_IN_PA_CB(READ8(abc80_state, pio_pa_r))
+	MCFG_Z80PIO_IN_PB_CB(READ8(abc80_state, pio_pb_r))
+	MCFG_Z80PIO_OUT_PB_CB(WRITE8(abc80_state, pio_pb_w))
+
+	MCFG_CASSETTE_ADD(CASSETTE_TAG)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("abc80_cass")
+
+	MCFG_DEVICE_ADD(ABC80_KEYBOARD_TAG, ABC80_KEYBOARD, 0)
+	MCFG_ABC80_KEYBOARD_KEYDOWN_CALLBACK(WRITELINE(abc80_state, keydown_w))
+
+	MCFG_ABCBUS_SLOT_ADD(ABCBUS_TAG, abc80_cards, "abcexp")
+
+	MCFG_RS232_PORT_ADD(RS232_TAG, default_rs232_devices, NULL)
+	MCFG_DEVICE_ADD(KEYBOARD_TAG, GENERIC_KEYBOARD, 0)
+	MCFG_GENERIC_KEYBOARD_CB(WRITE8(abc80_state, kbd_w))
+
+	MCFG_QUICKLOAD_ADD("quickload", abc80_state, bac, "bac", 2)
 
 	// internal ram
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("16K")
 
 	// software list
-	MCFG_SOFTWARE_LIST_ADD("flop_list", "abc80")
+	MCFG_SOFTWARE_LIST_ADD("cass_list", "abc80_cass")
+	MCFG_SOFTWARE_LIST_ADD("flop_list", "abc80_flop")
 MACHINE_CONFIG_END
 
 

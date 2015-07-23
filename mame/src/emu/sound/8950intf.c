@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi
 /******************************************************************************
 * FILE
 *   Yamaha 3812 emulator interface - MAME VERSION
@@ -46,13 +48,13 @@ void y8950_device::device_timer(emu_timer &timer, device_timer_id id, int param,
 	}
 }
 
-static void timer_handler(void *param, int c, attotime period)
+static void timer_handler(void *param, int c, const attotime &period)
 {
 	y8950_device *y8950 = (y8950_device *) param;
 	y8950->_timer_handler(c, period);
 }
 
-void y8950_device::_timer_handler(int c, attotime period)
+void y8950_device::_timer_handler(int c, const attotime &period)
 {
 	if( period == attotime::zero )
 	{   /* Reset FM Timer */
@@ -149,7 +151,7 @@ void y8950_device::device_start()
 	assert_always(m_chip != NULL, "Error creating Y8950 chip");
 
 	/* ADPCM ROM data */
-	y8950_set_delta_t_memory(m_chip, *region(), region()->bytes());
+	y8950_set_delta_t_memory(m_chip, region()->base(), region()->bytes());
 
 	m_stream = machine().sound().stream_alloc(*this,0,1,rate);
 	/* port and keyboard handler */
@@ -203,7 +205,7 @@ WRITE8_MEMBER( y8950_device::write_port_w ) { write(space, 1, data); }
 const device_type Y8950 = &device_creator<y8950_device>;
 
 y8950_device::y8950_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, Y8950, "Y8950", tag, owner, clock),
+	: device_t(mconfig, Y8950, "Y8950", tag, owner, clock, "y8950", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_irq_handler(*this),
 		m_keyboard_read_handler(*this),

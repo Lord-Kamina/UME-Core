@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Chris Moore
 /***************************************************************************
 
 GAME PLAN driver
@@ -7,7 +9,6 @@ driver by Chris Moore
 ****************************************************************************/
 
 #include "emu.h"
-#include "machine/6522via.h"
 #include "includes/gameplan.h"
 
 
@@ -67,7 +68,7 @@ void gameplan_state::gameplan_get_pens( pen_t *pens )
 	offs_t i;
 
 	for (i = 0; i < GAMEPLAN_NUM_PENS; i++)
-		pens[i] = MAKE_RGB(pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
+		pens[i] = rgb_t(pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
 }
 
 
@@ -83,7 +84,7 @@ void gameplan_state::leprechn_get_pens( pen_t *pens )
 		UINT8 g = (i & 2) ? 0xff : bk;
 		UINT8 b = (i & 4) ? 0xff : bk;
 
-		pens[i] = MAKE_RGB(r, g, b);
+		pens[i] = rgb_t(r, g, b);
 	}
 }
 
@@ -126,7 +127,7 @@ UINT32 gameplan_state::screen_update_leprechn(screen_device &screen, bitmap_rgb3
 		UINT8 y = offs >> 8;
 		UINT8 x = offs & 0xff;
 
-		bitmap.pix32(y, x) = pens[m_videoram[offs]];
+		bitmap.pix32(y, x) = pens[m_videoram[offs] & (LEPRECHN_NUM_PENS-1)];
 	}
 
 	return 0;
@@ -155,6 +156,12 @@ WRITE8_MEMBER(gameplan_state::gameplan_video_command_w)
 WRITE8_MEMBER(gameplan_state::leprechn_video_command_w)
 {
 	m_video_command = (data >> 3) & 0x07;
+}
+
+
+READ8_MEMBER(gameplan_state::leprechn_videoram_r)
+{
+	return m_videoram[m_video_y * (HBSTART - HBEND) + m_video_x];
 }
 
 
@@ -240,52 +247,15 @@ WRITE_LINE_MEMBER(gameplan_state::via_irq)
 }
 
 
-READ8_MEMBER(gameplan_state::vblank_r)
-{
-	/* this is needed for trivia quest */
-	return 0x20;
-}
-
-
-const via6522_interface gameplan_via_0_interface =
-{
-	DEVCB_NULL, DEVCB_DRIVER_MEMBER(gameplan_state,vblank_r),                                       /*inputs : A/B         */
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL,                             /*inputs : CA/B1,CA/B2 */
-	DEVCB_DRIVER_MEMBER(gameplan_state,video_data_w), DEVCB_DRIVER_MEMBER(gameplan_state,gameplan_video_command_w),     /*outputs: A/B         */
-	DEVCB_NULL, DEVCB_NULL, DEVCB_DRIVER_LINE_MEMBER(gameplan_state,video_command_trigger_w), DEVCB_NULL,   /*outputs: CA/B1,CA/B2 */
-	DEVCB_DRIVER_LINE_MEMBER(gameplan_state,via_irq)                                                         /*irq                  */
-};
-
-
-const via6522_interface leprechn_via_0_interface =
-{
-	DEVCB_NULL, DEVCB_DRIVER_MEMBER(gameplan_state,vblank_r),                                       /*inputs : A/B         */
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL,                             /*inputs : CA/B1,CA/B2 */
-	DEVCB_DRIVER_MEMBER(gameplan_state,video_data_w), DEVCB_DRIVER_MEMBER(gameplan_state,leprechn_video_command_w),     /*outputs: A/B         */
-	DEVCB_NULL, DEVCB_NULL, DEVCB_DRIVER_LINE_MEMBER(gameplan_state,video_command_trigger_w), DEVCB_NULL,   /*outputs: CA/B1,CA/B2 */
-	DEVCB_DRIVER_LINE_MEMBER(gameplan_state,via_irq)                                                         /*irq                  */
-};
-
-
-const via6522_interface trvquest_via_0_interface =
-{
-	DEVCB_NULL, DEVCB_DRIVER_MEMBER(gameplan_state,vblank_r),                                       /*inputs : A/B         */
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL,                             /*inputs : CA/B1,CA/B2 */
-	DEVCB_DRIVER_MEMBER(gameplan_state,video_data_w), DEVCB_DRIVER_MEMBER(gameplan_state,gameplan_video_command_w),     /*outputs: A/B         */
-	DEVCB_NULL, DEVCB_NULL, DEVCB_DRIVER_LINE_MEMBER(gameplan_state,video_command_trigger_w), DEVCB_NULL,   /*outputs: CA/B1,CA/B2 */
-	DEVCB_NULL                                                                  /*irq                  */
-};
-
-
 TIMER_CALLBACK_MEMBER(gameplan_state::via_0_ca1_timer_callback)
 {
 	/* !VBLANK is connected to CA1 */
 	m_via_0->write_ca1(param);
 
 	if (param)
-		m_via_0_ca1_timer->adjust(machine().primary_screen->time_until_pos(VBSTART));
+		m_via_0_ca1_timer->adjust(m_screen->time_until_pos(VBSTART));
 	else
-		m_via_0_ca1_timer->adjust(machine().primary_screen->time_until_pos(VBEND), 1);
+		m_via_0_ca1_timer->adjust(m_screen->time_until_pos(VBEND), 1);
 }
 
 
@@ -334,7 +304,7 @@ VIDEO_START_MEMBER(gameplan_state,trvquest)
 
 VIDEO_RESET_MEMBER(gameplan_state,gameplan)
 {
-	m_via_0_ca1_timer->adjust(machine().primary_screen->time_until_pos(VBSTART));
+	m_via_0_ca1_timer->adjust(m_screen->time_until_pos(VBSTART));
 }
 
 
@@ -348,8 +318,6 @@ VIDEO_RESET_MEMBER(gameplan_state,gameplan)
 MACHINE_CONFIG_FRAGMENT( gameplan_video )
 	MCFG_VIDEO_START_OVERRIDE(gameplan_state,gameplan)
 	MCFG_VIDEO_RESET_OVERRIDE(gameplan_state,gameplan)
-
-	MCFG_VIDEO_START_OVERRIDE(gameplan_state,gameplan)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(GAMEPLAN_PIXEL_CLOCK, HTOTAL, HBEND, HBSTART, VTOTAL, VBEND, VBSTART)

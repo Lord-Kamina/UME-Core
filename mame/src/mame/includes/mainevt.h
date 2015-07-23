@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /*************************************************************************
 
     The Main Event / Devastators
@@ -5,6 +7,10 @@
 *************************************************************************/
 #include "sound/upd7759.h"
 #include "sound/k007232.h"
+#include "video/k052109.h"
+#include "video/k051960.h"
+#include "video/k051733.h"
+#include "video/konami_helper.h"
 
 class mainevt_state : public driver_device
 {
@@ -58,11 +64,8 @@ public:
 	INTERRUPT_GEN_MEMBER(mainevt_sound_timer_irq);
 	INTERRUPT_GEN_MEMBER(devstors_sound_timer_irq);
 	DECLARE_WRITE8_MEMBER(volume_callback);
+	K052109_CB_MEMBER(mainevt_tile_callback);
+	K052109_CB_MEMBER(dv_tile_callback);
+	K051960_CB_MEMBER(mainevt_sprite_callback);
+	K051960_CB_MEMBER(dv_sprite_callback);
 };
-
-/*----------- defined in video/mainevt.c -----------*/
-
-extern void mainevt_tile_callback(running_machine &machine, int layer,int bank,int *code,int *color,int *flags,int *priority);
-extern void dv_tile_callback(running_machine &machine, int layer,int bank,int *code,int *color,int *flags,int *priority);
-extern void mainevt_sprite_callback(running_machine &machine, int *code,int *color,int *priority_mask,int *shadow);
-extern void dv_sprite_callback(running_machine &machine, int *code,int *color,int *priority,int *shadow);

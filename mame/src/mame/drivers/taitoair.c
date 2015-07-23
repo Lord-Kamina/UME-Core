@@ -1,9 +1,10 @@
+// license:LGPL-2.1+
+// copyright-holders:Angelo Salese, Olivier Galibert
 /***************************************************************************
 
 Taito Air System
 ----------------
 
-Midnight Landing        *** not dumped, 1987? ***
 Top Landing             (c) 1988 Taito
 Air Inferno             (c) 1990 Taito
 
@@ -120,7 +121,6 @@ Stephh's notes (based on the game M68000 code and some tests) :
 TODO    (TC0080VCO issues shared with TaitoH driver)
 ----
 
- - Need to implement BG1 : sprite priority. Currently not clear how this works.
  - Fix sprite coordinates.
  - Improve zoom y coordinate.
 
@@ -134,15 +134,17 @@ Video section hung off TaitoH driver, it should be separate.
 hardware which creates the 3d background scenes? It seems
 the TMS320C25 is being used as a co-processor to relieve the
 68000 of 3d calculations... it has direct access to line ram
-along with the 68000. Seems gradiation ram is responsibility
-of 68000. Unless - unlikely IMO - there is banking
-allowing the 32025 to select this area in its address map.
+along with the 68000.
 
-"Power common ram" is presumably for communication with an MCU
+Gradiation RAM is used to display a rotatable gradient background.
+The rotation is handled by the TC0430GRW ROZ chip which outputs
+coordinates for a X=a1+b1*x+c1*y, Y=a2+b2*x+c2*y mapping.  The
+coordinates are used unconventionally as indices in a color palette.
+
+"Power common ram" is for communication with a processor
 controlling the sit-in-cabinet (deluxe mechanized version only).
-
-[Offer dip-selectable kludge of the analogue stick inputs so that
-keyboard play is possible?]
+The interface is similar to that used by Midnight Landing
+and though undumped, the motor CPU program may be identical.
 
 Unknown control bits remain in the 0x140000 write.
 
@@ -156,14 +158,12 @@ DIPs are the same as topland, which is clearly wrong if you try
 them ("SWB:7,8" do not set Coin B to multiple credits for each
 coin!)
 
-Therefore, some verificiation could still be needed, once the
+Therefore, some verification could still be needed, once the
 emulation is complete.
 
 
 Topland
 -------
-
-Sprite/tile priority bad.
 
 After demo game in attract, palette seems too dark for a while.
 Palette corruption has occurred with areas not restored after a fade.
@@ -182,38 +182,17 @@ discarded. But the cpu waits for a bit to be zero... some
 sort of frame flag or some "ready" message from the 3d h/w
 perhaps? The two writes seem to take only two values.
 
-
-Ainferno
---------
-
-Sprite/tile priority bad.
-
-More unmapped 320C25 reads and writes. This could be some sort of
-I/O device?? The MCU program is longer than the Topland one.
-
-cpu #2 (PC=000000C3): unmapped memory word write to 00006808 = 00FD & FFFF
-cpu #2 (PC=000000C8): unmapped memory word write to 00006810 = FF38 & FFFF
-cpu #2 (PC=000005A0): unmapped memory word write to 00006836 = 804E & FFFF
-cpu #2 (PC=000005B2): unmapped memory word write to 00006830 = FFFF & FFFF
-cpu #2 (PC=000005B5): unmapped memory word write to 00006832 = FFFE & FFFF
-cpu #2 (PC=000005B8): unmapped memory word write to 00006834 = FBCA & FFFF
-cpu #2 (PC=000005B9): unmapped memory word read from 00006836 & FFFF
-cpu #2 (PC=000005CC): unmapped memory word write to 00006830 = FFFF & FFFF
-cpu #2 (PC=000005CF): unmapped memory word write to 00006832 = FFFE & FFFF
-cpu #2 (PC=000005D2): unmapped memory word write to 00006834 = FBCA & FFFF
-cpu #2 (PC=000005D3): unmapped memory word read from 00006836 & FFFF
-cpu #2 (PC=000005E6): unmapped memory word write to 00006830 = FFFF & FFFF
-cpu #2 (PC=000005E9): unmapped memory word write to 00006832 = FFFE & FFFF
-cpu #2 (PC=000005EC): unmapped memory word write to 00006834 = FC8F & FFFF
-cpu #2 (PC=000005ED): unmapped memory word read from 00006836 & FFFF
-cpu #2 (PC=00000600): unmapped memory word write to 00006830 = FFFF & FFFF
-cpu #2 (PC=00000603): unmapped memory word write to 00006832 = FFFE & FFFF
-cpu #2 (PC=00000606): unmapped memory word write to 00006834 = FC8F & FFFF
-cpu #2 (PC=00000607): unmapped memory word read from 00006836 & FFFF
-cpu #2 (PC=00000609): unmapped memory word read from 00006838 & FFFF
-cpu #2 (PC=0000060E): unmapped memory word read from 0000683A & FFFF
-
 ****************************************************************************/
+/*!
+ @todo - Framebuffer DMA requires palette switch to be selected dynamically, see at first stage Course Select in Top Landing.
+         My gut feeling is that 3d poly fill operation actually copies to internal buffer then a DMA op actually do the buffer-to-screen copy, including gradiation ROZ too;
+	   - Air Inferno: missing landing monitor camera (blackened);
+	   - Air Inferno: missing 3d HUD graphics;
+	   - Air Inferno: Expert course has wrong 3d geometry;
+	   - Air Inferno: Almost surely crashing during replay has missing smoke effect, looks quite odd atm.
+	   - Top Landing: Night stages might have wrong priority for stars-above-sea;
+	   - Input limiters / analog thresholds for both games;
+ */
 
 #include "emu.h"
 #include "cpu/z80/z80.h"
@@ -221,7 +200,6 @@ cpu #2 (PC=0000060E): unmapped memory word read from 0000683A & FFFF
 #include "includes/taitoipt.h"
 #include "includes/taitoair.h"
 #include "audio/taitosnd.h"
-#include "video/taitoic.h"
 #include "cpu/tms32025/tms32025.h"
 #include "sound/2610intf.h"
 
@@ -238,6 +216,7 @@ WRITE16_MEMBER(taitoair_state::system_control_w)
 
 	m_dsp->set_input_line(INPUT_LINE_RESET, (data & 1) ? CLEAR_LINE : ASSERT_LINE);
 
+	m_gradbank = (data & 0x40);
 	logerror("68K:%06x writing %04x to TMS32025.  %s HOLD , %s RESET\n", space.device().safe_pcbase(), data, ((data & 4) ? "Clear" : "Assert"), ((data & 1) ? "Clear" : "Assert"));
 }
 
@@ -252,7 +231,7 @@ WRITE16_MEMBER(taitoair_state::lineram_w)
 		m_line_ram[offset] = data;
 
 	//if(offset == 0x3fff)
-	//  printf("LineRAM go %d\n",(int)machine().primary_screen->frame_number());
+	//  printf("LineRAM go %d\n",(int)m_screen->frame_number());
 }
 
 READ16_MEMBER(taitoair_state::dspram_r)
@@ -288,7 +267,7 @@ WRITE16_MEMBER(taitoair_state::airsys_paletteram16_w)/* xxBBBBxRRRRxGGGG */
 	COMBINE_DATA(&m_paletteram[offset]);
 
 	a = m_paletteram[offset];
-	palette_set_color_rgb(machine(), offset, pal4bit(a >> 0), pal4bit(a >> 5), pal4bit(a >> 10));
+	m_palette->set_pen_color(offset, pal4bit(a >> 0), pal4bit(a >> 5), pal4bit(a >> 10));
 }
 
 WRITE16_MEMBER(taitoair_state::airsys_gradram_w)
@@ -310,16 +289,7 @@ WRITE16_MEMBER(taitoair_state::airsys_gradram_w)
 	g = (g << 1) | (g & 1);
 	b = (b << 1) | (b & 1);
 
-	/* TODO: I'm sure that normal paletteram and gradiation ram mixes in some way ... */
-	//pal_r = ((m_paletteram[(offset >> 7) + 0x300] & 0x000f) >> 0) * 0x11;
-	//pal_g = ((m_paletteram[(offset >> 7) + 0x300] & 0x01e0) >> 5) * 0x11;
-	//pal_b = ((m_paletteram[(offset >> 7) + 0x300] & 0x7c00) >> 10) * 0x11;
-
-	//if(r == 0) { r = (pal_r); }
-	//if(g == 0) { g = (pal_g); }
-	//if(b == 0) { b = (pal_b); }
-
-	palette_set_color_rgb(machine(), offset+0x2000, r, g, b);
+	m_palette->set_pen_color(offset+0x2000, r, g, b);
 }
 
 
@@ -368,19 +338,38 @@ READ16_MEMBER(taitoair_state::stick2_input_r)
 	return 0;
 }
 
-
-
-void taitoair_state::reset_sound_region()
-{
-	membank("bank1")->set_entry(m_banknum);
-}
-
 WRITE8_MEMBER(taitoair_state::sound_bankswitch_w)
 {
-	m_banknum = data & 3;
-	reset_sound_region();
+	membank("z80bank")->set_entry(data & 3);
 }
 
+/*!
+	@brief Framebuffer DMA control
+	@regs [0] x--- ---- ---- ---- copy framebuffer to the screen
+	      [0] --x- ---- ---- ---- unknown, used on POST test
+		  [0] 1001 1111 1111 1111 used by Air Inferno after erase op, erase -> copy?
+		  [0] 0001 1111 1111 1111 erase op?
+		  [1] xxxx xxxx xxxx xxxx fill value? 0xffff by Top Landing, 0x0000 Air Inferno
+		  [2] (unused)
+		  [3] both games uses 0xb7, most likely a register setting.
+*/
+WRITE16_MEMBER(taitoair_state::dma_regs_w)
+{
+	printf("%08x %04x\n",offset,data);
+
+	if(offset == 0 && ACCESSING_BITS_8_15)
+	{
+		if(data == 0x1fff)
+		{
+			fb_erase_op();
+		}
+		else if(data & 0x8000)
+		{
+			/*! @todo it also flushes current palette. */
+			fb_copy_op();
+		}
+	}
+}
 
 /***********************************************************
              MEMORY STRUCTURES
@@ -390,18 +379,18 @@ static ADDRESS_MAP_START( airsys_map, AS_PROGRAM, 16, taitoair_state )
 	AM_RANGE(0x000000, 0x0bffff) AM_ROM
 	AM_RANGE(0x0c0000, 0x0cffff) AM_RAM AM_SHARE("m68000_mainram")
 	AM_RANGE(0x140000, 0x140001) AM_WRITE(system_control_w) /* Pause the TMS32025 */
-	AM_RANGE(0x180000, 0x187fff) AM_RAM_WRITE(airsys_gradram_w) AM_SHARE("gradram")                 /* "gradiation ram (0/1)" */
+	AM_RANGE(0x180000, 0x187fff) AM_RAM_WRITE(airsys_gradram_w) AM_SHARE("gradram") /* "gradiation ram (0/1)" */
 	AM_RANGE(0x188000, 0x189fff) AM_MIRROR(0x2000) AM_RAM_WRITE(airsys_paletteram16_w) AM_SHARE("paletteram")
-	AM_RANGE(0x800000, 0x820fff) AM_DEVREADWRITE_LEGACY("tc0080vco", tc0080vco_word_r, tc0080vco_word_w)    /* tilemaps, sprites */
-	AM_RANGE(0x906000, 0x906007) AM_RAM // DMA?
+	AM_RANGE(0x800000, 0x820fff) AM_DEVREADWRITE("tc0080vco", tc0080vco_device, word_r, word_w)    /* tilemaps, sprites */
+	AM_RANGE(0x906000, 0x906007) AM_WRITE(dma_regs_w) // DMA?
 	AM_RANGE(0x908000, 0x90ffff) AM_RAM AM_SHARE("line_ram")    /* "line ram" */
 	AM_RANGE(0x910000, 0x91ffff) AM_RAM AM_SHARE("dsp_ram") /* "dsp common ram" (TMS320C25) */
-	AM_RANGE(0x980000, 0x98000f) AM_RAM AM_SHARE("backregs")
+	AM_RANGE(0x980000, 0x98000f) AM_RAM AM_SHARE("tc0430grw") /* TC0430GRW roz transform coefficients */
 	AM_RANGE(0xa00000, 0xa00007) AM_READ(stick_input_r)
 	AM_RANGE(0xa00100, 0xa00107) AM_READ(stick2_input_r)
 	AM_RANGE(0xa00200, 0xa0020f) AM_DEVREADWRITE8("tc0220ioc", tc0220ioc_device, read, write, 0x00ff) /* other I/O */
-	AM_RANGE(0xa80000, 0xa80001) AM_READNOP AM_DEVWRITE8("tc0140syt", tc0140syt_device, tc0140syt_port_w, 0x00ff)
-	AM_RANGE(0xa80002, 0xa80003) AM_DEVREADWRITE8("tc0140syt", tc0140syt_device, tc0140syt_comm_r, tc0140syt_comm_w, 0x00ff)
+	AM_RANGE(0xa80000, 0xa80001) AM_READNOP AM_DEVWRITE8("tc0140syt", tc0140syt_device, master_port_w, 0x00ff)
+	AM_RANGE(0xa80002, 0xa80003) AM_DEVREADWRITE8("tc0140syt", tc0140syt_device, master_comm_r, master_comm_w, 0x00ff)
 	AM_RANGE(0xb00000, 0xb007ff) AM_RAM                     /* "power common ram" (mecha drive) */
 ADDRESS_MAP_END
 
@@ -409,11 +398,11 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, taitoair_state )
 	AM_RANGE(0x0000, 0x3fff) AM_ROM
-	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank1")
+	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("z80bank")
 	AM_RANGE(0xc000, 0xdfff) AM_RAM
 	AM_RANGE(0xe000, 0xe003) AM_DEVREADWRITE("ymsnd", ym2610_device, read, write)
-	AM_RANGE(0xe200, 0xe200) AM_READNOP AM_DEVWRITE("tc0140syt", tc0140syt_device, tc0140syt_slave_port_w)
-	AM_RANGE(0xe201, 0xe201) AM_DEVREADWRITE("tc0140syt", tc0140syt_device, tc0140syt_slave_comm_r, tc0140syt_slave_comm_w)
+	AM_RANGE(0xe200, 0xe200) AM_READNOP AM_DEVWRITE("tc0140syt", tc0140syt_device, slave_port_w)
+	AM_RANGE(0xe201, 0xe201) AM_DEVREADWRITE("tc0140syt", tc0140syt_device, slave_comm_r, slave_comm_w)
 	AM_RANGE(0xe400, 0xe403) AM_WRITENOP        /* pan control */
 	AM_RANGE(0xea00, 0xea00) AM_READNOP
 	AM_RANGE(0xee00, 0xee00) AM_WRITENOP        /* ? */
@@ -423,33 +412,101 @@ ADDRESS_MAP_END
 
 /********************************** TMS32025 ********************************/
 
-/*
-Air Inferno:
+WRITE16_MEMBER(taitoair_state::dsp_test_start_w)
+{
+	m_dsp_test_object_type = data;
+	m_dsp_test_or_clip = 0;
+	m_dsp_test_and_clip = 0xf;
+}
 
-write to 0x3404 - almost always 0x00fd / 0xff38  (253, -200)
-write to 0x3408 /
+WRITE16_MEMBER(taitoair_state::dsp_test_x_w)
+{
+	m_dsp_test_x = data;
+}
 
-write to 0x341b - May not be numeric - it's weird.  stays stable,
-                  then freaks out just before "quad: unknown value 0066"
-                  This function seems to break things up into different polygon
-                  'classes'
+WRITE16_MEMBER(taitoair_state::dsp_test_y_w)
+{
+	m_dsp_test_y = data;
+}
 
-write to 0x3418 - X value
-write to 0x3419 - Y value
-write to 0x341a - Z value
-read to 0x341b, puts data to internal RAM 0x380 - 0x384 - 0x388 - 0x38c
+WRITE16_MEMBER(taitoair_state::dsp_test_z_w)
+{
+	m_dsp_test_z = data;
+}
 
-checks 0x341c - if != to 0 then skip ... ?
-checks 0x341d - if == to 0 then skip ... ?
+READ16_MEMBER(taitoair_state::dsp_test_point_r)
+{
+	UINT16 r = 0;
+	if(m_dsp_test_x < -m_dsp_test_z)
+		r |= 1;
+	if(m_dsp_test_x >  m_dsp_test_z)
+		r |= 2;
+	if(m_dsp_test_y < -m_dsp_test_z)
+		r |= 4;
+	if(m_dsp_test_y >  m_dsp_test_z)
+		r |= 8;
 
-write to 0x3405 ; X value
-write to 0x3409 ; Y value
-write to 0x3406 ; Z value
-write to 0x340a ; Z value
-read to 0x340b, puts to line RAM (y) with offset + 0x160
-read to 0x3407, puts to line RAM (x) with offset + 0x5d
+	m_dsp_test_or_clip |= r;
+	m_dsp_test_and_clip &= r;
+	return r;
+}
 
-*/
+READ16_MEMBER(taitoair_state::dsp_test_or_clip_r)
+{
+	return m_dsp_test_or_clip;
+}
+
+READ16_MEMBER(taitoair_state::dsp_test_and_clip_r)
+{
+	return m_dsp_test_and_clip;
+}
+
+WRITE16_MEMBER(taitoair_state::dsp_muldiv_a_1_w)
+{
+	m_dsp_muldiv_a_1 = data;
+}
+
+WRITE16_MEMBER(taitoair_state::dsp_muldiv_b_1_w)
+{
+	m_dsp_muldiv_b_1 = data;
+}
+
+WRITE16_MEMBER(taitoair_state::dsp_muldiv_c_1_w)
+{
+	m_dsp_muldiv_c_1 = data;
+}
+
+READ16_MEMBER(taitoair_state::dsp_muldiv_1_r)
+{
+	if(m_dsp_muldiv_c_1 == 0)
+		return 0xffff; /**< @todo true value? */
+
+	return m_dsp_muldiv_a_1*m_dsp_muldiv_b_1/m_dsp_muldiv_c_1;
+}
+
+WRITE16_MEMBER(taitoair_state::dsp_muldiv_a_2_w)
+{
+	m_dsp_muldiv_a_2 = data;
+}
+
+WRITE16_MEMBER(taitoair_state::dsp_muldiv_b_2_w)
+{
+	m_dsp_muldiv_b_2 = data;
+}
+
+WRITE16_MEMBER(taitoair_state::dsp_muldiv_c_2_w)
+{
+	m_dsp_muldiv_c_2 = data;
+}
+
+READ16_MEMBER(taitoair_state::dsp_muldiv_2_r)
+{
+	if(m_dsp_muldiv_c_2 == 0)
+		return 0xffff; /**< @todo true value? */
+
+	return m_dsp_muldiv_a_2*m_dsp_muldiv_b_2/m_dsp_muldiv_c_2;
+}
+
 
 static ADDRESS_MAP_START( DSP_map_program, AS_PROGRAM, 16, taitoair_state )
 	AM_RANGE(0x0000, 0x1fff) AM_ROM
@@ -458,18 +515,23 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( DSP_map_data, AS_DATA, 16, taitoair_state )
 	AM_RANGE(0x2003, 0x2003) AM_READNOP //bit 0 DMA status flag or vblank
 	AM_RANGE(0x3000, 0x3002) AM_WRITE(dsp_flags_w)
-	AM_RANGE(0x3404, 0x3404) AM_WRITE(dsp_frustum_left_w)
-	AM_RANGE(0x3405, 0x3405) AM_WRITE(dsp_x_eyecoord_w)
-	AM_RANGE(0x3406, 0x3406) AM_WRITE(dsp_z_eyecoord_w)
-	AM_RANGE(0x3407, 0x3407) AM_READ(dsp_x_return_r)
-	AM_RANGE(0x3408, 0x3408) AM_WRITE(dsp_frustum_bottom_w)
-	AM_RANGE(0x3409, 0x3409) AM_WRITE(dsp_y_eyecoord_w)
-	AM_RANGE(0x340a, 0x340a) AM_WRITE(dsp_rasterize_w)      /* Just a (lame) guess */
-	AM_RANGE(0x340b, 0x340b) AM_READ(dsp_y_return_r)
-//  AM_RANGE(0x3418, 0x341a) AM_WRITE(dsp_sqrt_w)
-//  AM_RANGE(0x341b, 0x341b) AM_WRITE(dsp_sqrt_r)
-//  AM_RANGE(0x341c, 0x341c) AM_READ(dsp_sqrt_flags1_r)
-//  AM_RANGE(0x341d, 0x341d) AM_READ(dsp_sqrt_flags2_r)
+	AM_RANGE(0x3404, 0x3404) AM_WRITE(dsp_muldiv_a_1_w)
+	AM_RANGE(0x3405, 0x3405) AM_WRITE(dsp_muldiv_b_1_w)
+	AM_RANGE(0x3406, 0x3406) AM_WRITE(dsp_muldiv_c_1_w)
+	AM_RANGE(0x3407, 0x3407) AM_READ(dsp_muldiv_1_r)
+
+	AM_RANGE(0x3408, 0x3408) AM_WRITE(dsp_muldiv_a_2_w)
+	AM_RANGE(0x3409, 0x3409) AM_WRITE(dsp_muldiv_b_2_w)
+	AM_RANGE(0x340a, 0x340a) AM_WRITE(dsp_muldiv_c_2_w)
+	AM_RANGE(0x340b, 0x340b) AM_READ(dsp_muldiv_2_r)
+
+	AM_RANGE(0x3418, 0x3418) AM_WRITE(dsp_test_x_w)
+	AM_RANGE(0x3419, 0x3419) AM_WRITE(dsp_test_y_w)
+	AM_RANGE(0x341a, 0x341a) AM_WRITE(dsp_test_z_w)
+	AM_RANGE(0x341b, 0x341b) AM_READWRITE(dsp_test_point_r, dsp_test_start_w)
+	AM_RANGE(0x341c, 0x341c) AM_READ(dsp_test_and_clip_r)
+	AM_RANGE(0x341d, 0x341d) AM_READ(dsp_test_or_clip_r)
+
 	AM_RANGE(0x4000, 0x7fff) AM_READWRITE(lineram_r, lineram_w)
 	AM_RANGE(0x8000, 0xffff) AM_READWRITE(dspram_r, dspram_w)
 ADDRESS_MAP_END
@@ -529,10 +591,10 @@ static INPUT_PORTS_START( topland )
 	PORT_BIT( 0x00ff, 0x0000, IPT_AD_STICK_Z ) PORT_MINMAX(0x0080,0x007f) PORT_SENSITIVITY(30) PORT_KEYDELTA(40) PORT_PLAYER(1) PORT_REVERSE
 
 	PORT_START(STICK2_PORT_TAG)
-	PORT_BIT( 0xffff, 0x0000, IPT_AD_STICK_X ) PORT_MINMAX(0xf800,0x07ff) PORT_SENSITIVITY(30) PORT_KEYDELTA(40) PORT_PLAYER(1)
+	PORT_BIT( 0x0fff, 0x0000, IPT_AD_STICK_X ) PORT_MINMAX(0x00800, 0x07ff) PORT_SENSITIVITY(100) PORT_KEYDELTA(20) PORT_PLAYER(1)
 
 	PORT_START(STICK3_PORT_TAG)
-	PORT_BIT( 0xffff, 0x0000, IPT_AD_STICK_Y ) PORT_MINMAX(0xf800,0x07ff) PORT_SENSITIVITY(30) PORT_KEYDELTA(40) PORT_PLAYER(1)
+	PORT_BIT( 0x0fff, 0x0000, IPT_AD_STICK_Y ) PORT_MINMAX(0x00800, 0x07ff) PORT_SENSITIVITY(100) PORT_KEYDELTA(20) PORT_PLAYER(1)
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( ainferno )
@@ -589,10 +651,10 @@ static INPUT_PORTS_START( ainferno )
 	PORT_BIT( 0x00ff, 0x0000, IPT_AD_STICK_Z ) PORT_MINMAX(0x0080,0x007f) PORT_SENSITIVITY(30) PORT_KEYDELTA(40) PORT_PLAYER(1) PORT_REVERSE
 
 	PORT_START(STICK2_PORT_TAG)
-	PORT_BIT( 0xffff, 0x0000, IPT_AD_STICK_X ) PORT_MINMAX(0xf800,0x7ff) PORT_SENSITIVITY(30) PORT_KEYDELTA(40) PORT_PLAYER(1)
+	PORT_BIT( 0x0fff, 0x0000, IPT_AD_STICK_X ) PORT_MINMAX(0x00800, 0x07ff) PORT_SENSITIVITY(100) PORT_KEYDELTA(20) PORT_PLAYER(1)
 
 	PORT_START(STICK3_PORT_TAG)
-	PORT_BIT( 0xffff, 0x0000, IPT_AD_STICK_Y ) PORT_MINMAX(0xf800,0x7ff) PORT_SENSITIVITY(30) PORT_KEYDELTA(40) PORT_PLAYER(1)
+	PORT_BIT( 0x0fff, 0x0000, IPT_AD_STICK_Y ) PORT_MINMAX(0x00800, 0x07ff) PORT_SENSITIVITY(100) PORT_KEYDELTA(20) PORT_PLAYER(1)
 INPUT_PORTS_END
 
 
@@ -635,42 +697,18 @@ WRITE_LINE_MEMBER(taitoair_state::irqhandler)
                 MACHINE DRIVERS
 ************************************************************/
 
-static const tc0080vco_interface airsys_tc0080vco_intf =
-{
-	0, 1,   /* gfxnum, txnum */
-	1, 1, -2,
-	0
-};
-
-static const tc0220ioc_interface airsys_io_intf =
-{
-	DEVCB_INPUT_PORT("DSWA"), DEVCB_INPUT_PORT("DSWB"),
-	DEVCB_INPUT_PORT("IN0"), DEVCB_INPUT_PORT("IN1"), DEVCB_INPUT_PORT("IN2")   /* port read handlers */
-};
-
-static const tc0140syt_interface airsys_tc0140syt_intf =
-{
-	"maincpu", "audiocpu"
-};
-
 void taitoair_state::machine_start()
 {
-	UINT8 *ROM = memregion("audiocpu")->base();
-	int i;
+	membank("z80bank")->configure_entries(0, 4, memregion("audiocpu")->base(), 0x4000);
 
-	membank("bank1")->configure_entries(0, 4, &ROM[0xc000], 0x4000);
-
-	save_item(NAME(m_banknum));
-	save_item(NAME(m_q.col));
+	save_item(NAME(m_q.header));
 	save_item(NAME(m_q.pcount));
 
-	for (i = 0; i < TAITOAIR_POLY_MAX_PT; i++)
+	for (int i = 0; i < TAITOAIR_POLY_MAX_PT; i++)
 	{
-		state_save_register_item(machine(), "globals", NULL, i, m_q.p[i].x);
-		state_save_register_item(machine(), "globals", NULL, i, m_q.p[i].y);
+		save_item(NAME(m_q.p[i].x), i);
+		save_item(NAME(m_q.p[i].y), i);
 	}
-
-	machine().save().register_postload(save_prepost_delegate(FUNC(taitoair_state::reset_sound_region), this));
 }
 
 void taitoair_state::machine_reset()
@@ -678,7 +716,6 @@ void taitoair_state::machine_reset()
 	int i;
 
 	m_dsp_hold_signal = ASSERT_LINE;
-	m_banknum = 0;
 
 	for (i = 0; i < TAITOAIR_POLY_MAX_PT; i++)
 	{
@@ -690,55 +727,84 @@ void taitoair_state::machine_reset()
 static MACHINE_CONFIG_START( airsys, taitoair_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M68000,24000000 / 2)        /* 12 MHz ??? */
+	MCFG_CPU_ADD("maincpu", M68000, XTAL_12MHz) // MC68000P12
 	MCFG_CPU_PROGRAM_MAP(airsys_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", taitoair_state,  irq5_line_hold)
 
-	MCFG_CPU_ADD("audiocpu", Z80,8000000 / 2)           /* 4 MHz ??? */
+	MCFG_CPU_ADD("audiocpu", Z80, XTAL_16MHz / 4)   // Z8400AB1
 	MCFG_CPU_PROGRAM_MAP(sound_map)
 
-	MCFG_CPU_ADD("dsp", TMS32025,24000000)          /* 24 MHz ??? *///
+	MCFG_CPU_ADD("dsp", TMS32025, XTAL_36MHz) // Unverified
 	MCFG_CPU_PROGRAM_MAP(DSP_map_program)
 	MCFG_CPU_DATA_MAP(DSP_map_data)
 	MCFG_CPU_IO_MAP(DSP_map_io)
 
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
-
-	MCFG_TC0220IOC_ADD("tc0220ioc", airsys_io_intf)
+	MCFG_DEVICE_ADD("tc0220ioc", TC0220IOC, 0)
+	MCFG_TC0220IOC_READ_0_CB(IOPORT("DSWA"))
+	MCFG_TC0220IOC_READ_1_CB(IOPORT("DSWB"))
+	MCFG_TC0220IOC_READ_2_CB(IOPORT("IN0"))
+	MCFG_TC0220IOC_READ_3_CB(IOPORT("IN1"))
+	MCFG_TC0220IOC_READ_7_CB(IOPORT("IN2"))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
-	MCFG_SCREEN_SIZE(64*16, 64*16)
+	MCFG_SCREEN_SIZE(64*16, 32*16)
 	MCFG_SCREEN_VISIBLE_AREA(0*16, 32*16-1, 3*16, 28*16-1)
 	MCFG_SCREEN_UPDATE_DRIVER(taitoair_state, screen_update_taitoair)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(airsys)
-	MCFG_PALETTE_LENGTH(512*16+512*16)
-	MCFG_PALETTE_INIT(all_black)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", airsys)
 
-	MCFG_TC0080VCO_ADD("tc0080vco", airsys_tc0080vco_intf)
+	MCFG_PALETTE_ADD_INIT_BLACK("palette", 512*16+512*16)
+
+	MCFG_DEVICE_ADD("tc0080vco", TC0080VCO, 0)
+	MCFG_TC0080VCO_GFX_REGION(0)
+	MCFG_TC0080VCO_TX_REGION(1)
+	MCFG_TC0080VCO_OFFSETS(1, 1)
+	MCFG_TC0080VCO_BGFLIP_OFFS(-2)
+	MCFG_TC0080VCO_GFXDECODE("gfxdecode")
+	MCFG_TC0080VCO_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SOUND_ADD("ymsnd", YM2610, 8000000)
+	MCFG_SOUND_ADD("ymsnd", YM2610, XTAL_16MHz / 2)
 	MCFG_YM2610_IRQ_HANDLER(WRITELINE(taitoair_state, irqhandler))
 	MCFG_SOUND_ROUTE(0, "mono", 0.30)
 	MCFG_SOUND_ROUTE(1, "mono", 0.60)
 	MCFG_SOUND_ROUTE(2, "mono", 0.60)
 
-	MCFG_TC0140SYT_ADD("tc0140syt", airsys_tc0140syt_intf)
+	MCFG_DEVICE_ADD("tc0140syt", TC0140SYT, 0)
+	MCFG_TC0140SYT_MASTER_CPU("maincpu")
+	MCFG_TC0140SYT_SLAVE_CPU("audiocpu")
 MACHINE_CONFIG_END
 
 
 /*************************************************************
                    DRIVERS
 
-Ainferno may be missing an 0x2000 byte rom from the video
-board - possibly?
+Both games use near-identical CPU boards but different video
+boards. Top Landing has a video board ROM (b62-28.22) which is
+not present on Air Inferno.
+
+Air Inferno video customs:
+
+TC0460LRN - 3D related?
+TC0440ENZ - 3D related?
+
+[Used also by F2/H/Z System games]
+TC0430GRW - Rotation/Zoom
+TC0300FLA
+TC0080VCO
+TC0130LNB
+TC0130LNB
+TC0160ROM
+TC0270MOD
+
 *************************************************************/
 
 ROM_START( topland )
@@ -750,9 +816,8 @@ ROM_START( topland )
 	ROM_LOAD16_BYTE( "b62_23.41",  0x80000, 0x20000, CRC(ef3a971c) SHA1(0840668dda48f4c9a85410361bfba3ae9580a71f) )
 	ROM_LOAD16_BYTE( "b62_22.12",  0x80001, 0x20000, CRC(94279201) SHA1(8518d8e722d4f2516f75224d9a21ab20d8ee6c78) )
 
-	ROM_REGION( 0x1c000, "audiocpu", 0 )    /* Z80 */
-	ROM_LOAD( "b62-42.34", 0x00000, 0x04000, CRC(389230e0) SHA1(3a336987aad7bf4df658f924de4bbe6f0fff6d59) )
-	ROM_CONTINUE(          0x10000, 0x0c000 )
+	ROM_REGION( 0x10000, "audiocpu", 0 )    /* Z80 */
+	ROM_LOAD( "b62-42.34", 0x00000, 0x10000, CRC(389230e0) SHA1(3a336987aad7bf4df658f924de4bbe6f0fff6d59) )
 
 	ROM_REGION( 0x20000, "dsp", 0 ) /* TMS320C25 */
 	ROM_LOAD16_BYTE( "b62-21.35", 0x00000, 0x02000, CRC(5f38460d) SHA1(0593718d15b30b10f7686959932e2c934de2a529) )  // cpu board
@@ -797,9 +862,8 @@ ROM_START( ainferno )
 
 	/* 0x80000 to 0xbffff is empty for this game */
 
-	ROM_REGION( 0x1c000, "audiocpu", 0 )    /* Z80 */
-	ROM_LOAD( "c45-23.34", 0x00000, 0x04000, CRC(d0750c78) SHA1(63232c2acef86e8c8ffaad36ab0b6c4cc1eb48f8) )
-	ROM_CONTINUE(          0x10000, 0x0c000 )
+	ROM_REGION( 0x10000, "audiocpu", 0 )    /* Z80 */
+	ROM_LOAD( "c45-23.34", 0x00000, 0x10000, CRC(d0750c78) SHA1(63232c2acef86e8c8ffaad36ab0b6c4cc1eb48f8) )
 
 	ROM_REGION( 0x20000, "dsp", 0 ) /* TMS320C25 */
 	ROM_LOAD16_BYTE( "c45-25.35", 0x00000, 0x02000, CRC(c0d39f95) SHA1(542aa6e2af510aea00db40bf803cb6653d4e7747) )
@@ -824,9 +888,6 @@ ROM_START( ainferno )
 
 	ROM_REGION( 0x20000, "ymsnd.deltat", 0 )    /* Delta-T samples */
 	ROM_LOAD( "c45-06.31", 0x00000, 0x20000, CRC(6a7976d4) SHA1(a465f9bb874b1eff08742b33cc3c364703b281ca) )
-
-	ROM_REGION( 0x02000, "user1", 0 )
-	ROM_LOAD( "c45-xx.22", 0x00000, 0x02000, NO_DUMP )  // video board
 
 	ROM_REGION( 0x1c00, "plds", 0 )
 	ROM_LOAD( "pal16l8b-c45-07.ic6",   0x0000, 0x0104, CRC(a139114f) SHA1(d21f0c02c34a59b2cea925a9a417d5c2db27a30e) )
@@ -853,9 +914,8 @@ ROM_START( ainfernoj )
 
 	/* 0x80000 to 0xbffff is empty for this game */
 
-	ROM_REGION( 0x1c000, "audiocpu", 0 )    /* Z80 */
-	ROM_LOAD( "c45-23.34", 0x00000, 0x04000, CRC(d0750c78) SHA1(63232c2acef86e8c8ffaad36ab0b6c4cc1eb48f8) )
-	ROM_CONTINUE(          0x10000, 0x0c000 )
+	ROM_REGION( 0x10000, "audiocpu", 0 )    /* Z80 */
+	ROM_LOAD( "c45-23.34", 0x00000, 0x10000, CRC(d0750c78) SHA1(63232c2acef86e8c8ffaad36ab0b6c4cc1eb48f8) )
 
 	ROM_REGION( 0x20000, "dsp", 0 ) /* TMS320C25 */
 	ROM_LOAD16_BYTE( "c45-25.35", 0x00000, 0x02000, CRC(c0d39f95) SHA1(542aa6e2af510aea00db40bf803cb6653d4e7747) )
@@ -881,9 +941,6 @@ ROM_START( ainfernoj )
 	ROM_REGION( 0x20000, "ymsnd.deltat", 0 )    /* Delta-T samples */
 	ROM_LOAD( "c45-06.31", 0x00000, 0x20000, CRC(6a7976d4) SHA1(a465f9bb874b1eff08742b33cc3c364703b281ca) )
 
-	ROM_REGION( 0x02000, "user1", 0 )
-	ROM_LOAD( "c45-xx.22", 0x00000, 0x02000, NO_DUMP )  // video board
-
 	ROM_REGION( 0x1c00, "plds", 0 )
 	ROM_LOAD( "pal16l8b-c45-07.ic6",   0x0000, 0x0104, CRC(a139114f) SHA1(d21f0c02c34a59b2cea925a9a417d5c2db27a30e) )
 	ROM_LOAD( "pal16l8b-c45-08.ic62",  0x0200, 0x0104, CRC(6f8ec860) SHA1(25161f6e5a5a76c35e697312567abe995b08b945) )
@@ -902,6 +959,6 @@ ROM_END
 
 
 /*   ( YEAR  NAME      PARENT    MACHINE   INPUT     INIT      MONITOR  COMPANY  FULLNAME */
-GAME( 1988, topland,  0,        airsys,   topland, driver_device,  0,        ROT0,    "Taito Corporation Japan", "Top Landing (World)", GAME_NOT_WORKING )
+GAME( 1988, topland,  0,        airsys,   topland, driver_device,  0,        ROT0,    "Taito Corporation Japan", "Top Landing (World)", GAME_IMPERFECT_GRAPHICS )
 GAME( 1990, ainferno, 0,        airsys,   ainferno, driver_device, 0,        ROT0,    "Taito America Corporation", "Air Inferno (US)", GAME_NOT_WORKING )
 GAME( 1990, ainfernoj,ainferno, airsys,   ainferno, driver_device, 0,        ROT0,    "Taito Corporation Japan", "Air Inferno (Japan)", GAME_NOT_WORKING )

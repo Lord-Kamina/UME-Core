@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Graves
 /*************************************************************************
 
     World Grand Prix
@@ -6,6 +8,8 @@
 
 #include "audio/taitosnd.h"
 #include "machine/taitoio.h"
+#include "video/tc0100scn.h"
+
 
 class wgp_state : public driver_device
 {
@@ -23,21 +27,20 @@ public:
 		m_spriteram(*this, "spriteram"),
 		m_pivram(*this, "pivram"),
 		m_piv_ctrlram(*this, "piv_ctrlram"),
-		m_sharedram(*this, "sharedram"),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
 		m_subcpu(*this, "sub"),
 		m_tc0100scn(*this, "tc0100scn"),
 		m_tc0140syt(*this, "tc0140syt"),
-		m_tc0220ioc(*this, "tc0220ioc") { }
+		m_tc0220ioc(*this, "tc0220ioc"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_spritemap;
 	required_shared_ptr<UINT16> m_spriteram;
 	required_shared_ptr<UINT16> m_pivram;
 	required_shared_ptr<UINT16> m_piv_ctrlram;
-	required_shared_ptr<UINT16> m_sharedram;
-//  UINT16 *    m_paletteram;    // currently this uses generic palette handling
 
 	/* video-related */
 	tilemap_t   *m_piv_tilemap[3];
@@ -53,7 +56,6 @@ public:
 	/* misc */
 	UINT16      m_cpua_ctrl;
 	UINT16      m_port_sel;
-	INT32       m_banknum;
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
@@ -62,8 +64,9 @@ public:
 	required_device<tc0100scn_device> m_tc0100scn;
 	required_device<tc0140syt_device> m_tc0140syt;
 	required_device<tc0220ioc_device> m_tc0220ioc;
-	DECLARE_READ16_MEMBER(sharedram_r);
-	DECLARE_WRITE16_MEMBER(sharedram_w);
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	DECLARE_WRITE16_MEMBER(cpua_ctrl_w);
 	DECLARE_READ16_MEMBER(lan_status_r);
 	DECLARE_WRITE16_MEMBER(rotate_port_w);
@@ -90,10 +93,9 @@ public:
 	void wgp_postload();
 	inline void common_get_piv_tile_info( tile_data &tileinfo, int tile_index, int num );
 	void wgp_core_vh_start( int piv_xoffs, int piv_yoffs );
-	void draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs );
-	void wgp_piv_layer_draw( bitmap_ind16 &bitmap, const rectangle &cliprect, int layer, int flags, UINT32 priority );
+	void draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs );
+	void wgp_piv_layer_draw( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int layer, int flags, UINT32 priority );
 	void parse_control();
-	void reset_sound_region(  )  /* assumes Z80 sandwiched between the 68Ks */;
 	DECLARE_WRITE_LINE_MEMBER(irqhandler);
 
 protected:

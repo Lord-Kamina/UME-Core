@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli, Bryan McPhail
 /***************************************************************************
 
    Alpha 68k video emulation - Bryan McPhail, mish@tendril.co.uk
@@ -18,21 +20,6 @@ void alpha68k_state::alpha68k_V_video_bank_w( int bank )
 	m_bank_base = bank & 0xf;
 }
 
-WRITE16_MEMBER(alpha68k_state::alpha68k_paletteram_w)
-{
-	int newword;
-	int r, g, b;
-
-	COMBINE_DATA(m_paletteram + offset);
-	newword = m_paletteram[offset];
-
-	r = ((newword >> 7) & 0x1e) | ((newword >> 14) & 0x01);
-	g = ((newword >> 3) & 0x1e) | ((newword >> 13) & 0x01);
-	b = ((newword << 1) & 0x1e) | ((newword >> 12) & 0x01);
-
-	palette_set_color_rgb(machine(), offset, pal5bit(r), pal5bit(g), pal5bit(b));
-}
-
 /******************************************************************************/
 
 TILE_GET_INFO_MEMBER(alpha68k_state::get_tile_info)
@@ -47,21 +34,15 @@ TILE_GET_INFO_MEMBER(alpha68k_state::get_tile_info)
 
 WRITE16_MEMBER(alpha68k_state::alpha68k_videoram_w)
 {
-	/* Doh. */
-	if(ACCESSING_BITS_0_7)
-		if(ACCESSING_BITS_8_15)
-			m_videoram[offset] = data;
-		else
-			m_videoram[offset] = data & 0xff;
-	else
-		m_videoram[offset] = (data >> 8) & 0xff;
+	/* 8 bit RAM, upper & lower byte writes end up in the same place due to m68k byte smearing */
+	m_videoram[offset] = data & 0xff;
 
 	m_fix_tilemap->mark_tile_dirty(offset / 2);
 }
 
 VIDEO_START_MEMBER(alpha68k_state,alpha68k)
 {
-	m_fix_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(alpha68k_state::get_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 32, 32);
+	m_fix_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(alpha68k_state::get_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 32, 32);
 	m_fix_tilemap->set_transparent_pen(0);
 }
 
@@ -104,7 +85,7 @@ void alpha68k_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			}
 
 			if (color)
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					tile,
 					color,
 					fx,fy,
@@ -135,7 +116,7 @@ UINT32 alpha68k_state::screen_update_alpha68k_II(screen_device &screen, bitmap_i
 	draw_sprites(bitmap, cliprect, 2, 0x0000, 0x0800);
 	draw_sprites(bitmap, cliprect, 0, 0x0000, 0x07c0);
 //ZT
-	m_fix_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fix_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -249,7 +230,7 @@ void alpha68k_state::draw_sprites_V( bitmap_ind16 &bitmap, const rectangle &clip
 			}
 
 			if (color)
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					tile,
 					color,
 					fx,fy,
@@ -299,7 +280,7 @@ UINT32 alpha68k_state::screen_update_alpha68k_V(screen_device &screen, bitmap_in
 		draw_sprites_V(bitmap, cliprect, 0, 0x0000, 0x07c0, 0x8000, 0, 0x7fff);
 	}
 
-	m_fix_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fix_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -319,7 +300,7 @@ UINT32 alpha68k_state::screen_update_alpha68k_V_sb(screen_device &screen, bitmap
 	draw_sprites_V(bitmap, cliprect, 2, 0x0000, 0x0800, 0x4000, 0x8000, 0x3fff);
 	draw_sprites_V(bitmap, cliprect, 0, 0x0000, 0x07c0, 0x4000, 0x8000, 0x3fff);
 
-	m_fix_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fix_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -330,7 +311,7 @@ void alpha68k_state::draw_sprites_I( bitmap_ind16 &bitmap, const rectangle &clip
 	UINT16 *spriteram = m_spriteram;
 	int data, offs, mx, my, tile, color, fy, i;
 	UINT8 *color_prom = memregion("user1")->base();
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 
 	for (offs = 0; offs < 0x400; offs += 0x20)
 	{
@@ -345,7 +326,7 @@ void alpha68k_state::draw_sprites_I( bitmap_ind16 &bitmap, const rectangle &clip
 			fy = data & 0x4000;
 			color = color_prom[tile << 1 | data >> 15];
 
-			drawgfx_transpen(bitmap, cliprect, gfx, tile, color, 0, fy, mx, my, 0);
+				gfx->transpen(bitmap,cliprect, tile, color, 0, fy, mx, my, 0);
 
 			my = (my + 8) & 0xff;
 		}
@@ -356,7 +337,7 @@ UINT32 alpha68k_state::screen_update_alpha68k_I(screen_device &screen, bitmap_in
 {
 	int yshift = (m_microcontroller_id == 0x890a) ? 1 : 0; // The Next Space is 1 pixel off
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	/* This appears to be correct priority */
 	draw_sprites_I(bitmap, cliprect, 2, 0x0800, yshift);
@@ -372,9 +353,6 @@ PALETTE_INIT_MEMBER(alpha68k_state,kyros)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
-
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x100; i++)
 	{
@@ -382,7 +360,7 @@ PALETTE_INIT_MEMBER(alpha68k_state,kyros)
 		int g = pal4bit(color_prom[i + 0x100]);
 		int b = pal4bit(color_prom[i + 0x200]);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* color_prom now points to the beginning of the lookup table */
@@ -391,7 +369,7 @@ PALETTE_INIT_MEMBER(alpha68k_state,kyros)
 	for (i = 0; i < 0x100; i++)
 	{
 		UINT8 ctabentry = ((color_prom[i] & 0x0f) << 4) | (color_prom[i + 0x100] & 0x0f);
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 }
 
@@ -400,9 +378,6 @@ PALETTE_INIT_MEMBER(alpha68k_state,paddlem)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
-
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x100; i++)
 	{
@@ -410,7 +385,7 @@ PALETTE_INIT_MEMBER(alpha68k_state,paddlem)
 		int g = pal4bit(color_prom[i + 0x100]);
 		int b = pal4bit(color_prom[i + 0x200]);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* color_prom now points to the beginning of the lookup table */
@@ -419,7 +394,7 @@ PALETTE_INIT_MEMBER(alpha68k_state,paddlem)
 	for (i = 0; i < 0x400; i++)
 	{
 		UINT8 ctabentry = ((color_prom[i + 0x400] & 0x0f) << 4) | (color_prom[i] & 0x0f);
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 }
 
@@ -473,7 +448,7 @@ void alpha68k_state::kyros_draw_sprites( bitmap_ind16 &bitmap, const rectangle &
 					else
 						jongbou_video_banking(&bank, data);
 
-					drawgfx_transpen(bitmap, cliprect, machine().gfx[bank], tile, color, fx, fy, mx, my, 0);
+					m_gfxdecode->gfx(bank)->transpen(bitmap,cliprect, tile, color, fx, fy, mx, my, 0);
 				}
 			}
 //ZT
@@ -487,7 +462,7 @@ void alpha68k_state::kyros_draw_sprites( bitmap_ind16 &bitmap, const rectangle &
 
 UINT32 alpha68k_state::screen_update_kyros(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	colortable_entry_set_value(machine().colortable, 0x100, *m_videoram & 0xff);
+	m_palette->set_pen_indirect(0x100, *m_videoram & 0xff);
 	bitmap.fill(0x100, cliprect); //AT
 
 	kyros_draw_sprites(bitmap, cliprect, 2, 0x0800);
@@ -532,7 +507,7 @@ void alpha68k_state::sstingry_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 				color = (data >> 7 & 0x18) | (data >> 13 & 7);
 				tile = data & 0x3ff;
 				bank = data >> 10 & 3;
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[bank], tile, color, fx, fy, mx, my, 0);
+				m_gfxdecode->gfx(bank)->transpen(bitmap,cliprect, tile, color, fx, fy, mx, my, 0);
 			}
 //ZT
 			if(m_flipscreen)
@@ -545,7 +520,7 @@ void alpha68k_state::sstingry_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 
 UINT32 alpha68k_state::screen_update_sstingry(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	colortable_entry_set_value(machine().colortable, 0x100, *m_videoram & 0xff);
+	m_palette->set_pen_indirect(0x100, *m_videoram & 0xff);
 	bitmap.fill(0x100, cliprect); //AT
 
 	sstingry_draw_sprites(bitmap, cliprect, 2, 0x0800);

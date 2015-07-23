@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     device.c
 
     Device interface functions.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -116,11 +87,11 @@ device_t::device_t(const machine_config &mconfig, device_type type, const char *
 		m_clock_scale(1.0),
 		m_attoseconds_per_clock((clock == 0) ? 0 : HZ_TO_ATTOSECONDS(clock)),
 
-		m_debug(NULL),
 		m_region(NULL),
 		m_machine_config(mconfig),
 		m_static_config(NULL),
 		m_input_defaults(NULL),
+		m_default_bios_tag(""),
 
 		m_machine(NULL),
 		m_save(NULL),
@@ -130,9 +101,9 @@ device_t::device_t(const machine_config &mconfig, device_type type, const char *
 		m_auto_finder_list(NULL)
 {
 	if (owner != NULL)
-		m_tag.cpy((owner->owner() == NULL) ? "" : owner->tag()).cat(":").cat(tag);
+		m_tag.assign((owner->owner() == NULL) ? "" : owner->tag()).append(":").append(tag);
 	else
-		m_tag.cpy(":");
+		m_tag.assign(":");
 	static_set_clock(*this, clock);
 }
 
@@ -151,6 +122,9 @@ device_t::~device_t()
 //  info for a given region
 //-------------------------------------------------
 
+// NOTE: this being NULL in a C++ member function can lead to undefined behavior.
+// However, it is relied on throughout MAME, so will remain for now.
+
 memory_region *device_t::memregion(const char *_tag) const
 {
 	// safety first
@@ -158,8 +132,7 @@ memory_region *device_t::memregion(const char *_tag) const
 		return NULL;
 
 	// build a fully-qualified name and look it up
-	astring fullpath;
-	return machine().memory().region(subtag(fullpath, _tag));
+	return machine().memory().region(subtag(_tag).c_str());
 }
 
 
@@ -175,8 +148,7 @@ memory_share *device_t::memshare(const char *_tag) const
 		return NULL;
 
 	// build a fully-qualified name and look it up
-	astring fullpath;
-	return machine().memory().shared(subtag(fullpath, _tag));
+	return machine().memory().shared(subtag(_tag).c_str());
 }
 
 
@@ -192,8 +164,7 @@ memory_bank *device_t::membank(const char *_tag) const
 		return NULL;
 
 	// build a fully-qualified name and look it up
-	astring fullpath;
-	return machine().memory().bank(subtag(fullpath, _tag));
+	return machine().memory().bank(subtag(_tag).c_str());
 }
 
 
@@ -209,8 +180,23 @@ ioport_port *device_t::ioport(const char *tag) const
 		return NULL;
 
 	// build a fully-qualified name and look it up
-	astring fullpath;
-	return machine().ioport().port(subtag(fullpath, tag));
+	return machine().ioport().port(subtag(tag).c_str());
+}
+
+
+//-------------------------------------------------
+//  ioport - return a pointer to the I/O port
+//  object for a given port name
+//-------------------------------------------------
+
+std::string device_t::parameter(const char *tag) const
+{
+	// safety first
+	if (this == NULL)
+		return NULL;
+
+	// build a fully-qualified name and look it up
+	return machine().parameters().lookup(subtag(tag));
 }
 
 
@@ -303,7 +289,7 @@ void device_t::set_unscaled_clock(UINT32 clock)
 {
 	m_unscaled_clock = clock;
 	m_clock = m_unscaled_clock * m_clock_scale;
-	m_attoseconds_per_clock = HZ_TO_ATTOSECONDS(m_clock);
+	m_attoseconds_per_clock = (m_clock == 0) ? 0 : HZ_TO_ATTOSECONDS(m_clock);
 	notify_clock_changed();
 }
 
@@ -317,7 +303,7 @@ void device_t::set_clock_scale(double clockscale)
 {
 	m_clock_scale = clockscale;
 	m_clock = m_unscaled_clock * m_clock_scale;
-	m_attoseconds_per_clock = HZ_TO_ATTOSECONDS(m_clock);
+	m_attoseconds_per_clock = (m_clock == 0) ? 0 : HZ_TO_ATTOSECONDS(m_clock);
 	notify_clock_changed();
 }
 
@@ -345,7 +331,7 @@ attotime device_t::clocks_to_attotime(UINT64 numclocks) const
 //  attotime to CPU clock ticks
 //-------------------------------------------------
 
-UINT64 device_t::attotime_to_clocks(attotime duration) const
+UINT64 device_t::attotime_to_clocks(const attotime &duration) const
 {
 	return mulu_32x32(duration.seconds, m_clock) + (UINT64)duration.attoseconds / (UINT64)m_attoseconds_per_clock;
 }
@@ -367,7 +353,7 @@ emu_timer *device_t::timer_alloc(device_timer_id id, void *ptr)
 //  call our device callback
 //-------------------------------------------------
 
-void device_t::timer_set(attotime duration, device_timer_id id, int param, void *ptr)
+void device_t::timer_set(const attotime &duration, device_timer_id id, int param, void *ptr)
 {
 	machine().scheduler().timer_set(duration, *this, id, param, ptr);
 }
@@ -389,7 +375,7 @@ void device_t::set_machine(running_machine &machine)
 //  list and return status
 //-------------------------------------------------
 
-bool device_t::findit(bool isvalidation)
+bool device_t::findit(bool isvalidation) const
 {
 	bool allfound = true;
 	for (finder_base *autodev = m_auto_finder_list; autodev != NULL; autodev = autodev->m_next)
@@ -441,7 +427,7 @@ void device_t::start()
 	// if we're debugging, create a device_debug object
 	if ((machine().debug_flags & DEBUG_FLAG_ENABLED) != 0)
 	{
-		m_debug = auto_alloc(machine(), device_debug(*this));
+		m_debug.reset(global_alloc(device_debug(*this)));
 		debug_setup();
 	}
 
@@ -473,7 +459,7 @@ void device_t::stop()
 		intf->interface_post_stop();
 
 	// free any debugging info
-	auto_free(machine(), m_debug);
+	m_debug.reset();
 
 	// we're now officially stopped, and the machine is off-limits
 	m_started = false;
@@ -655,7 +641,7 @@ void device_t::device_pre_save()
 //-------------------------------------------------
 //  device_post_load - called after the loading a
 //  saved state, so that registered variables can
-//  be expaneded as necessary
+//  be expanded as necessary
 //-------------------------------------------------
 
 void device_t::device_post_load()
@@ -707,8 +693,7 @@ void device_t::device_timer(emu_timer &timer, device_timer_id id, int param, voi
 device_t *device_t::subdevice_slow(const char *tag) const
 {
 	// resolve the full path
-	astring fulltag;
-	subtag(fulltag, tag);
+	std::string fulltag = subtag(tag);
 
 	// we presume the result is a rooted path; also doubled colons mess up our
 	// tree walk, so catch them early
@@ -717,12 +702,12 @@ device_t *device_t::subdevice_slow(const char *tag) const
 
 	// walk the device list to the final path
 	device_t *curdevice = &mconfig().root_device();
-	if (fulltag.len() > 1)
-		for (int start = 1, end = fulltag.chr(start, ':'); start != 0 && curdevice != NULL; start = end + 1, end = fulltag.chr(start, ':'))
+	if (fulltag.length() > 1)
+		for (int start = 1, end = fulltag.find_first_of(':', start); start != 0 && curdevice != NULL; start = end + 1, end = fulltag.find_first_of(':', start))
 		{
-			astring part(fulltag, start, (end == -1) ? -1 : end - start);
+			std::string part(fulltag, start, (end == -1) ? -1 : end - start);
 			for (curdevice = curdevice->m_subdevice_list.first(); curdevice != NULL; curdevice = curdevice->next())
-				if (part == curdevice->m_basetag)
+				if (part.compare(curdevice->m_basetag)==0)
 					break;
 		}
 
@@ -738,21 +723,22 @@ device_t *device_t::subdevice_slow(const char *tag) const
 //  to our device based on the provided tag
 //-------------------------------------------------
 
-astring &device_t::subtag(astring &result, const char *tag) const
+std::string device_t::subtag(const char *tag) const
 {
+	std::string result;
 	// if the tag begins with a colon, ignore our path and start from the root
 	if (*tag == ':')
 	{
 		tag++;
-		result.cpy(":");
+		result.assign(":");
 	}
 
 	// otherwise, start with our path
 	else
 	{
-		result.cpy(m_tag);
+		result.assign(m_tag);
 		if (result != ":")
-			result.cat(":");
+			result.append(":");
 	}
 
 	// iterate over the tag, look for special path characters to resolve
@@ -760,30 +746,30 @@ astring &device_t::subtag(astring &result, const char *tag) const
 	while ((caret = strchr(tag, '^')) != NULL)
 	{
 		// copy everything up to there
-		result.cat(tag, caret - tag);
+		result.append(tag, caret - tag);
 		tag = caret + 1;
 
 		// strip trailing colons
-		int len = result.len();
+		int len = result.length();
 		while (result[--len] == ':')
-			result.substr(0, len);
+			result = result.substr(0, len);
 
 		// remove the last path part, leaving the last colon
 		if (result != ":")
 		{
-			int lastcolon = result.rchr(0, ':');
+			int lastcolon = result.find_last_of(':');
 			if (lastcolon != -1)
-				result.substr(0, lastcolon + 1);
+				result = result.substr(0, lastcolon + 1);
 		}
 	}
 
 	// copy everything else
-	result.cat(tag);
+	result.append(tag);
 
 	// strip trailing colons up to the root
-	int len = result.len();
+	int len = result.length();
 	while (len > 1 && result[--len] == ':')
-		result.substr(0, len);
+		result = result.substr(0, len);
 	return result;
 }
 
@@ -802,7 +788,7 @@ device_t *device_t::add_subdevice(device_type type, const char *tag, UINT32 cloc
 	// apply any machine configuration owned by the device now
 	machine_config_constructor additions = device->machine_config_additions();
 	if (additions != NULL)
-		(*additions)(const_cast<machine_config &>(mconfig()), device);
+		(*additions)(const_cast<machine_config &>(mconfig()), device, NULL);
 	return device;
 }
 
@@ -826,7 +812,7 @@ device_t *device_t::replace_subdevice(device_t &old, device_type type, const cha
 	// apply any machine configuration owned by the device now
 	machine_config_constructor additions = device->machine_config_additions();
 	if (additions != NULL)
-		(*additions)(const_cast<machine_config &>(mconfig()), device);
+		(*additions)(const_cast<machine_config &>(mconfig()), device, NULL);
 	return device;
 }
 
@@ -852,7 +838,7 @@ void device_t::remove_subdevice(device_t &device)
 //  list of stuff to find after we go live
 //-------------------------------------------------
 
-device_t::finder_base *device_t::register_auto_finder(finder_base &autodev)
+finder_base *device_t::register_auto_finder(finder_base &autodev)
 {
 	// add to this list
 	finder_base *old = m_auto_finder_list;
@@ -860,71 +846,6 @@ device_t::finder_base *device_t::register_auto_finder(finder_base &autodev)
 	return old;
 }
 
-
-//-------------------------------------------------
-//  finder_base - constructor
-//-------------------------------------------------
-
-device_t::finder_base::finder_base(device_t &base, const char *tag)
-	: m_next(base.register_auto_finder(*this)),
-		m_base(base),
-		m_tag(tag)
-{
-}
-
-
-//-------------------------------------------------
-//  ~finder_base - destructor
-//-------------------------------------------------
-
-device_t::finder_base::~finder_base()
-{
-}
-
-
-//-------------------------------------------------
-//  find_memory - find memory
-//-------------------------------------------------
-
-void *device_t::finder_base::find_memory(UINT8 width, size_t &bytes, bool required)
-{
-	// look up the share and return NULL if not found
-	memory_share *share = m_base.memshare(m_tag);
-	if (share == NULL)
-		return NULL;
-
-	// check the width and warn if not correct
-	if (width != 0 && share->width() != width)
-	{
-		if (required)
-			mame_printf_warning("Shared ptr '%s' found but is width %d, not %d as requested\n", m_tag, share->width(), width);
-		return NULL;
-	}
-
-	// return results
-	bytes = share->bytes();
-	return share->ptr();
-}
-
-
-//-------------------------------------------------
-//  report_missing - report missing objects and
-//  return true if it's ok
-//-------------------------------------------------
-
-bool device_t::finder_base::report_missing(bool found, const char *objname, bool required)
-{
-	// just pass through in the found case
-	if (found)
-		return true;
-
-	// otherwise, report
-	if (required)
-		mame_printf_error("Required %s '%s' not found\n", objname, m_tag);
-	else
-		mame_printf_verbose("Optional %s '%s' not found\n", objname, m_tag);
-	return !required;
-}
 
 
 //**************************************************************************
@@ -935,9 +856,10 @@ bool device_t::finder_base::report_missing(bool found, const char *objname, bool
 //  device_interface - constructor
 //-------------------------------------------------
 
-device_interface::device_interface(device_t &device)
+device_interface::device_interface(device_t &device, const char *type)
 	: m_interface_next(NULL),
-		m_device(device)
+		m_device(device),
+		m_type(type)
 {
 	device_interface **tailptr;
 	for (tailptr = &device.m_interface_list; *tailptr != NULL; tailptr = &(*tailptr)->m_interface_next) ;

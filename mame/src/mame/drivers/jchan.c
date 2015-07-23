@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*
     Jackie Chan The Kung-Fu Master
     Jackie Chan in Fists of Fire
@@ -172,7 +174,7 @@ there are 9 PALS on the pcb (not dumped)
 #include "machine/nvram.h"
 #include "sound/ymz280b.h"
 #include "video/sknsspr.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "video/kaneko_tmap.h"
 #include "machine/kaneko_toybox.h"
 
@@ -181,25 +183,27 @@ class jchan_state : public driver_device
 public:
 	jchan_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this,"maincpu"),
+		m_subcpu(*this,"sub"),
+		m_palette(*this, "palette"),
+		m_spritegen1(*this, "spritegen1"),
+		m_spritegen2(*this, "spritegen2"),
 		m_view2_0(*this, "view2_0"),
 		m_spriteram_1(*this, "spriteram_1"),
 		m_sprregs_1(*this, "sprregs_1"),
 		m_spriteram_2(*this, "spriteram_2"),
 		m_sprregs_2(*this, "sprregs_2"),
 		m_mainsub_shared_ram(*this, "mainsub_shared"),
-		m_ctrl(*this, "ctrl"),
-		m_maincpu(*this,"maincpu"),
-		m_subcpu(*this,"sub")
+		m_ctrl(*this, "ctrl")
 		{ }
 
-	optional_device<kaneko_view2_tilemap_device> m_view2_0;
-	bitmap_ind16 *m_sprite_bitmap_1;
-	bitmap_ind16 *m_sprite_bitmap_2;
-	UINT32* m_sprite_ram32_1;
-	UINT32* m_sprite_ram32_2;
-	UINT32* m_sprite_regs32_1;
-	UINT32* m_sprite_regs32_2;
-	int m_irq_sub_enable;
+	required_device<cpu_device> m_maincpu;
+	required_device<cpu_device> m_subcpu;
+	required_device<palette_device> m_palette;
+	required_device<sknsspr_device> m_spritegen1;
+	required_device<sknsspr_device> m_spritegen2;
+	required_device<kaneko_view2_tilemap_device> m_view2_0;
+
 	required_shared_ptr<UINT16> m_spriteram_1;
 	required_shared_ptr<UINT16> m_sprregs_1;
 	required_shared_ptr<UINT16> m_spriteram_2;
@@ -207,25 +211,29 @@ public:
 	required_shared_ptr<UINT16> m_mainsub_shared_ram;
 	required_shared_ptr<UINT16> m_ctrl;
 
-	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_subcpu;
-	sknsspr_device* m_spritegen1;
-	sknsspr_device* m_spritegen2;
+	bitmap_ind16 *m_sprite_bitmap_1;
+	bitmap_ind16 *m_sprite_bitmap_2;
+	UINT32* m_sprite_ram32_1;
+	UINT32* m_sprite_ram32_2;
+	UINT32* m_sprite_regs32_1;
+	UINT32* m_sprite_regs32_2;
+	int m_irq_sub_enable;
 
-
-	DECLARE_WRITE16_MEMBER(jchan_ctrl_w);
-	DECLARE_READ16_MEMBER(jchan_ctrl_r);
+	DECLARE_WRITE16_MEMBER(ctrl_w);
+	DECLARE_READ16_MEMBER(ctrl_r);
 	DECLARE_WRITE16_MEMBER(main2sub_cmd_w);
 	DECLARE_WRITE16_MEMBER(sub2main_cmd_w);
-	DECLARE_WRITE16_MEMBER(jchan_suprnova_sprite32_1_w);
-	DECLARE_WRITE16_MEMBER(jchan_suprnova_sprite32regs_1_w);
-	DECLARE_WRITE16_MEMBER(jchan_suprnova_sprite32_2_w);
-	DECLARE_WRITE16_MEMBER(jchan_suprnova_sprite32regs_2_w);
+	DECLARE_WRITE16_MEMBER(sknsspr_sprite32_1_w);
+	DECLARE_WRITE16_MEMBER(sknsspr_sprite32regs_1_w);
+	DECLARE_WRITE16_MEMBER(sknsspr_sprite32_2_w);
+	DECLARE_WRITE16_MEMBER(sknsspr_sprite32regs_2_w);
 
 	DECLARE_DRIVER_INIT(jchan);
 	virtual void video_start();
-	UINT32 screen_update_jchan(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	TIMER_DEVICE_CALLBACK_MEMBER(jchan_vblank);
+
+	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+
+	TIMER_DEVICE_CALLBACK_MEMBER(vblank);
 };
 
 
@@ -244,7 +252,7 @@ public:
 //  if it is incorrect jchan2 will crash when
 //  certain characters win/lose but no finish
 //  move was performed
-TIMER_DEVICE_CALLBACK_MEMBER(jchan_state::jchan_vblank)
+TIMER_DEVICE_CALLBACK_MEMBER(jchan_state::vblank)
 {
 	int scanline = param;
 
@@ -272,7 +280,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(jchan_state::jchan_vblank)
 
 void jchan_state::video_start()
 {
-	/* so we can use suprnova.c */
+	/* so we can use sknsspr.c */
 	m_sprite_ram32_1 = auto_alloc_array(machine(), UINT32, 0x4000/4);
 	m_sprite_ram32_2 = auto_alloc_array(machine(), UINT32, 0x4000/4);
 
@@ -282,12 +290,14 @@ void jchan_state::video_start()
 	m_sprite_bitmap_1 = auto_bitmap_ind16_alloc(machine(),1024,1024);
 	m_sprite_bitmap_2 = auto_bitmap_ind16_alloc(machine(),1024,1024);
 
-	m_spritegen1 = machine().device<sknsspr_device>("spritegen1");
-	m_spritegen2 = machine().device<sknsspr_device>("spritegen2");
-
-
 	m_spritegen1->skns_sprite_kludge(0,0);
 	m_spritegen2->skns_sprite_kludge(0,0);
+
+	save_item(NAME(m_irq_sub_enable));
+	save_pointer(NAME(m_sprite_ram32_1), 0x4000/4);
+	save_pointer(NAME(m_sprite_ram32_2), 0x4000/4);
+	save_pointer(NAME(m_sprite_regs32_1), 0x40/4);
+	save_pointer(NAME(m_sprite_regs32_2), 0x40/4);
 }
 
 
@@ -296,7 +306,7 @@ void jchan_state::video_start()
 
 
 
-UINT32 jchan_state::screen_update_jchan(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 jchan_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int x,y;
 	UINT16* src1;
@@ -305,22 +315,22 @@ UINT32 jchan_state::screen_update_jchan(screen_device &screen, bitmap_ind16 &bit
 	UINT16 pixdata1;
 	UINT16 pixdata2;
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	m_view2_0->kaneko16_prepare(bitmap, cliprect);
 
 	for ( int i = 0; i < 8; i++ )
 	{
-		m_view2_0->render_tilemap_chip(bitmap,cliprect,i);
+		m_view2_0->render_tilemap_chip(screen,bitmap,cliprect,i);
 	}
 
 	m_sprite_bitmap_1->fill(0x0000, cliprect);
 	m_sprite_bitmap_2->fill(0x0000, cliprect);
 
-	m_spritegen1->skns_draw_sprites(machine(), *m_sprite_bitmap_1, cliprect, m_sprite_ram32_1, 0x4000, memregion("gfx1")->base(), memregion ("gfx1")->bytes(), m_sprite_regs32_1 );
-	m_spritegen2->skns_draw_sprites(machine(), *m_sprite_bitmap_2, cliprect, m_sprite_ram32_2, 0x4000, memregion("gfx2")->base(), memregion ("gfx2")->bytes(), m_sprite_regs32_2 );
+	m_spritegen1->skns_draw_sprites(*m_sprite_bitmap_1, cliprect, m_sprite_ram32_1, 0x4000, memregion("gfx1")->base(), memregion ("gfx1")->bytes(), m_sprite_regs32_1 );
+	m_spritegen2->skns_draw_sprites(*m_sprite_bitmap_2, cliprect, m_sprite_ram32_2, 0x4000, memregion("gfx2")->base(), memregion ("gfx2")->bytes(), m_sprite_regs32_2 );
 
 	// ignoring priority bits for now - might use alpha too, check 0x8000 of palette writes
 	for (y=0;y<240;y++)
@@ -361,12 +371,12 @@ UINT32 jchan_state::screen_update_jchan(screen_device &screen, bitmap_ind16 &bit
     $f00000 is the only location also written
 */
 
-WRITE16_MEMBER(jchan_state::jchan_ctrl_w)
+WRITE16_MEMBER(jchan_state::ctrl_w)
 {
 	m_irq_sub_enable = data & 0x8000; // hack / guess!
 }
 
-READ16_MEMBER(jchan_state::jchan_ctrl_r)
+READ16_MEMBER(jchan_state::ctrl_r)
 {
 	switch(offset)
 	{
@@ -374,7 +384,7 @@ READ16_MEMBER(jchan_state::jchan_ctrl_r)
 		case 2/2: return ioport("P2")->read();
 		case 4/2: return ioport("SYSTEM")->read();
 		case 6/2: return ioport("EXTRA")->read();
-		default: logerror("jchan_ctrl_r unknown!"); break;
+		default: logerror("ctrl_r unknown!"); break;
 	}
 	return m_ctrl[offset];
 }
@@ -400,28 +410,28 @@ WRITE16_MEMBER(jchan_state::sub2main_cmd_w)
 }
 
 /* ram convert for suprnova (requires 32-bit stuff) */
-WRITE16_MEMBER(jchan_state::jchan_suprnova_sprite32_1_w)
+WRITE16_MEMBER(jchan_state::sknsspr_sprite32_1_w)
 {
 	COMBINE_DATA(&m_spriteram_1[offset]);
 	offset>>=1;
 	m_sprite_ram32_1[offset]=(m_spriteram_1[offset*2+1]<<16) | (m_spriteram_1[offset*2]);
 }
 
-WRITE16_MEMBER(jchan_state::jchan_suprnova_sprite32regs_1_w)
+WRITE16_MEMBER(jchan_state::sknsspr_sprite32regs_1_w)
 {
 	COMBINE_DATA(&m_sprregs_1[offset]);
 	offset>>=1;
 	m_sprite_regs32_1[offset]=(m_sprregs_1[offset*2+1]<<16) | (m_sprregs_1[offset*2]);
 }
 
-WRITE16_MEMBER(jchan_state::jchan_suprnova_sprite32_2_w)
+WRITE16_MEMBER(jchan_state::sknsspr_sprite32_2_w)
 {
 	COMBINE_DATA(&m_spriteram_2[offset]);
 	offset>>=1;
 	m_sprite_ram32_2[offset]=(m_spriteram_2[offset*2+1]<<16) | (m_spriteram_2[offset*2]);
 }
 
-WRITE16_MEMBER(jchan_state::jchan_suprnova_sprite32regs_2_w)
+WRITE16_MEMBER(jchan_state::sknsspr_sprite32regs_2_w)
 {
 	COMBINE_DATA(&m_sprregs_2[offset]);
 	offset>>=1;
@@ -433,22 +443,22 @@ static ADDRESS_MAP_START( jchan_main, AS_PROGRAM, 16, jchan_state )
 	AM_RANGE(0x000000, 0x1fffff) AM_ROM
 	AM_RANGE(0x200000, 0x20ffff) AM_RAM // Work RAM - [A] grid tested, cleared ($9d6-$a54)
 
-	AM_RANGE(0x300000, 0x30ffff) AM_DEVREADWRITE( "toybox", kaneko_toybox_device, toybox_mcu_ram_r, toybox_mcu_ram_w )//    [G] MCU share
-	AM_RANGE(0x330000, 0x330001) AM_DEVWRITE( "toybox", kaneko_toybox_device, toybox_mcu_com0_w)
-	AM_RANGE(0x340000, 0x340001) AM_DEVWRITE( "toybox", kaneko_toybox_device, toybox_mcu_com1_w)
-	AM_RANGE(0x350000, 0x350001) AM_DEVWRITE( "toybox", kaneko_toybox_device, toybox_mcu_com2_w)
-	AM_RANGE(0x360000, 0x360001) AM_DEVWRITE( "toybox", kaneko_toybox_device, toybox_mcu_com3_w)
-	AM_RANGE(0x370000, 0x370001) AM_DEVREAD( "toybox", kaneko_toybox_device, toybox_mcu_status_r)
+	AM_RANGE(0x300000, 0x30ffff) AM_RAM AM_SHARE("mcuram") //    [G] MCU share
+	AM_RANGE(0x330000, 0x330001) AM_DEVWRITE( "toybox", kaneko_toybox_device, mcu_com0_w)
+	AM_RANGE(0x340000, 0x340001) AM_DEVWRITE( "toybox", kaneko_toybox_device, mcu_com1_w)
+	AM_RANGE(0x350000, 0x350001) AM_DEVWRITE( "toybox", kaneko_toybox_device, mcu_com2_w)
+	AM_RANGE(0x360000, 0x360001) AM_DEVWRITE( "toybox", kaneko_toybox_device, mcu_com3_w)
+	AM_RANGE(0x370000, 0x370001) AM_DEVREAD( "toybox", kaneko_toybox_device, mcu_status_r)
 
 	AM_RANGE(0x400000, 0x403fff) AM_RAM AM_SHARE("mainsub_shared")
 
 	/* 1st sprite layer */
-	AM_RANGE(0x500000, 0x503fff) AM_RAM_WRITE(jchan_suprnova_sprite32_1_w) AM_SHARE("spriteram_1")
-	AM_RANGE(0x600000, 0x60003f) AM_RAM_WRITE(jchan_suprnova_sprite32regs_1_w) AM_SHARE("sprregs_1")
+	AM_RANGE(0x500000, 0x503fff) AM_RAM_WRITE(sknsspr_sprite32_1_w) AM_SHARE("spriteram_1")
+	AM_RANGE(0x600000, 0x60003f) AM_RAM_WRITE(sknsspr_sprite32regs_1_w) AM_SHARE("sprregs_1")
 
-	AM_RANGE(0x700000, 0x70ffff) AM_RAM_WRITE(paletteram_xGGGGGRRRRRBBBBB_word_w) AM_SHARE("paletteram") // palette for sprites?
+	AM_RANGE(0x700000, 0x70ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette") // palette for sprites?
 
-	AM_RANGE(0xf00000, 0xf00007) AM_READWRITE(jchan_ctrl_r, jchan_ctrl_w) AM_SHARE("ctrl")
+	AM_RANGE(0xf00000, 0xf00007) AM_READWRITE(ctrl_r, ctrl_w) AM_SHARE("ctrl")
 
 	AM_RANGE(0xf80000, 0xf80001) AM_READWRITE(watchdog_reset16_r, watchdog_reset16_w)   // watchdog
 ADDRESS_MAP_END
@@ -465,8 +475,8 @@ static ADDRESS_MAP_START( jchan_sub, AS_PROGRAM, 16, jchan_state )
 	AM_RANGE(0x600000, 0x60001f) AM_DEVREADWRITE("view2_0", kaneko_view2_tilemap_device,  kaneko_tmap_regs_r, kaneko_tmap_regs_w)
 
 	/* background sprites */
-	AM_RANGE(0x700000, 0x703fff) AM_RAM_WRITE(jchan_suprnova_sprite32_2_w) AM_SHARE("spriteram_2")
-	AM_RANGE(0x780000, 0x78003f) AM_RAM_WRITE(jchan_suprnova_sprite32regs_2_w) AM_SHARE("sprregs_2")
+	AM_RANGE(0x700000, 0x703fff) AM_RAM_WRITE(sknsspr_sprite32_2_w) AM_SHARE("spriteram_2")
+	AM_RANGE(0x780000, 0x78003f) AM_RAM_WRITE(sknsspr_sprite32regs_2_w) AM_SHARE("sprregs_2")
 
 	AM_RANGE(0x800000, 0x800003) AM_DEVWRITE8("ymz", ymz280b_device, write, 0x00ff) // sound
 
@@ -583,12 +593,12 @@ static MACHINE_CONFIG_START( jchan, jchan_state )
 
 	MCFG_CPU_ADD("maincpu", M68000, 16000000)
 	MCFG_CPU_PROGRAM_MAP(jchan_main)
-	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", jchan_state, jchan_vblank, "screen", 0, 1)
+	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", jchan_state, vblank, "screen", 0, 1)
 
 	MCFG_CPU_ADD("sub", M68000, 16000000)
 	MCFG_CPU_PROGRAM_MAP(jchan_sub)
 
-	MCFG_GFXDECODE(jchan)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", jchan)
 
 
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -596,13 +606,16 @@ static MACHINE_CONFIG_START( jchan, jchan_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(64*8, 64*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 0*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(jchan_state, screen_update_jchan)
+	MCFG_SCREEN_UPDATE_DRIVER(jchan_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x10000)
+	MCFG_PALETTE_ADD("palette", 0x10000)
+	MCFG_PALETTE_FORMAT(xGGGGGRRRRRBBBBB)
 
 	MCFG_DEVICE_ADD("view2_0", KANEKO_TMAP, 0)
 	kaneko_view2_tilemap_device::set_gfx_region(*device, 1);
 	kaneko_view2_tilemap_device::set_offset(*device, 25, 11, 320, 240);
+	MCFG_KANEKO_TMAP_GFXDECODE("gfxdecode")
 
 
 
@@ -612,7 +625,7 @@ static MACHINE_CONFIG_START( jchan, jchan_state )
 	MCFG_DEVICE_ADD("toybox", KANEKO_TOYBOX, 0)
 
 
-	MCFG_EEPROM_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -711,5 +724,5 @@ DRIVER_INIT_MEMBER( jchan_state, jchan )
 
 
 /* game drivers */
-GAME( 1995, jchan,     0,        jchan,    jchan, jchan_state,    jchan,    ROT0, "Kaneko", "Jackie Chan - The Kung-Fu Master", GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL)
-GAME( 1995, jchan2,    0,        jchan,    jchan2, jchan_state,   jchan,    ROT0, "Kaneko", "Jackie Chan in Fists of Fire", GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL )
+GAME( 1995, jchan,     0,        jchan,    jchan, jchan_state,    jchan,    ROT0, "Kaneko", "Jackie Chan - The Kung-Fu Master", GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1995, jchan2,    0,        jchan,    jchan2, jchan_state,   jchan,    ROT0, "Kaneko", "Jackie Chan in Fists of Fire", GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )

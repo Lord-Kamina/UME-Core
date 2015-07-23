@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, R. Belmont
 /***************************************************************************
 
     machine/bebox.c
@@ -93,15 +95,15 @@
 
 /* Components */
 #include "video/pc_vga.h"
-#include "video/cirrus.h"
+#include "bus/lpci/cirrus.h"
 #include "cpu/powerpc/ppc.h"
 #include "machine/ins8250.h"
 #include "machine/upd765.h"
 #include "machine/mc146818.h"
 #include "machine/pic8259.h"
 #include "machine/am9517a.h"
-#include "machine/idectrl.h"
-#include "machine/pci.h"
+#include "machine/ataintf.h"
+#include "bus/lpci/pci.h"
 #include "machine/intelfsh.h"
 #include "machine/53c810.h"
 #include "machine/ram.h"
@@ -110,70 +112,11 @@
 #define LOG_UART        1
 #define LOG_INTERRUPTS  1
 
-INLINE UINT16 read16be_with_read8_handler(read8_space_func handler, address_space &space, offs_t offset, UINT16 mem_mask)
-{
-	UINT16 result = 0;
-	if (ACCESSING_BITS_8_15)
-		result |= ((UINT16)(*handler)(space, offset * 2 + 0, mem_mask >> 8)) << 8;
-	if (ACCESSING_BITS_0_7)
-		result |= ((UINT16)(*handler)(space, offset * 2 + 1, mem_mask >> 0)) << 0;
-	return result;
-}
-
-INLINE void write16be_with_write8_handler(write8_space_func handler, address_space &space, offs_t offset, UINT16 data, UINT16 mem_mask)
-{
-	if (ACCESSING_BITS_8_15)
-		(*handler)(space, offset * 2 + 0, data >> 8, mem_mask >> 8);
-	if (ACCESSING_BITS_0_7)
-		(*handler)(space, offset * 2 + 1, data >> 0, mem_mask >> 0);
-}
-
-INLINE UINT32 read32be_with_read8_handler(read8_space_func handler, address_space &space, offs_t offset, UINT32 mem_mask)
-{
-	UINT32 result = 0;
-	if (ACCESSING_BITS_16_31)
-		result |= read16be_with_read8_handler(handler, space, offset * 2 + 0, mem_mask >> 16) << 16;
-	if (ACCESSING_BITS_0_15)
-		result |= read16be_with_read8_handler(handler, space, offset * 2 + 1, mem_mask) << 0;
-	return result;
-}
-
-
-INLINE void write32be_with_write8_handler(write8_space_func handler, address_space &space, offs_t offset, UINT32 data, UINT32 mem_mask)
-{
-	if (ACCESSING_BITS_16_31)
-		write16be_with_write8_handler(handler, space, offset * 2 + 0, data >> 16, mem_mask >> 16);
-	if (ACCESSING_BITS_0_15)
-		write16be_with_write8_handler(handler, space, offset * 2 + 1, data, mem_mask);
-}
-
-INLINE UINT64 read64be_with_read8_handler(read8_space_func handler, address_space &space, offs_t offset, UINT64 mem_mask)
-{
-	UINT64 result = 0;
-	if (ACCESSING_BITS_32_63)
-		result |= (UINT64)read32be_with_read8_handler(handler, space, offset * 2 + 0, mem_mask >> 32) << 32;
-	if (ACCESSING_BITS_0_31)
-		result |= (UINT64)read32be_with_read8_handler(handler, space, offset * 2 + 1, mem_mask) << 0;
-	return result;
-}
-
-
-INLINE void write64be_with_write8_handler(write8_space_func handler, address_space &space, offs_t offset, UINT64 data, UINT64 mem_mask)
-{
-	if (ACCESSING_BITS_32_63)
-		write32be_with_write8_handler(handler, space, offset * 2 + 0, data >> 32, mem_mask >> 32);
-	if (ACCESSING_BITS_0_31)
-		write32be_with_write8_handler(handler, space, offset * 2 + 1, data, mem_mask);
-}
-
-
 /*************************************
  *
  *  Interrupts and Motherboard Registers
  *
  *************************************/
-
-static void bebox_update_interrupts(running_machine &machine);
 
 static void bebox_mbreg32_w(UINT32 *target, UINT64 data, UINT64 mem_mask)
 {
@@ -220,7 +163,7 @@ WRITE64_MEMBER(bebox_state::bebox_cpu0_imask_w )
 			logerror("BeBox CPU #0 pc=0x%08X imask=0x%08x\n",
 				(unsigned) space.device().safe_pc( ), m_cpu_imask[0]);
 		}
-		bebox_update_interrupts(space.machine());
+		bebox_update_interrupts();
 	}
 }
 
@@ -237,7 +180,7 @@ WRITE64_MEMBER(bebox_state::bebox_cpu1_imask_w )
 			logerror("BeBox CPU #1 pc=0x%08X imask=0x%08x\n",
 				(unsigned) space.device() .safe_pc( ), m_cpu_imask[1]);
 		}
-		bebox_update_interrupts(space.machine());
+		bebox_update_interrupts();
 	}
 }
 
@@ -310,31 +253,28 @@ WRITE64_MEMBER(bebox_state::bebox_processor_resets_w )
 }
 
 
-static void bebox_update_interrupts(running_machine &machine)
+void bebox_state::bebox_update_interrupts()
 {
-	bebox_state *state = machine.driver_data<bebox_state>();
-	int cpunum;
 	UINT32 interrupt;
 	static const char *const cputags[] = { "ppc1", "ppc2" };
 
-	for (cpunum = 0; cpunum < 2; cpunum++)
+	for (int cpunum = 0; cpunum < 2; cpunum++)
 	{
-		interrupt = state->m_interrupts & state->m_cpu_imask[cpunum];
+		interrupt = m_interrupts & m_cpu_imask[cpunum];
 
 		if (LOG_INTERRUPTS)
 		{
 			logerror("\tbebox_update_interrupts(): CPU #%d [%08X|%08X] IRQ %s\n", cpunum,
-				state->m_interrupts, state->m_cpu_imask[cpunum], interrupt ? "on" : "off");
+				m_interrupts, m_cpu_imask[cpunum], interrupt ? "on" : "off");
 		}
 
-		machine.device(cputags[cpunum])->execute().set_input_line(INPUT_LINE_IRQ0, interrupt ? ASSERT_LINE : CLEAR_LINE);
+		machine().device(cputags[cpunum])->execute().set_input_line(INPUT_LINE_IRQ0, interrupt ? ASSERT_LINE : CLEAR_LINE);
 	}
 }
 
 
-void bebox_set_irq_bit(running_machine &machine, unsigned int interrupt_bit, int val)
+void bebox_state::bebox_set_irq_bit(unsigned int interrupt_bit, int val)
 {
-	bebox_state *state = machine.driver_data<bebox_state>();
 	static const char *const interrupt_names[32] =
 	{
 		NULL,
@@ -378,70 +318,22 @@ void bebox_set_irq_bit(running_machine &machine, unsigned int interrupt_bit, int
 		assert_always((interrupt_bit < ARRAY_LENGTH(interrupt_names)) && (interrupt_names[interrupt_bit] != NULL), "Raising invalid interrupt");
 
 		logerror("bebox_set_irq_bit(): pc[0]=0x%08x pc[1]=0x%08x %s interrupt #%u (%s)\n",
-			(unsigned) machine.device("ppc1")->safe_pc(),
-			(unsigned) machine.device("ppc2")->safe_pc(),
+			(unsigned) machine().device("ppc1")->safe_pc(),
+			(unsigned) machine().device("ppc2")->safe_pc(),
 			val ? "Asserting" : "Clearing",
 			interrupt_bit, interrupt_names[interrupt_bit]);
 	}
 
-	old_interrupts = state->m_interrupts;
+	old_interrupts = m_interrupts;
 	if (val)
-		state->m_interrupts |= 1 << interrupt_bit;
+		m_interrupts |= 1 << interrupt_bit;
 	else
-		state->m_interrupts &= ~(1 << interrupt_bit);
+		m_interrupts &= ~(1 << interrupt_bit);
 
 	/* if interrupt values have changed, update the lines */
-	if (state->m_interrupts != old_interrupts)
-		bebox_update_interrupts(machine);
+	if (m_interrupts != old_interrupts)
+		bebox_update_interrupts();
 }
-
-
-/*************************************
- *
- *  COM ports
- *
- *************************************/
-
-const ins8250_interface bebox_uart_inteface_0 =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-const ins8250_interface bebox_uart_inteface_1 =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-const ins8250_interface bebox_uart_inteface_2 =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-const ins8250_interface bebox_uart_inteface_3 =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 
 /*************************************
  *
@@ -449,16 +341,10 @@ const ins8250_interface bebox_uart_inteface_3 =
  *
  *************************************/
 
-void bebox_state::fdc_interrupt(bool state)
+WRITE_LINE_MEMBER( bebox_state::fdc_interrupt )
 {
-	bebox_set_irq_bit(machine(), 13, state);
+	bebox_set_irq_bit(13, state);
 	m_pic8259_1->ir6_w(state);
-}
-
-
-void bebox_state::fdc_dma_drq(bool state)
-{
-	m_dma8237_1->dreq2_w(state);
 }
 
 /*************************************
@@ -471,7 +357,7 @@ READ64_MEMBER(bebox_state::bebox_interrupt_ack_r )
 {
 	UINT32 result;
 	result = m_pic8259_1->acknowledge();
-	bebox_set_irq_bit(space.machine(), 5, 0);   /* HACK */
+	bebox_set_irq_bit(5, 0);   /* HACK */
 	return ((UINT64) result) << 56;
 }
 
@@ -484,7 +370,7 @@ READ64_MEMBER(bebox_state::bebox_interrupt_ack_r )
 
 WRITE_LINE_MEMBER(bebox_state::bebox_pic8259_master_set_int_line)
 {
-	bebox_set_irq_bit(machine(), 5, state);
+	bebox_set_irq_bit(5, state);
 }
 
 WRITE_LINE_MEMBER(bebox_state::bebox_pic8259_slave_set_int_line)
@@ -506,7 +392,7 @@ READ8_MEMBER(bebox_state::get_slave_ack)
 
 WRITE_LINE_MEMBER(bebox_state::bebox_ide_interrupt)
 {
-	bebox_set_irq_bit(machine(), 7, state);
+	bebox_set_irq_bit(7, state);
 	m_pic8259_1->ir6_w(state);
 }
 
@@ -701,31 +587,6 @@ WRITE_LINE_MEMBER(bebox_state::pc_dack1_w){ set_dma_channel(machine(), 1, state)
 WRITE_LINE_MEMBER(bebox_state::pc_dack2_w){ set_dma_channel(machine(), 2, state); }
 WRITE_LINE_MEMBER(bebox_state::pc_dack3_w){ set_dma_channel(machine(), 3, state); }
 
-
-I8237_INTERFACE( bebox_dma8237_1_config )
-{
-	DEVCB_DRIVER_LINE_MEMBER(bebox_state,bebox_dma_hrq_changed),
-	DEVCB_DRIVER_LINE_MEMBER(bebox_state,bebox_dma8237_out_eop),
-	DEVCB_DRIVER_MEMBER(bebox_state, bebox_dma_read_byte),
-	DEVCB_DRIVER_MEMBER(bebox_state, bebox_dma_write_byte),
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_DRIVER_MEMBER(bebox_state,bebox_dma8237_fdc_dack_r), DEVCB_NULL },
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_DRIVER_MEMBER(bebox_state,bebox_dma8237_fdc_dack_w), DEVCB_NULL },
-	{ DEVCB_DRIVER_LINE_MEMBER(bebox_state,pc_dack0_w), DEVCB_DRIVER_LINE_MEMBER(bebox_state,pc_dack1_w), DEVCB_DRIVER_LINE_MEMBER(bebox_state,pc_dack2_w), DEVCB_DRIVER_LINE_MEMBER(bebox_state,pc_dack3_w) }
-};
-
-
-I8237_INTERFACE( bebox_dma8237_2_config )
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL },
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL },
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL }
-};
-
-
 /*************************************
  *
  *  8254 PIT
@@ -736,28 +597,6 @@ WRITE_LINE_MEMBER(bebox_state::bebox_timer0_w)
 {
 	m_pic8259_1->ir0_w(state);
 }
-
-
-const struct pit8253_interface bebox_pit8254_config =
-{
-	{
-		{
-			4772720/4,              /* heartbeat IRQ */
-			DEVCB_NULL,
-			DEVCB_DRIVER_LINE_MEMBER(bebox_state,bebox_timer0_w)
-		},
-		{
-			4772720/4,              /* dram refresh */
-			DEVCB_NULL,
-			DEVCB_NULL
-		},
-		{
-			4772720/4,              /* pio port c pin 4, and speaker polling enough */
-			DEVCB_NULL,
-			DEVCB_NULL
-		}
-	}
-};
 
 
 /*************************************
@@ -945,9 +784,6 @@ void bebox_state::machine_reset()
 
 void bebox_state::machine_start()
 {
-	smc37c78_device *fdc = machine().device<smc37c78_device>("smc37c78");
-	fdc->setup_intrq_cb(smc37c78_device::line_cb(FUNC(bebox_state::fdc_interrupt), this));
-	fdc->setup_drq_cb(smc37c78_device::line_cb(FUNC(bebox_state::fdc_dma_drq), this));
 }
 
 DRIVER_INIT_MEMBER(bebox_state,bebox)

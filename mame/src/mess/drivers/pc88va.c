@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese
 /********************************************************************************************
 
     PC-88VA (c) 1987 NEC
@@ -32,7 +34,9 @@
 #include "machine/upd765.h"
 #include "sound/2203intf.h"
 #include "formats/xdf_dsk.h"
-#include "machine/upd71071.h"
+//#include "machine/upd71071.h"
+#include "machine/am9517a.h"
+
 
 /* Note: for the time being, just disable FDC CPU, it's for PC-8801 compatibility mode anyway ... */
 #define TEST_SUBFDC 0
@@ -71,11 +75,13 @@ public:
 		m_maincpu(*this, "maincpu"),
 		m_fdc(*this, "upd765"),
 		m_dmac(*this, "dmac"),
-		m_palram(*this, "palram"){ }
+		m_palram(*this, "palram"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<upd765a_device> m_fdc;
-	required_device<upd71071_device> m_dmac;
+	required_device<am9517a_device> m_dmac;
 	required_shared_ptr<UINT16> m_palram;
 	UINT16 m_bank_reg;
 	UINT16 m_screen_ctrl_reg;
@@ -141,7 +147,6 @@ public:
 	DECLARE_WRITE8_MEMBER(r232_ctrl_porta_w);
 	DECLARE_WRITE8_MEMBER(r232_ctrl_portb_w);
 	DECLARE_WRITE8_MEMBER(r232_ctrl_portc_w);
-	DECLARE_WRITE_LINE_MEMBER(pc88va_pic_irq);
 	DECLARE_READ8_MEMBER(get_slave_ack);
 	DECLARE_WRITE_LINE_MEMBER(pc88va_pit_out0_changed);
 //  DECLARE_WRITE_LINE_MEMBER(pc88va_upd765_interrupt);
@@ -151,18 +156,19 @@ public:
 	TIMER_CALLBACK_MEMBER(pc88va_fdc_timer);
 	TIMER_CALLBACK_MEMBER(pc88va_fdc_motor_start_0);
 	TIMER_CALLBACK_MEMBER(pc88va_fdc_motor_start_1);
-//  UINT16 m_fdc_dma_r(running_machine &machine);
-//  void m_fdc_dma_w(running_machine &machine, UINT16 data);
+//  UINT16 m_fdc_dma_r();
+//  void m_fdc_dma_w(UINT16 data);
 	DECLARE_WRITE_LINE_MEMBER(pc88va_hlda_w);
 	DECLARE_WRITE_LINE_MEMBER(pc88va_tc_w);
-	DECLARE_READ16_MEMBER(fdc_dma_r);
-	DECLARE_WRITE16_MEMBER(fdc_dma_w);
+	DECLARE_READ8_MEMBER(fdc_dma_r);
+	DECLARE_WRITE8_MEMBER(fdc_dma_w);
+DECLARE_READ8_MEMBER(dma_memr_cb);
+DECLARE_WRITE8_MEMBER(dma_memw_cb);
 
-	void fdc_irq(bool state);
-	void fdc_drq(bool state);
+	DECLARE_WRITE_LINE_MEMBER(fdc_irq);
+	DECLARE_WRITE_LINE_MEMBER(fdc_drq);
 	DECLARE_FLOPPY_FORMATS( floppy_formats );
 	void pc88va_fdc_update_ready(floppy_image_device *, int);
-	IRQ_CALLBACK_MEMBER(pc88va_irq_callback);
 	void draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	UINT32 calc_kanji_rom_addr(UINT8 jis1,UINT8 jis2,int x,int y);
 	void draw_text(bitmap_rgb32 &bitmap, const rectangle &cliprect);
@@ -179,6 +185,8 @@ public:
 
 protected:
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -189,7 +197,7 @@ void pc88va_state::video_start()
 
 void pc88va_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	UINT16 *tvram = (UINT16 *)(*memregion("tvram"));
+	UINT16 *tvram = (UINT16 *)(memregion("tvram")->base());
 	int offs,i;
 
 	offs = m_tsp.spr_offset;
@@ -247,7 +255,7 @@ void pc88va_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 						pen = pen & 1 ? fg_col : (bc) ? 8 : -1;
 
 						if(pen != -1) //transparent pen
-							bitmap.pix32(yp+y_i, xp+x_i+(x_s)) = machine().pens[pen];
+							bitmap.pix32(yp+y_i, xp+x_i+(x_s)) = m_palette->pen(pen);
 					}
 					spr_count+=2;
 				}
@@ -272,7 +280,7 @@ void pc88va_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 						pen = (BITSWAP16(tvram[(spda+spr_count) / 2],7,6,5,4,3,2,1,0,15,14,13,12,11,10,9,8)) >> (16-(x_s*8)) & 0xf;
 
 						//if(bc != -1) //transparent pen
-						bitmap.pix32(yp+y_i, xp+x_i+(x_s)) = machine().pens[pen];
+						bitmap.pix32(yp+y_i, xp+x_i+(x_s)) = m_palette->pen(pen);
 					}
 					spr_count+=2;
 				}
@@ -467,7 +475,7 @@ void pc88va_state::draw_text(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 					if(secret) { pen = 0; } //hide text
 
 					if(pen != -1) //transparent
-						bitmap.pix32(res_y, res_x) = machine().pens[pen];
+						bitmap.pix32(res_y, res_x) = m_palette->pen(pen);
 				}
 			}
 
@@ -565,7 +573,7 @@ READ16_MEMBER(pc88va_state::sys_mem_r)
 			return 0xffff;
 		case 1: // TVRAM
 		{
-			UINT16 *tvram = (UINT16 *)(*memregion("tvram"));
+			UINT16 *tvram = (UINT16 *)(memregion("tvram")->base());
 
 			if(((offset*2) & 0x30000) == 0)
 				return tvram[offset];
@@ -574,14 +582,14 @@ READ16_MEMBER(pc88va_state::sys_mem_r)
 		}
 		case 4:
 		{
-			UINT16 *gvram = (UINT16 *)(*memregion("gvram"));
+			UINT16 *gvram = (UINT16 *)(memregion("gvram")->base());
 
 			return gvram[offset];
 		}
 		case 8: // kanji ROM
 		case 9:
 		{
-			UINT16 *knj_ram = (UINT16 *)(*memregion("kanji"));
+			UINT16 *knj_ram = (UINT16 *)(memregion("kanji")->base());
 			UINT32 knj_offset;
 
 			knj_offset = (offset + (((m_bank_reg & 0x100) >> 8)*0x20000));
@@ -593,11 +601,10 @@ READ16_MEMBER(pc88va_state::sys_mem_r)
 
 			return knj_ram[knj_offset];
 		}
-		break;
 		case 0xc: // Dictionary ROM
 		case 0xd:
 		{
-			UINT16 *dic_rom = (UINT16 *)(*memregion("dictionary"));
+			UINT16 *dic_rom = (UINT16 *)(memregion("dictionary")->base());
 			UINT32 dic_offset;
 
 			dic_offset = (offset + (((m_bank_reg & 0x100) >> 8)*0x20000));
@@ -617,7 +624,7 @@ WRITE16_MEMBER(pc88va_state::sys_mem_w)
 			break;
 		case 1: // TVRAM
 		{
-			UINT16 *tvram = (UINT16 *)(*memregion("tvram"));
+			UINT16 *tvram = (UINT16 *)(memregion("tvram")->base());
 
 			if(((offset*2) & 0x30000) == 0)
 				COMBINE_DATA(&tvram[offset]);
@@ -625,7 +632,7 @@ WRITE16_MEMBER(pc88va_state::sys_mem_w)
 		break;
 		case 4: // TVRAM
 		{
-			UINT16 *gvram = (UINT16 *)(*memregion("gvram"));
+			UINT16 *gvram = (UINT16 *)(memregion("gvram")->base());
 
 			COMBINE_DATA(&gvram[offset]);
 		}
@@ -633,7 +640,7 @@ WRITE16_MEMBER(pc88va_state::sys_mem_w)
 		case 8: // kanji ROM, backup RAM at 0xb0000 - 0xb3fff
 		case 9:
 		{
-			UINT16 *knj_ram = (UINT16 *)(*memregion("kanji"));
+			UINT16 *knj_ram = (UINT16 *)(memregion("kanji")->base());
 			UINT32 knj_offset;
 
 			knj_offset = ((offset) + (((m_bank_reg & 0x100) >> 8)*0x20000));
@@ -641,8 +648,8 @@ WRITE16_MEMBER(pc88va_state::sys_mem_w)
 			if(knj_offset >= 0x50000/2 && knj_offset <= 0x53fff/2) // TODO: there's an area that can be write protected
 			{
 				COMBINE_DATA(&knj_ram[knj_offset]);
-				machine().gfx[0]->mark_dirty((knj_offset * 2) / 8);
-				machine().gfx[1]->mark_dirty((knj_offset * 2) / 32);
+				m_gfxdecode->gfx(0)->mark_dirty((knj_offset * 2) / 8);
+				m_gfxdecode->gfx(1)->mark_dirty((knj_offset * 2) / 32);
 			}
 		}
 		break;
@@ -663,6 +670,7 @@ static ADDRESS_MAP_START( pc88va_map, AS_PROGRAM, 16, pc88va_state )
 	AM_RANGE(0xf0000, 0xfffff) AM_ROMBANK("rom10_bank")
 ADDRESS_MAP_END
 
+/* IDP = NEC uPD72022 */
 READ8_MEMBER(pc88va_state::idp_status_r)
 {
 /*
@@ -742,6 +750,7 @@ WRITE8_MEMBER(pc88va_state::idp_command_w)
 		case SPROV:  m_cmd = SPROV; /* TODO: where it returns the info? */ break;
 
 		/* TODO: 0x89 shouldn't trigger, should be one of the above commands */
+		/* Update: actually 0x89 is mask command */
 		default:   m_cmd = 0x00; printf("PC=%05x: Unknown IDP %02x cmd set\n",space.device().safe_pc(),data); break;
 	}
 }
@@ -796,7 +805,7 @@ void pc88va_state::execute_sync_cmd()
 
 	refresh = HZ_TO_ATTOSECONDS(60);
 
-	machine().primary_screen->configure(640, 480, visarea, refresh);
+	machine().first_screen()->configure(640, 480, visarea, refresh);
 }
 
 void pc88va_state::execute_dspon_cmd()
@@ -943,13 +952,13 @@ WRITE16_MEMBER(pc88va_state::palette_ram_w)
 	r = (m_palram[offset] & 0x03c0) >> 6;
 	g = (m_palram[offset] & 0x7800) >> 11;
 
-	palette_set_color_rgb(machine(),offset,pal4bit(r),pal4bit(g),pal4bit(b));
+	m_palette->set_pen_color(offset,pal4bit(r),pal4bit(g),pal4bit(b));
 }
 
 READ16_MEMBER(pc88va_state::sys_port4_r)
 {
 	UINT8 vrtc,sw1;
-	vrtc = (machine().primary_screen->vpos() < 200) ? 0x20 : 0x00; // vblank
+	vrtc = (machine().first_screen()->vpos() < 200) ? 0x20 : 0x00; // vblank
 
 	sw1 = (ioport("DSW")->read() & 1) ? 2 : 0;
 
@@ -1141,7 +1150,7 @@ WRITE8_MEMBER(pc88va_state::pc88va_fdc_w)
 				timer_set(attotime::from_msec(100), TIMER_PC88VA_FDC_TIMER);
 
 			if((m_fdc_ctrl_2 & 0x10) != (data & 0x10))
-				m_dmac->dmarq(1, 2);
+				m_dmac->dreq2_w(1);
 
 			if(data & 0x80) // correct?
 				machine().device<upd765a_device>("upd765")->reset();
@@ -1208,7 +1217,7 @@ WRITE16_MEMBER(pc88va_state::video_pri_w)
 
 READ8_MEMBER(pc88va_state::backupram_dsw_r)
 {
-	UINT16 *knj_ram = (UINT16 *)(*memregion("kanji"));
+	UINT16 *knj_ram = (UINT16 *)(memregion("kanji")->base());
 
 	if(offset == 0)
 		return knj_ram[(0x50000 + 0x1fc2) / 2] & 0xff;
@@ -1278,7 +1287,7 @@ static ADDRESS_MAP_START( pc88va_io_map, AS_IO, 16, pc88va_state )
 	AM_RANGE(0x0156, 0x0157) AM_READ8(rom_bank_r,0x00ff) // ROM bank status
 //  AM_RANGE(0x0158, 0x0159) Interruption Mode Modification
 //  AM_RANGE(0x015c, 0x015f) NMI mask port (strobe port)
-	AM_RANGE(0x0160, 0x016f) AM_DEVREADWRITE8("dmac", upd71071_device, read, write, 0xffff) // DMA Controller
+	AM_RANGE(0x0160, 0x016f) AM_DEVREADWRITE8("dmac", am9517a_device, read, write, 0xffff) // DMA Controller
 	AM_RANGE(0x0184, 0x0187) AM_DEVREADWRITE8("pic8259_slave", pic8259_device, read, write, 0x00ff)
 	AM_RANGE(0x0188, 0x018b) AM_DEVREADWRITE8("pic8259_master", pic8259_device, read, write, 0x00ff) // ICU, also controls 8214 emulation
 //  AM_RANGE(0x0190, 0x0191) System Port 5
@@ -1572,16 +1581,6 @@ WRITE8_MEMBER(pc88va_state::cpu_8255_c_w)
 	m_i8255_0_pc = data;
 }
 
-static I8255A_INTERFACE( master_fdd_intf )
-{
-	DEVCB_DEVICE_MEMBER("d8255_2s", i8255_device, pb_r),    // Port A read
-	DEVCB_NULL,                         // Port A write
-	DEVCB_DEVICE_MEMBER("d8255_2s", i8255_device, pa_r), // Port B read
-	DEVCB_NULL,                         // Port B write
-	DEVCB_DRIVER_MEMBER(pc88va_state,cpu_8255_c_r),     // Port C read
-	DEVCB_DRIVER_MEMBER(pc88va_state,cpu_8255_c_w)          // Port C write
-};
-
 READ8_MEMBER(pc88va_state::fdc_8255_c_r)
 {
 	return m_i8255_0_pc >> 4;
@@ -1591,16 +1590,6 @@ WRITE8_MEMBER(pc88va_state::fdc_8255_c_w)
 {
 	m_i8255_1_pc = data;
 }
-
-static I8255A_INTERFACE( slave_fdd_intf )
-{
-	DEVCB_DEVICE_MEMBER("d8255_2", i8255_device, pb_r), // Port A read
-	DEVCB_NULL,                         // Port A write
-	DEVCB_DEVICE_MEMBER("d8255_2", i8255_device, pa_r), // Port B read
-	DEVCB_NULL,                         // Port B write
-	DEVCB_DRIVER_MEMBER(pc88va_state,fdc_8255_c_r),     // Port C read
-	DEVCB_DRIVER_MEMBER(pc88va_state,fdc_8255_c_w)          // Port C write
-};
 
 READ8_MEMBER(pc88va_state::r232_ctrl_porta_r)
 {
@@ -1644,27 +1633,6 @@ WRITE8_MEMBER(pc88va_state::r232_ctrl_portc_w)
 	// ...
 }
 
-static I8255_INTERFACE( r232c_ctrl_intf )
-{
-	DEVCB_DRIVER_MEMBER(pc88va_state,r232_ctrl_porta_r),                        /* Port A read */
-	DEVCB_DRIVER_MEMBER(pc88va_state,r232_ctrl_porta_w),                        /* Port A write */
-	DEVCB_DRIVER_MEMBER(pc88va_state,r232_ctrl_portb_r),                        /* Port B read */
-	DEVCB_DRIVER_MEMBER(pc88va_state,r232_ctrl_portb_w),                        /* Port B write */
-	DEVCB_DRIVER_MEMBER(pc88va_state,r232_ctrl_portc_r),                        /* Port C read */
-	DEVCB_DRIVER_MEMBER(pc88va_state,r232_ctrl_portc_w)                     /* Port C write */
-};
-
-IRQ_CALLBACK_MEMBER(pc88va_state::pc88va_irq_callback)
-{
-	return machine().device<pic8259_device>( "pic8259_master" )->acknowledge();
-}
-
-WRITE_LINE_MEMBER(pc88va_state::pc88va_pic_irq)
-{
-	m_maincpu->set_input_line(0, state ? HOLD_LINE : CLEAR_LINE);
-//  logerror("PIC#1: set IRQ line to %i\n",interrupt);
-}
-
 READ8_MEMBER(pc88va_state::get_slave_ack)
 {
 	if (offset==7) { // IRQ = 7
@@ -1675,12 +1643,8 @@ READ8_MEMBER(pc88va_state::get_slave_ack)
 
 void pc88va_state::machine_start()
 {
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(pc88va_state::pc88va_irq_callback),this));
-
 	m_t3_mouse_timer = timer_alloc(TIMER_T3_MOUSE_CALLBACK);
 	m_t3_mouse_timer->adjust(attotime::never);
-	m_fdc->setup_drq_cb(upd765a_device::line_cb(FUNC(pc88va_state::fdc_drq), this));
-	m_fdc->setup_intrq_cb(upd765a_device::line_cb(FUNC(pc88va_state::fdc_irq), this));
 	floppy_image_device *floppy;
 	floppy = machine().device<floppy_connector>("upd765:0")->get_device();
 	if(floppy)
@@ -1710,7 +1674,7 @@ void pc88va_state::machine_reset()
 	{
 		UINT8 i;
 		for(i=0;i<32;i++)
-			palette_set_color_rgb(machine(),i,pal1bit((i & 2) >> 1),pal1bit((i & 4) >> 2),pal1bit(i & 1));
+			m_palette->set_pen_color(i,pal1bit((i & 2) >> 1),pal1bit((i & 4) >> 2),pal1bit(i & 1));
 	}
 
 	m_tsp.tvram_vreg_offset = 0;
@@ -1741,38 +1705,13 @@ WRITE_LINE_MEMBER(pc88va_state::pc88va_pit_out0_changed)
 	}
 }
 
-static const struct pit8253_interface pc88va_pit8253_config =
-{
-	{
-		{
-			/* general purpose timer 1 */
-			8000000,
-			DEVCB_NULL,
-			DEVCB_DRIVER_LINE_MEMBER(pc88va_state, pc88va_pit_out0_changed)
-		},
-		{
-			/* BEEP frequency setting */
-			8000000,
-			DEVCB_NULL,
-			DEVCB_NULL
-		},
-		{
-			/* RS232C baud rate setting  */
-			8000000,
-			DEVCB_NULL,
-			DEVCB_NULL
-		}
-	}
-};
-
-
-void pc88va_state::fdc_drq(bool state)
+WRITE_LINE_MEMBER( pc88va_state::fdc_drq )
 {
 	printf("%02x DRQ\n",state);
-	m_dmac->dmarq(state, 2);
+	m_dmac->dreq2_w(state);
 }
 
-void pc88va_state::fdc_irq(bool state)
+WRITE_LINE_MEMBER( pc88va_state::fdc_irq )
 {
 	if(m_fdc_mode && state)
 	{
@@ -1786,22 +1725,11 @@ void pc88va_state::fdc_irq(bool state)
 	#endif
 }
 
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 WRITE_LINE_MEMBER(pc88va_state::pc88va_hlda_w)
 {
-	m_maincpu->set_input_line(INPUT_LINE_HALT, state ? ASSERT_LINE : CLEAR_LINE);
+//  m_maincpu->set_input_line(INPUT_LINE_HALT, state ? ASSERT_LINE : CLEAR_LINE);
 
-//  m_dmac->hack_w(state);
+	m_dmac->hack_w(state);
 
 //  printf("%02x HLDA\n",state);
 }
@@ -1815,30 +1743,17 @@ WRITE_LINE_MEMBER( pc88va_state::pc88va_tc_w )
 }
 
 
-READ16_MEMBER(pc88va_state::fdc_dma_r)
+READ8_MEMBER(pc88va_state::fdc_dma_r)
 {
 	printf("R DMA\n");
 	return m_fdc->dma_r();
 }
 
-WRITE16_MEMBER(pc88va_state::fdc_dma_w)
+WRITE8_MEMBER(pc88va_state::fdc_dma_w)
 {
 	printf("W DMA %08x\n",data);
 	m_fdc->dma_w(data);
 }
-
-
-/* ch2 is FDC, ch0/3 are "user". ch1 is unused */
-static const upd71071_intf pc88va_dma_config =
-{
-	"maincpu",
-	8000000,
-	DEVCB_DRIVER_LINE_MEMBER(pc88va_state, pc88va_hlda_w),
-	DEVCB_DRIVER_LINE_MEMBER(pc88va_state, pc88va_tc_w),
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_DRIVER_MEMBER16(pc88va_state, fdc_dma_r), DEVCB_NULL },
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_DRIVER_MEMBER16(pc88va_state, fdc_dma_w), DEVCB_NULL },
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL }
-};
 
 FLOPPY_FORMATS_MEMBER( pc88va_state::floppy_formats )
 	FLOPPY_XDF_FORMAT
@@ -1848,12 +1763,25 @@ static SLOT_INTERFACE_START( pc88va_floppies )
 	SLOT_INTERFACE( "525hd", FLOPPY_525_HD )
 SLOT_INTERFACE_END
 
+READ8_MEMBER(pc88va_state::dma_memr_cb)
+{
+printf("%08x\n",offset);
+	return 0;
+}
+
+WRITE8_MEMBER(pc88va_state::dma_memw_cb)
+{
+printf("%08x %02x\n",offset,data);
+}
+
+
 static MACHINE_CONFIG_START( pc88va, pc88va_state )
 
 	MCFG_CPU_ADD("maincpu", V30, 8000000)        /* 8 MHz */
 	MCFG_CPU_PROGRAM_MAP(pc88va_map)
 	MCFG_CPU_IO_MAP(pc88va_io_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pc88va_state, pc88va_vrtc_irq)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("pic8259_master", pic8259_device, inta_cb)
 
 #if TEST_SUBFDC
 	MCFG_CPU_ADD("fdccpu", Z80, 8000000)        /* 8 MHz */
@@ -1869,31 +1797,57 @@ static MACHINE_CONFIG_START( pc88va, pc88va_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 200-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pc88va_state, screen_update_pc88va)
 
-	MCFG_PALETTE_LENGTH(32)
-//  MCFG_PALETTE_INIT_OVERRIDE(pc88va_state, pc8801 )
-	MCFG_GFXDECODE( pc88va )
+	MCFG_PALETTE_ADD("palette", 32)
+//  MCFG_PALETTE_INIT_OWNER(pc88va_state, pc8801 )
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pc88va )
 
-	MCFG_I8255_ADD( "d8255_2", master_fdd_intf )
-	MCFG_I8255_ADD( "d8255_3", r232c_ctrl_intf )
+	MCFG_DEVICE_ADD("d8255_2", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(DEVREAD8("d8255_2s", i8255_device, pb_r))
+	MCFG_I8255_IN_PORTB_CB(DEVREAD8("d8255_2s", i8255_device, pa_r))
+	MCFG_I8255_IN_PORTC_CB(READ8(pc88va_state, cpu_8255_c_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pc88va_state, cpu_8255_c_w))
 
-	MCFG_I8255_ADD( "d8255_2s", slave_fdd_intf )
+	MCFG_DEVICE_ADD("d8255_3", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(pc88va_state, r232_ctrl_porta_r))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(pc88va_state, r232_ctrl_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(pc88va_state, r232_ctrl_portb_r))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(pc88va_state, r232_ctrl_portb_w))
+	MCFG_I8255_IN_PORTC_CB(READ8(pc88va_state, r232_ctrl_portc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pc88va_state, r232_ctrl_portc_w))
 
-	MCFG_PIC8259_ADD( "pic8259_master", WRITELINE(pc88va_state, pc88va_pic_irq), VCC, READ8(pc88va_state,get_slave_ack) )
+	MCFG_DEVICE_ADD("d8255_2s", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(DEVREAD8("d8255_2", i8255_device, pb_r))
+	MCFG_I8255_IN_PORTB_CB(DEVREAD8("d8255_2", i8255_device, pa_r))
+	MCFG_I8255_IN_PORTC_CB(READ8(pc88va_state, fdc_8255_c_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pc88va_state, fdc_8255_c_w))
+
+	MCFG_PIC8259_ADD( "pic8259_master", INPUTLINE("maincpu", 0), VCC, READ8(pc88va_state,get_slave_ack) )
 
 	MCFG_PIC8259_ADD( "pic8259_slave", DEVWRITELINE("pic8259_master", pic8259_device, ir7_w), GND, NULL )
 
-	MCFG_UPD71071_ADD("dmac", pc88va_dma_config)
+	MCFG_DEVICE_ADD("dmac", AM9517A, 8000000) /* ch2 is FDC, ch0/3 are "user". ch1 is unused */
+	MCFG_AM9517A_OUT_HREQ_CB(WRITELINE(pc88va_state, pc88va_hlda_w))
+	MCFG_AM9517A_OUT_EOP_CB(WRITELINE(pc88va_state, pc88va_tc_w))
+	MCFG_AM9517A_IN_IOR_2_CB(READ8(pc88va_state, fdc_dma_r))
+	MCFG_AM9517A_OUT_IOW_2_CB(WRITE8(pc88va_state, fdc_dma_w))
+	MCFG_AM9517A_IN_MEMR_CB(READ8(pc88va_state, dma_memr_cb))
+	MCFG_AM9517A_OUT_MEMW_CB(WRITE8(pc88va_state, dma_memw_cb))
 
 	MCFG_UPD765A_ADD("upd765", false, true)
+	MCFG_UPD765_INTRQ_CALLBACK(WRITELINE(pc88va_state, fdc_irq))
+	MCFG_UPD765_INTRQ_CALLBACK(WRITELINE(pc88va_state, fdc_drq))
 	MCFG_FLOPPY_DRIVE_ADD("upd765:0", pc88va_floppies, "525hd", pc88va_state::floppy_formats)
 	MCFG_FLOPPY_DRIVE_ADD("upd765:1", pc88va_floppies, "525hd", pc88va_state::floppy_formats)
 	MCFG_SOFTWARE_LIST_ADD("disk_list","pc88va")
 
-	MCFG_PIT8253_ADD("pit8253",pc88va_pit8253_config)
+	MCFG_DEVICE_ADD("pit8253", PIT8253, 0)
+	MCFG_PIT8253_CLK0(8000000) /* general purpose timer 1 */
+	MCFG_PIT8253_OUT0_HANDLER(WRITELINE(pc88va_state, pc88va_pit_out0_changed))
+	MCFG_PIT8253_CLK1(8000000) /* BEEP frequency setting */
+	MCFG_PIT8253_CLK2(8000000) /* RS232C baud rate setting */
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("ym", YM2203, 3993600) //unknown clock / divider
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(0, "mono", 0.25)
 	MCFG_SOUND_ROUTE(1, "mono", 0.25)
 	MCFG_SOUND_ROUTE(2, "mono", 0.50)

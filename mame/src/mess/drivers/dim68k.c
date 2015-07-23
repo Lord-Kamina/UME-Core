@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /***************************************************************************
 
         Micro Craft Dimension 68000
@@ -35,6 +37,8 @@
 #include "cpu/m68000/m68000.h"
 #include "sound/speaker.h"
 #include "video/mc6845.h"
+#include "machine/keyboard.h"
+#include "machine/upd765.h"
 
 
 class dim68k_state : public driver_device
@@ -42,15 +46,12 @@ class dim68k_state : public driver_device
 public:
 	dim68k_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_maincpu(*this, "maincpu"),
-			m_crtc(*this, "crtc"),
-			m_speaker(*this, "speaker")
-	,
-		m_ram(*this, "ram"){ }
+		m_maincpu(*this, "maincpu"),
+		m_crtc(*this, "crtc"),
+		m_speaker(*this, "speaker"),
+		m_ram(*this, "ram"),
+		m_palette(*this, "palette") { }
 
-	required_device<cpu_device> m_maincpu;
-	required_device<mc6845_device> m_crtc;
-	required_device<speaker_sound_device> m_speaker;
 	DECLARE_READ16_MEMBER( dim68k_duart_r );
 	DECLARE_READ16_MEMBER( dim68k_fdc_r );
 	DECLARE_READ16_MEMBER( dim68k_game_switches_r );
@@ -64,12 +65,19 @@ public:
 	DECLARE_WRITE16_MEMBER( dim68k_video_control_w );
 	DECLARE_WRITE16_MEMBER( dim68k_video_high_w );
 	DECLARE_WRITE16_MEMBER( dim68k_video_reset_w );
-	required_shared_ptr<UINT16> m_ram;
+	DECLARE_WRITE8_MEMBER(kbd_put);
+	MC6845_UPDATE_ROW(crtc_update_row);
 	const UINT8 *m_p_chargen;
 	bool m_speaker_bit;
 	UINT8 m_video_control;
+	UINT8 m_term_data;
 	virtual void machine_reset();
 	virtual void video_start();
+	required_device<cpu_device> m_maincpu;
+	required_device<mc6845_device> m_crtc;
+	required_device<speaker_sound_device> m_speaker;
+	required_shared_ptr<UINT16> m_ram;
+	required_device<palette_device> m_palette;
 };
 
 READ16_MEMBER( dim68k_state::dim68k_duart_r )
@@ -78,6 +86,9 @@ READ16_MEMBER( dim68k_state::dim68k_duart_r )
 // Device = SCN2681, not emulated. The keyboard is standard ASCII, so we can use the terminal
 // keyboard for now.
 {
+	if (offset==3)
+		return m_term_data;
+	else
 	return 0;
 }
 
@@ -187,7 +198,8 @@ static ADDRESS_MAP_START(dim68k_mem, AS_PROGRAM, 16, dim68k_state)
 	AM_RANGE(0x00ffc400, 0x00ffc41f) AM_READWRITE(dim68k_duart_r,dim68k_duart_w) // Signetics SCN2681AC1N40 Dual UART
 	AM_RANGE(0x00ffc800, 0x00ffc801) AM_READWRITE(dim68k_speaker_r,dim68k_speaker_w)
 	AM_RANGE(0x00ffcc00, 0x00ffcc1f) AM_READWRITE(dim68k_game_switches_r,dim68k_reset_timers_w)
-	AM_RANGE(0x00ffd000, 0x00ffd005) AM_READWRITE(dim68k_fdc_r,dim68k_fdc_w) // NEC uPD765A
+	AM_RANGE(0x00ffd000, 0x00ffd003) AM_DEVICE8("fdc",upd765a_device,map,0x00ff) // NEC uPD765A
+	AM_RANGE(0x00ffd004, 0x00ffd005) AM_READWRITE(dim68k_fdc_r,dim68k_fdc_w)
 	//AM_RANGE(0x00ffd400, 0x00ffd403) emulation trap control
 	AM_RANGE(0x00ffd800, 0x00ffd801) AM_WRITE(dim68k_printer_strobe_w)
 	AM_RANGE(0x00ffdc00, 0x00ffdc01) AM_WRITE(dim68k_banksw_w)
@@ -213,15 +225,14 @@ void dim68k_state::video_start()
 }
 
 // Text-only; graphics isn't emulated yet. Need to find out if hardware cursor is used.
-MC6845_UPDATE_ROW( dim68k_update_row )
+MC6845_UPDATE_ROW( dim68k_state::crtc_update_row )
 {
-	dim68k_state *state = device->machine().driver_data<dim68k_state>();
-	const rgb_t *palette = palette_entry_list_raw(bitmap.palette());
+	const rgb_t *palette = m_palette->palette()->entry_list_raw();
 	UINT8 chr,gfx,x,xx,inv;
 	UINT16 chr16=0x2020; // set to spaces if screen is off
 	UINT32 *p = &bitmap.pix32(y);
-	UINT8 screen_on = ~state->m_video_control & 4;
-	UINT8 dot8 = ~state->m_video_control & 40;
+	UINT8 screen_on = ~m_video_control & 4;
+	UINT8 dot8 = ~m_video_control & 40;
 
 	// need to divide everything in half to cater for 16-bit reads
 	x_count /= 2;
@@ -231,14 +242,14 @@ MC6845_UPDATE_ROW( dim68k_update_row )
 	for (x = 0; x < x_count; x++)
 	{
 		if (screen_on)
-			chr16 = state->m_ram[ma+x]; // reads 2 characters
+			chr16 = m_ram[ma+x]; // reads 2 characters
 
 		inv=0;
 		if (xx == cursor_x && screen_on) inv=0xff;
 		xx++;
 
 		chr = chr16>>8;
-		gfx = state->m_p_chargen[(chr<<4) | ra] ^ inv ^ ((chr & 0x80) ? 0xff : 0);
+		gfx = m_p_chargen[(chr<<4) | ra] ^ inv ^ ((chr & 0x80) ? 0xff : 0);
 		*p++ = palette[BIT(gfx, 7)];
 		*p++ = palette[BIT(gfx, 6)];
 		*p++ = palette[BIT(gfx, 5)];
@@ -253,7 +264,7 @@ MC6845_UPDATE_ROW( dim68k_update_row )
 		xx++;
 
 		chr = chr16;
-		gfx = state->m_p_chargen[(chr<<4) | ra] ^ inv ^ ((chr & 0x80) ? 0xff : 0);
+		gfx = m_p_chargen[(chr<<4) | ra] ^ inv ^ ((chr & 0x80) ? 0xff : 0);
 		*p++ = palette[BIT(gfx, 7)];
 		*p++ = palette[BIT(gfx, 6)];
 		*p++ = palette[BIT(gfx, 5)];
@@ -283,20 +294,14 @@ static GFXDECODE_START( dim68k )
 	GFXDECODE_ENTRY( "chargen", 0x0000, dim68k_charlayout, 0, 1 )
 GFXDECODE_END
 
-static MC6845_INTERFACE( dim68k_crtc )
+static SLOT_INTERFACE_START( dim68k_floppies )
+	SLOT_INTERFACE( "525hd", FLOPPY_525_HD )
+SLOT_INTERFACE_END
+
+WRITE8_MEMBER( dim68k_state::kbd_put )
 {
-	"screen",           /* name of screen */
-	false,
-	8,          /* number of dots per character - switchable 7 or 8 */
-	NULL,
-	dim68k_update_row,      /* handler to display a scanline */
-	NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	NULL
-};
+	m_term_data = data;
+}
 
 static MACHINE_CONFIG_START( dim68k, dim68k_state )
 	/* basic machine hardware */
@@ -310,9 +315,8 @@ static MACHINE_CONFIG_START( dim68k, dim68k_state )
 	MCFG_SCREEN_UPDATE_DEVICE("crtc", mc6845_device, screen_update)
 	MCFG_SCREEN_SIZE(640, 480)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 250-1)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(black_and_white)
-	MCFG_GFXDECODE(dim68k)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", dim68k)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -320,7 +324,17 @@ static MACHINE_CONFIG_START( dim68k, dim68k_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
 	/* Devices */
-	MCFG_MC6845_ADD("crtc", MC6845, 1790000, dim68k_crtc)
+	MCFG_UPD765A_ADD("fdc", true, true) // these options unknown
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", dim68k_floppies, "525hd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", dim68k_floppies, "525hd", floppy_image_device::default_floppy_formats)
+
+	MCFG_MC6845_ADD("crtc", MC6845, "screen", 1790000)
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
+	MCFG_MC6845_UPDATE_ROW_CB(dim68k_state, crtc_update_row)
+
+	MCFG_DEVICE_ADD("keyboard", GENERIC_KEYBOARD, 0)
+	MCFG_GENERIC_KEYBOARD_CB(WRITE8(dim68k_state, kbd_put))
 MACHINE_CONFIG_END
 
 /*

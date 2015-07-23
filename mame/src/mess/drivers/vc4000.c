@@ -1,5 +1,7 @@
+// license:???
+// copyright-holders:Peter Trauner, Manfred Schneider, Robbbert
 /******************************************************************************
- Peter.Trauner@jk.uni-linz.ac.at May 2001
+ Peter Trauner May 2001
 
  Paul Robson's Emulator at www.classicgaming.com/studio2 made it possible
 ******************************************************************************/
@@ -13,7 +15,7 @@ The PVI has 12 address line (A0-A11) which give him control over 4K. A11 of the 
 connected to A11 of the CPU, but connected to the cartridge slot. On the cartridge it is
 connected to A12 of the CPU which extends the addressable Range to 8K. This is also the
 maximum usable space, because A13 and A14 of the CPU are not used.
-With the above in mind address range will lock like this:
+With the above in mind address range will look like this:
 $0000 - $15FF  ROM, RAM
 $1600 - $167F  unused
 $1680 - $16FF  used for I/O Control on main PCB
@@ -42,8 +44,6 @@ It consisted of a 2K ROM and 2K RAM which are most likely mapped as follows (nee
 2K Ram mapped from $0800 - $0FFF
 The Cartridge is called Hobby Module and the Rom is probably the same as used in
 elektor TV Game Computer which is a kind of developer machine for the VC4000.
-
-Go to the bottom to see the game list and emulation status of each.
 
 ******************************************************************************
 
@@ -101,6 +101,32 @@ to work on the vc4000 as well. Procedure:
 
 - Load a quickload file. Some of them will work, and in some cases, better
   than on the Elektor system.
+
+
+Pasting
+-------
+This system uses the standard trainer paste codes:
+        0-F : as is
+        +   : ^
+        -   : V
+        MEM : -
+        MON : Q
+
+Here's a sample from the manual, page 34/35 (down-arrow to escape)
+Q-0900^762005CA06CA0D4A00CD7F00FA780C1E88441099791F0000040005CA06CACD4A00FA7B
+04FFCC0AC8CC0AC90409CC0AC60402CC0AC01F0900
+-0A00^F15155757FFFFFC3A52480FF4FFF-0AC0^C018P0900^
+
+Another sample, from page 94 (Q to escape)
+Q-0900^76203F0161063005080E492DCD4890597877103F020E75105A0A0C1E89F4101879
+1F003877103F02CF75101B5A
+17A2A2A2A2A2A217
+17171000000D1717
+0A171100BC17000F
+17170D000E051717
+14150A0CBC120C0E
+0A171112BCBC110EP0900^
+
 
 ******************************************************************************/
 
@@ -169,8 +195,7 @@ static ADDRESS_MAP_START(elektor_mem, AS_PROGRAM, 8, vc4000_state)
 	ADDRESS_MAP_UNMAP_HIGH
 	ADDRESS_MAP_GLOBAL_MASK(0x1fff)
 	AM_RANGE(0x0000, 0x07ff) AM_ROM
-	AM_RANGE(0x0800, 0x0fff) AM_RAM
-	//AM_RANGE(0x1000, 0x15ff) AM_RAM  ram extension area
+	AM_RANGE(0x0800, 0x15ff) AM_RAM
 	AM_RANGE(0x1d80, 0x1dff) AM_MIRROR(0x400) AM_READWRITE(elektor_cass_r,elektor_cass_w)
 	AM_RANGE(0x1e80, 0x1e8f) AM_MIRROR(0x800) AM_READWRITE(vc4000_key_r,vc4000_sound_ctl)
 	AM_RANGE(0x1f00, 0x1fff) AM_MIRROR(0x800) AM_READWRITE(vc4000_video_r, vc4000_video_w)
@@ -246,44 +271,44 @@ INPUT_PORTS_END
 
 INPUT_PORTS_START( elektor )
 	PORT_START("PANEL")
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("Start") PORT_CODE(KEYCODE_Q)
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("Game Select") PORT_CODE(KEYCODE_Z)
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("MON") PORT_CODE(KEYCODE_Q) PORT_CHAR('Q')
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("Game Select") PORT_CODE(KEYCODE_Z) PORT_CHAR('Z')
 
 	PORT_START("KEYPAD1_1")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("RCAS") PORT_CODE(KEYCODE_L)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("BP1/2") PORT_CODE(KEYCODE_W)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("PC") PORT_CODE(KEYCODE_X)
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("-") PORT_CODE(KEYCODE_MINUS_PAD)
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("RCAS") PORT_CODE(KEYCODE_L) PORT_CHAR('L')
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("BP1/2") PORT_CODE(KEYCODE_W) PORT_CHAR('W')
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("PC") PORT_CODE(KEYCODE_P) PORT_CHAR('P')
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("-") PORT_CODE(KEYCODE_DOWN) PORT_CHAR('V')
 
 	PORT_START("KEYPAD1_2")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("WCAS") PORT_CODE(KEYCODE_S)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("REG") PORT_CODE(KEYCODE_R)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("MEM") PORT_CODE(KEYCODE_MINUS)
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("+") PORT_CODE(KEYCODE_PLUS_PAD)
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("WCAS") PORT_CODE(KEYCODE_S) PORT_CHAR('S')
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("REG") PORT_CODE(KEYCODE_R) PORT_CHAR('R')
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("MEM") PORT_CODE(KEYCODE_MINUS) PORT_CHAR('-')
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("+") PORT_CODE(KEYCODE_UP) PORT_CHAR('^')
 
 	PORT_START("KEYPAD1_3")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("C") PORT_CODE(KEYCODE_C)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("8") PORT_CODE(KEYCODE_8)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("4") PORT_CODE(KEYCODE_4)
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("0") PORT_CODE(KEYCODE_0)
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("C") PORT_CODE(KEYCODE_C) PORT_CHAR('C')
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("8") PORT_CODE(KEYCODE_8) PORT_CHAR('8')
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("4") PORT_CODE(KEYCODE_4) PORT_CHAR('4')
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("0") PORT_CODE(KEYCODE_0) PORT_CHAR('0')
 
 	PORT_START("KEYPAD2_1")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("D") PORT_CODE(KEYCODE_D)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("9") PORT_CODE(KEYCODE_9)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("5") PORT_CODE(KEYCODE_5)
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("1") PORT_CODE(KEYCODE_1)
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("D") PORT_CODE(KEYCODE_D) PORT_CHAR('D')
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("9") PORT_CODE(KEYCODE_9) PORT_CHAR('9')
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("5") PORT_CODE(KEYCODE_5) PORT_CHAR('5')
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("1") PORT_CODE(KEYCODE_1) PORT_CHAR('1')
 
 	PORT_START("KEYPAD2_2")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("E") PORT_CODE(KEYCODE_E)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("A") PORT_CODE(KEYCODE_A)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("6") PORT_CODE(KEYCODE_6)
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("2") PORT_CODE(KEYCODE_2)
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("E") PORT_CODE(KEYCODE_E) PORT_CHAR('E')
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("A") PORT_CODE(KEYCODE_A) PORT_CHAR('A')
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("6") PORT_CODE(KEYCODE_6) PORT_CHAR('6')
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("2") PORT_CODE(KEYCODE_2) PORT_CHAR('2')
 
 	PORT_START("KEYPAD2_3")
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("F") PORT_CODE(KEYCODE_F)
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("B") PORT_CODE(KEYCODE_B)
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("7") PORT_CODE(KEYCODE_7)
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYPAD ) PORT_NAME("3") PORT_CODE(KEYCODE_3)
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("F") PORT_CODE(KEYCODE_F) PORT_CHAR('F')
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("B") PORT_CODE(KEYCODE_B) PORT_CHAR('B')
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("7") PORT_CODE(KEYCODE_7) PORT_CHAR('7')
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("3") PORT_CODE(KEYCODE_3) PORT_CHAR('3')
 #ifndef ANALOG_HACK
 	// auto centering too slow, so only using 5 bits, and scaling at videoside
 	PORT_START("JOY1_X")
@@ -315,72 +340,187 @@ INPUT_PORTS_END
 static const rgb_t vc4000_palette[] =
 {
 	// background colors
-	MAKE_RGB(0, 0, 0), // black
-	MAKE_RGB(0, 0, 175), // blue
-	MAKE_RGB(0, 175, 0), // green
-	MAKE_RGB(0, 255, 255), // cyan
-	MAKE_RGB(255, 0, 0), // red
-	MAKE_RGB(255, 0, 255), // magenta
-	MAKE_RGB(200, 200, 0), // yellow
-	MAKE_RGB(200, 200, 200), // white
+	rgb_t(0, 0, 0), // black
+	rgb_t(0, 0, 175), // blue
+	rgb_t(0, 175, 0), // green
+	rgb_t(0, 255, 255), // cyan
+	rgb_t(255, 0, 0), // red
+	rgb_t(255, 0, 255), // magenta
+	rgb_t(200, 200, 0), // yellow
+	rgb_t(200, 200, 200), // white
 	/* sprite colors
 	The control line simply inverts the RGB lines all at once.
 	We can do that in the code with ^7 */
 };
 
-void vc4000_state::palette_init()
+PALETTE_INIT_MEMBER(vc4000_state, vc4000)
 {
-	palette_set_colors(machine(), 0, vc4000_palette, ARRAY_LENGTH(vc4000_palette));
+	palette.set_pen_colors(0, vc4000_palette, ARRAY_LENGTH(vc4000_palette));
 }
 
-DEVICE_IMAGE_LOAD_MEMBER( vc4000_state, vc4000_cart )
+
+void vc4000_state::machine_start()
 {
-	address_space &memspace = m_maincpu->space(AS_PROGRAM);
-	UINT32 size;
-
-	if (image.software_entry() == NULL)
-		size = image.length();
-	else
-		size = image.get_software_region_length("rom");
-
-	if (size > 0x1600)
-		size = 0x1600;
-
-	if (size > 0x1000)  /* 6k rom + 1k ram - Chess2 only */
+	if (m_cart->exists())
 	{
-		memspace.install_read_bank(0x0800, 0x15ff, "bank1");    /* extra rom */
-		membank("bank1")->set_base(memregion("maincpu")->base() + 0x1000);
-
-		memspace.install_readwrite_bank(0x1800, 0x1bff, "bank2");   /* ram */
-		membank("bank2")->set_base(memregion("maincpu")->base() + 0x1800);
-	}
-	else if (size > 0x0800) /* some 4k roms have 1k of mirrored ram */
-	{
-		memspace.install_read_bank(0x0800, 0x0fff, "bank1");    /* extra rom */
-		membank("bank1")->set_base(memregion("maincpu")->base() + 0x0800);
-
-		memspace.install_readwrite_bank(0x1000, 0x15ff, 0, 0x800, "bank2"); /* ram */
-		membank("bank2")->set_base(memregion("maincpu")->base() + 0x1000);
-	}
-	else if (size == 0x0800)    /* 2k roms + 2k ram - Hobby Module(Radofin) and elektor TVGC*/
-	{
-		memspace.install_readwrite_bank(0x0800, 0x0fff, "bank1"); /* ram */
-		membank("bank1")->set_base(memregion("maincpu")->base() + 0x0800);
-	}
-
-	if (size > 0)
-	{
-		if (image.software_entry() == NULL)
+		// extra handler
+		switch (m_cart->get_type())
 		{
-			if (image.fread(memregion("maincpu")->base(), size) != size)
-				return IMAGE_INIT_FAIL;
+			case VC4000_STD:
+				m_maincpu->space(AS_PROGRAM).install_read_handler(0x0000, 0x07ff, read8_delegate(FUNC(vc4000_cart_slot_device::read_rom),(vc4000_cart_slot_device*)m_cart));
+				break;
+			case VC4000_ROM4K:
+				m_maincpu->space(AS_PROGRAM).install_read_handler(0x0000, 0x0fff, read8_delegate(FUNC(vc4000_cart_slot_device::read_rom),(vc4000_cart_slot_device*)m_cart));
+				break;
+			case VC4000_RAM1K:
+				m_maincpu->space(AS_PROGRAM).install_read_handler(0x0000, 0x0fff, read8_delegate(FUNC(vc4000_cart_slot_device::read_rom),(vc4000_cart_slot_device*)m_cart));
+				m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x1000, 0x15ff, read8_delegate(FUNC(vc4000_cart_slot_device::read_ram),(vc4000_cart_slot_device*)m_cart), write8_delegate(FUNC(vc4000_cart_slot_device::write_ram),(vc4000_cart_slot_device*)m_cart));
+				break;
+			case VC4000_CHESS2:
+				m_maincpu->space(AS_PROGRAM).install_read_handler(0x0000, 0x15ff, read8_delegate(FUNC(vc4000_cart_slot_device::read_rom),(vc4000_cart_slot_device*)m_cart));
+				m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x1800, 0x1bff, read8_delegate(FUNC(vc4000_cart_slot_device::read_ram),(vc4000_cart_slot_device*)m_cart), write8_delegate(FUNC(vc4000_cart_slot_device::write_ram),(vc4000_cart_slot_device*)m_cart));
+				break;
+			// undumped Radofin Hobby Module
+//          case VC4000_HOBBY:
+//              m_maincpu->space(AS_PROGRAM).install_read_handler(0x0000, 0x07ff, read8_delegate(FUNC(vc4000_cart_slot_device::read_rom),(vc4000_cart_slot_device*)m_cart));
+//              m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x0800, 0x0fff, read8_delegate(FUNC(vc4000_cart_slot_device::read_ram),(vc4000_cart_slot_device*)m_cart), write8_delegate(FUNC(vc4000_cart_slot_device::write_ram),(vc4000_cart_slot_device*)m_cart));
+//              break;
+		}
+
+		m_cart->save_ram();
+	}
+}
+
+
+QUICKLOAD_LOAD_MEMBER( vc4000_state,vc4000)
+{
+	address_space &space = m_maincpu->space(AS_PROGRAM);
+	int i;
+	int exec_addr;
+	int quick_length;
+	dynamic_buffer quick_data;
+	int read_;
+	int result = IMAGE_INIT_FAIL;
+
+	quick_length = image.length();
+	quick_data.resize(quick_length);
+	read_ = image.fread( &quick_data[0], quick_length);
+	if (read_ != quick_length)
+	{
+		image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Cannot read the file");
+		image.message(" Cannot read the file");
+	}
+	else
+	{
+		if (core_stricmp(image.filetype(), "tvc")==0)
+		{
+			if (quick_data[0] != 2)
+			{
+				image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Invalid header");
+				image.message(" Invalid header");
+			}
+			else
+			{
+				int quick_addr = quick_data[1] * 256 + quick_data[2];
+				exec_addr = quick_data[3] * 256 + quick_data[4];
+
+				if (quick_length < 0x5)
+				{
+					image.seterror(IMAGE_ERROR_INVALIDIMAGE, "File too short");
+					image.message(" File too short");
+				}
+				else
+					if ((quick_length + quick_addr - 5) > 0x1600)
+					{
+						image.seterror(IMAGE_ERROR_INVALIDIMAGE, "File too long");
+						image.message(" File too long");
+					}
+					else
+					{
+						space.write_byte(0x08be, quick_data[3]);
+						space.write_byte(0x08bf, quick_data[4]);
+
+						for (i = 5; i < quick_length; i++)
+							space.write_byte(i - 5 + quick_addr, quick_data[i]);
+
+						/* display a message about the loaded quickload */
+						image.message(" Quickload: size=%04X : start=%04X : end=%04X : exec=%04X",quick_length-5,quick_addr,quick_addr+quick_length-5,exec_addr);
+
+						// Start the quickload
+						m_maincpu->set_state_int(S2650_PC, exec_addr);
+						result = IMAGE_INIT_PASS;
+					}
+			}
 		}
 		else
-			memcpy(memregion("maincpu")->base(), image.get_software_region("rom"), size);
-	}
+			if (core_stricmp(image.filetype(), "pgm")==0)
+			{
+				if (quick_data[0] != 0)
+				{
+					image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Invalid header");
+					image.message(" Invalid header");
+				}
+				else
+				{
+					exec_addr = quick_data[1] * 256 + quick_data[2];
 
-	return IMAGE_INIT_PASS;
+					if (exec_addr >= quick_length)
+					{
+						image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Exec address beyond end of file");
+						image.message(" Exec address beyond end of file");
+					}
+					else
+						if (quick_length < 0x904)
+						{
+							image.seterror(IMAGE_ERROR_INVALIDIMAGE, "File too short");
+							image.message(" File too short");
+						}
+						else
+							if (quick_length > 0x2000)
+							{
+								image.seterror(IMAGE_ERROR_INVALIDIMAGE, "File too long");
+								image.message(" File too long");
+							}
+							else
+							{
+								space.write_byte(0x08be, quick_data[1]);
+								space.write_byte(0x08bf, quick_data[2]);
+
+								// load to 08C0-15FF (standard ram + extra)
+								int read_ = 0x1600;
+								if (quick_length < 0x1600)
+									read_ = quick_length;
+								for (i = 0x8c0; i < read_; i++)
+									space.write_byte(i, quick_data[i]);
+
+								// load to 1F50-1FAF (PVI regs)
+								read_ = 0x1FB0;
+								if (quick_length < 0x1FB0)
+									read_ = quick_length;
+								if (quick_length > 0x1FC0)
+									for (i = 0x1F50; i < read_; i++)
+										vc4000_video_w(space, i-0x1f00, quick_data[i]);
+
+								/* display a message about the loaded quickload */
+								image.message(" Quickload: size=%04X : exec=%04X",quick_length,exec_addr);
+
+								// Start the quickload
+								m_maincpu->set_state_int(S2650_PC, exec_addr);
+								result = IMAGE_INIT_PASS;
+							}
+				}
+			}
+	}
+	return result;
 }
+
+static SLOT_INTERFACE_START(vc4000_cart)
+	SLOT_INTERFACE_INTERNAL("std",      VC4000_ROM_STD)
+	SLOT_INTERFACE_INTERNAL("rom4k",    VC4000_ROM_ROM4K)
+	SLOT_INTERFACE_INTERNAL("ram1k",    VC4000_ROM_RAM1K)
+	SLOT_INTERFACE_INTERNAL("chess2",   VC4000_ROM_CHESS2)
+SLOT_INTERFACE_END
+
 
 static MACHINE_CONFIG_START( vc4000, vc4000_state )
 	/* basic machine hardware */
@@ -396,33 +536,55 @@ static MACHINE_CONFIG_START( vc4000, vc4000_state )
 	MCFG_SCREEN_SIZE(226, 312)
 	MCFG_SCREEN_VISIBLE_AREA(8, 184, 0, 269)
 	MCFG_SCREEN_UPDATE_DRIVER(vc4000_state, screen_update_vc4000)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(8)
-
+	MCFG_PALETTE_ADD("palette", 8)
+	MCFG_PALETTE_INIT_OWNER(vc4000_state, vc4000)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
-	MCFG_SOUND_ADD("custom", VC4000, 0)
+	MCFG_SOUND_ADD("custom", VC4000_SND, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
 	/* quickload */
 	MCFG_QUICKLOAD_ADD("quickload", vc4000_state, vc4000, "pgm,tvc", 0)
 
 	/* cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("vc4000_cart")
-	MCFG_CARTSLOT_LOAD(vc4000_state,vc4000_cart)
+	MCFG_VC4000_CARTRIDGE_ADD("cartslot", vc4000_cart, NULL)
 
 	/* software lists */
-	MCFG_SOFTWARE_LIST_ADD("cart_list","vc4000")
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "vc4000")
 MACHINE_CONFIG_END
+
+
+static MACHINE_CONFIG_DERIVED( cx3000tc, vc4000 )
+	MCFG_DEVICE_REMOVE("cart_list")
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "cx3000tc")
+MACHINE_CONFIG_END
+
+
+static MACHINE_CONFIG_DERIVED( mpu1000, vc4000 )
+	MCFG_DEVICE_REMOVE("cart_list")
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "mpu1000")
+MACHINE_CONFIG_END
+
+
+static MACHINE_CONFIG_DERIVED( database, vc4000 )
+	MCFG_DEVICE_REMOVE("cart_list")
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "database")
+MACHINE_CONFIG_END
+
+
+static MACHINE_CONFIG_DERIVED( rwtrntcs, vc4000 )
+	MCFG_DEVICE_REMOVE("cart_list")
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "rwtrntcs")
+MACHINE_CONFIG_END
+
 
 static MACHINE_CONFIG_DERIVED( elektor, vc4000 )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(elektor_mem)
-	MCFG_CASSETTE_ADD( "cassette", default_cassette_interface )
+	MCFG_CASSETTE_ADD( "cassette" )
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 MACHINE_CONFIG_END
@@ -524,122 +686,17 @@ ROM_START( elektor )
 	ROM_LOAD( "elektor.rom", 0x0000, 0x0800, CRC(e6ef1ee1) SHA1(6823b5a22582344016415f2a37f9f3a2dc75d2a7))
 ROM_END
 
-QUICKLOAD_LOAD_MEMBER( vc4000_state,vc4000)
-{
-	address_space &space = m_maincpu->space(AS_PROGRAM);
-	int i;
-	int quick_addr = 0x08c0;
-	int exec_addr;
-	int quick_length;
-	UINT8 *quick_data;
-	int read_;
-	int result = IMAGE_INIT_FAIL;
-
-	quick_length = image.length();
-	quick_data = (UINT8*)malloc(quick_length);
-	if (!quick_data)
-	{
-		image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Cannot open file");
-		image.message(" Cannot open file");
-	}
-	else
-	{
-		read_ = image.fread( quick_data, quick_length);
-		if (read_ != quick_length)
-		{
-			image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Cannot read the file");
-			image.message(" Cannot read the file");
-		}
-		else
-		{
-			if (mame_stricmp(image.filetype(), "tvc")==0)
-			{
-				if (quick_data[0] != 2)
-				{
-					image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Invalid header");
-					image.message(" Invalid header");
-				}
-				else
-				{
-					quick_addr = quick_data[1] * 256 + quick_data[2];
-					exec_addr = quick_data[3] * 256 + quick_data[4];
-
-					space.write_byte(0x08be, quick_data[3]);
-					space.write_byte(0x08bf, quick_data[4]);
-
-					for (i = 0; i < quick_length - 5; i++)
-						if ((quick_addr + i) < 0x1600)
-							space.write_byte(i + quick_addr, quick_data[i+5]);
-
-					/* display a message about the loaded quickload */
-					image.message(" Quickload: size=%04X : start=%04X : end=%04X : exec=%04X",quick_length-5,quick_addr,quick_addr+quick_length-5,exec_addr);
-
-					// Start the quickload
-					m_maincpu->set_pc(exec_addr);
-					result = IMAGE_INIT_PASS;
-				}
-			}
-			else
-			if (mame_stricmp(image.filetype(), "pgm")==0)
-			{
-				if (quick_data[0] != 0)
-				{
-					image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Invalid header");
-					image.message(" Invalid header");
-				}
-				else
-				{
-					exec_addr = quick_data[1] * 256 + quick_data[2];
-
-					if (exec_addr >= quick_length)
-					{
-						image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Exec address beyond end of file");
-						image.message(" Exec address beyond end of file");
-					}
-					else
-					if (quick_length < 0x904)
-					{
-						image.seterror(IMAGE_ERROR_INVALIDIMAGE, "File too short");
-						image.message(" File too short");
-					}
-					else
-					// some programs store data in PVI memory and other random places. This is not supported.
-					if (quick_length > 0x1600)
-					{
-						image.seterror(IMAGE_ERROR_INVALIDIMAGE, "File too long");
-						image.message(" File too long");
-					}
-					else
-					{
-						for (i = quick_addr; i < quick_length; i++)
-							if (i < 0x1600)
-								space.write_byte(i, quick_data[i]);
-
-						/* display a message about the loaded quickload */
-						image.message(" Quickload: size=%04X : exec=%04X",quick_length,exec_addr);
-
-						// Start the quickload
-						m_maincpu->set_pc(exec_addr);
-						result = IMAGE_INIT_PASS;
-					}
-				}
-			}
-		}
-		free (quick_data);
-	}
-	return result;
-}
 
 
 /*   YEAR  NAME      PARENT     COMPAT    MACHINE    INPUT        INIT      COMPANY             FULLNAME */
-CONS(1978, vc4000,   0,         0,        vc4000,    vc4000, driver_device,      0,        "Interton",         "VC 4000",          GAME_IMPERFECT_GRAPHICS )          /* Germany, Austria, UK, Australia */
+CONS(1978, vc4000,   0,         0,        vc4000,    vc4000, driver_device,      0,        "Interton",         "Interton Electronic VC 4000", GAME_IMPERFECT_GRAPHICS )          /* Germany, Austria, UK, Australia */
 CONS(1979, spc4000,  vc4000,    0,        vc4000,    vc4000, driver_device,      0,        "Grundig",          "Super Play Computer 4000", GAME_IMPERFECT_GRAPHICS )  /* Germany, Austria */
-CONS(1979, cx3000tc, vc4000,    0,        vc4000,    vc4000, driver_device,      0,        "Palson",           "CX 3000 Tele Computer", GAME_IMPERFECT_GRAPHICS )     /* Spain */
+CONS(1979, cx3000tc, vc4000,    0,        cx3000tc,  vc4000, driver_device,      0,        "Palson",           "CX 3000 Tele Computer", GAME_IMPERFECT_GRAPHICS )     /* Spain */
 CONS(1979, tvc4000,  vc4000,    0,        vc4000,    vc4000, driver_device,      0,        "Koerting",         "TVC-4000",         GAME_IMPERFECT_GRAPHICS )          /* Argentina */
 CONS(1976, 1292apvs, 0,         vc4000,   vc4000,    vc4000, driver_device,      0,        "Radofin",          "1292 Advanced Programmable Video System", GAME_IMPERFECT_GRAPHICS )/* Europe */
 CONS(1976, 1392apvs, 1292apvs,  0,        vc4000,    vc4000, driver_device,      0,        "Radofin",          "1392 Advanced Programmable Video System", GAME_IMPERFECT_GRAPHICS )/* Europe */
-CONS(1979, mpu1000,  1292apvs,  0,        vc4000,    vc4000, driver_device,      0,        "Acetronic",        "MPU-1000",         GAME_IMPERFECT_GRAPHICS )          /* Europe */
-CONS(1979, mpu2000,  1292apvs,  0,        vc4000,    vc4000, driver_device,      0,        "Acetronic",        "MPU-2000",         GAME_IMPERFECT_GRAPHICS )          /* Europe */
+CONS(1979, mpu1000,  1292apvs,  0,        mpu1000,   vc4000, driver_device,      0,        "Acetronic",        "MPU-1000",         GAME_IMPERFECT_GRAPHICS )          /* Europe */
+CONS(1979, mpu2000,  1292apvs,  0,        mpu1000,   vc4000, driver_device,      0,        "Acetronic",        "MPU-2000",         GAME_IMPERFECT_GRAPHICS )          /* Europe */
 CONS(1978, pp1292,   1292apvs,  0,        vc4000,    vc4000, driver_device,      0,        "Audio Sonic",      "PP-1292 Advanced Programmable Video System", GAME_IMPERFECT_GRAPHICS )/* Europe */
 CONS(1978, pp1392,   1292apvs,  0,        vc4000,    vc4000, driver_device,      0,        "Audio Sonic",      "PP-1392 Advanced Programmable Video System", GAME_IMPERFECT_GRAPHICS )/* Europe */
 CONS(1979, f1392,    1292apvs,  0,        vc4000,    vc4000, driver_device,      0,        "Fountain",         "Fountain 1392",    GAME_IMPERFECT_GRAPHICS )          /* New Zealand */
@@ -648,184 +705,11 @@ CONS(1979, hmg1292,  1292apvs,  0,        vc4000,    vc4000, driver_device,     
 CONS(1979, hmg1392,  1292apvs,  0,        vc4000,    vc4000, driver_device,      0,        "Hanimex",          "HMG 1392",         GAME_IMPERFECT_GRAPHICS )          /* Europe */
 CONS(1979, lnsy1392, 1292apvs,  0,        vc4000,    vc4000, driver_device,      0,        "Lansay",           "Lansay 1392",      GAME_IMPERFECT_GRAPHICS )          /* Europe */
 CONS(1979, vc6000,   1292apvs,  0,        vc4000,    vc4000, driver_device,      0,        "Prinztronic",      "VC 6000",          GAME_IMPERFECT_GRAPHICS )          /* UK */
-CONS(1979, database, 0,         vc4000,   vc4000,    vc4000, driver_device,      0,        "Voltmace",         "Voltmace Database", GAME_IMPERFECT_GRAPHICS )         /* UK */
-CONS(1979, vmdtbase, database,  0,        vc4000,    vc4000, driver_device,      0,        "Videomaster",      "Videomaster Database Games-Computer", GAME_IMPERFECT_GRAPHICS )/* UK */
-CONS(1979, rwtrntcs, 0,         vc4000,   vc4000,    vc4000, driver_device,      0,        "Rowtron",          "Rowtron Television Computer System", GAME_IMPERFECT_GRAPHICS )/* UK */
-CONS(1979, telngtcs, rwtrntcs,  0,        vc4000,    vc4000, driver_device,      0,        "Teleng",           "Teleng Television Computer System", GAME_IMPERFECT_GRAPHICS )/* UK */
+CONS(1979, database, 0,         vc4000,   database,  vc4000, driver_device,      0,        "Voltmace",         "Voltmace Database", GAME_IMPERFECT_GRAPHICS )         /* UK */
+CONS(1979, vmdtbase, database,  0,        database,  vc4000, driver_device,      0,        "Videomaster",      "Videomaster Database Games-Computer", GAME_IMPERFECT_GRAPHICS )/* UK */
+CONS(1979, rwtrntcs, 0,         vc4000,   rwtrntcs,  vc4000, driver_device,      0,        "Rowtron",          "Rowtron Television Computer System", GAME_IMPERFECT_GRAPHICS )/* UK */
+CONS(1979, telngtcs, rwtrntcs,  0,        rwtrntcs,  vc4000, driver_device,      0,        "Teleng",           "Teleng Television Computer System", GAME_IMPERFECT_GRAPHICS )/* UK */
 CONS(1979, krvnjvtv, 0,         vc4000,   vc4000,    vc4000, driver_device,      0,        "SOE",              "OC Jeu Video TV Karvan", GAME_IMPERFECT_GRAPHICS )    /* France */
 CONS(1979, oc2000,   krvnjvtv,  0,        vc4000,    vc4000, driver_device,      0,        "SOE",              "OC-2000",          GAME_IMPERFECT_GRAPHICS )          /* France */
 CONS(1980, mpt05,    0,         vc4000,   vc4000,    vc4000, driver_device,      0,        "ITMC",             "MPT-05",           GAME_IMPERFECT_GRAPHICS )          /* France */
-COMP(1979, elektor,  0,         0,        elektor,   elektor, driver_device,     0,        "Elektor",          "Elektor TV Games Computer", GAME_IMPERFECT_GRAPHICS )
-
-/*  Game List and Emulation Status
-
-When you load a game it will normally appear to be unresponsive. Most carts contain a number of variants
-of each game (e.g. Difficulty, Player1 vs Player2 or Player1 vs Computer, etc).
-
-Press F2 (if needed) to select which game variant you would like to play. The variant number will increment
-on-screen. When you've made your choice, press F1 to start. The main keys are unlabelled, because an overlay
-is provided with each cart. See below for a guide. You need to read the instructions that come with each game.
-
-In some games, the joystick is used like 4 buttons, and other games like a paddle. The two modes are
-incompatible when using a keyboard. Therefore (in the emulation) a config dipswitch is used. The preferred
-setting is listed below.
-
-(AC = Auto-centre, NAC = no auto-centre, 90 = turn controller 90 degrees).
-
-The list is rather incomplete, information will be added as it becomes available.
-
-The game names and numbers were obtained from the Amigan Software site.
-
-Cart Num    Name
-----------------------------------------------
-1.      Grand Prix / Car Races / Autosport / Motor Racing / Road Race
-Config: Paddle, NAC
-Status: Working
-Controls: Left-Right: Steer; Up: Accelerate
-
-2.      Black Jack
-Status: Not working (some digits missing; indicator missing; dealer's cards missing)
-Controls: set bet with S and D; A to deal; 1 to hit, 2 to stay; Q accept insurance, E to decline; double-up (unknown key)
-Indicator: E make a bet then deal; I choose insurance; - you lost; + you won; X hit or stay
-
-3.      Olympics / Paddle Games / Bat & Ball / Pro Sport 60 / Sportsworld
-Config: Paddle, NAC
-Status: Working
-
-4.      Tank Battle / Combat
-Config: Button, 90
-Status: Working
-Controls: Left-Right: Steer; Up: Accelerate; Fire: Shoot
-
-5.      Maths 1
-Status: Working
-Controls: Z difficulty; X = addition or subtraction; C ask question; A=1;S=2;D=3;Q=4;W=5;E=6;1=7;2=8;3=9;0=0; C enter
-
-6.      Maths 2
-Status: Not working
-Controls: Same as above.
-
-7.      Air Sea Attack / Air Sea Battle
-Config: Button, 90
-Status: Working
-Controls: Left-Right: Move; Fire: Shoot
-
-8.      Treasure Hunt / Capture the Flag / Concentration / Memory Match
-Config: Buttons
-Status: Working
-
-9.      Labyrinth / Maze / Intelligence 1
-Config: Buttons
-Status: Working
-
-10.     Winter Sports
-Notes: Background colours should be Cyan and White instead of Red and Black
-
-11.     Hippodrome / Horse Race
-
-12.     Hunting / Shooting Gallery
-
-13.     Chess 1
-Status: Can't see what you're typing, wrong colours
-
-14.     Moto-cros
-
-15.     Four in a row / Intelligence 2
-Config: Buttons
-Status: Working
-Notes: Seems the unused squares should be black. The screen jumps about while the computer is "thinking".
-
-16.     Code Breaker / Master Mind / Intelligence 3 / Challenge
-
-17.     Circus
-STatus: severe gfx issues
-
-18.     Boxing / Prize Fight
-
-19.     Outer Space / Spacewar / Space Attack / Outer Space Combat
-
-20.     Melody Simon / Musical Memory / Follow the Leader / Musical Games / Electronic Music / Face the Music
-
-21.     Capture / Othello / Reversi / Attack / Intelligence 4
-Config: Buttons
-Status: Working
-Notes: Seems the unused squares should be black
-
-22.     Chess 2
-Status: Can't see what you're typing, wrong colours
-
-23.     Pinball / Flipper / Arcade
-Status: gfx issues
-
-24.     Soccer
-
-25.     Bowling / NinePins
-Config: Paddle, rotated 90 degrees, up/down autocentre, left-right does not
-Status: Working
-
-26.     Draughts
-
-27.     Golf
-Status: gfx issues
-
-28.     Cockpit
-Status: gfx issues
-
-29.     Metropolis / Hangman
-Status: gfx issues
-
-30.     Solitaire
-
-31.     Casino
-Status: gfx issues, items missing and unplayable
-Controls: 1 or 3=START; q=GO; E=STOP; D=$; Z=^; X=tens; C=units
-
-32.     Invaders / Alien Invasion / Earth Invasion
-Status: Works
-Config: Buttons
-
-33.     Super Invaders
-Status: Stars are missing, colours are wrong
-Config: Buttons (90)
-
-36.     BackGammon
-Status: Not all counters are visible, Dice & game number not visible.
-Controls: Fire=Exec; 1=D+; 3=D-; Q,W,E=4,5,6; A,S,D=1,2,3; Z=CL; X=STOP; C=SET
-
-37.     Monster Man / Spider's Web
-Status: Works
-Config: Buttons
-
-38.     Hyperspace
-Status: Works
-Config: Buttons (90)
-Controls: 3 - status button; Q,W,E,A,S,D,Z,X,C selects which galaxy to visit
-
-
-40.     Super Space
-Status: Works, some small gfx issues near the bottom
-Config: Buttons
-
-
-
-Acetronic: (dumps are compatible)
-------------
-
-* Shooting Gallery
-Status: works but screen flickers
-Config: Buttons
-
-* Planet Defender
-Status: Works
-Config: Paddle (NAC)
-
-* Laser Attack
-Status: Works
-Config: Buttons
-
-
-
-Public Domain: (written for emulators, may not work on real hardware)
----------------
-* Picture (no controls) - works
-* Wincadia Stub (no controls) - works, small graphic error */
+CONS(1979, elektor,  0,         0,        elektor,   elektor, driver_device,     0,        "Elektor",          "Elektor TV Games Computer", GAME_IMPERFECT_GRAPHICS )

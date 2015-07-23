@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder, Robbbert, Wilbert Pol
 /*
 
 Ohio Scientific Superboard II Model 600
@@ -215,6 +217,7 @@ PRINT FRE(0)
 
 
 #include "includes/osi.h"
+#include "machine/clock.h"
 
 /* Sound */
 
@@ -232,12 +235,13 @@ static DISCRETE_SOUND_START( osi600_discrete_interface )
 	DISCRETE_INPUT_DATA(NODE_01)
 
 	DISCRETE_DAC_R1(NODE_02, NODE_01, DEFAULT_TTL_V_LOGIC_1, &osi600_dac)
-	DISCRETE_CRFILTER(NODE_03, NODE_02, 1.0/(1.0/RES_K(1)+1.0/180+1.0/180+1.0/180+1.0/180), CAP_U(0.1))
+	DISCRETE_CRFILTER(NODE_03, NODE_02, (int)(1.0/(1.0/RES_K(1)+1.0/180+1.0/180+1.0/180+1.0/180)), CAP_U(0.1))
 	DISCRETE_OUTPUT(NODE_03, 100)
 	DISCRETE_GAIN(NODE_04, NODE_03, 32767.0/5)
 	DISCRETE_OUTPUT(NODE_04, 100)
 DISCRETE_SOUND_END
 
+#if 0
 static const discrete_dac_r1_ladder osi600c_dac =
 {
 	8,          // size of ladder
@@ -247,6 +251,7 @@ static const discrete_dac_r1_ladder osi600c_dac =
 	0,          // no rGnd
 	CAP_U(33)   // C63
 };
+#endif
 
 static DISCRETE_SOUND_START( osi600c_discrete_interface )
 	DISCRETE_INPUT_DATA(NODE_01)
@@ -291,7 +296,7 @@ WRITE8_MEMBER( sb2m600_state::keyboard_w )
 	m_keylatch = data;
 
 	if (m_io_sound->read())
-		discrete_sound_w(m_discrete, space, NODE_01, (data >> 2) & 0x0f);
+		m_discrete->write(space, NODE_01, (data >> 2) & 0x0f);
 }
 
 WRITE8_MEMBER( uk101_state::keyboard_w )
@@ -319,7 +324,7 @@ WRITE8_MEMBER( sb2m600_state::ctrl_w )
 	m_32 = BIT(data, 0);
 	m_coloren = BIT(data, 1);
 
-	discrete_sound_w(m_discrete, space, NODE_10, BIT(data, 4));
+	m_discrete->write(space, NODE_10, BIT(data, 4));
 }
 
 WRITE8_MEMBER( c1p_state::osi630_ctrl_w )
@@ -383,7 +388,7 @@ WRITE8_MEMBER( c1p_state::osi630_sound_w )
     C011 ACIAIO         DISK CONTROLLER ACIA I/O PORT
 */
 
-WRITE_LINE_MEMBER(sb2m600_state::osi470_index_callback)
+void sb2m600_state::floppy_index_callback(floppy_image_device *floppy, int state)
 {
 	m_fdc_index = state;
 }
@@ -448,38 +453,6 @@ WRITE_LINE_MEMBER( c1pmf_state::osi470_pia_cb2_w )
 {
 }
 
-static const pia6821_interface osi470_pia_intf =
-{
-	DEVCB_DRIVER_MEMBER(c1pmf_state, osi470_pia_pa_r),
-	DEVCB_NULL, // read8_machine_func in_b_func,
-	DEVCB_NULL, // read8_machine_func in_ca1_func,
-	DEVCB_NULL, // read8_machine_func in_cb1_func,
-	DEVCB_NULL, // read8_machine_func in_ca2_func,
-	DEVCB_NULL, // read8_machine_func in_cb2_func,
-	DEVCB_DRIVER_MEMBER(c1pmf_state, osi470_pia_pa_w),
-	DEVCB_DRIVER_MEMBER(c1pmf_state, osi470_pia_pb_w),
-	DEVCB_NULL, // write8_machine_func out_ca2_func,
-	DEVCB_DRIVER_LINE_MEMBER(c1pmf_state, osi470_pia_cb2_w),
-	DEVCB_NULL, // void (*irq_a_func)(int state),
-	DEVCB_NULL, // void (*irq_b_func)(int state),
-};
-
-static const pia6821_interface pia_dummy_intf =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 /* Memory Maps */
 
 static ADDRESS_MAP_START( osi600_mem, AS_PROGRAM, 8, sb2m600_state )
@@ -487,8 +460,8 @@ static ADDRESS_MAP_START( osi600_mem, AS_PROGRAM, 8, sb2m600_state )
 	AM_RANGE(0xa000, 0xbfff) AM_ROM
 	AM_RANGE(0xd000, 0xd3ff) AM_RAM AM_SHARE("video_ram")
 	AM_RANGE(0xdf00, 0xdf00) AM_READWRITE(keyboard_r, keyboard_w)
-	AM_RANGE(0xf000, 0xf000) AM_DEVREADWRITE("acia_0", acia6850_device, status_read, control_write)
-	AM_RANGE(0xf001, 0xf001) AM_DEVREADWRITE("acia_0", acia6850_device, data_read, data_write)
+	AM_RANGE(0xf000, 0xf000) AM_DEVREADWRITE("acia_0", acia6850_device, status_r, control_w)
+	AM_RANGE(0xf001, 0xf001) AM_DEVREADWRITE("acia_0", acia6850_device, data_r, data_w)
 	AM_RANGE(0xf800, 0xffff) AM_ROM
 ADDRESS_MAP_END
 
@@ -498,8 +471,8 @@ static ADDRESS_MAP_START( uk101_mem, AS_PROGRAM, 8, uk101_state )
 	AM_RANGE(0xd000, 0xd3ff) AM_RAM AM_SHARE("video_ram")
 	AM_RANGE(0xd400, 0xd7ff) AM_NOP  // bios sets this to spaces at boot
 	AM_RANGE(0xdc00, 0xdfff) AM_READ(keyboard_r) AM_WRITE(keyboard_w)
-	AM_RANGE(0xf000, 0xf000) AM_MIRROR(0x00fe) AM_DEVREADWRITE("acia_0", acia6850_device, status_read, control_write)
-	AM_RANGE(0xf001, 0xf001) AM_MIRROR(0x00fe) AM_DEVREADWRITE("acia_0", acia6850_device, data_read, data_write)
+	AM_RANGE(0xf000, 0xf000) AM_MIRROR(0x00fe) AM_DEVREADWRITE("acia_0", acia6850_device, status_r, control_w)
+	AM_RANGE(0xf001, 0xf001) AM_MIRROR(0x00fe) AM_DEVREADWRITE("acia_0", acia6850_device, data_r, data_w)
 	AM_RANGE(0xf800, 0xffff) AM_ROM
 ADDRESS_MAP_END
 
@@ -513,8 +486,8 @@ static ADDRESS_MAP_START( c1p_mem, AS_PROGRAM, 8, c1p_state )
 	AM_RANGE(0xd400, 0xd7ff) AM_RAM AM_SHARE("color_ram")
 	AM_RANGE(0xd800, 0xd800) AM_WRITE(ctrl_w)
 	AM_RANGE(0xdf00, 0xdf00) AM_READWRITE(keyboard_r, keyboard_w)
-	AM_RANGE(0xf000, 0xf000) AM_DEVREADWRITE("acia_0", acia6850_device, status_read, control_write)
-	AM_RANGE(0xf001, 0xf001) AM_DEVREADWRITE("acia_0", acia6850_device, data_read, data_write)
+	AM_RANGE(0xf000, 0xf000) AM_DEVREADWRITE("acia_0", acia6850_device, status_r, control_w)
+	AM_RANGE(0xf001, 0xf001) AM_DEVREADWRITE("acia_0", acia6850_device, data_r, data_w)
 	AM_RANGE(0xf7c0, 0xf7c0) AM_WRITE(osi630_sound_w)
 	AM_RANGE(0xf7e0, 0xf7e0) AM_WRITE(osi630_ctrl_w)
 	AM_RANGE(0xf800, 0xffff) AM_ROM
@@ -524,8 +497,8 @@ static ADDRESS_MAP_START( c1pmf_mem, AS_PROGRAM, 8, c1pmf_state )
 	AM_RANGE(0x0000, 0x4fff) AM_RAMBANK("bank1")
 	AM_RANGE(0xa000, 0xbfff) AM_ROM
 	AM_RANGE(0xc000, 0xc003) AM_DEVREADWRITE("pia_0", pia6821_device, read, write) // FDC
-	AM_RANGE(0xc010, 0xc010) AM_DEVREADWRITE("acia_1", acia6850_device, status_read, control_write)
-	AM_RANGE(0xc011, 0xc011) AM_DEVREADWRITE("acia_1", acia6850_device, data_read, data_write)
+	AM_RANGE(0xc010, 0xc010) AM_DEVREADWRITE("acia_1", acia6850_device, status_r, control_w)
+	AM_RANGE(0xc011, 0xc011) AM_DEVREADWRITE("acia_1", acia6850_device, data_r, data_w)
 	AM_RANGE(0xc704, 0xc707) AM_DEVREADWRITE("pia_1", pia6821_device, read, write)
 	AM_RANGE(0xc708, 0xc70b) AM_DEVREADWRITE("pia_2", pia6821_device, read, write)
 	AM_RANGE(0xc70c, 0xc70f) AM_DEVREADWRITE("pia_3", pia6821_device, read, write)
@@ -533,8 +506,8 @@ static ADDRESS_MAP_START( c1pmf_mem, AS_PROGRAM, 8, c1pmf_state )
 	AM_RANGE(0xd400, 0xd7ff) AM_RAM AM_SHARE("color_ram")
 	AM_RANGE(0xd800, 0xd800) AM_WRITE(ctrl_w)
 	AM_RANGE(0xdf00, 0xdf00) AM_READWRITE(keyboard_r, keyboard_w)
-	AM_RANGE(0xf000, 0xf000) AM_DEVREADWRITE("acia_0", acia6850_device, status_read, control_write)
-	AM_RANGE(0xf001, 0xf001) AM_DEVREADWRITE("acia_0", acia6850_device, data_read, data_write)
+	AM_RANGE(0xf000, 0xf000) AM_DEVREADWRITE("acia_0", acia6850_device, status_r, control_w)
+	AM_RANGE(0xf001, 0xf001) AM_DEVREADWRITE("acia_0", acia6850_device, data_r, data_w)
 	AM_RANGE(0xf7c0, 0xf7c0) AM_WRITE(osi630_sound_w)
 	AM_RANGE(0xf7e0, 0xf7e0) AM_WRITE(osi630_ctrl_w)
 	AM_RANGE(0xf800, 0xffff) AM_ROM
@@ -644,51 +617,18 @@ INPUT_PORTS_END
 
 /* Machine Start */
 
-READ_LINE_MEMBER( sb2m600_state::cassette_rx )
+WRITE_LINE_MEMBER( sb2m600_state::write_cassette_clock )
 {
-	return ((m_cassette)->input() > 0.0) ? 1 : 0;
+	m_acia_0->write_rxd((m_cassette->input() > 0.0) ? 1 : 0);
+
+	m_acia_0->write_txc(state);
+	m_acia_0->write_rxc(state);
 }
 
 WRITE_LINE_MEMBER( sb2m600_state::cassette_tx )
 {
 	m_cassette->output(state ? +1.0 : -1.0);
 }
-
-static ACIA6850_INTERFACE( osi600_acia_intf )
-{
-	X1/32,
-	X1/32,
-	DEVCB_DRIVER_LINE_MEMBER(sb2m600_state, cassette_rx),
-	DEVCB_DRIVER_LINE_MEMBER(sb2m600_state, cassette_tx),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static ACIA6850_INTERFACE( uk101_acia_intf )
-{
-	500000, //
-	500000, //
-	DEVCB_DRIVER_LINE_MEMBER(sb2m600_state, cassette_rx),
-	DEVCB_DRIVER_LINE_MEMBER(sb2m600_state, cassette_tx),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static ACIA6850_INTERFACE( osi470_acia_intf )
-{
-	0,              // clocked in from the floppy drive
-	XTAL_4MHz/8,    // 250 kHz
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
 
 void sb2m600_state::machine_start()
 {
@@ -746,29 +686,17 @@ void c1p_state::machine_start()
 void c1pmf_state::machine_start()
 {
 	c1p_state::machine_start();
+
+	// drive select logic missing
+	if (m_floppy0->get_device())
+		m_floppy0->get_device()->setup_index_pulse_cb(floppy_image_device::index_pulse_cb(FUNC(sb2m600_state::floppy_index_callback), this));
 }
 
-static LEGACY_FLOPPY_OPTIONS_START(osi)
-	LEGACY_FLOPPY_OPTION(osi, "img", "OSI disk image", basicdsk_identify_default, basicdsk_construct_default, NULL,
-		HEADS([1])
-		TRACKS([36])
-		SECTORS([10])
-		SECTOR_LENGTH([256])
-		FIRST_SECTOR_ID([0]))
-LEGACY_FLOPPY_OPTIONS_END
-
-static const floppy_interface osi_floppy_interface =
-{
-	DEVCB_DRIVER_LINE_MEMBER(sb2m600_state,osi470_index_callback),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_SSDD_40,
-	LEGACY_FLOPPY_OPTIONS_NAME(osi),
-	NULL,
-	NULL
-};
+// disk format: 1 head, 36 tracks (? - manual displays a directory listing with 40 tracks),
+// 10 sectors, 256 byte sector length, first sector id 0
+static SLOT_INTERFACE_START( osi_floppies )
+	SLOT_INTERFACE("ssdd", FLOPPY_525_SSDD)
+SLOT_INTERFACE_END
 
 /* F4 Character Displayer */
 static const gfx_layout osi_charlayout =
@@ -797,19 +725,23 @@ static MACHINE_CONFIG_START( osi600, sb2m600_state )
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD(osi600_video)
-	MCFG_GFXDECODE(osi)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", osi)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD(DISCRETE_TAG, DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(osi600_discrete_interface)
+	MCFG_DISCRETE_INTF(osi600_discrete_interface)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
 	/* cassette ACIA */
-	MCFG_ACIA6850_ADD("acia_0", osi600_acia_intf)
+	MCFG_DEVICE_ADD("acia_0", ACIA6850, 0)
+	MCFG_ACIA6850_TXD_HANDLER(WRITELINE(sb2m600_state, cassette_tx))
+
+	MCFG_DEVICE_ADD("cassette_clock", CLOCK, X1/32)
+	MCFG_CLOCK_SIGNAL_HANDLER(WRITELINE(sb2m600_state, write_cassette_clock))
 
 	/* cassette */
-	MCFG_CASSETTE_ADD("cassette", default_cassette_interface)
+	MCFG_CASSETTE_ADD("cassette")
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -824,13 +756,17 @@ static MACHINE_CONFIG_START( uk101, uk101_state )
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD(uk101_video)
-	MCFG_GFXDECODE(osi)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", osi)
 
 	/* cassette ACIA */
-	MCFG_ACIA6850_ADD("acia_0", uk101_acia_intf)
+	MCFG_DEVICE_ADD("acia_0", ACIA6850, 0)
+	MCFG_ACIA6850_TXD_HANDLER(WRITELINE(sb2m600_state, cassette_tx))
+
+	MCFG_DEVICE_ADD("cassette_clock", CLOCK, 500000)
+	MCFG_CLOCK_SIGNAL_HANDLER(WRITELINE(sb2m600_state, write_cassette_clock))
 
 	/* cassette */
-	MCFG_CASSETTE_ADD("cassette", default_cassette_interface)
+	MCFG_CASSETTE_ADD("cassette")
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -845,25 +781,29 @@ static MACHINE_CONFIG_START( c1p, c1p_state )
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD(osi630_video)
-	MCFG_GFXDECODE(osi)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", osi)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD(DISCRETE_TAG, DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(osi600c_discrete_interface)
+	MCFG_DISCRETE_INTF(osi600c_discrete_interface)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 	MCFG_SOUND_ADD("beeper", BEEP, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
-	MCFG_PIA6821_ADD( "pia_1", pia_dummy_intf )
-	MCFG_PIA6821_ADD( "pia_2", pia_dummy_intf )
-	MCFG_PIA6821_ADD( "pia_3", pia_dummy_intf )
+	MCFG_DEVICE_ADD("pia_1", PIA6821, 0)
+	MCFG_DEVICE_ADD("pia_2", PIA6821, 0)
+	MCFG_DEVICE_ADD("pia_3", PIA6821, 0)
 
 	/* cassette ACIA */
-	MCFG_ACIA6850_ADD("acia_0", osi600_acia_intf)
+	MCFG_DEVICE_ADD("acia_0", ACIA6850, 0)
+	MCFG_ACIA6850_TXD_HANDLER(WRITELINE(sb2m600_state, cassette_tx))
+
+	MCFG_DEVICE_ADD("cassette_clock", CLOCK, X1/32)
+	MCFG_CLOCK_SIGNAL_HANDLER(WRITELINE(sb2m600_state, write_cassette_clock))
 
 	/* cassette */
-	MCFG_CASSETTE_ADD("cassette", default_cassette_interface)
+	MCFG_CASSETTE_ADD("cassette")
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -875,12 +815,20 @@ static MACHINE_CONFIG_DERIVED_CLASS( c1pmf, c1p, c1pmf_state )
 	MCFG_CPU_MODIFY(M6502_TAG)
 	MCFG_CPU_PROGRAM_MAP(c1pmf_mem)
 
-	MCFG_PIA6821_ADD( "pia_0", osi470_pia_intf )
+	MCFG_DEVICE_ADD("pia_0", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(c1pmf_state, osi470_pia_pa_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(c1pmf_state, osi470_pia_pa_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(c1pmf_state, osi470_pia_pb_w))
+	MCFG_PIA_CB2_HANDLER(WRITELINE(c1pmf_state, osi470_pia_cb2_w))
 
 	/* floppy ACIA */
-	MCFG_ACIA6850_ADD("acia_1", osi470_acia_intf)
+	MCFG_DEVICE_ADD("acia_1", ACIA6850, 0)
 
-	MCFG_LEGACY_FLOPPY_DRIVE_ADD(FLOPPY_0, osi_floppy_interface)
+	MCFG_DEVICE_ADD("floppy_clock", CLOCK, XTAL_4MHz/8) // 250 kHz
+	MCFG_CLOCK_SIGNAL_HANDLER(DEVWRITELINE("acia_1", acia6850_device, write_txc))
+
+	MCFG_FLOPPY_DRIVE_ADD("floppy0", osi_floppies, "ssdd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("floppy1", osi_floppies, NULL,   floppy_image_device::default_floppy_formats)
 
 	/* internal ram */
 	MCFG_RAM_MODIFY(RAM_TAG)

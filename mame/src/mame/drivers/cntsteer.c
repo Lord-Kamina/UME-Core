@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail,Pierpaolo Prazzoli, David Haywood, Angelo Salese
 /**************************************************************************************
 
     Counter Steer                   (c) 1985 Data East Corporation
@@ -40,7 +42,9 @@ public:
 		m_videoram2(*this, "videoram2"),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
-		m_subcpu(*this, "subcpu"){ }
+		m_subcpu(*this, "subcpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_spriteram;
@@ -69,6 +73,9 @@ public:
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
 	required_device<cpu_device> m_subcpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	DECLARE_WRITE8_MEMBER(zerotrgt_vregs_w);
 	DECLARE_WRITE8_MEMBER(cntsteer_vregs_w);
 	DECLARE_WRITE8_MEMBER(cntsteer_foreground_vram_w);
@@ -106,7 +113,7 @@ PALETTE_INIT_MEMBER(cntsteer_state,zerotrgt)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int bit0, bit1, bit2, r, g, b;
 
@@ -126,7 +133,7 @@ PALETTE_INIT_MEMBER(cntsteer_state,zerotrgt)
 		bit2 = (color_prom[i + 256] >> 2) & 0x01;
 		b = (0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2);
 
-		palette_set_color(machine(), i, MAKE_RGB(r,g,b));
+		palette.set_pen_color(i, rgb_t(r,g,b));
 	}
 }
 
@@ -149,8 +156,8 @@ TILE_GET_INFO_MEMBER(cntsteer_state::get_fg_tile_info)
 
 VIDEO_START_MEMBER(cntsteer_state,cntsteer)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(cntsteer_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 64, 64);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(cntsteer_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS_FLIP_X, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(cntsteer_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 64, 64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(cntsteer_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS_FLIP_X, 8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 
@@ -159,8 +166,8 @@ VIDEO_START_MEMBER(cntsteer_state,cntsteer)
 
 VIDEO_START_MEMBER(cntsteer_state,zerotrgt)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(cntsteer_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(cntsteer_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS_FLIP_X, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(cntsteer_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(cntsteer_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS_FLIP_X, 8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 
@@ -214,17 +221,17 @@ void cntsteer_state::zerotrgt_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 		{
 			if (fy)
 			{
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code, color, fx, fy, sx, sy, 0);
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code + 1, color, fx, fy, sx, sy - 16, 0);
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code, color, fx, fy, sx, sy, 0);
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code + 1, color, fx, fy, sx, sy - 16, 0);
 			}
 			else
 			{
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code, color, fx, fy, sx, sy - 16, 0);
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code + 1, color, fx, fy, sx, sy, 0);
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code, color, fx, fy, sx, sy - 16, 0);
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code + 1, color, fx, fy, sx, sy, 0);
 			}
 		}
 		else
-			drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code, color, fx, fy, sx, sy, 0);
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code, color, fx, fy, sx, sy, 0);
 	}
 }
 
@@ -271,24 +278,24 @@ void cntsteer_state::cntsteer_draw_sprites( bitmap_ind16 &bitmap, const rectangl
 		{
 			if (fy)
 			{
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code, color, fx, fy, sx, sy, 0);
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code + 1, color, fx, fy, sx, sy - 16, 0);
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code, color, fx, fy, sx, sy, 0);
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code + 1, color, fx, fy, sx, sy - 16, 0);
 			}
 			else
 			{
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code, color, fx, fy, sx, sy - 16, 0);
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code + 1, color, fx, fy, sx, sy, 0);
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code, color, fx, fy, sx, sy - 16, 0);
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code + 1, color, fx, fy, sx, sy, 0);
 			}
 		}
 		else
-			drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code, color, fx, fy, sx, sy, 0);
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code, color, fx, fy, sx, sy, 0);
 	}
 }
 
 UINT32 cntsteer_state::screen_update_zerotrgt(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	if (m_disable_roz)
-		bitmap.fill(machine().pens[8 * m_bg_color_bank], cliprect);
+		bitmap.fill(m_palette->pen(8 * m_bg_color_bank), cliprect);
 	else
 	{
 		int p1, p2, p3, p4;
@@ -320,7 +327,7 @@ UINT32 cntsteer_state::screen_update_zerotrgt(screen_device &screen, bitmap_ind1
 		x = -256 - (m_scrollx | m_scrollx_hi);
 		y = 256 + (m_scrolly | m_scrolly_hi);
 
-		m_bg_tilemap->draw_roz(bitmap, cliprect,
+		m_bg_tilemap->draw_roz(screen, bitmap, cliprect,
 						(x << 16), (y << 16),
 						p1, p2,
 						p3, p4,
@@ -329,7 +336,7 @@ UINT32 cntsteer_state::screen_update_zerotrgt(screen_device &screen, bitmap_ind1
 	}
 
 	zerotrgt_draw_sprites(bitmap, cliprect);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
@@ -337,7 +344,7 @@ UINT32 cntsteer_state::screen_update_zerotrgt(screen_device &screen, bitmap_ind1
 UINT32 cntsteer_state::screen_update_cntsteer(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	if (m_disable_roz)
-		bitmap.fill(machine().pens[8 * m_bg_color_bank], cliprect);
+		bitmap.fill(m_palette->pen(8 * m_bg_color_bank), cliprect);
 	else
 	{
 		int p1, p2, p3, p4;
@@ -367,7 +374,7 @@ UINT32 cntsteer_state::screen_update_cntsteer(screen_device &screen, bitmap_ind1
 		x = 256 + (m_scrollx | m_scrollx_hi);
 		y = 256 - (m_scrolly | m_scrolly_hi);
 
-		m_bg_tilemap->draw_roz(bitmap, cliprect,
+		m_bg_tilemap->draw_roz(screen, bitmap, cliprect,
 						(x << 16), (y << 16),
 						p1, p2,
 						p3, p4,
@@ -376,7 +383,7 @@ UINT32 cntsteer_state::screen_update_cntsteer(screen_device &screen, bitmap_ind1
 	}
 
 	cntsteer_draw_sprites(bitmap, cliprect);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
@@ -862,16 +869,6 @@ MACHINE_RESET_MEMBER(cntsteer_state,zerotrgt)
 	MACHINE_RESET_CALL_MEMBER(cntsteer);
 }
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DEVICE_MEMBER("dac", dac_device, write_unsigned8),
-	DEVCB_NULL
-};
-
 static MACHINE_CONFIG_START( cntsteer, cntsteer_state )
 
 	/* basic machine hardware */
@@ -898,19 +895,20 @@ static MACHINE_CONFIG_START( cntsteer, cntsteer_state )
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(cntsteer_state, screen_update_cntsteer)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(6000))
 
-	MCFG_GFXDECODE(cntsteer)
-	MCFG_PALETTE_LENGTH(256)
-//  MCFG_PALETTE_INIT_OVERRIDE(cntsteer_state,zerotrgt)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", cntsteer)
+	MCFG_PALETTE_ADD("palette", 256)
+//  MCFG_PALETTE_INIT_OWNER(cntsteer_state,zerotrgt)
 
 	MCFG_VIDEO_START_OVERRIDE(cntsteer_state,cntsteer)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("ay1", AY8910, 1500000)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_WRITE_CB(DEVWRITE8("dac", dac_device, write_unsigned8))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
 	MCFG_SOUND_ADD("ay2", AY8910, 1500000)
@@ -947,11 +945,12 @@ static MACHINE_CONFIG_START( zerotrgt, cntsteer_state )
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(cntsteer_state, screen_update_zerotrgt)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(zerotrgt)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", zerotrgt)
+	MCFG_PALETTE_ADD("palette", 256)
 
-	MCFG_PALETTE_INIT_OVERRIDE(cntsteer_state,zerotrgt)
+	MCFG_PALETTE_INIT_OWNER(cntsteer_state,zerotrgt)
 	MCFG_VIDEO_START_OVERRIDE(cntsteer_state,zerotrgt)
 
 	/* sound hardware */

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /*****************************************************************************
  *
  * includes/vector06.h
@@ -13,11 +15,11 @@
 #include "sound/wave.h"
 #include "machine/i8255.h"
 #include "machine/ram.h"
-#include "machine/wd17xx.h"
+#include "machine/wd_fdc.h"
 #include "imagedev/cassette.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/flopdrv.h"
-#include "formats/basicdsk.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 
 
 class vector06_state : public driver_device
@@ -27,18 +29,28 @@ public:
 		: driver_device(mconfig, type, tag),
 	m_maincpu(*this, "maincpu"),
 	m_cassette(*this, "cassette"),
+	m_cart(*this, "cartslot"),
 	m_fdc(*this, "wd1793"),
+	m_floppy0(*this, "wd1793:0"),
+	m_floppy1(*this, "wd1793:1"),
 	m_ppi(*this, "ppi8255"),
 	m_ppi2(*this, "ppi8255_2"),
-	m_ram(*this, RAM_TAG)
+	m_ram(*this, RAM_TAG),
+	m_palette(*this, "palette")
 	{ }
+
+	DECLARE_FLOPPY_FORMATS(floppy_formats);
 
 	required_device<cpu_device> m_maincpu;
 	required_device<cassette_image_device> m_cassette;
-	required_device<fd1793_device> m_fdc;
+	required_device<generic_slot_device> m_cart;
+	required_device<fd1793_t> m_fdc;
+	required_device<floppy_connector> m_floppy0;
+	required_device<floppy_connector> m_floppy1;
 	required_device<i8255_device> m_ppi;
 	required_device<i8255_device> m_ppi2;
 	required_device<ram_device> m_ram;
+	required_device<palette_device> m_palette;
 	DECLARE_READ8_MEMBER(vector06_8255_portb_r);
 	DECLARE_READ8_MEMBER(vector06_8255_portc_r);
 	DECLARE_WRITE8_MEMBER(vector06_8255_porta_w);
@@ -55,23 +67,18 @@ public:
 	UINT8 m_keyboard_mask;
 	UINT8 m_color_index;
 	UINT8 m_video_mode;
-	UINT16 m_romdisk_msb;
+	UINT8 m_romdisk_msb;
 	UINT8 m_romdisk_lsb;
 	UINT8 m_vblank_state;
 	void vector06_set_video_mode(int width);
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(vector06);
 	UINT32 screen_update_vector06(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(vector06_interrupt);
 	TIMER_CALLBACK_MEMBER(reset_check_callback);
 	IRQ_CALLBACK_MEMBER(vector06_irq_callback);
 };
-
-
-/*----------- defined in machine/vector06.c -----------*/
-extern const i8255_interface vector06_ppi8255_interface;
-extern const i8255_interface vector06_ppi8255_2_interface;
 
 #endif /* VECTOR06_H_ */

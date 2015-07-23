@@ -1,8 +1,10 @@
+// license:???
+// copyright-holders:Jarek Burczynski
 /****************************************************************************
 
     Forty-Love (c) Taito 1984
 
-    driver by Jaroslaw Burczynski
+    driver by Jarek Burczynski
 
 ****************************************************************************/
 
@@ -28,12 +30,12 @@ Game number              : A30
 Vintage                  : 1984
 Game serial/model number : M4300006B ?
 
-I dont have the wiring harness for this board, so dont know if it works.
+I don't have the wiring harness for this board, so don't know if it works.
 One GFX ROM is bad though.
 See A30-26.u23\A30-26.txt for details about the bad ROM.
 To summarise:
   Dumps from GFX ROM A30-26.u23 were inconsistent. Reads with checksums
-  41A3 and 415F occured a couple of times, and the difference is one byte
+  41A3 and 415F occurred a couple of times, and the difference is one byte
   at offset $0004 (data $CC or $88). Maybe one of these reads is correct
   or closest to the real ROM. We are using the one with checksum 415F,
   the other one makes one sprite looks worse.
@@ -227,22 +229,27 @@ Notes - Has jumper setting for 122HZ or 61HZ)
 #include "cpu/m6805/m6805.h"
 #include "sound/ay8910.h"
 #include "sound/dac.h"
-#include "sound/msm5232.h"
-#include "machine/buggychl.h"
 #include "includes/40love.h"
 
-TIMER_CALLBACK_MEMBER(fortyl_state::nmi_callback)
+void fortyl_state::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
 {
-	if (m_sound_nmi_enable)
-		m_audiocpu->set_input_line(INPUT_LINE_NMI, PULSE_LINE);
-	else
-		m_pending_nmi = 1;
+	switch(id)
+	{
+	case TIMER_NMI_CALLBACK:
+		if (m_sound_nmi_enable)
+			m_audiocpu->set_input_line(INPUT_LINE_NMI, PULSE_LINE);
+		else
+			m_pending_nmi = 1;
+		break;
+	default:
+			assert_always(FALSE, "Unknown id in fortyl_state::device_timer");
+	}
 }
 
 WRITE8_MEMBER(fortyl_state::sound_command_w)
 {
 	soundlatch_byte_w(space, 0, data);
-	machine().scheduler().synchronize(timer_expired_delegate(FUNC(fortyl_state::nmi_callback),this), data);
+	synchronize(TIMER_NMI_CALLBACK, data);
 }
 
 WRITE8_MEMBER(fortyl_state::nmi_disable_w)
@@ -623,8 +630,8 @@ WRITE8_MEMBER(fortyl_state::to_main_w)
 static ADDRESS_MAP_START( 40love_map, AS_PROGRAM, 8, fortyl_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
 	AM_RANGE(0x8000, 0x87ff) AM_RAM /* M5517P on main board */
-	AM_RANGE(0x8800, 0x8800) AM_DEVREADWRITE_LEGACY("bmcu", buggychl_mcu_r, buggychl_mcu_w)
-	AM_RANGE(0x8801, 0x8801) AM_DEVREAD_LEGACY("bmcu", buggychl_mcu_status_r) AM_WRITE(pix1_mcu_w)      //pixel layer related
+	AM_RANGE(0x8800, 0x8800) AM_DEVREADWRITE("bmcu", buggychl_mcu_device, buggychl_mcu_r, buggychl_mcu_w)
+	AM_RANGE(0x8801, 0x8801) AM_DEVREAD("bmcu", buggychl_mcu_device, buggychl_mcu_status_r) AM_WRITE(pix1_mcu_w)      //pixel layer related
 	AM_RANGE(0x8802, 0x8802) AM_WRITE(bank_select_w)
 	AM_RANGE(0x8803, 0x8803) AM_READWRITE(pix2_r, pix2_w)       //pixel layer related
 	AM_RANGE(0x8804, 0x8804) AM_READWRITE(from_snd_r, sound_command_w)
@@ -739,7 +746,7 @@ static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, fortyl_state )
 	AM_RANGE(0x0000, 0xbfff) AM_ROM
 	AM_RANGE(0xc000, 0xc7ff) AM_RAM
 	AM_RANGE(0xc800, 0xc801) AM_DEVWRITE("aysnd", ay8910_device, address_data_w)
-	AM_RANGE(0xca00, 0xca0d) AM_DEVWRITE_LEGACY("msm", msm5232_w)
+	AM_RANGE(0xca00, 0xca0d) AM_DEVWRITE("msm", msm5232_device, write)
 	AM_RANGE(0xcc00, 0xcc00) AM_WRITE(sound_control_0_w)
 	AM_RANGE(0xce00, 0xce00) AM_WRITE(sound_control_1_w)
 	AM_RANGE(0xd800, 0xd800) AM_READ(soundlatch_byte_r) AM_WRITE(to_main_w)
@@ -948,22 +955,6 @@ static GFXDECODE_START( 40love )
 	GFXDECODE_ENTRY( "gfx1", 0, sprite_layout, 0, 64 )
 GFXDECODE_END
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(fortyl_state,sound_control_2_w),
-	DEVCB_DRIVER_MEMBER(fortyl_state,sound_control_3_w)
-};
-
-static const msm5232_interface msm5232_config =
-{
-	{ 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6 }, /* 1.0 uF capacitors (verified on real PCB) */
-	DEVCB_NULL
-};
-
 /*******************************************************************************/
 
 MACHINE_START_MEMBER(fortyl_state,40love)
@@ -1068,20 +1059,22 @@ static MACHINE_CONFIG_START( 40love, fortyl_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(128,128+255, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(fortyl_state, screen_update_fortyl)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(40love)
-	MCFG_PALETTE_LENGTH(1024)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", 40love)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_INIT_OWNER(fortyl_state, fortyl)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, 2000000)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(fortyl_state, sound_control_2_w))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(fortyl_state, sound_control_3_w))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 
 	MCFG_SOUND_ADD("msm", MSM5232, 8000000/4)
-	MCFG_SOUND_CONFIG(msm5232_config)
+	MCFG_MSM5232_SET_CAPACITORS(1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6) /* 1.0 uF capacitors (verified on real PCB) */
 	MCFG_SOUND_ROUTE(0, "mono", 1.0)    // pin 28  2'-1
 	MCFG_SOUND_ROUTE(1, "mono", 1.0)    // pin 29  4'-1
 	MCFG_SOUND_ROUTE(2, "mono", 1.0)    // pin 30  8'-1
@@ -1123,20 +1116,22 @@ static MACHINE_CONFIG_START( undoukai, fortyl_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(128,128+255, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(fortyl_state, screen_update_fortyl)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(40love)
-	MCFG_PALETTE_LENGTH(1024)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", 40love)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_INIT_OWNER(fortyl_state, fortyl)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, 2000000)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(fortyl_state, sound_control_2_w))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(fortyl_state, sound_control_3_w))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 
 	MCFG_SOUND_ADD("msm", MSM5232, 8000000/4)
-	MCFG_SOUND_CONFIG(msm5232_config)
+	MCFG_MSM5232_SET_CAPACITORS(1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6) /* 1.0 uF capacitors (verified on real PCB) */
 	MCFG_SOUND_ROUTE(0, "mono", 1.0)    // pin 28  2'-1
 	MCFG_SOUND_ROUTE(1, "mono", 1.0)    // pin 29  4'-1
 	MCFG_SOUND_ROUTE(2, "mono", 1.0)    // pin 30  8'-1

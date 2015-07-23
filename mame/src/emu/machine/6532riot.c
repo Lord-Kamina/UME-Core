@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
   RIOT 6532 emulation
@@ -34,7 +36,6 @@ enum
 
 
 
-
 /***************************************************************************
     INTERNAL FUNCTIONS
 ***************************************************************************/
@@ -50,7 +51,7 @@ void riot6532_device::update_irqstate()
 
 	if (m_irq != irq)
 	{
-		m_irq_func(irq);
+		m_irq_cb(irq);
 		m_irq = irq;
 	}
 }
@@ -112,17 +113,6 @@ UINT8 riot6532_device::get_timer()
 }
 
 
-
-/*-------------------------------------------------
-    timer_end_callback - callback to process the
-    timer
--------------------------------------------------*/
-
-TIMER_CALLBACK( riot6532_device::timer_end_callback )
-{
-	riot6532_device *via = reinterpret_cast<riot6532_device *>(ptr);
-	via->timer_end();
-}
 
 void riot6532_device::timer_end()
 {
@@ -213,7 +203,7 @@ void riot6532_device::reg_w(UINT8 offset, UINT8 data)
 	else
 	{
 		/* A1 selects the port */
-		riot6532_port *port = &m_port[(offset >> 1) & 1];
+		riot6532_port *port = &m_port[BIT(offset, 1)];
 
 		/* if A0 == 1, we are writing to the port's DDR */
 		if (offset & 1)
@@ -225,7 +215,7 @@ void riot6532_device::reg_w(UINT8 offset, UINT8 data)
 		else
 		{
 			port->m_out = data;
-			port->m_out_func(0, data);
+			(*port->m_out_cb)((offs_t)0, data);
 		}
 
 		/* writes to port A need to update the PA7 state */
@@ -293,7 +283,7 @@ UINT8 riot6532_device::reg_r(UINT8 offset, bool debugger_access)
 	else
 	{
 		/* A1 selects the port */
-		riot6532_port *port = &m_port[(offset >> 1) & 1];
+		riot6532_port *port = &m_port[BIT(offset, 1)];
 
 		/* if A0 == 1, we are reading the port's DDR */
 		if (offset & 1)
@@ -305,14 +295,14 @@ UINT8 riot6532_device::reg_r(UINT8 offset, bool debugger_access)
 		else
 		{
 			/* call the input callback if it exists */
-			if (!port->m_in_func.isnull())
+			if (!(*port->m_in_cb).isnull())
 			{
-				port->m_in = port->m_in_func(0);
+				port->m_in = (*port->m_in_cb)(0);
 
 				/* changes to port A need to update the PA7 state */
 				if (port == &m_port[0])
 				{
-					if ( ! debugger_access )
+					if (!debugger_access)
 					{
 						update_pa7_state();
 					}
@@ -397,38 +387,18 @@ UINT8 riot6532_device::portb_out_get()
 //-------------------------------------------------
 
 riot6532_device::riot6532_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, RIOT6532, "6532 (RIOT)", tag, owner, clock),
-		m_irq(CLEAR_LINE)
+	: device_t(mconfig, RIOT6532, "6532 RIOT", tag, owner, clock, "riot6532", __FILE__),
+		m_in_pa_cb(*this),
+		m_out_pa_cb(*this),
+		m_in_pb_cb(*this),
+		m_out_pb_cb(*this),
+		m_irq_cb(*this),
+		m_irq(CLEAR_LINE),
+		m_pa7dir(0),
+		m_pa7prev(0)
 {
+	memset(m_port, 0x00, sizeof(m_port));
 }
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void riot6532_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const riot6532_interface *intf = reinterpret_cast<const riot6532_interface *>(static_config());
-	if (intf != NULL)
-	{
-		*static_cast<riot6532_interface *>(this) = *intf;
-	}
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_in_a_cb, 0, sizeof(m_in_a_cb));
-		memset(&m_in_b_cb, 0, sizeof(m_in_b_cb));
-		memset(&m_out_a_cb, 0, sizeof(m_out_a_cb));
-		memset(&m_out_b_cb, 0, sizeof(m_out_b_cb));
-		memset(&m_irq_cb, 0, sizeof(m_irq_cb));
-	}
-}
-
 
 /*-------------------------------------------------
     device_start - device-specific startup
@@ -436,17 +406,19 @@ void riot6532_device::device_config_complete()
 
 void riot6532_device::device_start()
 {
-	/* configure the ports */
-	m_port[0].m_in_func.resolve(m_in_a_cb, *this);
-	m_port[0].m_out_func.resolve(m_out_a_cb, *this);
-	m_port[1].m_in_func.resolve(m_in_b_cb, *this);
-	m_port[1].m_out_func.resolve(m_out_b_cb, *this);
-
-	/* resolve irq func */
-	m_irq_func.resolve(m_irq_cb, *this);
+	/* resolve callbacks */
+	m_in_pa_cb.resolve();
+	m_port[0].m_in_cb = &m_in_pa_cb;
+	m_out_pa_cb.resolve_safe();
+	m_port[0].m_out_cb = &m_out_pa_cb;
+	m_in_pb_cb.resolve();
+	m_port[1].m_in_cb = &m_in_pb_cb;
+	m_out_pb_cb.resolve_safe();
+	m_port[1].m_out_cb = &m_out_pb_cb;
+	m_irq_cb.resolve_safe();
 
 	/* allocate timers */
-	m_timer = machine().scheduler().timer_alloc(FUNC(timer_end_callback), (void *)this);
+	m_timer = timer_alloc(TIMER_END_CB);
 
 	/* register for save states */
 	save_item(NAME(m_port[0].m_in));
@@ -496,4 +468,16 @@ void riot6532_device::device_reset()
 	m_timershift = 10;
 	m_timerstate = TIMER_COUNTING;
 	m_timer->adjust(attotime::from_ticks(256 << m_timershift, clock()));
+}
+
+void riot6532_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+{
+	switch (id)
+	{
+		case TIMER_END_CB:
+			timer_end();
+			break;
+		default:
+			assert_always(FALSE, "Unknown id in riot6532_device::device_timer");
+	}
 }

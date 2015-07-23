@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Atari Missile Command hardware
@@ -367,7 +369,9 @@ public:
 		m_track0_x(*this, "TRACK0_X"),
 		m_track0_y(*this, "TRACK0_Y"),
 		m_track1_x(*this, "TRACK1_X"),
-		m_track1_y(*this, "TRACK1_Y")
+		m_track1_y(*this, "TRACK1_Y"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette")
 	{ }
 
 	required_device<m6502_device> m_maincpu;
@@ -381,6 +385,8 @@ public:
 	required_ioport m_track0_y;
 	required_ioport m_track1_x;
 	required_ioport m_track1_y;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 
 	const UINT8 *m_mainrom;
 	const UINT8 *m_writeprom;
@@ -460,7 +466,7 @@ void missile_state::schedule_next_irq(int curv)
 		curv = ((curv + 32) & 0xff) & ~0x10;
 
 	/* next one at the start of this scanline */
-	m_irq_timer->adjust(machine().primary_screen->time_until_pos(v_to_scanline(curv)), curv);
+	m_irq_timer->adjust(m_screen->time_until_pos(v_to_scanline(curv)), curv);
 }
 
 
@@ -473,7 +479,7 @@ TIMER_CALLBACK_MEMBER(missile_state::clock_irq)
 	m_maincpu->set_input_line(0, m_irq_state ? ASSERT_LINE : CLEAR_LINE);
 
 	/* force an update while we're here */
-	machine().primary_screen->update_partial(v_to_scanline(curv));
+	m_screen->update_partial(v_to_scanline(curv));
 
 	/* find the next edge */
 	schedule_next_irq(curv);
@@ -482,7 +488,7 @@ TIMER_CALLBACK_MEMBER(missile_state::clock_irq)
 
 CUSTOM_INPUT_MEMBER(missile_state::get_vblank)
 {
-	int v = scanline_to_v(machine().primary_screen->vpos());
+	int v = scanline_to_v(m_screen->vpos());
 	return v < 24;
 }
 
@@ -506,7 +512,7 @@ TIMER_CALLBACK_MEMBER(missile_state::adjust_cpu_speed)
 
 	/* scanline for the next run */
 	curv ^= 224;
-	m_cpu_timer->adjust(machine().primary_screen->time_until_pos(v_to_scanline(curv)), curv);
+	m_cpu_timer->adjust(m_screen->time_until_pos(v_to_scanline(curv)), curv);
 }
 
 
@@ -519,7 +525,7 @@ void missile_state::machine_start()
 
 	/* create a timer to speed/slow the CPU */
 	m_cpu_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(missile_state::adjust_cpu_speed),this));
-	m_cpu_timer->adjust(machine().primary_screen->time_until_pos(v_to_scanline(0), 0));
+	m_cpu_timer->adjust(m_screen->time_until_pos(v_to_scanline(0), 0));
 
 	/* create a timer for IRQs and set up the first callback */
 	m_irq_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(missile_state::clock_irq),this));
@@ -733,7 +739,7 @@ WRITE8_MEMBER(missile_state::missile_w)
 
 	/* color RAM */
 	else if (offset >= 0x4b00 && offset < 0x4c00)
-		palette_set_color_rgb(machine(), offset & 7, pal1bit(~data >> 3), pal1bit(~data >> 2), pal1bit(~data >> 1));
+		m_palette->set_pen_color(offset & 7, pal1bit(~data >> 3), pal1bit(~data >> 2), pal1bit(~data >> 1));
 
 	/* watchdog */
 	else if (offset >= 0x4c00 && offset < 0x4d00)
@@ -998,21 +1004,6 @@ static INPUT_PORTS_START( suprmatk )
 INPUT_PORTS_END
 
 
-
-/*************************************
- *
- *  Sound interfaces
- *
- *************************************/
-
-static const pokey_interface pokey_config =
-{
-	{ DEVCB_NULL },
-	DEVCB_INPUT_PORT("R8")
-};
-
-
-
 /*************************************
  *
  *  Machine driver
@@ -1028,17 +1019,18 @@ static MACHINE_CONFIG_START( missile, missile_state )
 	MCFG_WATCHDOG_VBLANK_INIT(8)
 
 	/* video hardware */
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_PALETTE_ADD("palette", 8)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(PIXEL_CLOCK, HTOTAL, HBEND, HBSTART, VTOTAL, VBEND, VBSTART)
 	MCFG_SCREEN_UPDATE_DRIVER(missile_state, screen_update_missile)
+	MCFG_SCREEN_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_POKEY_ADD("pokey", MASTER_CLOCK/8)
-	MCFG_POKEY_CONFIG(pokey_config)
+	MCFG_SOUND_ADD("pokey", POKEY, MASTER_CLOCK/8)
+	MCFG_POKEY_ALLPOT_R_CB(IOPORT("R8"))
 	MCFG_POKEY_OUTPUT_RC(RES_K(10), CAP_U(0.1), 5.0)
 
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)

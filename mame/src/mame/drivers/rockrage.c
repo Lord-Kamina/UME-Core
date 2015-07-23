@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia
 /***************************************************************************
 
 Rock'n Rage (GX620) (c) 1986 Konami
 
-Driver by Manuel Abadia <manu@teleline.es>
+Driver by Manuel Abadia <emumanu+mame@gmail.com>
 
 GX620 PWB302109A
 |------------------------------------------------------|
@@ -51,22 +53,20 @@ Notes:
 #include "cpu/m6809/m6809.h"
 #include "cpu/m6809/hd6309.h"
 #include "sound/2151intf.h"
-#include "sound/vlm5030.h"
-#include "video/konicdev.h"
 #include "includes/rockrage.h"
 #include "includes/konamipt.h"
 
 
 INTERRUPT_GEN_MEMBER(rockrage_state::rockrage_interrupt)
 {
-	if (k007342_is_int_enabled(m_k007342))
+	if (m_k007342->is_int_enabled())
 		device.execute().set_input_line(HD6309_IRQ_LINE, HOLD_LINE);
 }
 
 WRITE8_MEMBER(rockrage_state::rockrage_bankswitch_w)
 {
 	/* bits 4-6 = bank number */
-	membank("bank1")->set_entry((data & 0x70) >> 4);
+	m_rombank->set_entry((data & 0x70) >> 4);
 
 	/* bits 0 & 1 = coin counters */
 	coin_counter_w(machine(), 0,data & 0x01);
@@ -83,24 +83,22 @@ WRITE8_MEMBER(rockrage_state::rockrage_sh_irqtrigger_w)
 
 READ8_MEMBER(rockrage_state::rockrage_VLM5030_busy_r)
 {
-	device_t *device = machine().device("vlm");
-	return (vlm5030_bsy(device) ? 1 : 0);
+	return (m_vlm->bsy() ? 1 : 0);
 }
 
 WRITE8_MEMBER(rockrage_state::rockrage_speech_w)
 {
-	device_t *device = machine().device("vlm");
 	/* bit2 = data bus enable */
-	vlm5030_rst(device, (data >> 1) & 0x01);
-	vlm5030_st(device, (data >> 0) & 0x01);
+	m_vlm->rst((data >> 1) & 0x01);
+	m_vlm->st((data >> 0) & 0x01);
 }
 
 static ADDRESS_MAP_START( rockrage_map, AS_PROGRAM, 8, rockrage_state )
-	AM_RANGE(0x0000, 0x1fff) AM_DEVREADWRITE_LEGACY("k007342", k007342_r, k007342_w)                    /* Color RAM + Video RAM */
-	AM_RANGE(0x2000, 0x21ff) AM_DEVREADWRITE_LEGACY("k007420", k007420_r, k007420_w)                    /* Sprite RAM */
-	AM_RANGE(0x2200, 0x23ff) AM_DEVREADWRITE_LEGACY("k007342", k007342_scroll_r, k007342_scroll_w)  /* Scroll RAM */
-	AM_RANGE(0x2400, 0x247f) AM_RAM AM_SHARE("paletteram")                      /* Palette */
-	AM_RANGE(0x2600, 0x2607) AM_DEVWRITE_LEGACY("k007342", k007342_vreg_w)                          /* Video Registers */
+	AM_RANGE(0x0000, 0x1fff) AM_DEVREADWRITE("k007342", k007342_device, read, write)                    /* Color RAM + Video RAM */
+	AM_RANGE(0x2000, 0x21ff) AM_DEVREADWRITE("k007420", k007420_device, read, write)                    /* Sprite RAM */
+	AM_RANGE(0x2200, 0x23ff) AM_DEVREADWRITE("k007342", k007342_device, scroll_r, scroll_w)  /* Scroll RAM */
+	AM_RANGE(0x2400, 0x247f) AM_RAM_DEVWRITE("palette", palette_device, write_indirect) AM_SHARE("palette")
+	AM_RANGE(0x2600, 0x2607) AM_DEVWRITE("k007342", k007342_device, vreg_w)                          /* Video Registers */
 	AM_RANGE(0x2e00, 0x2e00) AM_READ_PORT("SYSTEM")
 	AM_RANGE(0x2e01, 0x2e01) AM_READ_PORT("P1")
 	AM_RANGE(0x2e02, 0x2e02) AM_READ_PORT("P2")
@@ -111,12 +109,12 @@ static ADDRESS_MAP_START( rockrage_map, AS_PROGRAM, 8, rockrage_state )
 	AM_RANGE(0x2f00, 0x2f00) AM_WRITE(rockrage_vreg_w)                          /* ??? */
 	AM_RANGE(0x2f40, 0x2f40) AM_WRITE(rockrage_bankswitch_w)                    /* bankswitch control */
 	AM_RANGE(0x4000, 0x5fff) AM_RAM                                             /* RAM */
-	AM_RANGE(0x6000, 0x7fff) AM_ROMBANK("bank1")                                        /* banked ROM */
+	AM_RANGE(0x6000, 0x7fff) AM_ROMBANK("rombank")                              /* banked ROM */
 	AM_RANGE(0x8000, 0xffff) AM_ROM                                             /* ROM */
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( rockrage_sound_map, AS_PROGRAM, 8, rockrage_state )
-	AM_RANGE(0x2000, 0x2000) AM_DEVWRITE_LEGACY("vlm", vlm5030_data_w)              /* VLM5030 */
+	AM_RANGE(0x2000, 0x2000) AM_DEVWRITE("vlm", vlm5030_device, data_w)              /* VLM5030 */
 	AM_RANGE(0x3000, 0x3000) AM_READ(rockrage_VLM5030_busy_r)           /* VLM5030 */
 	AM_RANGE(0x4000, 0x4000) AM_WRITE(rockrage_speech_w)                /* VLM5030 */
 	AM_RANGE(0x5000, 0x5000) AM_READ(soundlatch_byte_r)                             /* soundlatch_byte_r */
@@ -193,13 +191,13 @@ INPUT_PORTS_END
 
 static const gfx_layout charlayout =
 {
-	8,8,            /* 8*8 characters */
-	0x20000/16,     /* 8192 characters */
-	4,              /* 4 bpp */
+	8,8,            /* 8 x 8 characters */
+	0x40000/32,     /* 8192 characters */
+	4,              /* 4bpp */
 	{ 0, 1, 2, 3 }, /* the four bitplanes are packed in one nibble */
-	{ 0*4, 1*4, 0x20000*8+0*4, 0x20000*8+1*4, 2*4, 3*4, 0x20000*8+2*4, 0x20000*8+3*4 },
-	{ 0*16, 1*16, 2*16, 3*16, 4*16, 5*16, 6*16, 7*16 },
-	16*8        /* every char takes 16 consecutive bytes */
+	{ 2*4, 3*4, 0*4, 1*4, 6*4, 7*4, 4*4, 5*4 },
+	{ 0*32, 1*32, 2*32, 3*32, 4*32, 5*32, 6*32, 7*32 },
+	32*8            /* every character takes 32 consecutive bytes */
 };
 
 static const gfx_layout spritelayout =
@@ -214,8 +212,8 @@ static const gfx_layout spritelayout =
 };
 
 static GFXDECODE_START( rockrage )
-	GFXDECODE_ENTRY( "gfx1", 0, charlayout,   64, 32 )  /* colors 00..31, but using 2 lookup tables */
-	GFXDECODE_ENTRY( "gfx2", 0, spritelayout, 32,  1 )  /* colors 32..63 */
+	GFXDECODE_ENTRY( "gfx1", 0, charlayout,     0, 32 )  /* colors 00..31, using 2 lookup tables */
+	GFXDECODE_ENTRY( "gfx2", 0, spritelayout, 512, 16 )  /* colors 32..47, using lookup table */
 GFXDECODE_END
 
 /***************************************************************************
@@ -224,25 +222,13 @@ GFXDECODE_END
 
 ***************************************************************************/
 
-static const k007342_interface rockrage_k007342_intf =
-{
-	0,  rockrage_tile_callback
-};
-
-static const k007420_interface rockrage_k007420_intf =
-{
-	0x3ff, rockrage_sprite_callback
-};
-
-
 void rockrage_state::machine_start()
 {
 	UINT8 *ROM = memregion("maincpu")->base();
 
-	membank("bank1")->configure_entries(0, 8, &ROM[0x10000], 0x2000);
+	m_rombank->configure_entries(0, 8, &ROM[0x10000], 0x2000);
 
 	save_item(NAME(m_vreg));
-	save_item(NAME(m_layer_colorbase));
 }
 
 void rockrage_state::machine_reset()
@@ -270,13 +256,24 @@ static MACHINE_CONFIG_START( rockrage, rockrage_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(rockrage_state, screen_update_rockrage)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_K007342_ADD("k007342", rockrage_k007342_intf)
-	MCFG_K007420_ADD("k007420", rockrage_k007420_intf)
+	MCFG_K007342_ADD("k007342")
+	MCFG_K007342_GFXNUM(0)
+	MCFG_K007342_CALLBACK_OWNER(rockrage_state, rockrage_tile_callback)
+	MCFG_K007342_GFXDECODE("gfxdecode")
 
-	MCFG_GFXDECODE(rockrage)
-	MCFG_PALETTE_LENGTH(64 + 2*16*16)
+	MCFG_K007420_ADD("k007420")
+	MCFG_K007420_BANK_LIMIT(0x3ff)
+	MCFG_K007420_CALLBACK_OWNER(rockrage_state, rockrage_sprite_callback)
+	MCFG_K007420_PALETTE("palette")
 
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rockrage)
+	MCFG_PALETTE_ADD("palette", 16*16*3)
+	MCFG_PALETTE_INDIRECT_ENTRIES(64)
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
+	MCFG_PALETTE_ENDIANNESS(ENDIANNESS_LITTLE)
+	MCFG_PALETTE_INIT_OWNER(rockrage_state, rockrage)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -306,18 +303,18 @@ ROM_START( rockrage )
 	ROM_LOAD( "620k03.11c", 0x08000, 0x08000, CRC(9fbefe82) SHA1(ab42b7e519a0dd08f2249dad0819edea0976f39a) )
 
 	ROM_REGION( 0x040000, "gfx1", 0 )
-	ROM_LOAD( "620k06.rom", 0x000000, 0x20000, CRC(7fa2c57c) SHA1(8c5d85c31dc26cb59a012ebb1ea195c3db80cda8)  )  /* tiles */
-	ROM_LOAD( "620k05.rom", 0x020000, 0x20000, CRC(145d387c) SHA1(4fb0c54f9a218d512d8aec09ef995494a06912d6)  ) /* Both World & Japan use the same "K" code for these??? */
+	ROM_LOAD16_BYTE( "620k05.rom", 0x00000, 0x20000, CRC(145d387c) SHA1(4fb0c54f9a218d512d8aec09ef995494a06912d6)  )  /* tiles */
+	ROM_LOAD16_BYTE( "620k06.rom", 0x00001, 0x20000, CRC(7fa2c57c) SHA1(8c5d85c31dc26cb59a012ebb1ea195c3db80cda8)  ) /* Both World & Japan use the same "K" code for these??? */
 
 	ROM_REGION( 0x040000, "gfx2", 0 )
 	ROM_LOAD( "620k11.rom", 0x000000, 0x20000, CRC(70449239) SHA1(07653ea3bfe0063c9d2b2102ac52a1b50fc2971e) )   /* sprites */
 	ROM_LOAD( "620l10.8g",  0x020000, 0x20000, CRC(06d108e0) SHA1(cae8c5f2fc4e84bc7adbf27f71a18a74968c4296) ) /* One "K" & one "L" code version??? */
 
 	ROM_REGION( 0x0300, "proms", 0 )
-	ROM_LOAD( "620k09.11g", 0x00000, 0x00100, CRC(9f0e0608) SHA1(c95bdb370e4a91f27afbd5ff3b39b2e0ad87da73) )    /* layer 0 lookup table */
+	ROM_LOAD( "620k07.13g", 0x00000, 0x00100, CRC(b6135ee0) SHA1(248a978987cff86c2bbad10ef332f63a6abd5bee) )    /* layer 0 lookup table */
 	ROM_LOAD( "620k08.12g", 0x00100, 0x00100, CRC(b499800c) SHA1(46fa4e071ebceed12027de109be1e16dde5e846e) )    /* layer 1 lookup table */
-	ROM_LOAD( "620k07.13g", 0x00200, 0x00100, CRC(b6135ee0) SHA1(248a978987cff86c2bbad10ef332f63a6abd5bee) )    /* sprite lookup table, but its not used */
-															/* because it's always 0 1 2 ... f */
+	ROM_LOAD( "620k09.11g", 0x00200, 0x00100, CRC(9f0e0608) SHA1(c95bdb370e4a91f27afbd5ff3b39b2e0ad87da73) )    /* sprite lookup table */
+
 	ROM_REGION( 0x08000, "vlm", 0 ) /* VLM3050 data */
 	ROM_LOAD( "620k04.6e", 0x00000, 0x08000, CRC(8be969f3) SHA1(9856b4c13fac77b645aed67a08cb4965b4966492) )
 ROM_END
@@ -331,10 +328,10 @@ ROM_START( rockragea )
 	ROM_LOAD( "620k03.11c", 0x08000, 0x08000, CRC(9fbefe82) SHA1(ab42b7e519a0dd08f2249dad0819edea0976f39a) ) /* Same rom but labeled as ver "G" */
 
 	ROM_REGION( 0x040000, "gfx1", 0 )
-	ROM_LOAD( "620d06a.15g", 0x000000, 0x10000, CRC(8cc05d4b) SHA1(0d6fef98bdc4d299229de4e0044241aedee83b85) )  /* tiles */
-	ROM_LOAD( "620d06b.15f", 0x010000, 0x10000, CRC(3892d41d) SHA1(c49f2e61f24a59be4e59e2f3c60e731b8a05ddd3) )
-	ROM_LOAD( "620d05a.16g", 0x020000, 0x10000, CRC(4d53fde9) SHA1(941fb6c94922727516945330b4b738aa052f7734) )
-	ROM_LOAD( "620d05b.16f", 0x030000, 0x10000, CRC(69f4599f) SHA1(664581874d74ed7bf59bde6730799e15f4e0144d) )
+	ROM_LOAD16_BYTE( "620d05a.16g", 0x00000, 0x10000, CRC(4d53fde9) SHA1(941fb6c94922727516945330b4b738aa052f7734) )  /* tiles */
+	ROM_LOAD16_BYTE( "620d06a.15g", 0x00001, 0x10000, CRC(8cc05d4b) SHA1(0d6fef98bdc4d299229de4e0044241aedee83b85) )
+	ROM_LOAD16_BYTE( "620d05b.16f", 0x20000, 0x10000, CRC(69f4599f) SHA1(664581874d74ed7bf59bde6730799e15f4e0144d) )
+	ROM_LOAD16_BYTE( "620d06b.15f", 0x20001, 0x10000, CRC(3892d41d) SHA1(c49f2e61f24a59be4e59e2f3c60e731b8a05ddd3) )
 
 	ROM_REGION( 0x040000, "gfx2", 0 )
 	ROM_LOAD( "620g11a.7g", 0x000000, 0x10000, CRC(0ef40c2c) SHA1(2c0b7e611333a072ebcef60c1985211d5936bf66) )   /* sprites */
@@ -343,10 +340,10 @@ ROM_START( rockragea )
 	ROM_LOAD( "620g10b.8f", 0x030000, 0x10000, CRC(1618854a) SHA1(0afb34a9ed97f13c1910acd7767cb8546ea7e6cd) )
 
 	ROM_REGION( 0x0300, "proms", 0 )
-	ROM_LOAD( "620k09.11g", 0x00000, 0x00100, CRC(9f0e0608) SHA1(c95bdb370e4a91f27afbd5ff3b39b2e0ad87da73) )    /* layer 0 lookup table */
+	ROM_LOAD( "620k07.13g", 0x00000, 0x00100, CRC(b6135ee0) SHA1(248a978987cff86c2bbad10ef332f63a6abd5bee) )    /* layer 0 lookup table */
 	ROM_LOAD( "620k08.12g", 0x00100, 0x00100, CRC(b499800c) SHA1(46fa4e071ebceed12027de109be1e16dde5e846e) )    /* layer 1 lookup table */
-	ROM_LOAD( "620k07.13g", 0x00200, 0x00100, CRC(b6135ee0) SHA1(248a978987cff86c2bbad10ef332f63a6abd5bee) )    /* sprite lookup table, but its not used */
-															/* because it's always 0 1 2 ... f */
+	ROM_LOAD( "620k09.11g", 0x00200, 0x00100, CRC(9f0e0608) SHA1(c95bdb370e4a91f27afbd5ff3b39b2e0ad87da73) )    /* sprite lookup table */
+
 	ROM_REGION( 0x08000, "vlm", 0 ) /* VLM3050 data */
 	ROM_LOAD( "620k04.6e", 0x00000, 0x08000, CRC(8be969f3) SHA1(9856b4c13fac77b645aed67a08cb4965b4966492) ) /* Same rom but labeled as ver "G" */
 ROM_END
@@ -360,18 +357,18 @@ ROM_START( rockragej )
 	ROM_LOAD( "620k03.11c", 0x08000, 0x08000, CRC(9fbefe82) SHA1(ab42b7e519a0dd08f2249dad0819edea0976f39a) )
 
 	ROM_REGION( 0x040000, "gfx1", 0 )
-	ROM_LOAD( "620k06.15g", 0x000000, 0x20000, CRC(c0e2b35c) SHA1(fb37a151188f27f883fed5fdfb0094c3efa9470d) )   /* tiles */
-	ROM_LOAD( "620k05.16g", 0x020000, 0x20000, CRC(ca9d9346) SHA1(fee8d98def802f312c6cd0ec751c67aa18acfacd) ) /* Both World & Japan use the same "K" code for these??? */
+	ROM_LOAD16_BYTE( "620k05.16g", 0x00000, 0x20000, CRC(ca9d9346) SHA1(fee8d98def802f312c6cd0ec751c67aa18acfacd) )   /* tiles */
+	ROM_LOAD16_BYTE( "620k06.15g", 0x00001, 0x20000, CRC(c0e2b35c) SHA1(fb37a151188f27f883fed5fdfb0094c3efa9470d) ) /* Both World & Japan use the same "K" code for these??? */
 
 	ROM_REGION( 0x040000, "gfx2", 0 )
 	ROM_LOAD( "620k11.7g",  0x000000, 0x20000, CRC(7430f6e9) SHA1(5d488c7b7b0eb4e502b3e566ac102cd3267e8568) )   /* sprites */
 	ROM_LOAD( "620k10.8g",  0x020000, 0x20000, CRC(0d1a95ab) SHA1(be565424f17af31dcd07004c6be03bbb00aef514) )
 
 	ROM_REGION( 0x0300, "proms", 0 )
-	ROM_LOAD( "620k09.11g", 0x00000, 0x00100, CRC(9f0e0608) SHA1(c95bdb370e4a91f27afbd5ff3b39b2e0ad87da73) )    /* layer 0 lookup table */
+	ROM_LOAD( "620k07.13g", 0x00000, 0x00100, CRC(b6135ee0) SHA1(248a978987cff86c2bbad10ef332f63a6abd5bee) )    /* layer 0 lookup table */
 	ROM_LOAD( "620k08.12g", 0x00100, 0x00100, CRC(b499800c) SHA1(46fa4e071ebceed12027de109be1e16dde5e846e) )    /* layer 1 lookup table */
-	ROM_LOAD( "620k07.13g", 0x00200, 0x00100, CRC(b6135ee0) SHA1(248a978987cff86c2bbad10ef332f63a6abd5bee) )    /* sprite lookup table, but its not used */
-															/* because it's always 0 1 2 ... f */
+	ROM_LOAD( "620k09.11g", 0x00200, 0x00100, CRC(9f0e0608) SHA1(c95bdb370e4a91f27afbd5ff3b39b2e0ad87da73) )    /* sprite lookup table */
+
 	ROM_REGION( 0x08000, "vlm", 0 ) /* VLM3050 data */
 	ROM_LOAD( "620k04.6e", 0x00000, 0x08000, CRC(8be969f3) SHA1(9856b4c13fac77b645aed67a08cb4965b4966492) )
 ROM_END

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #ifndef __JVSDEV_H__
 #define __JVSDEV_H__
 
@@ -11,7 +13,7 @@ class jvs_host;
 class jvs_device : public device_t
 {
 public:
-	jvs_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	jvs_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 	static void static_set_jvs_host_tag(device_t &device, const char *jvs_host_tag);
 
 	void chain(jvs_device *dev);

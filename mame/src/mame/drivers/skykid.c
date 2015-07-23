@@ -1,9 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia
 /***************************************************************************
 
 Dragon Buster (c) 1984 Namco
 Sky Kid       (c) 1985 Namco
 
-Driver by Manuel Abadia <manu@teleline.es>
+Driver by Manuel Abadia <emumanu+mame@gmail.com>
 
 Notes:
 -----
@@ -105,7 +107,7 @@ static ADDRESS_MAP_START( skykid_map, AS_PROGRAM, 8, skykid_state )
 	AM_RANGE(0x4800, 0x5fff) AM_RAM AM_SHARE("spriteram")   /* RAM + Sprite RAM */
 	AM_RANGE(0x6000, 0x60ff) AM_WRITE(skykid_scroll_y_w)        /* Y scroll register map */
 	AM_RANGE(0x6200, 0x63ff) AM_WRITE(skykid_scroll_x_w)        /* X scroll register map */
-	AM_RANGE(0x6800, 0x6bff) AM_DEVREADWRITE_LEGACY("namco", namcos1_cus30_r, namcos1_cus30_w) /* PSG device, shared RAM */
+	AM_RANGE(0x6800, 0x6bff) AM_DEVREADWRITE("namco", namco_cus30_device, namcos1_cus30_r, namcos1_cus30_w) /* PSG device, shared RAM */
 	AM_RANGE(0x7000, 0x7fff) AM_WRITE(skykid_irq_1_ctrl_w)      /* IRQ control */
 	AM_RANGE(0x7800, 0x7fff) AM_READ(watchdog_reset_r)          /* watchdog reset */
 	AM_RANGE(0x8000, 0xffff) AM_ROM                 /* ROM */
@@ -115,9 +117,9 @@ static ADDRESS_MAP_START( skykid_map, AS_PROGRAM, 8, skykid_state )
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( mcu_map, AS_PROGRAM, 8, skykid_state )
-	AM_RANGE(0x0000, 0x001f) AM_READWRITE_LEGACY(m6801_io_r, m6801_io_w)
+	AM_RANGE(0x0000, 0x001f) AM_DEVREADWRITE("mcu", hd63701_cpu_device, m6801_io_r, m6801_io_w)
 	AM_RANGE(0x0080, 0x00ff) AM_RAM
-	AM_RANGE(0x1000, 0x13ff) AM_DEVREADWRITE_LEGACY("namco", namcos1_cus30_r, namcos1_cus30_w) /* PSG device, shared RAM */
+	AM_RANGE(0x1000, 0x13ff) AM_DEVREADWRITE("namco", namco_cus30_device, namcos1_cus30_r, namcos1_cus30_w) /* PSG device, shared RAM */
 	AM_RANGE(0x2000, 0x3fff) AM_WRITE(watchdog_reset_w)     /* watchdog? */
 	AM_RANGE(0x4000, 0x7fff) AM_WRITE(skykid_irq_2_ctrl_w)
 	AM_RANGE(0x8000, 0xbfff) AM_ROM
@@ -415,13 +417,6 @@ static GFXDECODE_START( skykid )
 GFXDECODE_END
 
 
-
-static const namco_interface namco_config =
-{
-	8,                  /* number of voices */
-	0                   /* stereo */
-};
-
 INTERRUPT_GEN_MEMBER(skykid_state::main_vblank_irq)
 {
 	if(m_main_irq_mask)
@@ -458,16 +453,18 @@ static MACHINE_CONFIG_START( skykid, skykid_state )
 	MCFG_SCREEN_SIZE(36*8, 28*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 36*8-1, 0*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(skykid_state, screen_update_skykid)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(skykid)
-	MCFG_PALETTE_LENGTH(64*4+128*4+64*8)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", skykid)
+	MCFG_PALETTE_ADD("palette", 64*4+128*4+64*8)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256)
+	MCFG_PALETTE_INIT_OWNER(skykid_state, skykid)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("namco", NAMCO_CUS30, 49152000/2048)
-	MCFG_SOUND_CONFIG(namco_config)
+	MCFG_NAMCO_AUDIO_VOICES(8)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 

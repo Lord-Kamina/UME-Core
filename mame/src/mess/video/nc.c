@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Wilbert Pol, Kevin Thacker
 /***************************************************************************
 
   nc.c
@@ -18,26 +20,28 @@ void nc_state::video_start()
 {
 }
 
+#if 0
 /* two colours */
 static const unsigned short nc_colour_table[NC_NUM_COLOURS] =
 {
 	0, 1,2,3
 };
+#endif
 
 /* black/white */
 static const rgb_t nc_palette[NC_NUM_COLOURS] =
 {
-	MAKE_RGB(0x060, 0x060, 0x060),
-	MAKE_RGB(0x000, 0x000, 0x000),
-	MAKE_RGB(0x080, 0x0a0, 0x060),
-	MAKE_RGB(0x000, 0x000, 0x000)
+	rgb_t(0x060, 0x060, 0x060),
+	rgb_t(0x000, 0x000, 0x000),
+	rgb_t(0x080, 0x0a0, 0x060),
+	rgb_t(0x000, 0x000, 0x000)
 };
 
 
 /* Initialise the palette */
-void nc_state::palette_init()
+PALETTE_INIT_MEMBER(nc_state, nc)
 {
-	palette_set_colors(machine(), 0, nc_palette, ARRAY_LENGTH(nc_palette));
+	palette.set_pen_colors(0, nc_palette, ARRAY_LENGTH(nc_palette));
 }
 
 

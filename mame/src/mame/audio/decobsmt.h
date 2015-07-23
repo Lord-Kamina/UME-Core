@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 #pragma once
 
 #ifndef __DECOBSMT_H__
@@ -22,9 +24,6 @@ public:
 		// construction/destruction
 		decobsmt_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
-		// optional information overrides
-		virtual machine_config_constructor device_mconfig_additions() const;
-
 		DECLARE_WRITE8_MEMBER(bsmt_reset_w);
 		DECLARE_READ8_MEMBER(bsmt_status_r);
 		DECLARE_WRITE8_MEMBER(bsmt0_w);
@@ -34,6 +33,8 @@ public:
 
 		DECLARE_WRITE_LINE_MEMBER(bsmt_reset_line);
 
+		INTERRUPT_GEN_MEMBER(decobsmt_firq_interrupt);
+
 		required_device<cpu_device> m_ourcpu;
 		required_device<bsmt2000_device> m_bsmt;
 
@@ -41,6 +42,7 @@ protected:
 		// device-level overrides
 		virtual void device_start();
 		virtual void device_reset();
+		virtual machine_config_constructor device_mconfig_additions() const;
 
 private:
 		UINT8 m_bsmt_latch;

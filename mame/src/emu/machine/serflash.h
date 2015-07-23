@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Luca Elia
 /* Serial Flash */
 
 #pragma once
@@ -86,7 +88,7 @@ protected:
 	UINT16 m_flash_page_index;
 
 
-	UINT8* m_flashwritemap;
+	dynamic_buffer m_flashwritemap;
 
 	UINT8 m_last_flash_cmd;
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Tim Schuerewegen
 /*
 
     Atmel Serial DataFlash
@@ -44,27 +46,29 @@ const device_type AT45DB161 = &device_creator<at45db161_device>;
 //-------------------------------------------------
 
 at45db041_device::at45db041_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, AT45DB041, "AT45DB041", tag, owner, clock),
-	device_nvram_interface(mconfig, *this)
+	: device_t(mconfig, AT45DB041, "AT45DB041", tag, owner, clock, "at45db041", __FILE__),
+	device_nvram_interface(mconfig, *this),
+	write_so(*this)
 {
 }
 
 
-at45db041_device::at45db041_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, type, name, tag, owner, clock),
-	device_nvram_interface(mconfig, *this)
+at45db041_device::at45db041_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source)
+	: device_t(mconfig, type, name, tag, owner, clock, shortname, source),
+	device_nvram_interface(mconfig, *this),
+	write_so(*this)
 {
 }
 
 
 at45db081_device::at45db081_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: at45db041_device(mconfig, AT45DB081, "AT45DB081", tag, owner, clock)
+	: at45db041_device(mconfig, AT45DB081, "AT45DB081", tag, owner, clock, "at45db081", __FILE__)
 {
 }
 
 
 at45db161_device::at45db161_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: at45db041_device(mconfig, AT45DB161, "AT45DB161", tag, owner, clock)
+	: at45db041_device(mconfig, AT45DB161, "AT45DB161", tag, owner, clock, "at45db161", __FILE__)
 {
 }
 
@@ -76,12 +80,20 @@ at45db161_device::at45db161_device(const machine_config &mconfig, const char *ta
 void at45db041_device::device_start()
 {
 	m_size = num_pages() * page_size();
-	m_data = auto_alloc_array(machine(), UINT8, m_size);
-	m_buffer1 = auto_alloc_array(machine(), UINT8, page_size());
-	//m_buffer2 = auto_alloc_array(machine(), UINT8, page_size());
+	m_data.resize(m_size);
+	m_buffer1.resize(page_size());
+	//m_buffer2.resize(page_size());
+
+	// pins
+	m_pin.cs    = 0;
+	m_pin.sck   = 0;
+	m_pin.si    = 0;
+	m_pin.wp    = 0;
+	m_pin.reset = 0;
+	m_pin.busy  = 0;
 
 	// data
-	save_pointer(NAME(m_data), m_size);
+	save_item(NAME(m_data));
 	// pins
 	save_item(NAME(m_pin.cs));
 	save_item(NAME(m_pin.sck));
@@ -90,6 +102,8 @@ void at45db041_device::device_start()
 	save_item(NAME(m_pin.wp));
 	save_item(NAME(m_pin.reset));
 	save_item(NAME(m_pin.busy));
+
+	write_so.resolve_safe();
 }
 
 
@@ -111,13 +125,7 @@ void at45db041_device::device_reset()
 	m_io.size = 0;
 	m_io.pos  = 0;
 	// pins
-	m_pin.cs    = 0;
-	m_pin.sck   = 0;
-	m_pin.si    = 0;
-	m_pin.so    = 0;
-	m_pin.wp    = 0;
-	m_pin.reset = 0;
-	m_pin.busy  = 0;
+	m_pin.so  = 0;
 	// output
 	m_so_byte = 0;
 	m_so_bits = 0;
@@ -134,7 +142,7 @@ void at45db041_device::device_reset()
 
 void at45db041_device::nvram_default()
 {
-	memset(m_data, 0xff, m_size);
+	memset(&m_data[0], 0xff, m_data.size());
 
 	if (region() != NULL)
 	{
@@ -142,7 +150,7 @@ void at45db041_device::nvram_default()
 		if (bytes > m_size)
 			bytes = m_size;
 
-		memcpy(m_data, region()->base(), bytes);
+		memcpy(&m_data[0], region()->base(), bytes);
 	}
 }
 
@@ -153,7 +161,7 @@ void at45db041_device::nvram_default()
 
 void at45db041_device::nvram_read(emu_file &file)
 {
-	file.read(m_data, m_size);
+	file.read(&m_data[0], m_size);
 }
 
 //-------------------------------------------------
@@ -163,7 +171,7 @@ void at45db041_device::nvram_read(emu_file &file)
 
 void at45db041_device::nvram_write(emu_file &file)
 {
-	file.write(m_data, m_size);
+	file.write(&m_data[0], m_size);
 }
 
 UINT8 at45db041_device::read_byte()
@@ -249,7 +257,7 @@ void at45db041_device::write_byte(UINT8 data)
 					UINT8 comp;
 					page = flash_get_page_addr();
 					_logerror( 1, ("at45dbxx opcode %02X - main memory page to buffer 1 compare [%04X]\n", opcode, page));
-					comp = memcmp( m_data + page * page_size(), m_buffer1, page_size()) == 0 ? 0 : 1;
+					comp = memcmp( &m_data[page * page_size()], &m_buffer1[0], page_size()) == 0 ? 0 : 1;
 					if (comp) m_status |= 0x40; else m_status &= ~0x40;
 					_logerror( 1, ("at45dbxx page compare %s\n", comp ? "failure" : "success"));
 					m_mode = FLASH_MODE_SI;
@@ -267,7 +275,7 @@ void at45db041_device::write_byte(UINT8 data)
 					page = flash_get_page_addr();
 					byte = flash_get_byte_addr();
 					_logerror( 1, ("at45dbxx opcode %02X - main memory page read [%04X/%04X]\n", opcode, page, byte));
-					flash_set_io(m_data + page * page_size(), page_size(), byte);
+					flash_set_io(&m_data[page * page_size()], page_size(), byte);
 					m_mode = FLASH_MODE_SO;
 					m_cmd.size = 8;
 				}
@@ -283,8 +291,8 @@ void at45db041_device::write_byte(UINT8 data)
 					page = flash_get_page_addr();
 					byte = flash_get_byte_addr();
 					_logerror( 1, ("at45dbxx opcode %02X - main memory page program through buffer 1 [%04X/%04X]\n",opcode, page, byte));
-					flash_set_io(m_buffer1, page_size(), byte);
-					memset( m_buffer1, 0xFF, page_size());
+					flash_set_io(&m_buffer1[0], page_size(), byte);
+					memset(&m_buffer1[0], 0xff, m_buffer1.size());
 					m_mode = FLASH_MODE_SI;
 					m_cmd.size = 8;
 				}
@@ -336,7 +344,7 @@ WRITE_LINE_MEMBER(at45db041_device::cs_w)
 			page = flash_get_page_addr();
 			byte = flash_get_byte_addr();
 			_logerror( 1, ("at45dbxx - program data stored in buffer 1 into selected page in main memory [%04X/%04X]\n", page, byte));
-			memcpy( m_data + page * page_size(), m_buffer1, page_size());
+			memcpy( &m_data[page * page_size()], &m_buffer1[0], page_size());
 		}
 		// reset
 		at45db041_device::device_reset();
@@ -358,6 +366,13 @@ WRITE_LINE_MEMBER(at45db041_device::sck_w)
 			m_so_bits = 0;
 			m_so_byte = read_byte();
 		}
+		// output (part 2)
+		m_pin.so = (m_so_byte >> m_so_bits) & 1;
+		write_so(m_pin.so);
+		m_so_bits++;
+	}
+	else
+	{
 		// input
 		if (m_pin.si) m_si_byte = m_si_byte | (1 << m_si_bits);
 		m_si_bits++;
@@ -367,9 +382,6 @@ WRITE_LINE_MEMBER(at45db041_device::sck_w)
 			write_byte(m_si_byte);
 			m_si_byte = 0;
 		}
-		// output (part 2)
-		m_pin.so = (m_so_byte >> m_so_bits) & 1;
-		m_so_bits++;
 	}
 	// save sck
 	m_pin.sck = state;

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
   aquarius.c
@@ -9,27 +11,6 @@
 #include "emu.h"
 #include "includes/aquarius.h"
 
-
-
-static const rgb_t aquarius_colors[] =
-{
-	RGB_BLACK,                  /* Black */
-	MAKE_RGB(0xff, 0x00, 0x00), /* Red */
-	MAKE_RGB(0x00, 0xff, 0x00), /* Green */
-	MAKE_RGB(0xff, 0xff, 0x00), /* Yellow */
-	MAKE_RGB(0x00, 0x00, 0xff), /* Blue */
-	MAKE_RGB(0x7f, 0x00, 0x7f), /* Violet */
-	MAKE_RGB(0x7f, 0xff, 0xff), /* Light Blue-Green */
-	RGB_WHITE,                  /* White */
-	MAKE_RGB(0xc0, 0xc0, 0xc0), /* Light Gray */
-	MAKE_RGB(0x00, 0xff, 0xff), /* Blue-Green */
-	MAKE_RGB(0xff, 0x00, 0xff), /* Magenta */
-	MAKE_RGB(0x00, 0x00, 0x7f), /* Dark Blue */
-	MAKE_RGB(0xff, 0xff, 0x7f), /* Light Yellow */
-	MAKE_RGB(0x7f, 0xff, 0x7f), /* Light Green */
-	MAKE_RGB(0xff, 0x7f, 0x00), /* Orange */
-	MAKE_RGB(0x7f, 0x7f, 0x7f)  /* Dark Gray */
-};
 
 static const unsigned short aquarius_palette[] =
 {
@@ -51,17 +32,15 @@ static const unsigned short aquarius_palette[] =
 	0,15, 1,15, 2,15, 3,15, 4,15, 5,15, 6,15, 7,15, 8,15, 9,15,10,15,11,15,12,15,13,15,14,15,15,15,
 };
 
-void aquarius_state::palette_init()
+PALETTE_INIT_MEMBER(aquarius_state, aquarius)
 {
 	int i;
 
-	machine().colortable = colortable_alloc(machine(), 16);
-
 	for (i = 0; i < 16; i++)
-		colortable_palette_set_color(machine().colortable, i, aquarius_colors[i]);
+		m_palette->set_indirect_color(i, m_tea1002->color(i));
 
 	for (i = 0; i < 512; i++)
-		colortable_entry_set_value(machine().colortable, i, aquarius_palette[i]);
+		m_palette->set_pen_indirect(i, aquarius_palette[i]);
 }
 
 WRITE8_MEMBER(aquarius_state::aquarius_videoram_w)
@@ -90,12 +69,12 @@ TILE_GET_INFO_MEMBER(aquarius_state::aquarius_gettileinfo)
 
 void aquarius_state::video_start()
 {
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(aquarius_state::aquarius_gettileinfo),this), TILEMAP_SCAN_ROWS, 8, 8, 40, 25);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(aquarius_state::aquarius_gettileinfo),this), TILEMAP_SCAN_ROWS, 8, 8, 40, 25);
 }
 
 UINT32 aquarius_state::screen_update_aquarius(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }

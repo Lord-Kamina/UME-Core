@@ -1,12 +1,15 @@
+// license:???
+// copyright-holders:David Graves, Jarek Burczynski
 /*************************************************************************
 
     Darius
 
 *************************************************************************/
 
-#include "sound/flt_vol.h"
 #include "audio/taitosnd.h"
+#include "sound/flt_vol.h"
 #include "sound/msm5205.h"
+#include "video/pc080sn.h"
 
 #define DARIUS_VOL_MAX    (3*2 + 2)
 #define DARIUS_PAN_MAX    (2 + 2 + 1)   /* FM 2port + PSG 2port + DA 1port */
@@ -42,7 +45,9 @@ public:
 		m_filter1_3l(*this, "filter1.3l"),
 		m_filter1_3r(*this, "filter1.3r"),
 		m_msm5205_l(*this, "msm5205.l"),
-		m_msm5205_r(*this, "msm5205.r") { }
+		m_msm5205_r(*this, "msm5205.r"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_spriteram;
@@ -54,7 +59,6 @@ public:
 	/* misc */
 	UINT16     m_cpua_ctrl;
 	UINT16     m_coin_word;
-	INT32      m_banknum;
 	UINT8      m_adpcm_command;
 	UINT8      m_nmi_enable;
 	UINT32     m_def_vol[0x10];
@@ -88,6 +92,9 @@ public:
 	required_device<filter_volume_device> m_filter1_3r;
 	required_device<filter_volume_device> m_msm5205_l;
 	required_device<filter_volume_device> m_msm5205_r;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	DECLARE_WRITE16_MEMBER(cpua_ctrl_w);
 	DECLARE_WRITE16_MEMBER(darius_watchdog_w);
 	DECLARE_READ16_MEMBER(darius_ioc_r);
@@ -111,7 +118,6 @@ public:
 	DECLARE_WRITE8_MEMBER(darius_write_portB0);
 	DECLARE_WRITE8_MEMBER(darius_write_portB1);
 	DECLARE_WRITE8_MEMBER(adpcm_data_w);
-	DECLARE_DRIVER_INIT(darius);
 	TILE_GET_INFO_MEMBER(get_fg_tile_info);
 	virtual void machine_start();
 	virtual void machine_reset();
@@ -120,11 +126,9 @@ public:
 	UINT32 screen_update_darius_middle(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_darius_right(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void darius_postload();
-	inline void actual_get_fg_tile_info( tile_data &tileinfo, int tile_index, UINT16 *ram, int gfxnum );
 	void draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, int primask, int x_offs, int y_offs );
 	UINT32 update_screen(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int xoffs);
 	void parse_control(  )   /* assumes Z80 sandwiched between 68Ks */;
-	void reset_sound_region(  );
 	void update_fm0(  );
 	void update_fm1(  );
 	void update_psg0( int port );

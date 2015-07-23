@@ -1,44 +1,16 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*********************************************************************
 
     png.c
 
     PNG reading functions.
 
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
-
 ***************************************************************************/
 
 #include <math.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include <zlib.h>
 #include "png.h"
@@ -920,9 +892,9 @@ static png_error convert_bitmap_to_image_palette(png_info *pnginfo, const bitmap
 	for (x = 0; x < palette_length; x++)
 	{
 		rgb_t color = palette[x];
-		pnginfo->palette[3 * x + 0] = RGB_RED(color);
-		pnginfo->palette[3 * x + 1] = RGB_GREEN(color);
-		pnginfo->palette[3 * x + 2] = RGB_BLUE(color);
+		pnginfo->palette[3 * x + 0] = color.r();
+		pnginfo->palette[3 * x + 1] = color.g();
+		pnginfo->palette[3 * x + 2] = color.b();
 	}
 
 	/* allocate memory for the image */
@@ -987,9 +959,9 @@ static png_error convert_bitmap_to_image_rgb(png_info *pnginfo, const bitmap_t &
 			for (x = 0; x < pnginfo->width; x++)
 			{
 				rgb_t color = palette[*src16++];
-				*dst++ = RGB_RED(color);
-				*dst++ = RGB_GREEN(color);
-				*dst++ = RGB_BLUE(color);
+				*dst++ = color.r();
+				*dst++ = color.g();
+				*dst++ = color.b();
 			}
 		}
 
@@ -999,10 +971,10 @@ static png_error convert_bitmap_to_image_rgb(png_info *pnginfo, const bitmap_t &
 			UINT32 *src32 = reinterpret_cast<UINT32 *>(bitmap.raw_pixptr(y));
 			for (x = 0; x < pnginfo->width; x++)
 			{
-				UINT32 raw = *src32++;
-				*dst++ = RGB_RED(raw);
-				*dst++ = RGB_GREEN(raw);
-				*dst++ = RGB_BLUE(raw);
+				rgb_t raw = *src32++;
+				*dst++ = raw.r();
+				*dst++ = raw.g();
+				*dst++ = raw.b();
 			}
 		}
 
@@ -1012,11 +984,11 @@ static png_error convert_bitmap_to_image_rgb(png_info *pnginfo, const bitmap_t &
 			UINT32 *src32 = reinterpret_cast<UINT32 *>(bitmap.raw_pixptr(y));
 			for (x = 0; x < pnginfo->width; x++)
 			{
-				UINT32 raw = *src32++;
-				*dst++ = RGB_RED(raw);
-				*dst++ = RGB_GREEN(raw);
-				*dst++ = RGB_BLUE(raw);
-				*dst++ = RGB_ALPHA(raw);
+				rgb_t raw = *src32++;
+				*dst++ = raw.r();
+				*dst++ = raw.g();
+				*dst++ = raw.b();
+				*dst++ = raw.a();
 			}
 		}
 
@@ -1089,7 +1061,7 @@ handle_error:
 }
 
 
-png_error png_write_bitmap(core_file *fp, png_info *info, bitmap_t &bitmap, int palette_length, const UINT32 *palette)
+png_error png_write_bitmap(core_file *fp, png_info *info, bitmap_t &bitmap, int palette_length, const rgb_t *palette)
 {
 	png_info pnginfo;
 	png_error error;
@@ -1124,6 +1096,18 @@ png_error png_write_bitmap(core_file *fp, png_info *info, bitmap_t &bitmap, int 
 
 ********************************************************************************/
 
+/**
+ * @fn  png_error mng_capture_start(core_file *fp, bitmap_t &bitmap, double rate)
+ *
+ * @brief   Mng capture start.
+ *
+ * @param [in,out]  fp      If non-null, the fp.
+ * @param [in,out]  bitmap  The bitmap.
+ * @param   rate            The rate.
+ *
+ * @return  A png_error.
+ */
+
 png_error mng_capture_start(core_file *fp, bitmap_t &bitmap, double rate)
 {
 	UINT8 mhdr[28];
@@ -1146,10 +1130,34 @@ png_error mng_capture_start(core_file *fp, bitmap_t &bitmap, double rate)
 	return PNGERR_NONE;
 }
 
-png_error mng_capture_frame(core_file *fp, png_info *info, bitmap_t &bitmap, int palette_length, const UINT32 *palette)
+/**
+ * @fn  png_error mng_capture_frame(core_file *fp, png_info *info, bitmap_t &bitmap, int palette_length, const rgb_t *palette)
+ *
+ * @brief   Mng capture frame.
+ *
+ * @param [in,out]  fp      If non-null, the fp.
+ * @param [in,out]  info    If non-null, the information.
+ * @param [in,out]  bitmap  The bitmap.
+ * @param   palette_length  Length of the palette.
+ * @param   palette         The palette.
+ *
+ * @return  A png_error.
+ */
+
+png_error mng_capture_frame(core_file *fp, png_info *info, bitmap_t &bitmap, int palette_length, const rgb_t *palette)
 {
 	return write_png_stream(fp, info, bitmap, palette_length, palette);
 }
+
+/**
+ * @fn  png_error mng_capture_stop(core_file *fp)
+ *
+ * @brief   Mng capture stop.
+ *
+ * @param [in,out]  fp  If non-null, the fp.
+ *
+ * @return  A png_error.
+ */
 
 png_error mng_capture_stop(core_file *fp)
 {

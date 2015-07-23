@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 /*
  * Namco System 11 Protection
  *
@@ -8,7 +10,7 @@
 class ns11_keycus_device : public device_t
 {
 protected:
-	ns11_keycus_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	ns11_keycus_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock,const char *shortname, const char *source);
 
 	virtual void device_start();
 	virtual void device_reset();

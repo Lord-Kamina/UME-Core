@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, Raphael Nabet, R. Belmont
 /*********************************************************************
 
     sonydriv.h
@@ -9,7 +11,6 @@
 #ifndef SONYDRIV_H
 #define SONYDRIV_H
 
-#include "image.h"
 #include "imagedev/flopdrv.h"
 
 #if 0

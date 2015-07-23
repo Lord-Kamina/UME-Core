@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /***************************************************************************
 
     Bell-Fruit/ATD RasterSpeed hardware
@@ -20,6 +22,7 @@
 #include "machine/mc146818.h"
 #include "machine/nscsi_hd.h"
 #include "sound/dac.h"
+#include "machine/nvram.h"
 
 
 /*************************************
@@ -52,7 +55,9 @@ public:
 			m_dac_l(*this, "dac_l"),
 			m_dac_r(*this, "dac_r"),
 			m_tms_timer1(*this, "tms_timer1"),
-			m_tms_tx_timer(*this, "tms_tx_timer")
+			m_tms_tx_timer(*this, "tms_tx_timer"),
+			m_palette(*this, "palette"),
+			m_nvram(*this, "nvram")
 	{}
 
 	#define VIDEO_ADDR_MASK     0x3fffffff
@@ -79,7 +84,7 @@ public:
 		SPORT_TIMER_COUNTER =   0x45,
 		SPORT_TIMER_PERIOD  =   0x46,
 		SPORT_DATA_TX       =   0x48,
-		SPORT_DATA_RX       =   0x4c,
+		SPORT_DATA_RX       =   0x4c
 	};
 
 	enum irq_status
@@ -88,7 +93,7 @@ public:
 		IRQ_UART    = 2,
 		IRQ_DSP     = 4,
 		IRQ_VBLANK  = 5,
-		IRQ_SCSI    = 7,
+		IRQ_SCSI    = 7
 	};
 
 	required_device<cpu_device>     m_maincpu;
@@ -98,6 +103,8 @@ public:
 	required_device<dac_device>     m_dac_r;
 	required_device<timer_device>   m_tms_timer1;
 	required_device<timer_device>   m_tms_tx_timer;
+	required_device<palette_device> m_palette;
+	required_device<nvram_device>   m_nvram;
 
 	DECLARE_WRITE32_MEMBER(cyrix_cache_w);
 	DECLARE_READ8_MEMBER(nvram_r);
@@ -125,7 +132,7 @@ public:
 	UINT8   m_io_reg;
 	UINT8   m_irq_status;
 	UINT32  m_dpyaddr;
-	UINT16 *m_palette;
+	UINT16 *m_paletteram;
 	UINT32  m_speedup_count;
 	UINT32  m_tms_io_regs[0x80];
 	bitmap_ind16 m_update_bitmap;
@@ -151,11 +158,9 @@ protected:
 
 void rastersp_state::machine_start()
 {
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(rastersp_state::irq_callback),this));
-
 	m_nvram8 = auto_alloc_array(machine(), UINT8, NVRAM_SIZE);
-
-	m_palette = auto_alloc_array(machine(), UINT16, 0x8000);
+	m_nvram->set_base(m_nvram8,NVRAM_SIZE);
+	m_paletteram = auto_alloc_array(machine(), UINT16, 0x8000);
 
 	membank("bank1")->set_base(m_dram);
 	membank("bank2")->set_base(&m_dram[0x10000/4]);
@@ -206,7 +211,7 @@ WRITE32_MEMBER( rastersp_state::dpylist_w )
 	// TODO: This should probably be done in sync with the video scan
 	if (m_dpyaddr == 0)
 	{
-		m_update_bitmap.fill(get_black_pen(machine()));
+		m_update_bitmap.fill(m_palette->black_pen());
 		return;
 	}
 
@@ -243,7 +248,7 @@ WRITE32_MEMBER( rastersp_state::dpylist_w )
 				UINT32 pixels = (word2 >> 16) & 0x1ff;
 				UINT32 palbase = (word2 >> 4) & 0xf00;
 
-				UINT16* palptr = &m_palette[palbase];
+				UINT16* palptr = &m_paletteram[palbase];
 				UINT8* srcptr = reinterpret_cast<UINT8*>(&m_dram[0]);
 
 				UINT32 acc = srcaddr << 8;
@@ -299,7 +304,7 @@ void rastersp_state::upload_palette(UINT32 word1, UINT32 word2)
 	while (entries--)
 	{
 		UINT32 data = m_dram[addr / 4];
-		m_palette[index++] = data & 0xffff;
+		m_paletteram[index++] = data & 0xffff;
 		addr += 4;
 	}
 }
@@ -450,25 +455,6 @@ WRITE32_MEMBER( rastersp_state:: port3_w )
  *  NVRAM
  *
  *************************************/
-
-static NVRAM_HANDLER( rastersp )
-{
-	rastersp_state *state = machine.driver_data<rastersp_state>();
-
-	if (read_or_write)
-	{
-		file->write(state->m_nvram8, NVRAM_SIZE);
-	}
-	else if (file)
-	{
-		file->read(state->m_nvram8, NVRAM_SIZE);
-	}
-	else
-	{
-		memcpy(state->m_nvram8, machine.root_device().memregion("nvram")->base(), NVRAM_SIZE);
-	}
-}
-
 
 WRITE8_MEMBER( rastersp_state::nvram_w )
 {
@@ -844,7 +830,6 @@ WRITE32_MEMBER(rastersp_state::ncr53c700_write)
 }
 
 static MACHINE_CONFIG_FRAGMENT( ncr53c700 )
-	MCFG_DEVICE_MODIFY(DEVICE_SELF)
 	MCFG_DEVICE_CLOCK(66000000)
 	MCFG_NCR53C7XX_IRQ_HANDLER(DEVWRITELINE(":", rastersp_state, scsi_irq))
 	MCFG_NCR53C7XX_HOST_READ(DEVREAD32(":", rastersp_state, ncr53c700_read))
@@ -855,20 +840,6 @@ static SLOT_INTERFACE_START( rastersp_scsi_devices )
 	SLOT_INTERFACE("harddisk", NSCSI_HARDDISK)
 	SLOT_INTERFACE_INTERNAL("ncr53c700", NCR53C7XX)
 SLOT_INTERFACE_END
-
-
-
-/*************************************
- *
- *  TMS32031
- *
- *************************************/
-
-static const tms3203x_config tms_config =
-{
-	true    // Boot-loader mode
-};
-
 
 
 /*************************************
@@ -882,16 +853,17 @@ static MACHINE_CONFIG_START( rastersp, rastersp_state )
 	MCFG_CPU_PROGRAM_MAP(cpu_map)
 	MCFG_CPU_IO_MAP(io_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", rastersp_state, vblank_irq)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(rastersp_state,irq_callback)
 
 	MCFG_CPU_ADD("dsp", TMS32031, 33330000)
-	MCFG_TMS3203X_CONFIG(tms_config)
 	MCFG_CPU_PROGRAM_MAP(dsp_map)
+	MCFG_TMS3203X_MCBL(true)    // Boot-loader mode
 
 	/* Devices */
 	MCFG_TIMER_DRIVER_ADD("tms_timer1", rastersp_state, tms_timer1)
 	MCFG_TIMER_DRIVER_ADD("tms_tx_timer", rastersp_state, tms_tx_timer)
-	MCFG_MC146818_ADD("rtc", MC146818_STANDARD)
-	MCFG_NVRAM_HANDLER(rastersp)
+	MCFG_MC146818_ADD( "rtc", XTAL_32_768kHz )
+	MCFG_NVRAM_ADD_0FILL("nvram")
 
 	MCFG_NSCSI_BUS_ADD("scsibus")
 	MCFG_NSCSI_ADD("scsibus:0", rastersp_scsi_devices, "harddisk", true)
@@ -905,9 +877,9 @@ static MACHINE_CONFIG_START( rastersp, rastersp_state )
 	MCFG_SCREEN_UPDATE_DRIVER(rastersp_state, screen_update)
 	MCFG_SCREEN_REFRESH_RATE(50)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_INIT(RRRRR_GGGGGG_BBBBB)
-	MCFG_PALETTE_LENGTH(65536)
+	MCFG_PALETTE_ADD_RRRRRGGGGGGBBBBB("palette")
 
 	/* Sound */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -940,7 +912,7 @@ ROM_START( rotr )
 	ROM_REGION(0x8000, "nvram", 0) /* Default NVRAM */
 	ROM_LOAD( "rotr.nv", 0x0000, 0x8000, CRC(62543517) SHA1(a4bf3431cdab956839bb155c4a8c140d30e5c7ec) )
 
-	DISK_REGION( "scsibus:0:harddisk" )
+	DISK_REGION( "scsibus:0:harddisk:image" )
 	DISK_IMAGE( "rotr", 0, SHA1(d67d7feb52d8c7ba1d2a190a40d97e84871f2d80) )
 ROM_END
 
@@ -972,7 +944,7 @@ ROM_START( fbcrazy )
 
 	ROM_REGION(0x8000, "nvram", ROMREGION_ERASEFF )
 
-	DISK_REGION( "scsibus:0:harddisk" )
+	DISK_REGION( "scsibus:0:harddisk:image" )
 	DISK_IMAGE( "fbcrazy_hdd", 0, NO_DUMP )
 ROM_END
 

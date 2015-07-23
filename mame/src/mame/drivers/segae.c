@@ -1,10 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Sega System E */
 
 /*
 
 
  Sega System 'E' is a piece of hardware used for a couple of Arcade Games
- produced by Sega in the Mid 80's, its roughly based on their Sega Master System
+ produced by Sega in the mid 80's. It's roughly based on their Sega Master System
  home console unit, using the same '315-5124' VDP (actually in this case 2 of
  them)
 
@@ -286,15 +288,6 @@ GND  8A 8B GND
  E572 : table with L. slot infos (5 bytes wide)
  E577 : table with R. slot infos (5 bytes wide)
 
-Known issues:
-
-sometimes hangonjr has corrupt gfx when you start a game, I don't know why (timing?)
-
-todo:
-
-tidy up, add save states, clean up so we can use it with hazemd again
-add emulation of vdp bugs, use mame's new screen timing system instead
-covert megatech / megaplay drivers to use new code etc. etc.
 
 */
 
@@ -311,7 +304,6 @@ covert megatech / megaplay drivers to use new code etc. etc.
 class systeme_state : public driver_device
 {
 protected:
-	virtual void driver_start();
 	virtual void machine_start();
 
 public:
@@ -319,9 +311,13 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_vdp1(*this, "vdp1"),
-		m_vdp2(*this, "vdp2") { }
+		m_vdp2(*this, "vdp2"),
+		m_decrypted_opcodes(*this, "decrypted_opcodes"),
+		m_maincpu_region(*this, "maincpu"),
+		m_bank1(*this, "bank1"),
+		m_bank0d(*this, "bank0d"),
+		m_bank1d(*this, "bank1d") { }
 
-	DECLARE_WRITE8_MEMBER( videoram_write );
 	DECLARE_WRITE8_MEMBER( bank_write );
 	DECLARE_WRITE_LINE_MEMBER( int_callback );
 
@@ -330,78 +326,34 @@ public:
 	DECLARE_READ8_MEMBER( hangonjr_port_f8_read );
 	DECLARE_WRITE8_MEMBER( hangonjr_port_fa_write );
 
+	DECLARE_DRIVER_INIT( hangonjr );
+	DECLARE_DRIVER_INIT( astrofl );
+	DECLARE_DRIVER_INIT( ridleofp );
+	DECLARE_DRIVER_INIT( opaopa );
+	DECLARE_DRIVER_INIT( fantzn2 );
+
 	// Devices
 	required_device<cpu_device>          m_maincpu;
 	required_device<sega315_5124_device> m_vdp1;
 	required_device<sega315_5124_device> m_vdp2;
 
+	optional_shared_ptr<UINT8> m_decrypted_opcodes;
+	required_memory_region m_maincpu_region;
+	required_memory_bank m_bank1;
+	optional_memory_bank m_bank0d;
+	optional_memory_bank m_bank1d;
+
+	// Analog input related
+	UINT8 m_port_select;
+	UINT16 m_last1;
+	UINT16 m_last2;
+	UINT16 m_diff1;
+	UINT16 m_diff2;
+
 	// Video RAM
-	memory_region *m_vdp1_vram;
-	memory_region *m_vdp2_vram;
+	UINT8 m_vram[2][0x4000 * 2];
 
-	UINT8 m_f7_bank_value;
-	UINT8 m_port_fa_last;
-	int m_port_to_read;
-	int m_last1;
-	int m_last2;
-	int m_diff1;
-	int m_diff2;
 	UINT32 screen_update_systeme(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
-};
-
-class fantzn2_state : public systeme_state
-{
-public:
-	fantzn2_state(const machine_config &mconfig, device_type type, const char *tag)
-		: systeme_state(mconfig, type, tag)
-		{ }
-
-protected:
-	virtual void driver_start();
-};
-
-class ridleofp_state : public systeme_state
-{
-public:
-	ridleofp_state(const machine_config &mconfig, device_type type, const char *tag)
-		: systeme_state(mconfig, type, tag)
-		{ }
-
-protected:
-	virtual void driver_start();
-};
-
-class hangonjr_state : public systeme_state
-{
-public:
-	hangonjr_state(const machine_config &mconfig, device_type type, const char *tag)
-		: systeme_state(mconfig, type, tag)
-		{ }
-
-protected:
-	virtual void driver_start();
-};
-
-class opaopa_state : public systeme_state
-{
-public:
-	opaopa_state(const machine_config &mconfig, device_type type, const char *tag)
-		: systeme_state(mconfig, type, tag)
-		{ }
-
-protected:
-	virtual void driver_start();
-};
-
-class astrofl_state : public systeme_state
-{
-public:
-	astrofl_state(const machine_config &mconfig, device_type type, const char *tag)
-		: systeme_state(mconfig, type, tag)
-			{ }
-
-protected:
-	virtual void driver_start();
 };
 
 
@@ -416,8 +368,20 @@ protected:
 /* we have to fill in the ROM addresses for systeme due to the encrypted games */
 static ADDRESS_MAP_START( systeme_map, AS_PROGRAM, 8, systeme_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM                                                     /* Fixed ROM */
-	AM_RANGE(0x8000, 0xbfff) AM_ROMBANK("bank1") AM_WRITE( videoram_write )             /* Banked ROM */
-	AM_RANGE(0xc000, 0xffff) AM_RAM
+	AM_RANGE(0x8000, 0xbfff) AM_READ_BANK("bank1") AM_WRITE_BANK("vram_write")          /* Banked ROM */
+	AM_RANGE(0xc000, 0xffff) AM_RAM AM_SHARE("mainram")
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 8, systeme_state )
+	AM_RANGE(0x0000, 0x7fff) AM_ROM AM_SHARE("decrypted_opcodes")
+	AM_RANGE(0x8000, 0xbfff) AM_ROMBANK("bank1")
+	AM_RANGE(0xc000, 0xffff) AM_RAM AM_SHARE("mainram")
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( banked_decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 8, systeme_state )
+	AM_RANGE(0x0000, 0x7fff) AM_ROMBANK("bank0d")
+	AM_RANGE(0x8000, 0xbfff) AM_ROMBANK("bank1d")
+	AM_RANGE(0xc000, 0xffff) AM_RAM AM_SHARE("mainram")
 ADDRESS_MAP_END
 
 
@@ -450,106 +414,45 @@ static ADDRESS_MAP_START( vdp2_map, AS_0, 8, systeme_state )
 ADDRESS_MAP_END
 
 
-WRITE8_MEMBER( systeme_state::videoram_write )
-{
-	if (m_f7_bank_value & 0x20)
-	{ // to vdp1 vram
-		if (m_f7_bank_value & 0x80)
-		{
-			m_vdp1_vram->base()[offset] = data;
-		}
-		else
-		{
-			m_vdp1_vram->base()[0x4000 + offset] = data;
-		}
-	}
-	else
-	{ // to vdp2 vram
-		if (m_f7_bank_value & 0x40)
-		{
-			m_vdp2_vram->base()[offset] = data;
-		}
-		else
-		{
-			m_vdp2_vram->base()[0x4000 + offset] = data;
-		}
-	}
-
-}
-
-
 WRITE8_MEMBER( systeme_state::bank_write )
 {
-	m_f7_bank_value = data;
-
-	membank("vdp1_bank")->set_base(m_vdp1_vram->base() + ( ( data & 0x80 ) ? 0x4000 : 0 ) );
-	membank("vdp2_bank")->set_base(m_vdp2_vram->base() + ( ( data & 0x40 ) ? 0x4000 : 0 ) );
-
-	membank("bank1")->set_entry(data & 0x0f);
-}
-
-
-void systeme_state::driver_start()
-{
-	/* Allocate video RAM */
-	m_vdp1_vram = machine().memory().region_alloc("vdp1_vram", 2 * 0x4000, 1, ENDIANNESS_LITTLE);
-	m_vdp2_vram = machine().memory().region_alloc("vdp2_vram", 2 * 0x4000, 1, ENDIANNESS_LITTLE);
-
-	membank("bank1")->configure_entries(0, 16, memregion("maincpu")->base() + 0x10000, 0x4000);
-}
-
-
-void fantzn2_state::driver_start()
-{
-	systeme_state::driver_start();
-
-	mc8123_decrypt_rom(machine(), "maincpu", "user1", NULL, 0);
-}
-
-
-void ridleofp_state::driver_start()
-{
-	systeme_state::driver_start();
-
-	m_maincpu->space(AS_IO).install_read_handler(0xf8, 0xf8, read8_delegate(FUNC(systeme_state::ridleofp_port_f8_read), this));
-	m_maincpu->space(AS_IO).install_write_handler(0xfa, 0xfa, write8_delegate(FUNC(systeme_state::ridleofp_port_fa_write), this));
-}
-
-
-void hangonjr_state::driver_start()
-{
-	systeme_state::driver_start();
-
-	m_maincpu->space(AS_IO).install_read_handler(0xf8, 0xf8, read8_delegate(FUNC(systeme_state::hangonjr_port_f8_read), this));
-	m_maincpu->space(AS_IO).install_write_handler(0xfa, 0xfa, write8_delegate(FUNC(systeme_state::hangonjr_port_fa_write), this));
-}
-
-
-void opaopa_state::driver_start()
-{
-	systeme_state::driver_start();
-
-	mc8123_decrypt_rom(machine(), "maincpu", "user1", "bank1", 8);
-}
-
-
-void astrofl_state::driver_start()
-{
-	systeme_state::driver_start();
-
-	sega_315_5177_decode(machine(), "maincpu");
+	membank("vdp1_bank")->set_entry((data >> 7) & 1);
+	membank("vdp2_bank")->set_entry((data >> 6) & 1);
+	membank("vram_write")->set_entry(data >> 5);
+	m_bank1->set_entry(data & 0x0f);
+	if(m_bank1d)
+		m_bank1d->set_entry(data & 0x0f);
 }
 
 
 void systeme_state::machine_start()
 {
-	save_item(NAME(m_f7_bank_value));
-	save_item(NAME(m_port_fa_last));
-	save_item(NAME(m_port_to_read));
+	membank("vdp1_bank")->configure_entries(0, 2, m_vram[0], 0x4000);
+	membank("vdp2_bank")->configure_entries(0, 2, m_vram[1], 0x4000);
+	m_bank1->configure_entries(0, 16, m_maincpu_region->base() + 0x10000, 0x4000);
+
+	for (int i = 7; i >= 0; i--)
+	{
+		int which_vdp, offset;
+		if (i & 1)
+		{
+			which_vdp = 0;
+			offset = (i & 4) ? 0 : 0x4000;
+		}
+		else
+		{
+			which_vdp = 1;
+			offset = (i & 2) ? 0 : 0x4000;
+		}
+		membank("vram_write")->configure_entry(i, &m_vram[which_vdp][offset]);
+	}
+
+	save_item(NAME(m_port_select));
 	save_item(NAME(m_last1));
 	save_item(NAME(m_last2));
 	save_item(NAME(m_diff1));
 	save_item(NAME(m_diff2));
+	save_item(NAME(m_vram));
 }
 
 
@@ -560,10 +463,10 @@ READ8_MEMBER( systeme_state::hangonjr_port_f8_read )
 
 	temp = 0;
 
-	if (m_port_fa_last == 0x08)  /* 0000 1000 */ /* Angle */
+	if (m_port_select == 0x08)  /* 0000 1000 */ /* Angle */
 		temp = ioport("IN2")->read();
 
-	if (m_port_fa_last == 0x09)  /* 0000 1001 */ /* Accel */
+	if (m_port_select == 0x09)  /* 0000 1001 */ /* Accel */
 		temp = ioport("IN3")->read();
 
 	return temp;
@@ -572,14 +475,14 @@ READ8_MEMBER( systeme_state::hangonjr_port_f8_read )
 WRITE8_MEMBER( systeme_state::hangonjr_port_fa_write)
 {
 	/* Seems to write the same pattern again and again bits ---- xx-x used */
-	m_port_fa_last = data;
+	m_port_select = data;
 }
 
 /*- Riddle of Pythagoras Specific -*/
 
 READ8_MEMBER( systeme_state::ridleofp_port_f8_read )
 {
-	switch (m_port_to_read)
+	switch (m_port_select)
 	{
 		default:
 		case 0: return m_diff1 & 0xff;
@@ -594,7 +497,7 @@ WRITE8_MEMBER( systeme_state::ridleofp_port_fa_write )
 	/* 0x10 is written before reading the dial (hold counters?) */
 	/* 0x03 is written after reading the dial (reset counters?) */
 
-	m_port_to_read = (data & 0x0c) >> 2;
+	m_port_select = (data & 0x0c) >> 2;
 
 	if (data & 1)
 	{
@@ -1031,7 +934,7 @@ ROM_START( fantzn2 )
 	ROM_LOAD( "epr-11414.ic4",  0x30000, 0x10000, CRC(6f7a9f5f) SHA1(b53aa2eded781c80466a79b7d81383b9a875d0be) )
 	ROM_LOAD( "epr-11412.ic2",  0x40000, 0x10000, CRC(b14db5af) SHA1(04c7fb659385438b3d8f9fb66800eb7b6373bda9) )
 
-	ROM_REGION( 0x2000, "user1", 0 ) /* MC8123 key */
+	ROM_REGION( 0x2000, "key", 0 ) /* MC8123 key */
 	ROM_LOAD( "317-0057.key",  0x0000, 0x2000, CRC(ee43d0f0) SHA1(72cb75a4d8352fe372db12046a59ea044360d5c3) )
 ROM_END
 
@@ -1045,7 +948,7 @@ ROM_START( opaopa )
 	ROM_LOAD( "epr11221.ic3",   0x20000, 0x08000, CRC(4ca132a2) SHA1(cb4e4c01b6ab070eef37c0603190caafe6236ccd) ) /* encrypted */
 	ROM_LOAD( "epr11220.ic2",   0x28000, 0x08000, CRC(a165e2ef) SHA1(498ff4c5d3a2658567393378c56be6ed86ac0384) ) /* encrypted */
 
-	ROM_REGION( 0x2000, "user1", 0 ) /* MC8123 key */
+	ROM_REGION( 0x2000, "key", 0 ) /* MC8123 key */
 	ROM_LOAD( "317-0042.key",  0x0000, 0x2000, CRC(d6312538) SHA1(494ac7f080775c21dc7d369e6ea78f3299e6975a) )
 ROM_END
 
@@ -1054,24 +957,6 @@ WRITE_LINE_MEMBER( systeme_state::int_callback )
 {
 	m_maincpu->set_input_line(0, state);
 }
-
-
-static const sega315_5124_interface _315_5124_1_intf =
-{
-	false,
-	"screen",
-	DEVCB_NULL,
-	DEVCB_NULL,
-};
-
-
-static const sega315_5124_interface _315_5124_2_intf =
-{
-	false,
-	"screen",
-	DEVCB_DRIVER_LINE_MEMBER(systeme_state, int_callback),
-	DEVCB_NULL,
-};
 
 
 UINT32 systeme_state::screen_update_systeme(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
@@ -1089,24 +974,13 @@ UINT32 systeme_state::screen_update_systeme(screen_device &screen, bitmap_rgb32 
 
 		for ( int x = cliprect.min_x; x <= cliprect.max_x; x++ )
 		{
-			dest_ptr[x] = ( y1_ptr[x] ) ? vdp1_ptr[x] : vdp2_ptr[x];
-//dest_ptr[x] = y1_ptr[x] ? 0xFF0000 : 0x00FF00;
+			dest_ptr[x] = ( y1_ptr[x] ) ? vdp2_ptr[x] : vdp1_ptr[x];
+			//dest_ptr[x] = y1_ptr[x] ? 0x00FF00 : 0xFF0000;
 		}
 	}
 
 	return 0;
 }
-
-
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
 
 static MACHINE_CONFIG_START( systeme, systeme_state )
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_10_738635MHz/2) /* Z80B @ 5.3693Mhz */
@@ -1119,13 +993,13 @@ static MACHINE_CONFIG_START( systeme, systeme_state )
 		SEGA315_5124_HEIGHT_NTSC, SEGA315_5124_TBORDER_START + SEGA315_5124_NTSC_192_TBORDER_HEIGHT, SEGA315_5124_TBORDER_START + SEGA315_5124_NTSC_192_TBORDER_HEIGHT + 192)
 	MCFG_SCREEN_UPDATE_DRIVER(systeme_state, screen_update_systeme)
 
-	MCFG_PALETTE_LENGTH(SEGA315_5124_PALETTE_SIZE)
-	MCFG_PALETTE_INIT(sega315_5124)
-
-	MCFG_SEGA315_5124_ADD("vdp1", _315_5124_1_intf)
+	MCFG_DEVICE_ADD("vdp1", SEGA315_5124, 0)
+	MCFG_SEGA315_5124_IS_PAL(false)
 	MCFG_DEVICE_ADDRESS_MAP(AS_0, vdp1_map)
 
-	MCFG_SEGA315_5124_ADD("vdp2", _315_5124_2_intf)
+	MCFG_DEVICE_ADD("vdp2", SEGA315_5124, 0)
+	MCFG_SEGA315_5124_IS_PAL(false)
+	MCFG_SEGA315_5124_INT_CB(WRITELINE(systeme_state, int_callback))
 	MCFG_DEVICE_ADDRESS_MAP(AS_0, vdp2_map)
 
 	/* sound hardware */
@@ -1133,39 +1007,114 @@ static MACHINE_CONFIG_START( systeme, systeme_state )
 
 	MCFG_SOUND_ADD("sn1", SEGAPSG, XTAL_10_738635MHz/3)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("sn2", SEGAPSG, XTAL_10_738635MHz/3)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
-	MCFG_SOUND_CONFIG(psg_intf)
 MACHINE_CONFIG_END
 
 
-static MACHINE_CONFIG_DERIVED_CLASS( fantzn2, systeme, fantzn2_state )
+static MACHINE_CONFIG_DERIVED( systemex, systeme )
+	MCFG_DEVICE_MODIFY("maincpu")
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
 MACHINE_CONFIG_END
 
-
-static MACHINE_CONFIG_DERIVED_CLASS( ridleofp, systeme, ridleofp_state )
+static MACHINE_CONFIG_DERIVED( systemeb, systeme )
+	MCFG_DEVICE_MODIFY("maincpu")
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(banked_decrypted_opcodes_map)
 MACHINE_CONFIG_END
 
-
-static MACHINE_CONFIG_DERIVED_CLASS( hangonjr, systeme, hangonjr_state )
-MACHINE_CONFIG_END
-
-
-static MACHINE_CONFIG_DERIVED_CLASS( opaopa, systeme, opaopa_state )
-MACHINE_CONFIG_END
+DRIVER_INIT_MEMBER(systeme_state, hangonjr)
+{
+	m_maincpu->space(AS_IO).install_read_handler(0xf8, 0xf8, read8_delegate(FUNC(systeme_state::hangonjr_port_f8_read), this));
+	m_maincpu->space(AS_IO).install_write_handler(0xfa, 0xfa, write8_delegate(FUNC(systeme_state::hangonjr_port_fa_write), this));
+}
 
 
-static MACHINE_CONFIG_DERIVED_CLASS( astrofl, systeme, astrofl_state )
-MACHINE_CONFIG_END
+DRIVER_INIT_MEMBER(systeme_state, astrofl)
+{
+	// 315-5177
+	static const UINT8 xor_table[128] =
+	{
+		0x04,0x54,0x51,0x15,0x40,0x44,0x01,0x51,0x55,0x10,0x44,0x41,
+		0x05,0x55,0x50,0x14,0x41,0x45,0x00,0x50,0x54,0x11,0x45,0x40,
+		0x04,0x54,0x51,0x15,0x40,0x44,0x01,0x51,0x55,0x10,0x44,0x41,
+		0x05,0x55,0x50,0x14,0x41,0x45,0x00,0x50,0x54,0x11,0x45,0x40,
+		0x04,0x54,0x51,0x15,0x40,0x44,0x01,0x51,0x55,0x10,0x44,0x41,
+		0x05,0x55,0x50,0x14,
+
+		0x04,0x54,0x51,0x15,0x40,0x44,0x01,0x51,0x55,0x10,0x44,0x41,
+		0x05,0x55,0x50,0x14,0x41,0x45,0x00,0x50,0x54,0x11,0x45,0x40,
+		0x04,0x54,0x51,0x15,0x40,0x44,0x01,0x51,0x55,0x10,0x44,0x41,
+		0x05,0x55,0x50,0x14,0x41,0x45,0x00,0x50,0x54,0x11,0x45,0x40,
+		0x04,0x54,0x51,0x15,0x40,0x44,0x01,0x51,0x55,0x10,0x44,0x41,
+		0x05,0x55,0x50,0x14,
+	};
+
+	static const int swap_table[128] =
+	{
+		0,0,0,0,
+		1,1,1,1,1,
+		2,2,2,2,2,
+		3,3,3,3,
+		4,4,4,4,4,
+		5,5,5,5,5,
+		6,6,6,6,6,
+		7,7,7,7,7,
+		8,8,8,8,
+		9,9,9,9,9,
+		10,10,10,10,10,
+		11,11,11,11,11,
+		12,12,12,12,12,
+		13,13,
+
+		8,8,8,8,
+		9,9,9,9,9,
+		10,10,10,10,10,
+		11,11,11,11,
+		12,12,12,12,12,
+		13,13,13,13,13,
+		14,14,14,14,14,
+		15,15,15,15,15,
+		16,16,16,16,
+		17,17,17,17,17,
+		18,18,18,18,18,
+		19,19,19,19,19,
+		20,20,20,20,20,
+		21,21,
+	};
+
+	sega_decode_2(m_maincpu_region->base(), m_decrypted_opcodes, xor_table, swap_table);
+}
 
 
-//    YEAR, NAME,     PARENT,   MACHINE,  INPUT,    INIT, MONITOR,COMPANY,FULLNAME,FLAGS
-GAME( 1985, hangonjr, 0,        hangonjr, hangonjr, driver_device, 0,    ROT0,   "Sega", "Hang-On Jr.", 0 )
-GAME( 1986, transfrm, 0,        systeme,  transfrm, driver_device, 0,    ROT0,   "Sega", "Transformer", 0 )
-GAME( 1986, astrofl,  transfrm, astrofl,  transfrm, driver_device, 0,    ROT0,   "Sega", "Astro Flash (Japan)", 0 )
-GAME( 1986, ridleofp, 0,        ridleofp, ridleofp, driver_device, 0,    ROT90,  "Sega / Nasco", "Riddle of Pythagoras (Japan)", 0 )
-GAME( 1987, opaopa,   0,        opaopa,   opaopa, driver_device,   0,    ROT0,   "Sega", "Opa Opa (MC-8123, 317-0042)", 0 )
-GAME( 1988, fantzn2,  0,        fantzn2,  fantzn2, driver_device,  0,    ROT0,   "Sega", "Fantasy Zone II - The Tears of Opa-Opa (MC-8123, 317-0057)", 0 )
-GAME( 1988, tetrisse, 0,        systeme,  tetrisse, driver_device, 0,    ROT0,   "Sega", "Tetris (Japan, System E)", 0 )
+DRIVER_INIT_MEMBER(systeme_state, ridleofp)
+{
+	m_maincpu->space(AS_IO).install_read_handler(0xf8, 0xf8, read8_delegate(FUNC(systeme_state::ridleofp_port_f8_read), this));
+	m_maincpu->space(AS_IO).install_write_handler(0xfa, 0xfa, write8_delegate(FUNC(systeme_state::ridleofp_port_fa_write), this));
+}
+
+
+DRIVER_INIT_MEMBER(systeme_state, opaopa)
+{
+	UINT8 *banked_decrypted_opcodes = auto_alloc_array(machine(), UINT8, m_maincpu_region->bytes());
+	mc8123_decode(m_maincpu_region->base(), banked_decrypted_opcodes, memregion("key")->base(), m_maincpu_region->bytes());
+
+	m_bank0d->set_base(banked_decrypted_opcodes);
+	m_bank1d->configure_entries(0, 16, banked_decrypted_opcodes + 0x10000, 0x4000);
+}
+
+
+DRIVER_INIT_MEMBER(systeme_state, fantzn2)
+{
+	mc8123_decode(m_maincpu_region->base(), m_decrypted_opcodes, memregion("key")->base(), 0x8000);
+}
+
+
+//    YEAR, NAME,     PARENT,   MACHINE,  INPUT,    INIT,                    MONITOR,COMPANY,FULLNAME,FLAGS
+GAME( 1985, hangonjr, 0,        systeme,  hangonjr, systeme_state, hangonjr, ROT0,   "Sega", "Hang-On Jr.", GAME_SUPPORTS_SAVE )
+GAME( 1986, transfrm, 0,        systeme,  transfrm, driver_device, 0,        ROT0,   "Sega", "Transformer", GAME_SUPPORTS_SAVE )
+GAME( 1986, astrofl,  transfrm, systemex, transfrm, systeme_state, astrofl,  ROT0,   "Sega", "Astro Flash (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1986, ridleofp, 0,        systeme,  ridleofp, systeme_state, ridleofp, ROT90,  "Sega / Nasco", "Riddle of Pythagoras (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1987, opaopa,   0,        systemeb, opaopa,   systeme_state, opaopa,   ROT0,   "Sega", "Opa Opa (MC-8123, 317-0042)", GAME_SUPPORTS_SAVE )
+GAME( 1988, fantzn2,  0,        systemex, fantzn2,  systeme_state, fantzn2,  ROT0,   "Sega", "Fantasy Zone II - The Tears of Opa-Opa (MC-8123, 317-0057)", GAME_SUPPORTS_SAVE )
+GAME( 1988, tetrisse, 0,        systeme,  tetrisse, driver_device, 0,        ROT0,   "Sega", "Tetris (Japan, System E)", GAME_SUPPORTS_SAVE )

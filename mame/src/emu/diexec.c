@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     diexec.c
 
     Device execution interfaces.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -71,15 +42,12 @@ const int TRIGGER_SUSPENDTIME   = -4000;
 //-------------------------------------------------
 
 device_execute_interface::device_execute_interface(const machine_config &mconfig, device_t &device)
-	: device_interface(device),
+	: device_interface(device, "execute"),
 		m_disabled(false),
-		m_vblank_interrupt_legacy(NULL),
 		m_vblank_interrupt_screen(NULL),
-		m_timed_interrupt_legacy(NULL),
 		m_timed_interrupt_period(attotime::zero),
 		m_is_octal(false),
 		m_nextexec(NULL),
-		m_driver_irq_legacy(0),
 		m_timedint_timer(NULL),
 		m_profiler(PROFILER_IDLE),
 		m_icountptr(NULL),
@@ -132,22 +100,12 @@ void device_execute_interface::static_set_disable(device_t &device)
 //  to set up VBLANK interrupts on the device
 //-------------------------------------------------
 
-void device_execute_interface::static_set_vblank_int(device_t &device, device_interrupt_func function, const char *tag, int rate)
-{
-	device_execute_interface *exec;
-	if (!device.interface(exec))
-		throw emu_fatalerror("MCFG_DEVICE_VBLANK_INT called on device '%s' with no execute interface", device.tag());
-	exec->m_vblank_interrupt_legacy = function;
-	exec->m_vblank_interrupt_screen = tag;
-}
-
 void device_execute_interface::static_set_vblank_int(device_t &device, device_interrupt_delegate function, const char *tag, int rate)
 {
 	device_execute_interface *exec;
 	if (!device.interface(exec))
 		throw emu_fatalerror("MCFG_DEVICE_VBLANK_INT called on device '%s' with no execute interface", device.tag());
 	exec->m_vblank_interrupt = function;
-	exec->m_vblank_interrupt_legacy = NULL;
 	exec->m_vblank_interrupt_screen = tag;
 }
 
@@ -157,23 +115,27 @@ void device_execute_interface::static_set_vblank_int(device_t &device, device_in
 //  to set up periodic interrupts on the device
 //-------------------------------------------------
 
-void device_execute_interface::static_set_periodic_int(device_t &device, device_interrupt_func function, attotime rate)
-{
-	device_execute_interface *exec;
-	if (!device.interface(exec))
-		throw emu_fatalerror("MCFG_DEVICE_PERIODIC_INT called on device '%s' with no execute interface", device.tag());
-	exec->m_timed_interrupt_legacy = function;
-	exec->m_timed_interrupt_period = rate;
-}
-
-void device_execute_interface::static_set_periodic_int(device_t &device, device_interrupt_delegate function, attotime rate)
+void device_execute_interface::static_set_periodic_int(device_t &device, device_interrupt_delegate function, const attotime &rate)
 {
 	device_execute_interface *exec;
 	if (!device.interface(exec))
 		throw emu_fatalerror("MCFG_DEVICE_PERIODIC_INT called on device '%s' with no execute interface", device.tag());
 	exec->m_timed_interrupt = function;
-	exec->m_timed_interrupt_legacy = NULL;
 	exec->m_timed_interrupt_period = rate;
+}
+
+
+//-------------------------------------------------
+//  set_irq_acknowledge_callback - configuration helper
+//  to setup callback for IRQ acknowledge
+//-------------------------------------------------
+
+void device_execute_interface::static_set_irq_acknowledge_callback(device_t &device, device_irq_acknowledge_delegate callback)
+{
+	device_execute_interface *exec;
+	if (!device.interface(exec))
+		throw emu_fatalerror("MCFG_DEVICE_IRQ_ACKNOWLEDGE called on device '%s' with no execute interface", device.tag());
+	exec->m_driver_irq = callback;
 }
 
 
@@ -184,7 +146,7 @@ void device_execute_interface::static_set_periodic_int(device_t &device, device_
 
 bool device_execute_interface::executing() const
 {
-	return (this == device().machine().scheduler().currently_executing());
+	return (this == m_scheduler->currently_executing());
 }
 
 
@@ -228,7 +190,7 @@ void device_execute_interface::adjust_icount(int delta)
 	if (!executing())
 		return;
 
-	// aply the delta directly
+	// apply the delta directly
 	*m_icountptr += delta;
 }
 
@@ -242,7 +204,7 @@ void device_execute_interface::adjust_icount(int delta)
 void device_execute_interface::abort_timeslice()
 {
 	// ignore if not the executing device
-	if (this != device().machine().scheduler().currently_executing())
+	if (!executing())
 		return;
 
 	// swallow the remaining cycles
@@ -257,36 +219,13 @@ void device_execute_interface::abort_timeslice()
 
 
 //-------------------------------------------------
-//  set_irq_acknowledge_callback - install a driver-specific
-//  callback for IRQ acknowledge
-//-------------------------------------------------
-
-void device_execute_interface::set_irq_acknowledge_callback(device_irq_acknowledge_callback callback)
-{
-	m_driver_irq_legacy = callback;
-}
-
-
-//-------------------------------------------------
-//  set_irq_acknowledge_callback - install a driver-specific
-//  callback for IRQ acknowledge
-//-------------------------------------------------
-
-void device_execute_interface::set_irq_acknowledge_callback(device_irq_acknowledge_delegate callback)
-{
-	m_driver_irq = callback;
-	m_driver_irq_legacy = NULL;
-}
-
-
-//-------------------------------------------------
 //  suspend_resume_changed
 //-------------------------------------------------
 
 void device_execute_interface::suspend_resume_changed()
 {
 	// inform the scheduler
-	device().machine().scheduler().suspend_resume_changed();
+	m_scheduler->suspend_resume_changed();
 
 	// if we're active, synchronize
 	abort_timeslice();
@@ -326,7 +265,7 @@ if (TEMPLOG) printf("resume %s (%X)\n", device().tag(), reason);
 //  period of time
 //-------------------------------------------------
 
-void device_execute_interface::spin_until_time(attotime duration)
+void device_execute_interface::spin_until_time(const attotime &duration)
 {
 	static int timetrig = 0;
 
@@ -334,7 +273,7 @@ void device_execute_interface::spin_until_time(attotime duration)
 	suspend_until_trigger(TRIGGER_SUSPENDTIME + timetrig, true);
 
 	// then set a timer for it
-	device().machine().scheduler().timer_set(duration, FUNC(static_timed_trigger_callback), TRIGGER_SUSPENDTIME + timetrig, this);
+	m_scheduler->timer_set(duration, FUNC(static_timed_trigger_callback), TRIGGER_SUSPENDTIME + timetrig, this);
 	timetrig = (timetrig + 1) % 256;
 }
 
@@ -380,14 +319,13 @@ void device_execute_interface::trigger(int trigid)
 attotime device_execute_interface::local_time() const
 {
 	// if we're active, add in the time from the current slice
-	attotime result = m_localtime;
 	if (executing())
 	{
 		assert(m_cycles_running >= *m_icountptr);
 		int cycles = m_cycles_running - *m_icountptr;
-		result += cycles_to_attotime(cycles);
+		return m_localtime + cycles_to_attotime(cycles);
 	}
-	return result;
+	return m_localtime;
 }
 
 
@@ -508,19 +446,19 @@ void device_execute_interface::execute_set_input(int linenum, int state)
 void device_execute_interface::interface_validity_check(validity_checker &valid) const
 {
 	// validate the interrupts
-	if (!m_vblank_interrupt.isnull() || m_vblank_interrupt_legacy != NULL)
+	if (!m_vblank_interrupt.isnull())
 	{
 		screen_device_iterator iter(device().mconfig().root_device());
 		if (iter.first() == NULL)
-			mame_printf_error("VBLANK interrupt specified, but the driver is screenless\n");
+			osd_printf_error("VBLANK interrupt specified, but the driver is screenless\n");
 		else if (m_vblank_interrupt_screen != NULL && device().siblingdevice(m_vblank_interrupt_screen) == NULL)
-			mame_printf_error("VBLANK interrupt references a non-existant screen tag '%s'\n", m_vblank_interrupt_screen);
+			osd_printf_error("VBLANK interrupt references a non-existant screen tag '%s'\n", m_vblank_interrupt_screen);
 	}
 
-	if ((!m_timed_interrupt.isnull() || m_timed_interrupt_legacy != NULL) && m_timed_interrupt_period == attotime::zero)
-		mame_printf_error("Timed interrupt handler specified with 0 period\n");
-	else if ((m_timed_interrupt.isnull() && m_timed_interrupt_legacy == NULL) && m_timed_interrupt_period != attotime::zero)
-		mame_printf_error("No timer interrupt handler specified, but has a non-0 period given\n");
+	if (!m_timed_interrupt.isnull() && m_timed_interrupt_period == attotime::zero)
+		osd_printf_error("Timed interrupt handler specified with 0 period\n");
+	else if (m_timed_interrupt.isnull() && m_timed_interrupt_period != attotime::zero)
+		osd_printf_error("No timer interrupt handler specified, but has a non-0 period given\n");
 }
 
 
@@ -531,34 +469,23 @@ void device_execute_interface::interface_validity_check(validity_checker &valid)
 
 void device_execute_interface::interface_pre_start()
 {
+	m_scheduler = &device().machine().scheduler();
+
 	// bind delegates
-	m_vblank_interrupt.bind_relative_to(device());
-	m_timed_interrupt.bind_relative_to(device());
-	m_driver_irq.bind_relative_to(device());
+	m_vblank_interrupt.bind_relative_to(*device().owner());
+	m_timed_interrupt.bind_relative_to(*device().owner());
+	m_driver_irq.bind_relative_to(*device().owner());
 
 	// fill in the initial states
-	execute_interface_iterator iter(device().machine().root_device());
+	device_iterator iter(device().machine().root_device());
 	int index = iter.indexof(*this);
 	m_suspend = SUSPEND_REASON_RESET;
 	m_profiler = profile_type(index + PROFILER_DEVICE_FIRST);
 	m_inttrigger = index + TRIGGER_INT;
 
-	// fill in the input states and IRQ callback information
-	for (int line = 0; line < ARRAY_LENGTH(m_input); line++)
-		m_input[line].start(this, line);
-
 	// allocate timers if we need them
 	if (m_timed_interrupt_period != attotime::zero)
-		m_timedint_timer = device().machine().scheduler().timer_alloc(FUNC(static_trigger_periodic_interrupt), (void *)this);
-
-	// register for save states
-	device().save_item(NAME(m_suspend));
-	device().save_item(NAME(m_nextsuspend));
-	device().save_item(NAME(m_eatcycles));
-	device().save_item(NAME(m_nexteatcycles));
-	device().save_item(NAME(m_trigger));
-	device().save_item(NAME(m_totalcycles));
-	device().save_item(NAME(m_localtime));
+		m_timedint_timer = m_scheduler->timer_alloc(FUNC(static_trigger_periodic_interrupt), (void *)this);
 }
 
 
@@ -571,6 +498,19 @@ void device_execute_interface::interface_post_start()
 {
 	// make sure somebody set us up the icount
 	assert_always(m_icountptr != NULL, "m_icountptr never initialized!");
+
+	// register for save states
+	device().save_item(NAME(m_suspend));
+	device().save_item(NAME(m_nextsuspend));
+	device().save_item(NAME(m_eatcycles));
+	device().save_item(NAME(m_nexteatcycles));
+	device().save_item(NAME(m_trigger));
+	device().save_item(NAME(m_totalcycles));
+	device().save_item(NAME(m_localtime));
+
+	// fill in the input states and IRQ callback information
+	for (int line = 0; line < ARRAY_LENGTH(m_input); line++)
+		m_input[line].start(this, line);
 }
 
 
@@ -607,15 +547,7 @@ void device_execute_interface::interface_post_reset()
 	if (m_vblank_interrupt_screen != NULL)
 	{
 		// get the screen that will trigger the VBLANK
-
-		// new style - use screen tag directly
-		screen_device *screen;
-		if (m_vblank_interrupt_screen != NULL)
-			screen = downcast<screen_device *>(device().machine().device(m_vblank_interrupt_screen));
-
-		// old style 'hack' setup - use screen #0
-		else
-			screen = device().machine().first_screen();
+		screen_device *screen = downcast<screen_device *>(device().machine().device(device().siblingtag(m_vblank_interrupt_screen).c_str()));
 
 		assert(screen != NULL);
 		screen->register_vblank_callback(vblank_state_delegate(FUNC(device_execute_interface::on_vblank), this));
@@ -638,6 +570,17 @@ void device_execute_interface::interface_post_reset()
 
 void device_execute_interface::interface_clock_changed()
 {
+	// a clock of zero disables the device
+	if (device().clock() == 0)
+	{
+		suspend(SUSPEND_REASON_CLOCK, true);
+		return;
+	}
+
+	// if we were suspended because we had no clock, enable us now
+	if (suspended(SUSPEND_REASON_CLOCK))
+		resume(SUSPEND_REASON_CLOCK);
+
 	// recompute cps and spc
 	m_cycles_per_second = clocks_to_cycles(device().clock());
 	m_attoseconds_per_cycle = HZ_TO_ATTOSECONDS(m_cycles_per_second);
@@ -653,31 +596,29 @@ void device_execute_interface::interface_clock_changed()
 	m_divisor = attos;
 
 	// re-compute the perfect interleave factor
-	device().machine().scheduler().compute_perfect_interleave();
+	m_scheduler->compute_perfect_interleave();
 }
 
 
 //-------------------------------------------------
-//  static_standard_irq_callback - IRQ acknowledge
+//  standard_irq_callback_member - IRQ acknowledge
 //  callback; handles HOLD_LINE case and signals
 //  to the debugger
 //-------------------------------------------------
 
-IRQ_CALLBACK( device_execute_interface::static_standard_irq_callback )
+IRQ_CALLBACK_MEMBER( device_execute_interface::standard_irq_callback_member )
 {
-	return device->execute().standard_irq_callback(irqline);
+	return device.execute().standard_irq_callback(irqline);
 }
 
 int device_execute_interface::standard_irq_callback(int irqline)
 {
 	// get the default vector and acknowledge the interrupt if needed
 	int vector = m_input[irqline].default_irq_callback();
-	LOG(("static_standard_irq_callback('%s', %d) $%04x\n", device().tag(), irqline, vector));
+	LOG(("standard_irq_callback('%s', %d) $%04x\n", device().tag(), irqline, vector));
 
 	// if there's a driver callback, run it to get the vector
-	if (m_driver_irq_legacy != NULL)
-		vector = (*m_driver_irq_legacy)(&device(), irqline);
-	else if (!m_driver_irq.isnull())
+	if (!m_driver_irq.isnull())
 		vector = m_driver_irq(device(),irqline);
 
 	// notify the debugger
@@ -693,7 +634,11 @@ int device_execute_interface::standard_irq_callback(int irqline)
 
 attoseconds_t device_execute_interface::minimum_quantum() const
 {
-	// if we don't have that information, compute it
+	// if we don't have a clock, return a huge factor
+	if (device().clock() == 0)
+		return ATTOSECONDS_PER_SECOND - 1;
+
+	// if we don't have the quantum time, compute it
 	attoseconds_t basetick = m_attoseconds_per_cycle;
 	if (basetick == 0)
 		basetick = HZ_TO_ATTOSECONDS(clocks_to_cycles(device().clock()));
@@ -727,11 +672,9 @@ void device_execute_interface::on_vblank(screen_device &screen, bool vblank_stat
 		return;
 
 	// generate the interrupt callback
-	if (!suspended(SUSPEND_REASON_HALT | SUSPEND_REASON_RESET | SUSPEND_REASON_DISABLE))
+	if (!suspended(SUSPEND_REASON_HALT | SUSPEND_REASON_RESET | SUSPEND_REASON_DISABLE | SUSPEND_REASON_CLOCK))
 	{
-		if (m_vblank_interrupt_legacy != NULL)
-			(*m_vblank_interrupt_legacy)(&device());
-		else if (!m_vblank_interrupt.isnull())
+		if (!m_vblank_interrupt.isnull())
 			m_vblank_interrupt(device());
 	}
 }
@@ -750,11 +693,9 @@ TIMER_CALLBACK( device_execute_interface::static_trigger_periodic_interrupt )
 void device_execute_interface::trigger_periodic_interrupt()
 {
 	// bail if there is no routine
-	if (!suspended(SUSPEND_REASON_HALT | SUSPEND_REASON_RESET | SUSPEND_REASON_DISABLE))
+	if (!suspended(SUSPEND_REASON_HALT | SUSPEND_REASON_RESET | SUSPEND_REASON_DISABLE | SUSPEND_REASON_CLOCK))
 	{
-		if (m_timed_interrupt_legacy != NULL)
-			(*m_timed_interrupt_legacy)(&device());
-		else if (!m_timed_interrupt.isnull())
+		if (!m_timed_interrupt.isnull())
 			m_timed_interrupt(device());
 	}
 }
@@ -771,7 +712,6 @@ void device_execute_interface::trigger_periodic_interrupt()
 
 device_execute_interface::device_input::device_input()
 	: m_execute(NULL),
-		m_device(NULL),
 		m_linenum(0),
 		m_stored_vector(0),
 		m_curvector(0),
@@ -790,14 +730,14 @@ device_execute_interface::device_input::device_input()
 void device_execute_interface::device_input::start(device_execute_interface *execute, int linenum)
 {
 	m_execute = execute;
-	m_device = &m_execute->device();
 	m_linenum = linenum;
 
 	reset();
 
-	m_device->save_item(NAME(m_stored_vector), m_linenum);
-	m_device->save_item(NAME(m_curvector), m_linenum);
-	m_device->save_item(NAME(m_curstate), m_linenum);
+	device_t &device = m_execute->device();
+	device.save_item(NAME(m_stored_vector), m_linenum);
+	device.save_item(NAME(m_curvector), m_linenum);
+	device.save_item(NAME(m_curstate), m_linenum);
 }
 
 
@@ -819,9 +759,9 @@ void device_execute_interface::device_input::reset()
 
 void device_execute_interface::device_input::set_state_synced(int state, int vector)
 {
-	LOG(("set_state_synced('%s',%d,%d,%02x)\n", m_device->tag(), m_linenum, state, vector));
+	LOG(("set_state_synced('%s',%d,%d,%02x)\n", m_execute->device().tag(), m_linenum, state, vector));
 
-if (TEMPLOG) printf("setline(%s,%d,%d,%d)\n", m_device->tag(), m_linenum, state, (vector == USE_STORED_VECTOR) ? 0 : vector);
+if (TEMPLOG) printf("setline(%s,%d,%d,%d)\n", m_execute->device().tag(), m_linenum, state, (vector == USE_STORED_VECTOR) ? 0 : vector);
 	assert(state == ASSERT_LINE || state == HOLD_LINE || state == CLEAR_LINE || state == PULSE_LINE);
 
 	// treat PULSE_LINE as ASSERT+CLEAR
@@ -829,7 +769,7 @@ if (TEMPLOG) printf("setline(%s,%d,%d,%d)\n", m_device->tag(), m_linenum, state,
 	{
 		// catch errors where people use PULSE_LINE for devices that don't support it
 		if (m_linenum != INPUT_LINE_NMI && m_linenum != INPUT_LINE_RESET)
-			throw emu_fatalerror("device '%s': PULSE_LINE can only be used for NMI and RESET lines\n", m_device->tag());
+			throw emu_fatalerror("device '%s': PULSE_LINE can only be used for NMI and RESET lines\n", m_execute->device().tag());
 
 		set_state_synced(ASSERT_LINE, vector);
 		set_state_synced(CLEAR_LINE, vector);
@@ -843,7 +783,7 @@ if (TEMPLOG) printf("setline(%s,%d,%d,%d)\n", m_device->tag(), m_linenum, state,
 		m_qindex--;
 		empty_event_queue();
 		event_index = m_qindex++;
-		logerror("Exceeded pending input line event queue on device '%s'!\n", m_device->tag());
+		logerror("Exceeded pending input line event queue on device '%s'!\n", m_execute->device().tag());
 	}
 
 	// enqueue the event
@@ -855,7 +795,7 @@ if (TEMPLOG) printf("setline(%s,%d,%d,%d)\n", m_device->tag(), m_linenum, state,
 
 		// if this is the first one, set the timer
 		if (event_index == 0)
-			m_execute->device().machine().scheduler().synchronize(FUNC(static_empty_event_queue), 0, (void *)this);
+			m_execute->scheduler().synchronize(FUNC(static_empty_event_queue), 0, (void *)this);
 	}
 }
 
@@ -871,7 +811,7 @@ TIMER_CALLBACK( device_execute_interface::device_input::static_empty_event_queue
 
 void device_execute_interface::device_input::empty_event_queue()
 {
-if (TEMPLOG) printf("empty_queue(%s,%d,%d)\n", m_device->tag(), m_linenum, m_qindex);
+if (TEMPLOG) printf("empty_queue(%s,%d,%d)\n", m_execute->device().tag(), m_linenum, m_qindex);
 	// loop over all events
 	for (int curevent = 0; curevent < m_qindex; curevent++)
 	{
@@ -894,7 +834,7 @@ if (TEMPLOG) printf(" (%d,%d)\n", m_curstate, m_curvector);
 			// if we're clearing the line that was previously asserted, reset the device
 			else if (m_execute->suspended(SUSPEND_REASON_RESET))
 			{
-				m_device->reset();
+				m_execute->device().reset();
 				m_execute->resume(SUSPEND_REASON_RESET);
 			}
 		}
@@ -927,7 +867,7 @@ if (TEMPLOG) printf(" (%d,%d)\n", m_curstate, m_curvector);
 					break;
 
 				default:
-					logerror("empty_event_queue device '%s', line %d, unknown state %d\n", m_device->tag(), m_linenum, m_curstate);
+					logerror("empty_event_queue device '%s', line %d, unknown state %d\n", m_execute->device().tag(), m_linenum, m_curstate);
 					break;
 			}
 
@@ -954,7 +894,7 @@ int device_execute_interface::device_input::default_irq_callback()
 	// if the IRQ state is HOLD_LINE, clear it
 	if (m_curstate == HOLD_LINE)
 	{
-		LOG(("->set_irq_line('%s',%d,%d)\n", m_device->tag(), m_linenum, CLEAR_LINE));
+		LOG(("->set_irq_line('%s',%d,%d)\n", m_execute->device().tag(), m_linenum, CLEAR_LINE));
 		m_execute->execute_set_input(m_linenum, CLEAR_LINE);
 		m_curstate = CLEAR_LINE;
 	}

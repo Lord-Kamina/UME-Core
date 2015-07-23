@@ -1,9 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 #pragma once
 
 #ifndef __K051649_H__
 #define __K051649_H__
-
-#include "devlegcy.h"
 
 
 //**************************************************************************

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /******************************************************************
 
   Nazionale Elettronica + others (mostly Italian) Gambling games
@@ -55,7 +57,7 @@
 
 
 #include "emu.h"
-#include "cpu/h83002/h8.h"
+#include "cpu/h8/h83048.h"
 #include "sound/okim6295.h"
 
 
@@ -64,7 +66,8 @@ class itgamble_state : public driver_device
 public:
 	itgamble_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_maincpu(*this, "maincpu")
+			m_maincpu(*this, "maincpu"),
+			m_palette(*this, "palette")
 	{ }
 
 	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
@@ -73,6 +76,7 @@ protected:
 
 	// devices
 	required_device<cpu_device> m_maincpu;
+	required_device<palette_device> m_palette;
 
 	// driver_device overrides
 	virtual void machine_reset();
@@ -90,7 +94,7 @@ void itgamble_state::video_start()
 
 UINT32 itgamble_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	bitmap.fill(get_black_pen(machine()));
+	bitmap.fill(m_palette->black_pen());
 	return 0;
 }
 
@@ -205,7 +209,7 @@ void itgamble_state::machine_reset()
 static MACHINE_CONFIG_START( itgamble, itgamble_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", H83044, MAIN_CLOCK/2)   /* probably the wrong CPU */
+	MCFG_CPU_ADD("maincpu", H83048, MAIN_CLOCK/2)
 	MCFG_CPU_PROGRAM_MAP(itgamble_map)
 
 	/* video hardware */
@@ -215,9 +219,10 @@ static MACHINE_CONFIG_START( itgamble, itgamble_state )
 	MCFG_SCREEN_UPDATE_DRIVER(itgamble_state, screen_update)
 	MCFG_SCREEN_SIZE(512, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 512-1, 0, 256-1)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(itgamble)
-	MCFG_PALETTE_LENGTH(0x200)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", itgamble)
+	MCFG_PALETTE_ADD("palette", 0x200)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -518,10 +523,10 @@ ROM_START( euro2k2a )
 	ROM_LOAD( "4a.ic18", 0x000000, 0x80000, CRC(5decae2d) SHA1(d918aad0e2a1249b18677833f743c92fb678050a) )
 	ROM_LOAD( "5a.ic17", 0x080000, 0x80000, CRC(8f1bbbf3) SHA1(5efcf77674f8737fc1b98881acebacb26b10adc1) )
 	ROM_LOAD( "2a.ic20", 0x100000, 0x40000, CRC(f9bffb07) SHA1(efba175189d99a4548739a72f8a1f03c2782a3d0) )
-	ROM_LOAD( "3a(__euro2k2a).ic19", 0x140000, 0x80000, CRC(56c8a73d) SHA1(49b44e5604cd8675d8f9770e5fb68dad4394e11d) ) /* identical halves */
+	ROM_LOAD( "3a.ic19", 0x140000, 0x80000, CRC(56c8a73d) SHA1(49b44e5604cd8675d8f9770e5fb68dad4394e11d) ) /* identical halves */ // sldh
 
 	ROM_REGION( 0x40000, "oki", 0 ) /* M6295 samples */
-	ROM_LOAD( "1(__euro2k2a).ic25", 0x00000, 0x40000, CRC(4fe79e43) SHA1(7c154cb00e9b64fbdcc218280f2183b816cef20b) )
+	ROM_LOAD( "1.ic25", 0x00000, 0x40000, CRC(4fe79e43) SHA1(7c154cb00e9b64fbdcc218280f2183b816cef20b) ) // sldh
 ROM_END
 
 

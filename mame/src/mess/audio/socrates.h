@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Jonathan Gevaryahu
 #pragma once
 
 #ifndef __SOCR_SND_H__

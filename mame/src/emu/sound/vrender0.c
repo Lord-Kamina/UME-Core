@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:ElSemi
 #include "emu.h"
 #include "vrender0.h"
 
@@ -59,8 +61,8 @@ static const unsigned short ULawTo16[]=
 #define ENVVOL(chan)    (m_SOUNDREGS[(0x20/4)*chan+0x04/4]&0xffffff)
 
 /*
-#define GETSOUNDREG16(Chan,Offs) space.read_word(m_Intf.reg_base+0x20*Chan+Offs)
-#define GETSOUNDREG32(Chan,Offs) space.read_dword(m_Intf.reg_base+0x20*Chan+Offs)
+#define GETSOUNDREG16(Chan,Offs) space.read_word(m_reg_base+0x20*Chan+Offs)
+#define GETSOUNDREG32(Chan,Offs) space.read_dword(m_reg_base+0x20*Chan+Offs)
 
 #define CURSADDR(chan)  GETSOUNDREG32(chan,0x00)
 #define DSADDR(chan)    GETSOUNDREG16(chan,0x08)
@@ -82,11 +84,12 @@ const device_type VRENDER0 = &device_creator<vrender0_device>;
 //-------------------------------------------------
 
 vrender0_device::vrender0_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, VRENDER0, "VRender0", tag, owner, clock),
+	: device_t(mconfig, VRENDER0, "VRender0", tag, owner, clock, "vrender0", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_TexBase(NULL),
 		m_FBBase(NULL),
-		m_stream(NULL)
+		m_stream(NULL),
+		m_reg_base(0)
 {
 }
 
@@ -97,9 +100,6 @@ vrender0_device::vrender0_device(const machine_config &mconfig, const char *tag,
 
 void vrender0_device::device_start()
 {
-	const vr0_interface *intf = (const vr0_interface *)static_config();
-
-	memcpy(&(m_Intf),intf,sizeof(vr0_interface));
 	memset(m_SOUNDREGS,0,sizeof(m_SOUNDREGS));
 
 	m_stream = stream_alloc(0, 2, 44100);

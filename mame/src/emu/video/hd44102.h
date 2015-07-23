@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     HD44102 Dot Matrix Liquid Crystal Graphic Display Column Driver emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -22,7 +21,8 @@
 
 #define MCFG_HD44102_ADD(_tag, _screen_tag, _sx, _sy) \
 	MCFG_DEVICE_ADD(_tag, HD44102, 0) \
-	hd44102_device::static_set_config(*device, _screen_tag, _sx, _sy);
+	MCFG_VIDEO_SET_SCREEN(_screen_tag) \
+	hd44102_device::static_set_offsets(*device, _sx, _sy);
 
 
 
@@ -32,14 +32,15 @@
 
 // ======================> hd44102_device
 
-class hd44102_device :  public device_t
+class hd44102_device :  public device_t,
+						public device_video_interface
 {
 public:
 	// construction/destruction
 	hd44102_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
 	// inline configuration helpers
-	static void static_set_config(device_t &device, const char *screen_tag, int sx, int sy);
+	static void static_set_offsets(device_t &device, int sx, int sy);
 
 	DECLARE_READ8_MEMBER( read );
 	DECLARE_WRITE8_MEMBER( write );
@@ -62,8 +63,6 @@ private:
 
 	inline void count_up_or_down();
 
-	screen_device *m_screen;        // screen
-
 	UINT8 m_ram[4][50];             // display memory
 
 	UINT8 m_status;                 // status register
@@ -74,7 +73,6 @@ private:
 	int m_x;                        // X address
 	int m_y;                        // Y address
 
-	const char *m_screen_tag;
 	int m_sx;
 	int m_sy;
 };

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese
 /***************************************************************************
 
     NEC PC-100
@@ -66,13 +68,24 @@ class pc100_state : public driver_device
 public:
 	pc100_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-		m_rtc(*this, "rtc"),
-		m_palram(*this, "palram"),
 		m_maincpu(*this, "maincpu"),
-		m_beeper(*this, "beeper") { }
+		m_beeper(*this, "beeper"),
+		m_rtc(*this, "rtc"),
+		m_palette(*this, "palette"),
+		m_palram(*this, "palram"),
+		m_kanji_rom(*this, "kanji"),
+		m_vram(*this, "vram"),
+		m_rtc_portc(0)
+	{
+	}
 
+	required_device<cpu_device> m_maincpu;
+	required_device<beep_device> m_beeper;
 	required_device<msm58321_device> m_rtc;
+	required_device<palette_device> m_palette;
 	required_shared_ptr<UINT16> m_palram;
+	required_region_ptr<UINT16> m_kanji_rom;
+	required_region_ptr<UINT16> m_vram;
 
 	DECLARE_READ16_MEMBER(pc100_vram_r);
 	DECLARE_WRITE16_MEMBER(pc100_vram_w);
@@ -92,9 +105,8 @@ public:
 	DECLARE_WRITE8_MEMBER(upper_mask_w);
 	DECLARE_WRITE8_MEMBER(crtc_bank_w);
 	DECLARE_WRITE8_MEMBER(rtc_porta_w);
-	DECLARE_WRITE_LINE_MEMBER(pc100_set_int_line);
-	UINT16 *m_kanji_rom;
-	UINT16 *m_vram;
+	DECLARE_READ8_MEMBER(rtc_portc_r);
+	DECLARE_WRITE8_MEMBER(rtc_portc_w);
 	UINT16 m_kanji_addr;
 	UINT8 m_timer_mode;
 
@@ -116,9 +128,13 @@ public:
 	TIMER_DEVICE_CALLBACK_MEMBER(pc100_100hz_irq);
 	TIMER_DEVICE_CALLBACK_MEMBER(pc100_50hz_irq);
 	TIMER_DEVICE_CALLBACK_MEMBER(pc100_10hz_irq);
-	IRQ_CALLBACK_MEMBER(pc100_irq_callback);
-	required_device<cpu_device> m_maincpu;
-	required_device<beep_device> m_beeper;
+
+
+	WRITE_LINE_MEMBER(rtc_portc_0_w) { m_rtc_portc = (m_rtc_portc & ~(1 << 0)) | ((state & 1) << 0); }
+	WRITE_LINE_MEMBER(rtc_portc_1_w) { m_rtc_portc = (m_rtc_portc & ~(1 << 1)) | ((state & 1) << 1); }
+	WRITE_LINE_MEMBER(rtc_portc_2_w) { m_rtc_portc = (m_rtc_portc & ~(1 << 2)) | ((state & 1) << 2); }
+	WRITE_LINE_MEMBER(rtc_portc_3_w) { m_rtc_portc = (m_rtc_portc & ~(1 << 3)) | ((state & 1) << 3); }
+	UINT8 m_rtc_portc;
 };
 
 void pc100_state::video_start()
@@ -151,7 +167,7 @@ UINT32 pc100_state::screen_update_pc100(screen_device &screen, bitmap_ind16 &bit
 					dot |= pen[pen_i]<<pen_i;
 
 				if(y < 512 && x*16+xi < 768) /* TODO: safety check */
-					bitmap.pix16(y, x*16+xi) = machine().pens[dot];
+					bitmap.pix16(y, x*16+xi) = m_palette->pen(dot);
 			}
 
 			count++;
@@ -241,7 +257,7 @@ WRITE16_MEMBER( pc100_state::pc100_paletteram_w )
 		g = (m_palram[offset] >> 3) & 7;
 		b = (m_palram[offset] >> 6) & 7;
 
-		palette_set_color_rgb(machine(), offset, pal3bit(r),pal3bit(g),pal3bit(b));
+		m_palette->set_pen_color(offset, pal3bit(r),pal3bit(g),pal3bit(b));
 	}
 }
 
@@ -361,21 +377,23 @@ WRITE8_MEMBER( pc100_state::rtc_porta_w )
     ---- ---x write
 */
 
-	m_rtc->write_w(data & 1);
-	m_rtc->read_w((data & 2) >> 1);
-	m_rtc->cs1_w((data & 4) >> 2);
+	m_rtc->write_w((data >> 0) & 1);
+	m_rtc->read_w((data >> 1) & 1);
+	m_rtc->cs1_w((data >> 2) & 1);
 }
 
-static I8255A_INTERFACE( pc100_ppi8255_interface_1 )
+WRITE8_MEMBER( pc100_state::rtc_portc_w )
 {
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(pc100_state, rtc_porta_w),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DEVICE_MEMBER("rtc", msm58321_device, read),
-	DEVCB_DEVICE_MEMBER("rtc", msm58321_device, write)
-};
+	m_rtc->d0_w((data >> 0) & 1);
+	m_rtc->d1_w((data >> 1) & 1);
+	m_rtc->d2_w((data >> 2) & 1);
+	m_rtc->d3_w((data >> 3) & 1);
+}
 
+READ8_MEMBER( pc100_state::rtc_portc_r )
+{
+	return m_rtc_portc;
+}
 
 WRITE8_MEMBER( pc100_state::lower_mask_w )
 {
@@ -393,32 +411,8 @@ WRITE8_MEMBER( pc100_state::crtc_bank_w )
 	m_bank_r = (data & 0x30) >> 4;
 }
 
-static I8255A_INTERFACE( pc100_ppi8255_interface_2 )
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(pc100_state, lower_mask_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(pc100_state, upper_mask_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(pc100_state, crtc_bank_w)
-};
-
-IRQ_CALLBACK_MEMBER(pc100_state::pc100_irq_callback)
-{
-	return device.machine().device<pic8259_device>( "pic8259" )->acknowledge();
-}
-
-WRITE_LINE_MEMBER( pc100_state::pc100_set_int_line )
-{
-	//printf("%02x\n",interrupt);
-	m_maincpu->set_input_line(0, state ? HOLD_LINE : CLEAR_LINE);
-}
-
 void pc100_state::machine_start()
 {
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(pc100_state::pc100_irq_callback),this));
-	m_kanji_rom = (UINT16 *)(*memregion("kanji"));
-	m_vram = (UINT16 *)(*memregion("vram"));
 }
 
 void pc100_state::machine_reset()
@@ -473,11 +467,6 @@ static SLOT_INTERFACE_START( pc100_floppies )
 	SLOT_INTERFACE( "525hd", FLOPPY_525_HD )
 SLOT_INTERFACE_END
 
-static MSM58321_INTERFACE( rtc_intf )
-{
-	DEVCB_NULL
-};
-
 #define MASTER_CLOCK 6988800
 
 static MACHINE_CONFIG_START( pc100, pc100_state )
@@ -486,16 +475,32 @@ static MACHINE_CONFIG_START( pc100, pc100_state )
 	MCFG_CPU_PROGRAM_MAP(pc100_map)
 	MCFG_CPU_IO_MAP(pc100_io)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pc100_state, pc100_vblank_irq)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("pic8259", pic8259_device, inta_cb)
 
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("600hz", pc100_state, pc100_600hz_irq, attotime::from_hz(MASTER_CLOCK/600))
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("100hz", pc100_state, pc100_100hz_irq, attotime::from_hz(MASTER_CLOCK/100))
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("50hz", pc100_state, pc100_50hz_irq, attotime::from_hz(MASTER_CLOCK/50))
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("10hz", pc100_state, pc100_10hz_irq, attotime::from_hz(MASTER_CLOCK/10))
-	MCFG_I8255_ADD( "ppi8255_1", pc100_ppi8255_interface_1 )
-	MCFG_I8255_ADD( "ppi8255_2", pc100_ppi8255_interface_2 )
-	MCFG_PIC8259_ADD( "pic8259", WRITELINE(pc100_state, pc100_set_int_line), GND, NULL )
+
+	MCFG_DEVICE_ADD("ppi8255_1", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(pc100_state, rtc_porta_w))
+	MCFG_I8255_IN_PORTC_CB(READ8(pc100_state, rtc_portc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pc100_state, rtc_portc_w))
+
+	MCFG_DEVICE_ADD("ppi8255_2", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(pc100_state, lower_mask_w))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(pc100_state, upper_mask_w))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pc100_state, crtc_bank_w))
+
+	MCFG_PIC8259_ADD( "pic8259", INPUTLINE("maincpu", 0), GND, NULL )
+
 	MCFG_UPD765A_ADD("upd765", true, true)
-	MCFG_MSM58321_ADD("rtc", XTAL_32_768kHz, rtc_intf)
+
+	MCFG_DEVICE_ADD("rtc", MSM58321, XTAL_32_768kHz)
+	MCFG_MSM58321_D0_HANDLER(WRITELINE(pc100_state, rtc_portc_0_w))
+	MCFG_MSM58321_D1_HANDLER(WRITELINE(pc100_state, rtc_portc_1_w))
+	MCFG_MSM58321_D2_HANDLER(WRITELINE(pc100_state, rtc_portc_2_w))
+	MCFG_MSM58321_D3_HANDLER(WRITELINE(pc100_state, rtc_portc_3_w))
 
 	MCFG_FLOPPY_DRIVE_ADD("upd765:0", pc100_floppies, "525hd", floppy_image_device::default_floppy_formats)
 	MCFG_FLOPPY_DRIVE_ADD("upd765:1", pc100_floppies, "525hd", floppy_image_device::default_floppy_formats)
@@ -505,8 +510,10 @@ static MACHINE_CONFIG_START( pc100, pc100_state )
 	/* TODO: Unknown Pixel Clock and CRTC is dynamic */
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK*4, 1024, 0, 768, 264*2, 0, 512)
 	MCFG_SCREEN_UPDATE_DRIVER(pc100_state, screen_update_pc100)
-	MCFG_GFXDECODE(pc100)
-	MCFG_PALETTE_LENGTH(16)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pc100)
+	MCFG_PALETTE_ADD("palette", 16)
 //  MCFG_PALETTE_INIT(black_and_white)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -517,13 +524,13 @@ MACHINE_CONFIG_END
 
 /* ROM definition */
 ROM_START( pc100 )
-	ROM_REGION( 0x8000, "ipl", ROMREGION_ERASEFF )
+	ROM_REGION16_LE( 0x8000, "ipl", ROMREGION_ERASEFF )
 	ROM_LOAD( "ipl.rom", 0x0000, 0x8000, CRC(fd54a80e) SHA1(605a1b598e623ba2908a14a82454b9d32ea3c331))
 
-	ROM_REGION( 0x20000, "kanji", ROMREGION_ERASEFF )
+	ROM_REGION16_LE( 0x20000, "kanji", ROMREGION_ERASEFF )
 	ROM_LOAD( "kanji.rom", 0x0000, 0x20000, BAD_DUMP CRC(29298591) SHA1(d10174553ceea556fc53fc4e685d939524a4f64b))
 
-	ROM_REGION( 0x20000*4, "vram", ROMREGION_ERASEFF )
+	ROM_REGION16_LE( 0x20000*4, "vram", ROMREGION_ERASEFF )
 ROM_END
 
 /* Driver */

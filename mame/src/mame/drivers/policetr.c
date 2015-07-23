@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     P&P Marketing Police Trainer hardware
@@ -28,7 +30,7 @@ Noted differences in versions of SharpShooter:
  Added a "Welcome to Sharpshooter" start-up screen showing rom versions for v1.9
  Initial High Score names are changed between v1.1 and v1.2
   Circus of Mystery:
-    The ballon challenge has been rewritten for v1.7
+    The balloon challenge has been rewritten for v1.7
     Jugglers throw balls painted with targets for v1.1 & v1.2  Version 1.7 uses regular targets
   Alien Encounter:
     First saucer challenge has been modified for v1.7
@@ -62,7 +64,7 @@ Sound: BSMT2000
 Other: Bt481AKPJ110 (44 Pin PQFP, Brooktree RAMDAC)
        AT001 (160 Pin PQFP, P&P Marketing, custom programmed XILINX XC4310)
        ATMEL 93C66 (EEPROM)
-       CN7 - 4 pin connector for stero speaker output
+       CN7 - 4 pin connector for stereo speaker output
 PLDs:
        XILINX-1 XC9536 Labeled as U175A (Rev 2/3: Not Used)
        XILINX-2 XC9536 Labeled as U109A (Rev 2/3: Lattice ispLSI 2032-80LJ - U109.P)
@@ -86,7 +88,7 @@ PC5380-9651            5380-JY3306A           5380-N1045503A
 
 #include "emu.h"
 #include "cpu/mips/r3000.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "includes/policetr.h"
 #include "sound/bsmt2000.h"
 
@@ -117,7 +119,7 @@ void policetr_state::device_timer(emu_timer &timer, device_timer_id id, int para
 INTERRUPT_GEN_MEMBER(policetr_state::irq4_gen)
 {
 	device.execute().set_input_line(R3000_IRQ4, ASSERT_LINE);
-	timer_set(machine().primary_screen->time_until_pos(0), TIMER_IRQ5_GEN);
+	timer_set(m_screen->time_until_pos(0), TIMER_IRQ5_GEN);
 }
 
 
@@ -144,9 +146,9 @@ WRITE32_MEMBER(policetr_state::control_w)
 	/* handle EEPROM I/O */
 	if (ACCESSING_BITS_16_23)
 	{
-		m_eeprom->write_bit(data & 0x00800000);
-		m_eeprom->set_cs_line((data & 0x00200000) ? CLEAR_LINE : ASSERT_LINE);
-		m_eeprom->set_clock_line((data & 0x00400000) ? ASSERT_LINE : CLEAR_LINE);
+		m_eeprom->di_write((data & 0x00800000) >> 23);
+		m_eeprom->cs_write((data & 0x00200000) ? ASSERT_LINE : CLEAR_LINE);
+		m_eeprom->clk_write((data & 0x00400000) ? ASSERT_LINE : CLEAR_LINE);
 	}
 
 	/* toggling BSMT off then on causes a reset */
@@ -211,7 +213,7 @@ WRITE32_MEMBER(policetr_state::speedup_w)
 	/* see if the PC matches */
 	if ((space.device().safe_pcbase() & 0x1fffffff) == m_speedup_pc)
 	{
-		UINT64 curr_cycles = machine().firstcpu->total_cycles();
+		UINT64 curr_cycles = m_maincpu->total_cycles();
 
 		/* if less than 50 cycles from the last time, count it */
 		if (curr_cycles - m_last_cycles < 50)
@@ -228,25 +230,6 @@ WRITE32_MEMBER(policetr_state::speedup_w)
 		m_last_cycles = curr_cycles;
 	}
 }
-
-
-
-/*************************************
- *
- *  EEPROM interface/saving
- *
- *************************************/
-
-static const eeprom_interface eeprom_interface_policetr =
-{
-	8,              // address bits 8
-	16,             // data bits    16
-	"*110",         // read         1 10 aaaaaa
-	"*101",         // write        1 01 aaaaaa dddddddddddddddd
-	"*111",         // erase        1 11 aaaaaa
-	"*10000xxxx",   // lock         1 00 00xxxx
-	"*10011xxxx"    // unlock       1 00 11xxxx
-};
 
 
 
@@ -334,7 +317,7 @@ static INPUT_PORTS_START( policetr )
 	PORT_BIT( 0x04000000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2)
 	PORT_BIT( 0x08000000, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x10000000, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x20000000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit) /* EEPROM read */
+	PORT_BIT( 0x20000000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read) /* EEPROM read */
 	PORT_BIT( 0x40000000, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x80000000, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
@@ -416,18 +399,18 @@ static MACHINE_CONFIG_START( policetr, policetr_state )
 	MCFG_CPU_PROGRAM_MAP(policetr_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", policetr_state,  irq4_gen)
 
-	MCFG_EEPROM_ADD("eeprom", eeprom_interface_policetr)
+	MCFG_EEPROM_SERIAL_93C66_ADD("eeprom")
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
-
 	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_SIZE(400, 262)  /* needs to be verified */
 	MCFG_SCREEN_VISIBLE_AREA(0, 393, 0, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(policetr_state, screen_update_policetr)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_PALETTE_ADD("palette", 256)
 
 
 	/* sound hardware */

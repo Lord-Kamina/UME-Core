@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Paul Hampson, Nicola Salmoria
 /***************************************************************************
 
-Super Dodgeball / Nekketsu Koukou Dodgeball Bu
+Super Dodge Ball / Nekketsu Koukou Dodgeball Bu
 
-briver by Paul Hampson and Nicola Salmoria
+driver by Paul Hampson and Nicola Salmoria
 
 TODO:
 - sprite lag (the real game has quite a bit of lag too)
@@ -25,7 +27,6 @@ Notes:
 #include "cpu/m6502/m6502.h"
 #include "cpu/m6809/m6809.h"
 #include "sound/3812intf.h"
-#include "sound/msm5205.h"
 #include "includes/spdodgeb.h"
 
 
@@ -238,31 +239,21 @@ WRITE8_MEMBER(spdodgeb_state::mcu63701_w)
 }
 
 
-READ8_MEMBER(spdodgeb_state::port_0_r)
-{
-	int port = ioport("IN0")->read();
-
-	m_toggle^=0x02; /* mcu63701_busy flag */
-
-	return (port | m_toggle);
-}
-
-
 
 static ADDRESS_MAP_START( spdodgeb_map, AS_PROGRAM, 8, spdodgeb_state )
 	AM_RANGE(0x0000, 0x0fff) AM_RAM
 	AM_RANGE(0x1000, 0x10ff) AM_WRITEONLY AM_SHARE("spriteram")
-	AM_RANGE(0x2000, 0x2fff) AM_RAM_WRITE(spdodgeb_videoram_w) AM_SHARE("videoram")
-	AM_RANGE(0x3000, 0x3000) AM_READ(port_0_r) //AM_WRITENOP
+	AM_RANGE(0x2000, 0x2fff) AM_RAM_WRITE(videoram_w) AM_SHARE("videoram")
+	AM_RANGE(0x3000, 0x3000) AM_READ_PORT("IN0") //AM_WRITENOP
 	AM_RANGE(0x3001, 0x3001) AM_READ_PORT("DSW") //AM_WRITENOP
 	AM_RANGE(0x3002, 0x3002) AM_WRITE(sound_command_w)
 //  AM_RANGE(0x3003, 0x3003) AM_WRITENOP
-	AM_RANGE(0x3004, 0x3004) AM_WRITE(spdodgeb_scrollx_lo_w)
+	AM_RANGE(0x3004, 0x3004) AM_WRITE(scrollx_lo_w)
 //  AM_RANGE(0x3005, 0x3005) AM_WRITENOP         /* mcu63701_output_w */
-	AM_RANGE(0x3006, 0x3006) AM_WRITE(spdodgeb_ctrl_w)  /* scroll hi, flip screen, bank switch, palette select */
+	AM_RANGE(0x3006, 0x3006) AM_WRITE(ctrl_w)  /* scroll hi, flip screen, bank switch, palette select */
 	AM_RANGE(0x3800, 0x3800) AM_WRITE(mcu63701_w)
 	AM_RANGE(0x3801, 0x3805) AM_READ(mcu63701_r)
-	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank1")
+	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("mainbank")
 	AM_RANGE(0x8000, 0xffff) AM_ROM
 ADDRESS_MAP_END
 
@@ -275,10 +266,16 @@ static ADDRESS_MAP_START( spdodgeb_sound_map, AS_PROGRAM, 8, spdodgeb_state )
 ADDRESS_MAP_END
 
 
+CUSTOM_INPUT_MEMBER(spdodgeb_state::mcu63705_busy_r)
+{
+	m_toggle ^= 0x01;
+	return m_toggle;
+}
+
 static INPUT_PORTS_START( spdodgeb )
 	PORT_START("IN0")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_VBLANK("screen")
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_SPECIAL )   /* mcu63701_busy flag */
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER(DEVICE_SELF, spdodgeb_state, mcu63705_busy_r, NULL) /* mcu63701_busy flag */
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_COIN1 )
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_COIN2 )
@@ -382,22 +379,19 @@ static GFXDECODE_START( spdodgeb )
 GFXDECODE_END
 
 
-WRITE_LINE_MEMBER(spdodgeb_state::irqhandler)
+void spdodgeb_state::machine_start()
 {
-	m_audiocpu->set_input_line(M6809_FIRQ_LINE, state ? ASSERT_LINE : CLEAR_LINE);
+	save_item(NAME(m_toggle));
+	save_item(NAME(m_adpcm_pos));
+	save_item(NAME(m_adpcm_end));
+	save_item(NAME(m_adpcm_idle));
+	save_item(NAME(m_adpcm_data));
+	save_item(NAME(m_mcu63701_command));
+	save_item(NAME(m_inputs));
+	save_item(NAME(m_tapc));
+	save_item(NAME(m_last_port));
+	save_item(NAME(m_last_dash));
 }
-
-static const msm5205_interface msm5205_config_1 =
-{
-	DEVCB_DRIVER_LINE_MEMBER(spdodgeb_state,spd_adpcm_int_1),  /* interrupt function */
-	MSM5205_S48_4B  /* 8kHz? */
-};
-
-static const msm5205_interface msm5205_config_2 =
-{
-	DEVCB_DRIVER_LINE_MEMBER(spdodgeb_state,spd_adpcm_int_2),  /* interrupt function */
-	MSM5205_S48_4B  /* 8kHz? */
-};
 
 void spdodgeb_state::machine_reset()
 {
@@ -416,38 +410,40 @@ void spdodgeb_state::machine_reset()
 static MACHINE_CONFIG_START( spdodgeb, spdodgeb_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M6502,12000000/6)   /* 2MHz ? */
+	MCFG_CPU_ADD("maincpu", M6502, XTAL_12MHz/6)   /* 2MHz ? */
 	MCFG_CPU_PROGRAM_MAP(spdodgeb_map)
-	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", spdodgeb_state, spdodgeb_interrupt, "screen", 0, 1) /* 1 IRQ every 8 visible scanlines, plus NMI for vblank */
+	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", spdodgeb_state, interrupt, "screen", 0, 1) /* 1 IRQ every 8 visible scanlines, plus NMI for vblank */
 
-	MCFG_CPU_ADD("audiocpu", M6809,12000000/6)  /* 2MHz ? */
+	MCFG_CPU_ADD("audiocpu", M6809, XTAL_12MHz/6)  /* 2MHz ? */
 	MCFG_CPU_PROGRAM_MAP(spdodgeb_sound_map)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_RAW_PARAMS(12000000/2, 384, 0, 256, 272, 0, 240)
-	MCFG_SCREEN_UPDATE_DRIVER(spdodgeb_state, screen_update_spdodgeb)
+	MCFG_SCREEN_RAW_PARAMS(XTAL_12MHz/2, 384, 0, 256, 272, 0, 240)
+	MCFG_SCREEN_UPDATE_DRIVER(spdodgeb_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(spdodgeb)
-	MCFG_PALETTE_LENGTH(1024)
-
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", spdodgeb)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_INIT_OWNER(spdodgeb_state, spdodgeb)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	MCFG_SOUND_ADD("ymsnd", YM3812, 3000000)
-	MCFG_YM3812_IRQ_HANDLER(WRITELINE(spdodgeb_state, irqhandler))
+	MCFG_SOUND_ADD("ymsnd", YM3812, XTAL_12MHz/4)
+	MCFG_YM3812_IRQ_HANDLER(INPUTLINE("audiocpu", M6809_FIRQ_LINE))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 1.0)
 
 	MCFG_SOUND_ADD("msm1", MSM5205, 384000)
-	MCFG_SOUND_CONFIG(msm5205_config_1)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(spdodgeb_state, spd_adpcm_int_1))  /* interrupt function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)  /* 8kHz? */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.50)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.50)
 
 	MCFG_SOUND_ADD("msm2", MSM5205, 384000)
-	MCFG_SOUND_CONFIG(msm5205_config_2)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(spdodgeb_state, spd_adpcm_int_2))  /* interrupt function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)  /* 8kHz? */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.50)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.50)
 MACHINE_CONFIG_END
@@ -578,6 +574,6 @@ ROM_END
 
 
 
-GAME( 1987, spdodgeb, 0,        spdodgeb, spdodgeb, driver_device, 0, ROT0, "Technos Japan", "Super Dodge Ball (US)", 0 )
-GAME( 1987, nkdodge,  spdodgeb, spdodgeb, spdodgeb, driver_device, 0, ROT0, "Technos Japan", "Nekketsu Koukou Dodgeball Bu (Japan)", 0 )
-GAME( 1987, nkdodgeb, spdodgeb, spdodgeb, spdodgeb, driver_device, 0, ROT0, "bootleg", "Nekketsu Koukou Dodgeball Bu (Japan, bootleg)", 0 )
+GAME( 1987, spdodgeb, 0,        spdodgeb, spdodgeb, driver_device, 0, ROT0, "Technos Japan", "Super Dodge Ball (US)", GAME_SUPPORTS_SAVE )
+GAME( 1987, nkdodge,  spdodgeb, spdodgeb, spdodgeb, driver_device, 0, ROT0, "Technos Japan", "Nekketsu Koukou Dodgeball Bu (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1987, nkdodgeb, spdodgeb, spdodgeb, spdodgeb, driver_device, 0, ROT0, "bootleg", "Nekketsu Koukou Dodgeball Bu (Japan, bootleg)", GAME_SUPPORTS_SAVE )

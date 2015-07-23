@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, Peter Ferrie
 /*
     Pinball 2000
 
@@ -5,12 +7,11 @@
 
     TODO:
         - Everything!
-        - BIOS hangs waiting for port 0400h to return 0x80.  If you make that happy it jumps off into the weeds.
         - MediaGX features should be moved out to machine/ and shared with mediagx.c once we know what these games need
 
     Hardware:
-        - Cyrix MediaGX processor/VGA
-        - Cyrix CX5520 northbridge?
+        - Cyrix MediaGX processor/VGA (northbridge)
+        - Cyrix CX5520 (southbridge)
         - VS9824AG SuperI/O standard PC I/O chip
         - 1 ISA, 2 PCI slots, 2 IDE headers
         - "Prism" PCI card with PLX PCI9052 PCI-to-random stuff bridge
@@ -19,7 +20,7 @@
 
 #include "emu.h"
 #include "cpu/i386/i386.h"
-#include "machine/pci.h"
+#include "machine/lpci.h"
 #include "machine/pcshare.h"
 #include "machine/pckeybrd.h"
 #include "machine/idectrl.h"
@@ -33,12 +34,18 @@ public:
 		m_main_ram(*this, "main_ram"),
 		m_cga_ram(*this, "cga_ram"),
 		m_bios_ram(*this, "bios_ram"),
-		m_vram(*this, "vram") { }
+		m_vram(*this, "vram"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette") { }
 
 	required_shared_ptr<UINT32> m_main_ram;
 	required_shared_ptr<UINT32> m_cga_ram;
 	required_shared_ptr<UINT32> m_bios_ram;
 	required_shared_ptr<UINT32> m_vram;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 	UINT8 m_pal[768];
 
 
@@ -77,6 +84,10 @@ public:
 	DECLARE_WRITE32_MEMBER(ad1847_w);
 	DECLARE_READ8_MEMBER(io20_r);
 	DECLARE_WRITE8_MEMBER(io20_w);
+	DECLARE_READ32_MEMBER(port400_r);
+	DECLARE_WRITE32_MEMBER(port400_w);
+	DECLARE_READ32_MEMBER(port800_r);
+	DECLARE_WRITE32_MEMBER(port800_w);
 	DECLARE_DRIVER_INIT(pinball2k);
 	virtual void machine_start();
 	virtual void machine_reset();
@@ -123,10 +134,10 @@ public:
 
 static const rgb_t cga_palette[16] =
 {
-	MAKE_RGB( 0x00, 0x00, 0x00 ), MAKE_RGB( 0x00, 0x00, 0xaa ), MAKE_RGB( 0x00, 0xaa, 0x00 ), MAKE_RGB( 0x00, 0xaa, 0xaa ),
-	MAKE_RGB( 0xaa, 0x00, 0x00 ), MAKE_RGB( 0xaa, 0x00, 0xaa ), MAKE_RGB( 0xaa, 0x55, 0x00 ), MAKE_RGB( 0xaa, 0xaa, 0xaa ),
-	MAKE_RGB( 0x55, 0x55, 0x55 ), MAKE_RGB( 0x55, 0x55, 0xff ), MAKE_RGB( 0x55, 0xff, 0x55 ), MAKE_RGB( 0x55, 0xff, 0xff ),
-	MAKE_RGB( 0xff, 0x55, 0x55 ), MAKE_RGB( 0xff, 0x55, 0xff ), MAKE_RGB( 0xff, 0xff, 0x55 ), MAKE_RGB( 0xff, 0xff, 0xff ),
+	rgb_t( 0x00, 0x00, 0x00 ), rgb_t( 0x00, 0x00, 0xaa ), rgb_t( 0x00, 0xaa, 0x00 ), rgb_t( 0x00, 0xaa, 0xaa ),
+	rgb_t( 0xaa, 0x00, 0x00 ), rgb_t( 0xaa, 0x00, 0xaa ), rgb_t( 0xaa, 0x55, 0x00 ), rgb_t( 0xaa, 0xaa, 0xaa ),
+	rgb_t( 0x55, 0x55, 0x55 ), rgb_t( 0x55, 0x55, 0xff ), rgb_t( 0x55, 0xff, 0x55 ), rgb_t( 0x55, 0xff, 0xff ),
+	rgb_t( 0xff, 0x55, 0x55 ), rgb_t( 0xff, 0x55, 0xff ), rgb_t( 0xff, 0xff, 0x55 ), rgb_t( 0xff, 0xff, 0xff ),
 };
 
 void pinball2k_state::video_start()
@@ -134,7 +145,7 @@ void pinball2k_state::video_start()
 	int i;
 	for (i=0; i < 16; i++)
 	{
-		palette_set_color(machine(), i, cga_palette[i]);
+		m_palette->set_pen_color(i, cga_palette[i]);
 	}
 }
 
@@ -143,7 +154,7 @@ void pinball2k_state::draw_char(bitmap_rgb32 &bitmap, const rectangle &cliprect,
 	int i,j;
 	const UINT8 *dp;
 	int index = 0;
-	const pen_t *pens = gfx->machine().pens;
+	const pen_t *pens = m_palette->pens();
 
 	dp = gfx->get_data(ch);
 
@@ -188,7 +199,7 @@ void pinball2k_state::draw_framebuffer(bitmap_rgb32 &bitmap, const rectangle &cl
 		m_frame_height = height;
 
 		visarea.set(0, width - 1, 0, height - 1);
-		machine().primary_screen->configure(width, height * 262 / 240, visarea, machine().primary_screen->frame_period().attoseconds);
+		m_screen->configure(width, height * 262 / 240, visarea, m_screen->frame_period().attoseconds);
 	}
 
 	if (m_disp_ctrl_reg[DC_OUTPUT_CFG] & 0x1)        // 8-bit mode
@@ -257,7 +268,7 @@ void pinball2k_state::draw_framebuffer(bitmap_rgb32 &bitmap, const rectangle &cl
 void pinball2k_state::draw_cga(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
 	int i, j;
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 	UINT32 *cga = m_cga_ram;
 	int index = 0;
 
@@ -299,7 +310,7 @@ READ32_MEMBER(pinball2k_state::disp_ctrl_r)
 		case DC_TIMING_CFG:
 			r |= 0x40000000;
 
-			if (machine().primary_screen->vpos() >= m_frame_height)
+			if (m_screen->vpos() >= m_frame_height)
 				r &= ~0x40000000;
 			break;
 	}
@@ -366,12 +377,12 @@ READ32_MEMBER(pinball2k_state::biu_ctrl_r)
 
 WRITE32_MEMBER(pinball2k_state::biu_ctrl_w)
 {
-	//mame_printf_debug("biu_ctrl_w %08X, %08X, %08X\n", data, offset, mem_mask);
+	//osd_printf_debug("biu_ctrl_w %08X, %08X, %08X\n", data, offset, mem_mask);
 	COMBINE_DATA(m_biu_ctrl_reg + offset);
 
 	if (offset == 3)        // BC_XMAP_3 register
 	{
-		//mame_printf_debug("BC_XMAP_3: %08X, %08X, %08X\n", data, offset, mem_mask);
+		//osd_printf_debug("BC_XMAP_3: %08X, %08X, %08X\n", data, offset, mem_mask);
 	}
 }
 
@@ -386,16 +397,12 @@ READ8_MEMBER(pinball2k_state::io20_r)
 	UINT8 r = 0;
 
 	// 0x22, 0x23, Cyrix configuration registers
-	if (offset == 0x02)
+	if (offset == 0x00)
 	{
 	}
-	else if (offset == 0x03)
+	else if (offset == 0x01)
 	{
 		r = m_mediagx_config_regs[m_mediagx_config_reg_sel];
-	}
-	else
-	{
-		r = m_pic8259_1->read(space, offset);
 	}
 	return r;
 }
@@ -403,18 +410,32 @@ READ8_MEMBER(pinball2k_state::io20_r)
 WRITE8_MEMBER(pinball2k_state::io20_w)
 {
 	// 0x22, 0x23, Cyrix configuration registers
-	if (offset == 0x02)
+	if (offset == 0x00)
 	{
 		m_mediagx_config_reg_sel = data;
 	}
-	else if (offset == 0x03)
+	else if (offset == 0x01)
 	{
 		m_mediagx_config_regs[m_mediagx_config_reg_sel] = data;
 	}
-	else
-	{
-		m_pic8259_1->write(space, offset, data);
-	}
+}
+
+READ32_MEMBER(pinball2k_state::port400_r)
+{
+	return 0x8000;
+}
+
+WRITE32_MEMBER(pinball2k_state::port400_w)
+{
+}
+
+READ32_MEMBER(pinball2k_state::port800_r)
+{
+	return 0x80;
+}
+
+WRITE32_MEMBER(pinball2k_state::port800_w)
+{
 }
 
 READ32_MEMBER(pinball2k_state::parallel_port_r)
@@ -432,7 +453,7 @@ static UINT32 cx5510_pci_r(device_t *busdevice, device_t *device, int function, 
 {
 	pinball2k_state *state = busdevice->machine().driver_data<pinball2k_state>();
 
-	//mame_printf_debug("CX5510: PCI read %d, %02X, %08X\n", function, reg, mem_mask);
+	//osd_printf_debug("CX5510: PCI read %d, %02X, %08X\n", function, reg, mem_mask);
 	switch (reg)
 	{
 		case 0:     return 0x00001078;
@@ -445,7 +466,7 @@ static void cx5510_pci_w(device_t *busdevice, device_t *device, int function, in
 {
 	pinball2k_state *state = busdevice->machine().driver_data<pinball2k_state>();
 
-	//mame_printf_debug("CX5510: PCI write %d, %02X, %08X, %08X\n", function, reg, data, mem_mask);
+	//osd_printf_debug("CX5510: PCI write %d, %02X, %08X, %08X\n", function, reg, data, mem_mask);
 	COMBINE_DATA(state->m_cx5510_regs + (reg/4));
 }
 
@@ -465,10 +486,12 @@ static ADDRESS_MAP_START( mediagx_map, AS_PROGRAM, 32, pinball2k_state )
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START(mediagx_io, AS_IO, 32, pinball2k_state )
+	AM_RANGE(0x0020, 0x0023) AM_READWRITE8(io20_r, io20_w, 0xffff0000)
 	AM_IMPORT_FROM(pcat32_io_common)
-	AM_RANGE(0x0020, 0x003f) AM_READWRITE8(io20_r, io20_w, 0xffffffff)
 	AM_RANGE(0x00e8, 0x00eb) AM_NOP     // I/O delay port
 	AM_RANGE(0x0378, 0x037b) AM_READWRITE(parallel_port_r, parallel_port_w)
+	AM_RANGE(0x0400, 0x0403) AM_READWRITE(port400_r, port400_w)
+	AM_RANGE(0x0800, 0x0803) AM_READWRITE(port800_r, port800_w)
 	AM_RANGE(0x0cf8, 0x0cff) AM_DEVREADWRITE("pcibus", pci_bus_legacy_device, read, write)
 ADDRESS_MAP_END
 
@@ -560,8 +583,6 @@ void pinball2k_state::machine_reset()
 {
 	UINT8 *rom = memregion("bios")->base();
 
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(pinball2k_state::irq_callback),this));
-
 	memcpy(m_bios_ram, rom, 0x40000);
 	m_maincpu->reset();
 }
@@ -570,27 +591,23 @@ static ADDRESS_MAP_START( ramdac_map, AS_0, 8, pinball2k_state )
 	AM_RANGE(0x000, 0x3ff) AM_DEVREADWRITE("ramdac",ramdac_device,ramdac_pal_r,ramdac_rgb666_w)
 ADDRESS_MAP_END
 
-static RAMDAC_INTERFACE( ramdac_intf )
-{
-	0
-};
-
 static MACHINE_CONFIG_START( mediagx, pinball2k_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", MEDIAGX, 166000000)
 	MCFG_CPU_PROGRAM_MAP(mediagx_map)
 	MCFG_CPU_IO_MAP(mediagx_io)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("pic8259_1", pic8259_device, inta_cb)
 
 	MCFG_FRAGMENT_ADD( pcat_common )
 
 	MCFG_PCI_BUS_LEGACY_ADD("pcibus", 0)
 	MCFG_PCI_BUS_LEGACY_DEVICE(18, NULL, cx5510_pci_r, cx5510_pci_w)
 
-	MCFG_IDE_CONTROLLER_ADD("ide", ide_devices, "hdd", NULL, true)
-	MCFG_IDE_CONTROLLER_IRQ_HANDLER(DEVWRITELINE("pic8259_2", pic8259_device, ir6_w))
+	MCFG_IDE_CONTROLLER_ADD("ide", ata_devices, "hdd", NULL, true)
+	MCFG_ATA_INTERFACE_IRQ_HANDLER(DEVWRITELINE("pic8259_2", pic8259_device, ir6_w))
 
-	MCFG_RAMDAC_ADD("ramdac", ramdac_intf, ramdac_map)
+	MCFG_RAMDAC_ADD("ramdac", ramdac_map, "palette")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -599,8 +616,8 @@ static MACHINE_CONFIG_START( mediagx, pinball2k_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 639, 0, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(pinball2k_state, screen_update_mediagx)
 
-	MCFG_GFXDECODE(CGA)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", CGA)
+	MCFG_PALETTE_ADD("palette", 256)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")

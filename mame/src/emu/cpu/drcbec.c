@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     drcbec.c
 
     Interpreted C core back-end for the universal machine language.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -156,7 +127,7 @@ enum
 	OP_FFRI4,
 	OP_FFRI8,
 	OP_FFRFS,
-	OP_FFRFD,
+	OP_FFRFD
 };
 
 
@@ -549,7 +520,6 @@ int drcbe_c::execute(code_handle &entry)
 
 				// these opcodes should be processed at compile-time only
 				fatalerror("Unexpected opcode\n");
-				break;
 
 			case MAKE_OPCODE_SHORT(OP_DEBUG, 4, 0):     // DEBUG   pc
 				debugger_instruction_hook(&m_device, PARAM0);
@@ -1959,7 +1929,7 @@ int drcbe_c::execute(code_handle &entry)
 				break;
 
 			case MAKE_OPCODE_SHORT(OP_FRSQRT, 4, 0):    // FSRSQRT dst,src1
-				FSPARAM0 = 1.0f / sqrt(FSPARAM1);
+				FSPARAM0 = 1.0f / sqrtf(FSPARAM1);
 				break;
 
 
@@ -2103,14 +2073,14 @@ int drcbe_c::execute(code_handle &entry)
 
 			default:
 				fatalerror("Unexpected opcode!\n");
-				break;
 		}
 
 		// advance past the parameters and immediates
 		inst += OPCODE_GET_PWORDS(opcode);
 	}
 
-	return 0;
+	// never executed
+	//return 0;
 }
 
 
@@ -2194,7 +2164,6 @@ void drcbe_c::output_parameter(drcbec_instruction **dstptr, void **immedptr, int
 
 		default:
 			fatalerror("Unexpected param->type\n");
-			break;
 	}
 
 	*dstptr = dst;

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Takahiro Nogi
 /******************************************************************************
 
     Video Hardware for Nichibutsu Mahjong series.
@@ -7,7 +9,6 @@
 ******************************************************************************/
 
 #include "emu.h"
-#include "includes/nb1413m3.h"
 #include "includes/hyhoo.h"
 
 
@@ -16,9 +17,9 @@ WRITE8_MEMBER(hyhoo_state::hyhoo_blitter_w)
 	switch (offset)
 	{
 		case 0x00:  m_blitter_src_addr = (m_blitter_src_addr & 0xff00) | data;
-					nb1413m3_gfxradr_l_w(space, 0, data); break;
+					m_nb1413m3->gfxradr_l_w(space, 0, data); break;
 		case 0x01:  m_blitter_src_addr = (m_blitter_src_addr & 0x00ff) | (data << 8);
-					nb1413m3_gfxradr_h_w(space, 0, data); break;
+					m_nb1413m3->gfxradr_h_w(space, 0, data); break;
 		case 0x02:  m_blitter_destx = data; break;
 		case 0x03:  m_blitter_desty = data; break;
 		case 0x04:  m_blitter_sizex = data; break;
@@ -41,7 +42,7 @@ WRITE8_MEMBER(hyhoo_state::hyhoo_romsel_w)
 	int gfxlen = memregion("gfx1")->bytes();
 	m_gfxrom = (((data & 0xc0) >> 4) + (data & 0x03));
 	m_highcolorflag = data;
-	nb1413m3_gfxrombank_w(space, 0, data);
+	m_nb1413m3->gfxrombank_w(space, 0, data);
 
 	if ((0x20000 * m_gfxrom) > (gfxlen - 1))
 	{
@@ -57,7 +58,7 @@ void hyhoo_state::device_timer(emu_timer &timer, device_timer_id id, int param, 
 	switch (id)
 	{
 	case TIMER_BLITTER:
-		nb1413m3_busyflag = 1;
+		m_nb1413m3->m_busyflag = 1;
 		break;
 	default:
 		assert_always(FALSE, "Unknown id in hyhoo_state::device_timer");
@@ -79,9 +80,9 @@ void hyhoo_state::hyhoo_gfxdraw()
 	int r, g, b;
 	pen_t pen;
 
-	nb1413m3_busyctr = 0;
+	m_nb1413m3->m_busyctr = 0;
 
-	m_gfxrom |= ((nb1413m3_sndrombank1 & 0x02) << 3);
+	m_gfxrom |= ((m_nb1413m3->m_sndrombank1 & 0x02) << 3);
 
 	startx = m_blitter_destx + m_blitter_sizex;
 	starty = m_blitter_desty + m_blitter_sizey;
@@ -146,7 +147,7 @@ void hyhoo_state::hyhoo_gfxdraw()
 						g = ((color & 0x18) >> 3) & 0x03;
 						b = ((color & 0xe0) >> 5) & 0x07;
 
-						pen = MAKE_RGB(pal6bit(r), pal5bit(g), pal5bit(b));
+						pen = rgb_t(pal6bit(r), pal5bit(g), pal5bit(b));
 
 						m_tmpbitmap.pix32(dy, dx1) = m_tmpbitmap.pix32(dy, dx1) | pen;
 						m_tmpbitmap.pix32(dy, dx2) = m_tmpbitmap.pix32(dy, dx2) | pen;
@@ -162,7 +163,7 @@ void hyhoo_state::hyhoo_gfxdraw()
 						g = ((color & 0x38) >> 3) & 0x07;
 						b = ((color & 0xc0) >> 6) & 0x03;
 
-						pen = MAKE_RGB(pal6bit(r << 3), pal5bit(g << 2), pal5bit(b << 3));
+						pen = rgb_t(pal6bit(r << 3), pal5bit(g << 2), pal5bit(b << 3));
 
 						m_tmpbitmap.pix32(dy, dx1) = pen;
 						m_tmpbitmap.pix32(dy, dx2) = pen;
@@ -195,7 +196,7 @@ void hyhoo_state::hyhoo_gfxdraw()
 					g = ((~m_clut[color1] & 0x38) >> 3) & 0x07;
 					b = ((~m_clut[color1] & 0xc0) >> 6) & 0x03;
 
-					pen = MAKE_RGB(pal6bit(r << 3), pal5bit(g << 2), pal5bit(b << 3));
+					pen = rgb_t(pal6bit(r << 3), pal5bit(g << 2), pal5bit(b << 3));
 
 					m_tmpbitmap.pix32(dy, dx1) = pen;
 				}
@@ -209,24 +210,36 @@ void hyhoo_state::hyhoo_gfxdraw()
 					g = ((~m_clut[color2] & 0x38) >> 3) & 0x07;
 					b = ((~m_clut[color2] & 0xc0) >> 6) & 0x03;
 
-					pen = MAKE_RGB(pal6bit(r << 3), pal5bit(g << 2), pal5bit(b << 3));
+					pen = rgb_t(pal6bit(r << 3), pal5bit(g << 2), pal5bit(b << 3));
 
 					m_tmpbitmap.pix32(dy, dx2) = pen;
 				}
 			}
 
-			nb1413m3_busyctr++;
+			m_nb1413m3->m_busyctr++;
 		}
 	}
 
-	nb1413m3_busyflag = 0;
-	timer_set(attotime::from_hz(400000) * nb1413m3_busyctr, TIMER_BLITTER);
+	m_nb1413m3->m_busyflag = 0;
+	timer_set(attotime::from_hz(400000) * m_nb1413m3->m_busyctr, TIMER_BLITTER);
 }
 
 
 void hyhoo_state::video_start()
 {
-	machine().primary_screen->register_screen_bitmap(m_tmpbitmap);
+	m_screen->register_screen_bitmap(m_tmpbitmap);
+	save_item(NAME(m_blitter_destx));
+	save_item(NAME(m_blitter_desty));
+	save_item(NAME(m_blitter_sizex));
+	save_item(NAME(m_blitter_sizey));
+	save_item(NAME(m_blitter_src_addr));
+	save_item(NAME(m_blitter_direction_x));
+	save_item(NAME(m_blitter_direction_y));
+	save_item(NAME(m_gfxrom));
+	save_item(NAME(m_dispflag));
+	save_item(NAME(m_highcolorflag));
+	save_item(NAME(m_flipscreen));
+	save_item(NAME(m_tmpbitmap));
 }
 
 
@@ -235,7 +248,7 @@ UINT32 hyhoo_state::screen_update_hyhoo(screen_device &screen, bitmap_rgb32 &bit
 	if (m_dispflag)
 		copybitmap(bitmap, m_tmpbitmap, m_flipscreen, m_flipscreen, 0, 0, cliprect);
 	else
-		bitmap.fill(RGB_BLACK, cliprect);
+		bitmap.fill(rgb_t::black, cliprect);
 
 	return 0;
 }

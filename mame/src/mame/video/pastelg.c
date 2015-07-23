@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Takahiro Nogi
 /******************************************************************************
 
     Video Hardware for Nichibutsu Mahjong series.
@@ -7,20 +9,19 @@
 ******************************************************************************/
 
 #include "emu.h"
-#include "includes/nb1413m3.h"
 #include "includes/pastelg.h"
 
 /******************************************************************************
 
 
 ******************************************************************************/
-void pastelg_state::palette_init()
+PALETTE_INIT_MEMBER(pastelg_state, pastelg)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 	int bit0, bit1, bit2, bit3, r, g, b;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		bit0 = (color_prom[0] >> 0) & 0x01;
 		bit1 = (color_prom[0] >> 1) & 0x01;
@@ -32,27 +33,22 @@ void pastelg_state::palette_init()
 		bit2 = (color_prom[0] >> 6) & 0x01;
 		bit3 = (color_prom[0] >> 7) & 0x01;
 		g = 0x0e * bit0 + 0x1f * bit1 + 0x43 * bit2 + 0x8f * bit3;
-		bit0 = (color_prom[machine().total_colors()] >> 0) & 0x01;
-		bit1 = (color_prom[machine().total_colors()] >> 1) & 0x01;
-		bit2 = (color_prom[machine().total_colors()] >> 2) & 0x01;
-		bit3 = (color_prom[machine().total_colors()] >> 3) & 0x01;
+		bit0 = (color_prom[palette.entries()] >> 0) & 0x01;
+		bit1 = (color_prom[palette.entries()] >> 1) & 0x01;
+		bit2 = (color_prom[palette.entries()] >> 2) & 0x01;
+		bit3 = (color_prom[palette.entries()] >> 3) & 0x01;
 		b = 0x0e * bit0 + 0x1f * bit1 + 0x43 * bit2 + 0x8f * bit3;
 
-		palette_set_color(machine(),i,MAKE_RGB(r,g,b));
+		palette.set_pen_color(i,rgb_t(r,g,b));
 		color_prom++;
 	}
-}
-
-WRITE8_MEMBER(pastelg_state::pastelg_clut_w)
-{
-	m_clut[offset] = data;
 }
 
 /******************************************************************************
 
 
 ******************************************************************************/
-int pastelg_state::pastelg_blitter_src_addr_r(address_space &space)
+int pastelg_state::pastelg_blitter_src_addr_r()
 {
 	return m_blitter_src_addr;
 }
@@ -105,7 +101,7 @@ WRITE8_MEMBER(pastelg_state::pastelg_romsel_w)
 	int gfxlen = memregion("gfx1")->bytes();
 	m_gfxrom = ((data & 0xc0) >> 6);
 	m_palbank = ((data & 0x10) >> 4);
-	nb1413m3_sndrombank1_w(space, 0, data);
+	m_nb1413m3->sndrombank1_w(space, 0, data);
 
 	if ((m_gfxrom << 16) > (gfxlen - 1))
 	{
@@ -124,8 +120,8 @@ void pastelg_state::pastelg_vramflip()
 {
 	int x, y;
 	UINT8 color1, color2;
-	int width = machine().primary_screen->width();
-	int height = machine().primary_screen->height();
+	int width = m_screen->width();
+	int height = m_screen->height();
 
 	if (m_flipscreen == m_flipscreen_old) return;
 
@@ -148,7 +144,7 @@ void pastelg_state::device_timer(emu_timer &timer, device_timer_id id, int param
 	switch (id)
 	{
 	case TIMER_BLITTER:
-		nb1413m3_busyflag = 1;
+		m_nb1413m3->m_busyflag = 1;
 		break;
 	default:
 		assert_always(FALSE, "Unknown id in pastelg_state::device_timer");
@@ -159,7 +155,7 @@ void pastelg_state::device_timer(emu_timer &timer, device_timer_id id, int param
 void pastelg_state::pastelg_gfxdraw()
 {
 	UINT8 *GFX = memregion("gfx1")->base();
-	int width = machine().primary_screen->width();
+	int width = m_screen->width();
 
 	int x, y;
 	int dx, dy;
@@ -172,7 +168,7 @@ void pastelg_state::pastelg_gfxdraw()
 	int count;
 	UINT8 color;
 
-	nb1413m3_busyctr = 0;
+	m_nb1413m3->m_busyctr = 0;
 
 	startx = m_blitter_destx + m_blitter_sizex;
 	starty = m_blitter_desty + m_blitter_sizey;
@@ -268,15 +264,15 @@ void pastelg_state::pastelg_gfxdraw()
 				}
 			}
 
-			nb1413m3_busyctr++;
+			m_nb1413m3->m_busyctr++;
 			x += incx;
 		}
 
 		y += incy;
 	}
 
-	nb1413m3_busyflag = 0;
-	timer_set(attotime::from_hz(400000) * nb1413m3_busyctr, TIMER_BLITTER);
+	m_nb1413m3->m_busyflag = 0;
+	timer_set(attotime::from_hz(400000) * m_nb1413m3->m_busyctr, TIMER_BLITTER);
 }
 
 /******************************************************************************
@@ -285,11 +281,23 @@ void pastelg_state::pastelg_gfxdraw()
 ******************************************************************************/
 void pastelg_state::video_start()
 {
-	int width = machine().primary_screen->width();
-	int height = machine().primary_screen->height();
+	int width = m_screen->width();
+	int height = m_screen->height();
 
 	m_videoram = auto_alloc_array_clear(machine(), UINT8, width * height);
-	m_clut = auto_alloc_array(machine(), UINT8, 0x10);
+
+	save_item(NAME(m_blitter_desty));
+	save_item(NAME(m_blitter_sizex));
+	save_item(NAME(m_blitter_sizey));
+	save_item(NAME(m_blitter_src_addr));
+	save_item(NAME(m_gfxrom));
+	save_item(NAME(m_dispflag));
+	save_item(NAME(m_flipscreen));
+	save_item(NAME(m_blitter_direction_x));
+	save_item(NAME(m_blitter_direction_y));
+	save_item(NAME(m_palbank));
+	save_pointer(NAME(m_videoram), width*height);
+	save_item(NAME(m_flipscreen_old));
 }
 
 /******************************************************************************

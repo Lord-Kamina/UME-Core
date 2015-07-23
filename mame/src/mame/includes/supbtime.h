@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /*************************************************************************
 
     Super Burger Time & China Town
@@ -5,6 +7,7 @@
 *************************************************************************/
 
 #include "video/decospr.h"
+#include "video/deco16ic.h"
 
 class supbtime_state : public driver_device
 {

@@ -1,4 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia
 #include "sound/k007232.h"
+#include "video/k052109.h"
+#include "video/k051960.h"
+#include "video/k051316.h"
+#include "video/konami_helper.h"
+
 class ajax_state : public driver_device
 {
 public:
@@ -11,7 +18,8 @@ public:
 		m_k007232_2(*this, "k007232_2"),
 		m_k052109(*this, "k052109"),
 		m_k051960(*this, "k051960"),
-		m_k051316(*this, "k051316") { }
+		m_k051316(*this, "k051316"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 //  UINT8 *    m_paletteram;    // currently this uses generic palette handling
@@ -34,6 +42,7 @@ public:
 	required_device<k052109_device> m_k052109;
 	required_device<k051960_device> m_k051960;
 	required_device<k051316_device> m_k051316;
+	required_device<palette_device> m_palette;
 	DECLARE_WRITE8_MEMBER(sound_bank_w);
 	DECLARE_READ8_MEMBER(ajax_ls138_f10_r);
 	DECLARE_WRITE8_MEMBER(ajax_ls138_f10_w);
@@ -48,10 +57,7 @@ public:
 	INTERRUPT_GEN_MEMBER(ajax_interrupt);
 	DECLARE_WRITE8_MEMBER(volume_callback0);
 	DECLARE_WRITE8_MEMBER(volume_callback1);
-
+	K051316_CB_MEMBER(zoom_callback);
+	K052109_CB_MEMBER(tile_callback);
+	K051960_CB_MEMBER(sprite_callback);
 };
-
-/*----------- defined in video/ajax.c -----------*/
-extern void ajax_tile_callback(running_machine &machine, int layer,int bank,int *code,int *color,int *flags,int *priority);
-extern void ajax_sprite_callback(running_machine &machine, int *code,int *color,int *priority,int *shadow);
-extern void ajax_zoom_callback(running_machine &machine, int *code,int *color,int *flags);

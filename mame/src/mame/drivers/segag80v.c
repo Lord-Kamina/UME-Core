@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Sega vector hardware
@@ -136,7 +138,6 @@
 #include "cpu/z80/z80.h"
 #include "sound/ay8910.h"
 #include "sound/samples.h"
-#include "audio/segasnd.h"
 #include "machine/segag80.h"
 #include "includes/segag80v.h"
 
@@ -200,7 +201,7 @@ WRITE8_MEMBER(segag80v_state::mainram_w)
 	m_mainram[decrypt_offset(space, offset)] = data;
 }
 
-WRITE8_MEMBER(segag80v_state::usb_ram_w){ sega_usb_ram_w(m_usb, space, decrypt_offset(m_maincpu->space(AS_PROGRAM), offset), data); }
+WRITE8_MEMBER(segag80v_state::usb_ram_w){ m_usb->ram_w(space, decrypt_offset(m_maincpu->space(AS_PROGRAM), offset), data); }
 WRITE8_MEMBER(segag80v_state::vectorram_w)
 {
 	m_vectorram[decrypt_offset(space, offset)] = data;
@@ -358,7 +359,7 @@ WRITE8_MEMBER(segag80v_state::unknown_w)
 	/* writing an 0x04 here enables interrupts */
 	/* some games write 0x00/0x01 here as well */
 	if (data != 0x00 && data != 0x01 && data != 0x04)
-		mame_printf_debug("%04X:unknown_w = %02X\n", space.device().safe_pc(), data);
+		osd_printf_debug("%04X:unknown_w = %02X\n", space.device().safe_pc(), data);
 }
 
 
@@ -813,13 +814,6 @@ static const char *const elim_sample_names[] =
 	0   /* end of array */
 };
 
-static const samples_interface elim2_samples_interface =
-{
-	8,  /* 8 channels */
-	elim_sample_names
-};
-
-
 
 /*************************************
  *
@@ -843,14 +837,6 @@ static const char *const spacfury_sample_names[] =
 	"sfury10",
 	0   /* end of array */
 };
-
-
-static const samples_interface spacfury_samples_interface =
-{
-	8,  /* 8 channels */
-	spacfury_sample_names
-};
-
 
 /*************************************
  *
@@ -876,14 +862,6 @@ static const char *const zektor_sample_names[] =
 };
 
 
-static const samples_interface zektor_samples_interface =
-{
-	8,
-	zektor_sample_names
-};
-
-
-
 /*************************************
  *
  *  Machine drivers
@@ -900,12 +878,14 @@ static MACHINE_CONFIG_START( g80v_base, segag80v_state )
 
 
 	/* video hardware */
+
 	MCFG_SCREEN_ADD("screen", VECTOR)
 	MCFG_SCREEN_REFRESH_RATE(40)
 	MCFG_SCREEN_SIZE(400, 300)
 	MCFG_SCREEN_VISIBLE_AREA(512, 1536, 640-32, 1408+32)
 	MCFG_SCREEN_UPDATE_DRIVER(segag80v_state, screen_update_segag80v)
 
+	MCFG_VECTOR_ADD("vector")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -915,7 +895,9 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( elim2, g80v_base )
 
 	/* custom sound board */
-	MCFG_SAMPLES_ADD("samples", elim2_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(8)
+	MCFG_SAMPLES_NAMES(elim_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -923,7 +905,9 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( spacfury, g80v_base )
 
 	/* custom sound board */
-	MCFG_SAMPLES_ADD("samples", spacfury_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(8)
+	MCFG_SAMPLES_NAMES(spacfury_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 
 	/* speech board */
@@ -934,7 +918,9 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( zektor, g80v_base )
 
 	/* custom sound board */
-	MCFG_SAMPLES_ADD("samples", zektor_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(8)
+	MCFG_SAMPLES_NAMES(zektor_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 
 	MCFG_SOUND_ADD("aysnd", AY8910, CPU_CLOCK/2/2)
@@ -948,7 +934,7 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( tacscan, g80v_base )
 
 	/* universal sound board */
-	MCFG_FRAGMENT_ADD(sega_universal_sound_board)
+	MCFG_SEGAUSB_ADD("usbsnd")
 MACHINE_CONFIG_END
 
 
@@ -958,7 +944,7 @@ static MACHINE_CONFIG_DERIVED( startrek, g80v_base )
 	MCFG_FRAGMENT_ADD(sega_speech_board)
 
 	/* universal sound board */
-	MCFG_FRAGMENT_ADD(sega_universal_sound_board)
+	MCFG_SEGAUSB_ADD("usbsnd")
 MACHINE_CONFIG_END
 
 
@@ -1291,7 +1277,6 @@ DRIVER_INIT_MEMBER(segag80v_state,elim2)
 	m_decrypt = segag80_security(70);
 
 	/* configure sound */
-	m_usb = NULL;
 	iospace.install_write_handler(0x3e, 0x3e, write8_delegate(FUNC(segag80v_state::elim1_sh_w),this));
 	iospace.install_write_handler(0x3f, 0x3f, write8_delegate(FUNC(segag80v_state::elim2_sh_w),this));
 }
@@ -1305,7 +1290,6 @@ DRIVER_INIT_MEMBER(segag80v_state,elim4)
 	m_decrypt = segag80_security(76);
 
 	/* configure sound */
-	m_usb = NULL;
 	iospace.install_write_handler(0x3e, 0x3e, write8_delegate(FUNC(segag80v_state::elim1_sh_w),this));
 	iospace.install_write_handler(0x3f, 0x3f, write8_delegate(FUNC(segag80v_state::elim2_sh_w),this));
 
@@ -1323,9 +1307,8 @@ DRIVER_INIT_MEMBER(segag80v_state,spacfury)
 	m_decrypt = segag80_security(64);
 
 	/* configure sound */
-	m_usb = NULL;
-	iospace.install_legacy_write_handler(*machine().device("segaspeech"), 0x38, 0x38, FUNC(sega_speech_data_w));
-	iospace.install_legacy_write_handler(*machine().device("segaspeech"), 0x3b, 0x3b, FUNC(sega_speech_control_w));
+	iospace.install_write_handler(0x38, 0x38, write8_delegate(FUNC(speech_sound_device::data_w), (speech_sound_device*)m_speech));
+	iospace.install_write_handler(0x3b, 0x3b, write8_delegate(FUNC(speech_sound_device::control_w), (speech_sound_device*)m_speech));
 	iospace.install_write_handler(0x3e, 0x3e, write8_delegate(FUNC(segag80v_state::spacfury1_sh_w),this));
 	iospace.install_write_handler(0x3f, 0x3f, write8_delegate(FUNC(segag80v_state::spacfury2_sh_w),this));
 }
@@ -1340,9 +1323,8 @@ DRIVER_INIT_MEMBER(segag80v_state,zektor)
 	m_decrypt = segag80_security(82);
 
 	/* configure sound */
-	m_usb = NULL;
-	iospace.install_legacy_write_handler(*machine().device("segaspeech"), 0x38, 0x38, FUNC(sega_speech_data_w));
-	iospace.install_legacy_write_handler(*machine().device("segaspeech"), 0x3b, 0x3b, FUNC(sega_speech_control_w));
+	iospace.install_write_handler(0x38, 0x38, write8_delegate(FUNC(speech_sound_device::data_w), (speech_sound_device*)m_speech));
+	iospace.install_write_handler(0x3b, 0x3b, write8_delegate(FUNC(speech_sound_device::control_w), (speech_sound_device*)m_speech));
 	iospace.install_write_handler(0x3c, 0x3d, write8_delegate(FUNC(ay8910_device::address_data_w), ay8910));
 	iospace.install_write_handler(0x3e, 0x3e, write8_delegate(FUNC(segag80v_state::zektor1_sh_w),this));
 	iospace.install_write_handler(0x3f, 0x3f, write8_delegate(FUNC(segag80v_state::zektor2_sh_w),this));
@@ -1362,9 +1344,8 @@ DRIVER_INIT_MEMBER(segag80v_state,tacscan)
 	m_decrypt = segag80_security(76);
 
 	/* configure sound */
-	m_usb = machine().device("usbsnd");
-	iospace.install_legacy_readwrite_handler(*m_usb, 0x3f, 0x3f, FUNC(sega_usb_status_r), FUNC(sega_usb_data_w));
-	pgmspace.install_legacy_read_handler(*m_usb, 0xd000, 0xdfff, FUNC(sega_usb_ram_r));
+	iospace.install_readwrite_handler(0x3f, 0x3f, read8_delegate(FUNC(usb_sound_device::status_r), (usb_sound_device*)m_usb), write8_delegate(FUNC(usb_sound_device::data_w), (usb_sound_device*)m_usb));
+	pgmspace.install_read_handler(0xd000, 0xdfff, read8_delegate(FUNC(usb_sound_device::ram_r), (usb_sound_device*)m_usb));
 	pgmspace.install_write_handler(0xd000, 0xdfff, write8_delegate(FUNC(segag80v_state::usb_ram_w),this));
 
 	/* configure inputs */
@@ -1382,12 +1363,11 @@ DRIVER_INIT_MEMBER(segag80v_state,startrek)
 	m_decrypt = segag80_security(64);
 
 	/* configure sound */
-	m_usb = machine().device("usbsnd");
-	iospace.install_legacy_write_handler(*machine().device("segaspeech"), 0x38, 0x38, FUNC(sega_speech_data_w));
-	iospace.install_legacy_write_handler(*machine().device("segaspeech"), 0x3b, 0x3b, FUNC(sega_speech_control_w));
+	iospace.install_write_handler(0x38, 0x38, write8_delegate(FUNC(speech_sound_device::data_w), (speech_sound_device*)m_speech));
+	iospace.install_write_handler(0x3b, 0x3b, write8_delegate(FUNC(speech_sound_device::control_w), (speech_sound_device*)m_speech));
 
-	iospace.install_legacy_readwrite_handler(*m_usb, 0x3f, 0x3f, FUNC(sega_usb_status_r), FUNC(sega_usb_data_w));
-	pgmspace.install_legacy_read_handler(*m_usb, 0xd000, 0xdfff, FUNC(sega_usb_ram_r));
+	iospace.install_readwrite_handler(0x3f, 0x3f, read8_delegate(FUNC(usb_sound_device::status_r), (usb_sound_device*)m_usb), write8_delegate(FUNC(usb_sound_device::data_w), (usb_sound_device*)m_usb));
+	pgmspace.install_read_handler(0xd000, 0xdfff, read8_delegate(FUNC(usb_sound_device::ram_r), (usb_sound_device*)m_usb));
 	pgmspace.install_write_handler(0xd000, 0xdfff, write8_delegate(FUNC(segag80v_state::usb_ram_w),this));
 
 	/* configure inputs */

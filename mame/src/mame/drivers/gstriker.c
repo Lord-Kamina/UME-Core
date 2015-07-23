@@ -1,7 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Farfetch'd, David Haywood
 /*** DRIVER INFO **************************************************************
 
 Grand Striker, V Goal Soccer, World Cup '94
-driver by Farfetch and David Haywood
+driver by Farfetch'd and David Haywood
 
 Grand Striker (c)199?  Human
 V Goal Soccer (c)199?  Tecmo (2 sets)
@@ -28,7 +30,6 @@ Finish hooking up the inputs
 Tilemap scrolling/rotation/zooming or whatever effect it needs
 Priorities are wrong. I suspect they need sprite orthogonality
 Missing mixer registers (mainly layer enable/disable)
-Merge with other Video System games ?
 
 ******************************************************************************/
 
@@ -177,6 +178,13 @@ Frequencies: 68k is XTAL_32MHZ/2
 
 ******************************************************************************/
 
+void gstriker_state::machine_start()
+{
+	membank("soundbank")->configure_entries(0, 8, memregion("audiocpu")->base(), 0x8000);
+	
+	save_item(NAME(m_dmmy_8f_ret));
+	save_item(NAME(m_pending_command));
+}
 
 /*** MISC READ / WRITE HANDLERS **********************************************/
 
@@ -206,18 +214,14 @@ READ16_MEMBER(gstriker_state::pending_command_r)
 }
 #endif
 
-WRITE8_MEMBER(gstriker_state::gs_sh_pending_command_clear_w)
+WRITE8_MEMBER(gstriker_state::sh_pending_command_clear_w)
 {
 	m_pending_command = 0;
 }
 
-WRITE8_MEMBER(gstriker_state::gs_sh_bankswitch_w)
+WRITE8_MEMBER(gstriker_state::sh_bankswitch_w)
 {
-	UINT8 *RAM = memregion("audiocpu")->base();
-	int bankaddress;
-
-	bankaddress = (data & 0x07) * 0x8000;
-	membank("bank1")->set_base(&RAM[bankaddress]);
+	membank("soundbank")->set_entry(data & 0x07);
 }
 
 /*** GFX DECODE **************************************************************/
@@ -257,15 +261,6 @@ static GFXDECODE_START( gstriker )
 
 GFXDECODE_END
 
-/*** MORE SOUND RELATED ******************************************************/
-
-WRITE_LINE_MEMBER(gstriker_state::gs_ym2610_irq)
-{
-	if (state)
-		m_audiocpu->set_input_line(0, ASSERT_LINE);
-	else
-		m_audiocpu->set_input_line(0, CLEAR_LINE);
-}
 
 /*** MEMORY LAYOUTS **********************************************************/
 
@@ -273,15 +268,15 @@ WRITE_LINE_MEMBER(gstriker_state::gs_ym2610_irq)
 
 static ADDRESS_MAP_START( gstriker_map, AS_PROGRAM, 16, gstriker_state )
 	AM_RANGE(0x000000, 0x0fffff) AM_ROM
-	AM_RANGE(0x100000, 0x103fff) AM_RAM_WRITE(MB60553_0_vram_w) AM_SHARE("mb60553_vram")
-	AM_RANGE(0x140000, 0x141fff) AM_RAM AM_SHARE("cg10103_vram")
-	AM_RANGE(0x180000, 0x180fff) AM_RAM_WRITE(VS920A_0_vram_w) AM_SHARE("vs920a_vram")
-	AM_RANGE(0x181000, 0x181fff) AM_RAM AM_SHARE("lineram")
-	AM_RANGE(0x1c0000, 0x1c0fff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x100000, 0x103fff) AM_DEVREADWRITE("zoomtilemap", mb60553_zooming_tilemap_device,  vram_r, vram_w )
+	AM_RANGE(0x140000, 0x141fff) AM_RAM AM_SHARE("cg10103_m_vram")
+	AM_RANGE(0x180000, 0x180fff) AM_DEVREADWRITE("texttilemap", vs920a_text_tilemap_device,  vram_r, vram_w )
+	AM_RANGE(0x181000, 0x181fff) AM_DEVREADWRITE("zoomtilemap", mb60553_zooming_tilemap_device,  line_r, line_w )
+	AM_RANGE(0x1c0000, 0x1c0fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette") AM_MIRROR(0x00f000)
 
-	AM_RANGE(0x200000, 0x20000f) AM_RAM_WRITE(MB60553_0_regs_w)
-	AM_RANGE(0x200040, 0x20005f) AM_RAM
-	AM_RANGE(0x200060, 0x20007f) AM_RAM
+	AM_RANGE(0x200000, 0x20000f) AM_DEVREADWRITE("zoomtilemap", mb60553_zooming_tilemap_device,  regs_r, regs_w )
+	AM_RANGE(0x200040, 0x20005f) AM_RAM AM_SHARE("mixerregs1")
+	AM_RANGE(0x200060, 0x20007f) AM_RAM AM_SHARE("mixerregs2")
 	AM_RANGE(0x200080, 0x200081) AM_READ_PORT("P1")
 	AM_RANGE(0x200082, 0x200083) AM_READ_PORT("P2")
 	AM_RANGE(0x200084, 0x200085) AM_READ_PORT("SYSTEM")
@@ -296,38 +291,18 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, gstriker_state )
 	AM_RANGE(0x0000, 0x77ff) AM_ROM
 	AM_RANGE(0x7800, 0x7fff) AM_RAM
-	AM_RANGE(0x8000, 0xffff) AM_ROMBANK("bank1")
+	AM_RANGE(0x8000, 0xffff) AM_ROMBANK("soundbank")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( sound_io_map, AS_IO, 8, gstriker_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x03) AM_DEVREADWRITE("ymsnd", ym2610_device, read, write)
-	AM_RANGE(0x04, 0x04) AM_WRITE(gs_sh_bankswitch_w)
-	AM_RANGE(0x08, 0x08) AM_WRITE(gs_sh_pending_command_clear_w)
+	AM_RANGE(0x04, 0x04) AM_WRITE(sh_bankswitch_w)
+	AM_RANGE(0x08, 0x08) AM_WRITE(sh_pending_command_clear_w)
 	AM_RANGE(0x0c, 0x0c) AM_READ(soundlatch_byte_r)
 ADDRESS_MAP_END
 
 
-static ADDRESS_MAP_START( vgoal_map, AS_PROGRAM, 16, gstriker_state )
-	AM_RANGE(0x000000, 0x0fffff) AM_ROM
-	AM_RANGE(0x100000, 0x103fff) AM_RAM_WRITE(MB60553_0_vram_w) AM_SHARE("mb60553_vram")
-	AM_RANGE(0x140000, 0x141fff) AM_RAM AM_SHARE("cg10103_vram")
-	AM_RANGE(0x180000, 0x180fff) AM_RAM_WRITE(VS920A_0_vram_w) AM_SHARE("vs920a_vram")
-	AM_RANGE(0x181000, 0x181fff) AM_RAM AM_SHARE("lineram")
-	AM_RANGE(0x1c0000, 0x1c4fff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")
-	AM_RANGE(0x200000, 0x20000f) AM_RAM_WRITE(MB60553_0_regs_w)
-	AM_RANGE(0x200040, 0x20005f) AM_RAM
-
-	AM_RANGE(0x200080, 0x200081) AM_READ_PORT("P1")
-	AM_RANGE(0x200082, 0x200083) AM_READ_PORT("P2")
-	AM_RANGE(0x200084, 0x200085) AM_READ_PORT("SYSTEM")
-	AM_RANGE(0x200086, 0x200087) AM_READ_PORT("DSW1")
-	AM_RANGE(0x200088, 0x200089) AM_READ_PORT("DSW2")
-	AM_RANGE(0x20008e, 0x20008f) AM_READ(dmmy_8f)
-
-	AM_RANGE(0x2000a0, 0x2000a1) AM_WRITE(sound_command_w)
-	AM_RANGE(0xffc000, 0xffffff) AM_RAM AM_SHARE("work_ram")
-ADDRESS_MAP_END
 
 /*** INPUT PORTS *************************************************************/
 
@@ -543,80 +518,60 @@ static MACHINE_CONFIG_START( gstriker, gstriker_state )
 	MCFG_CPU_PROGRAM_MAP(sound_map)
 	MCFG_CPU_IO_MAP(sound_io_map)
 
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_AFTER_VBLANK)
-
 	MCFG_SCREEN_ADD("screen", RASTER)
+//  MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_AFTER_VBLANK)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(5000) /* hand-tuned, it needs a bit */)
 	MCFG_SCREEN_SIZE(64*8, 64*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 0*8, 28*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(gstriker_state, screen_update_gstriker)
+	MCFG_SCREEN_UPDATE_DRIVER(gstriker_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(gstriker)
-	MCFG_PALETTE_LENGTH(0x800)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", gstriker)
+	MCFG_PALETTE_ADD("palette", 0x800)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
+
+
+	MCFG_DEVICE_ADD("zoomtilemap", MB60553, 0)
+	MCFG_MB60553_GFXDECODE("gfxdecode")
+	MCFG_MB60553_GFX_REGION(1)
+
+	MCFG_DEVICE_ADD("texttilemap", VS920A, 0)
+	MCFG_VS920A_GFXDECODE("gfxdecode")
+	MCFG_VS920A_GFX_REGION(0)
+
 
 	MCFG_DEVICE_ADD("vsystem_spr", VSYSTEM_SPR, 0)
 	MCFG_VSYSTEM_SPR_SET_GFXREGION(2)
-	MCFG_VSYSTEM_SPR_SET_PALBASE(0x10)
 	MCFG_VSYSTEM_SPR_SET_PALMASK(0x1f)
 	MCFG_VSYSTEM_SPR_SET_TRANSPEN(0)
-
-	MCFG_VIDEO_START_OVERRIDE(gstriker_state,gstriker)
+	MCFG_VSYSTEM_SPR_GFXDECODE("gfxdecode")
+	MCFG_VSYSTEM_SPR_PALETTE("palette")
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_ADD("ymsnd", YM2610, 8000000)
-	MCFG_YM2610_IRQ_HANDLER(WRITELINE(gstriker_state, gs_ym2610_irq))
+	MCFG_YM2610_IRQ_HANDLER(INPUTLINE("audiocpu", 0))
 	MCFG_SOUND_ROUTE(0, "lspeaker",  0.25)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 0.25)
 	MCFG_SOUND_ROUTE(1, "lspeaker",  1.0)
 	MCFG_SOUND_ROUTE(2, "rspeaker", 1.0)
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_DERIVED( twrldc94, gstriker )
-	MCFG_VIDEO_START_OVERRIDE(gstriker_state, twrldc94 )
-
-	MCFG_DEVICE_MODIFY("vsystem_spr")
-	MCFG_VSYSTEM_SPR_SET_PALBASE(0x60)
-
+static MACHINE_CONFIG_DERIVED( twc94, gstriker )
+	MCFG_CPU_REPLACE("maincpu", M68000, 16000000)
+	MCFG_CPU_PROGRAM_MAP(gstriker_map)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", gstriker_state,  irq1_line_hold)
 MACHINE_CONFIG_END
 
 
-static MACHINE_CONFIG_START( vgoal, gstriker_state )
-	MCFG_CPU_ADD("maincpu", M68000, 16000000)
-	MCFG_CPU_PROGRAM_MAP(vgoal_map)
+static MACHINE_CONFIG_DERIVED( vgoal, gstriker )
+	MCFG_CPU_REPLACE("maincpu", M68000, 16000000)
+	MCFG_CPU_PROGRAM_MAP(gstriker_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", gstriker_state,  irq1_line_hold)
 
-	MCFG_CPU_ADD("audiocpu", Z80,8000000/2) /* 4 MHz ??? */
-	MCFG_CPU_PROGRAM_MAP(sound_map)
-	MCFG_CPU_IO_MAP(sound_io_map)
-
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_AFTER_VBLANK)
-
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_REFRESH_RATE(60)
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(5000) /* hand-tuned, it needs a bit */)
-	MCFG_SCREEN_SIZE(64*8, 64*8)
-	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 0*8, 28*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(gstriker_state, screen_update_gstriker)
-
-	MCFG_GFXDECODE(gstriker)
-	MCFG_PALETTE_LENGTH(0x2000)
-
-	MCFG_DEVICE_ADD("vsystem_spr", VSYSTEM_SPR, 0)
-	MCFG_VSYSTEM_SPR_SET_GFXREGION(2)
-	MCFG_VSYSTEM_SPR_SET_PALBASE(0x00)
-
-	MCFG_VIDEO_START_OVERRIDE(gstriker_state,vgoalsoc)
-
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("ymsnd", YM2610, 8000000)
-	MCFG_YM2610_IRQ_HANDLER(WRITELINE(gstriker_state, gs_ym2610_irq))
-	MCFG_SOUND_ROUTE(0, "lspeaker",  0.25)
-	MCFG_SOUND_ROUTE(0, "rspeaker", 0.25)
-	MCFG_SOUND_ROUTE(1, "lspeaker",  1.0)
-	MCFG_SOUND_ROUTE(2, "rspeaker", 1.0)
+	MCFG_DEVICE_MODIFY("vsystem_spr")
+	MCFG_VSYSTEM_SPR_SET_TRANSPEN(0xf) // different vs. the other games, find register
 MACHINE_CONFIG_END
 
 
@@ -643,7 +598,7 @@ ROM_START( gstriker )
 	ROM_LOAD( "human_scr-gs-102_m531602c-41_3405355.u24", 0x200000, 0x200000, CRC(0dae7aba) SHA1(304f336994be33fa8239c13e6fd9967c06f97d5c) )
 	ROM_LOAD( "human_scr-gs-103_m531602c-42_3405353.u23", 0x400000, 0x200000, CRC(3448fe92) SHA1(c4c2d2d5610795aff6633b0601ff484897598904) )
 	ROM_LOAD( "human_scr-gs-104_m531602c-43_3405354.u22", 0x600000, 0x200000, CRC(0ac33e5a) SHA1(9d7717d80f2c6817bac3fad50c39e04f0aa94255) )
-	ROM_LOAD( "human-4_27c240.u6",   0xf80000, 0x080000, CRC(a990f9bb) SHA1(7ce31d4c650eb244e2ab285f253a98d6613b7dc8) )
+	ROM_LOAD( "human-4_27c240.u6",   0xf80000, 0x080000, CRC(a990f9bb) SHA1(7ce31d4c650eb244e2ab285f253a98d6613b7dc8) ) // extra european team flags
 
 	ROM_REGION( 0x40000, "ymsnd.deltat", 0 )
 	ROM_LOAD( "human_scr-gs-106_m532001b-16_3402370.u93", 0x00000, 0x040000, CRC(93c9868c) SHA1(dcecb34e46405155e35aaf134b8547430d23f5a7) )
@@ -678,7 +633,7 @@ ROM_START( gstrikera )
 	ROM_LOAD( "human_scr-gs-102_m531602c-41_3405355.u24", 0x200000, 0x200000, CRC(0dae7aba) SHA1(304f336994be33fa8239c13e6fd9967c06f97d5c) )
 	ROM_LOAD( "human_scr-gs-103_m531602c-42_3405353.u23", 0x400000, 0x200000, CRC(3448fe92) SHA1(c4c2d2d5610795aff6633b0601ff484897598904) )
 	ROM_LOAD( "human_scr-gs-104_m531602c-43_3405354.u22", 0x600000, 0x200000, CRC(0ac33e5a) SHA1(9d7717d80f2c6817bac3fad50c39e04f0aa94255) )
-	ROM_LOAD( "human-4_27c240.u6",   0xf80000, 0x080000, CRC(a990f9bb) SHA1(7ce31d4c650eb244e2ab285f253a98d6613b7dc8) )
+	ROM_LOAD( "human-4_27c240.u6",   0xf80000, 0x080000, CRC(a990f9bb) SHA1(7ce31d4c650eb244e2ab285f253a98d6613b7dc8) ) // extra european team flags
 
 	ROM_REGION( 0x40000, "ymsnd.deltat", 0 )
 	ROM_LOAD( "human_scr-gs-106_m532001b-16_3402370.u93", 0x00000, 0x040000, CRC(93c9868c) SHA1(dcecb34e46405155e35aaf134b8547430d23f5a7) )
@@ -695,7 +650,41 @@ ROM_START( gstrikera )
 	ROM_LOAD( "pal16l8.s205a.u109",  0x0800, 0x0104, CRC(0d644e59) SHA1(bb8f4ab47d7bc9b9b37f636f8fa9c419f17630ad) )
 ROM_END
 
+ROM_START( gstrikerj )
+	ROM_REGION( 0x100000, "maincpu", 0 )
+	ROM_LOAD16_WORD_SWAP( "human1.u58",  0x00000, 0x80000, CRC(dce0549c) SHA1(5805a81ddae6bec5b6cc47dc1dbcbe2a81d2c033) )
 
+	ROM_REGION( 0x40000, "audiocpu", 0 )
+	ROM_LOAD( "human3.u87",  0x00000, 0x20000, CRC(2f28c01e) SHA1(63829ad7969d197b2f2c87cb88bdb9e9880ed2d6) )
+
+	ROM_REGION( 0x20000, "gfx1", 0 ) // score tilemap
+	ROM_LOAD( "human2.u79",  0x00000, 0x20000, CRC(9ad17eb3) SHA1(614b2630e02745f675b1791a514a90131264d545) )
+
+	ROM_REGION( 0x200000, "gfx2", 0 ) // scroll tilemap
+	ROM_LOAD( "human_scr-gs-105_m531602c-44_3405356.u2",  0x00000, 0x200000, CRC(d584b568) SHA1(64c5e4fdbb859873e51f62d8f5314598108270ef) )
+	ROM_LOAD( "human_scr-gs-105_m531602c-44_3405356.u4",  0x00000, 0x200000, CRC(d584b568) SHA1(64c5e4fdbb859873e51f62d8f5314598108270ef) ) // same content, dif pos on board
+
+	ROM_REGION( 0x1000000, "gfx3", 0 )
+	ROM_LOAD( "human_scr-gs-101_m531602c-40_3405351.u25", 0x000000, 0x200000, CRC(becaea24) SHA1(e96fca863f49f50992f56c7defa5a69599608785) )
+	ROM_LOAD( "human_scr-gs-102_m531602c-41_3405355.u24", 0x200000, 0x200000, CRC(0dae7aba) SHA1(304f336994be33fa8239c13e6fd9967c06f97d5c) )
+	ROM_LOAD( "human_scr-gs-103_m531602c-42_3405353.u23", 0x400000, 0x200000, CRC(3448fe92) SHA1(c4c2d2d5610795aff6633b0601ff484897598904) )
+	ROM_LOAD( "human_scr-gs-104_m531602c-43_3405354.u22", 0x600000, 0x200000, CRC(0ac33e5a) SHA1(9d7717d80f2c6817bac3fad50c39e04f0aa94255) )
+	// u6 is NOT populated on the JPN version
+
+	ROM_REGION( 0x40000, "ymsnd.deltat", 0 )
+	ROM_LOAD( "human_scr-gs-106_m532001b-16_3402370.u93", 0x00000, 0x040000, CRC(93c9868c) SHA1(dcecb34e46405155e35aaf134b8547430d23f5a7) )
+
+	ROM_REGION( 0x100000, "ymsnd", 0 )
+	ROM_LOAD( "scrgs107.u99", 0x00000, 0x100000, CRC(ecc0a01b) SHA1(239e832b7d22925460a8f44eb82e782cd13aba49) )
+
+		/* PALs were protected on this version, used the ones from the "gstriker" set */
+	ROM_REGION( 0x1000, "plds", 0 )
+	ROM_LOAD( "pal16l8.s201a.u52",   0x0000, 0x0104, CRC(724faf0f) SHA1(755fad09d188af58efce733a9f1256b1abc7c360) )
+	ROM_LOAD( "pal16l8.s202a.u74",   0x0200, 0x0104, CRC(ad5c4722) SHA1(0aad71b73c6674e15596b7de59160a5156a4118d) )
+	ROM_LOAD( "pal16l8.s203a.u75",   0x0400, 0x0104, CRC(ad197e2d) SHA1(e0691b79b8433285a0bafea1d52b0166f6417c20) )
+	ROM_LOAD( "pal16l8.s204a.u89",   0x0600, 0x0104, CRC(eb997577) SHA1(504a2499c8a96c74607d06aefb0a062612a78b38) )
+	ROM_LOAD( "pal16l8.s205a.u109",  0x0800, 0x0104, CRC(0d644e59) SHA1(bb8f4ab47d7bc9b9b37f636f8fa9c419f17630ad) )
+ROM_END
 
 ROM_START( vgoalsoc )
 	ROM_REGION( 0x100000, "maincpu", 0 )
@@ -743,7 +732,8 @@ ROM_START( vgoalsca )
 	ROM_LOAD( "vgoalc16.u17", 0x000000, 0x200000, CRC(2b211fb2) SHA1(4e04e099a1dae7abdb0732808a5d74fdc7afcf45) ) // same content, dif pos on board
 
 	ROM_REGION( 0x400000, "gfx3", 0 )
-	ROM_LOAD( "vgoalc16.u11", 0x000000, 0x200000, CRC(5bc3146c) SHA1(ede4def1ddc4390fed8fd89643900967faff3640) )
+	//ROM_LOAD( "vgoalc16.u11", 0x000000, 0x200000, CRC(5bc3146c) SHA1(ede4def1ddc4390fed8fd89643900967faff3640) ) // this is just a bad dump, are the above roms too?
+	ROM_LOAD( "c13_u11.u11",  0x000000, 0x200000, CRC(76d09f27) SHA1(ffef83954426f9e56bbe2d98b32cea675c063fab) )
 	ROM_LOAD( "c13_u12.u12",  0x200000, 0x200000, CRC(a3874419) SHA1(c9fa283106ada3419e311f400fcf4251b32318c4) )
 
 	ROM_REGION( 0x40000, "ymsnd.deltat", 0 )
@@ -828,13 +818,13 @@ the zooming.To use it,you should use Player 2 Start button to show the test scre
 or to advance into the tests.
 ******************************************************************************************/
 #define PC(_num_)\
-state->m_work_ram[0x000/2] = (_num_ & 0xffff0000) >> 16;\
-state->m_work_ram[0x002/2] = (_num_ & 0x0000ffff) >> 0;
+m_work_ram[0x000/2] = (_num_ & 0xffff0000) >> 16;\
+m_work_ram[0x002/2] = (_num_ & 0x0000ffff) >> 0;
 
 
 WRITE16_MEMBER(gstriker_state::twrldc94_mcu_w)
 {
-	m_mcu_data = data;
+	m_mcu_data = data & 0xff;
 }
 
 READ16_MEMBER(gstriker_state::twrldc94_mcu_r)
@@ -844,9 +834,8 @@ READ16_MEMBER(gstriker_state::twrldc94_mcu_r)
 
 WRITE16_MEMBER(gstriker_state::twrldc94_prot_reg_w)
 {
-	gstriker_state *state = machine().driver_data<gstriker_state>();
 	m_prot_reg[1] = m_prot_reg[0];
-	m_prot_reg[0] = data;
+	m_prot_reg[0] = data & 0xff;
 
 	if( ((m_prot_reg[1] & 2) == 2) && ((m_prot_reg[0] & 2) == 0) )
 	{
@@ -975,15 +964,15 @@ READ16_MEMBER(gstriker_state::twrldc94_prot_reg_r)
 
     The tick count is usually set to 0x3c => it's driven off vblank?
 */
-//state->m_work_ram[ (0xffe900 - 0xffc00) ]
-#define COUNTER1_ENABLE state->m_work_ram[0x2900/2] >> 8
-#define COUNTER2_ENABLE (state->m_work_ram[0x2900/2] & 0xff)
-#define TICK_1 state->m_work_ram[0x2908/2]
-#define TICKCOUNT_1 state->m_work_ram[0x290a/2]
-#define TICK_2 state->m_work_ram[0x290c/2]
-#define TICKCOUNT_3 state->m_work_ram[0x290e/2]
-#define COUNTER_1 state->m_work_ram[0x2928/2]
-#define COUNTER_2 state->m_work_ram[0x292a/2]
+//m_work_ram[ (0xffe900 - 0xffc00) ]
+#define COUNTER1_ENABLE m_work_ram[0x2900/2] >> 8
+#define COUNTER2_ENABLE (m_work_ram[0x2900/2] & 0xff)
+#define TICK_1 m_work_ram[0x2908/2]
+#define TICKCOUNT_1 m_work_ram[0x290a/2]
+#define TICK_2 m_work_ram[0x290c/2]
+#define TICKCOUNT_3 m_work_ram[0x290e/2]
+#define COUNTER_1 m_work_ram[0x2928/2]
+#define COUNTER_2 m_work_ram[0x292a/2]
 READ16_MEMBER(gstriker_state::vbl_toggle_r)
 {
 	return 0xff;
@@ -991,7 +980,6 @@ READ16_MEMBER(gstriker_state::vbl_toggle_r)
 
 WRITE16_MEMBER(gstriker_state::vbl_toggle_w)
 {
-	gstriker_state *state = machine().driver_data<gstriker_state>();
 	if( COUNTER1_ENABLE == 1 )
 	{
 		TICK_1 = (TICK_1 - 1) & 0xff;   // 8bit
@@ -1013,7 +1001,7 @@ WRITE16_MEMBER(gstriker_state::vbl_toggle_w)
 	}
 }
 
-void gstriker_state::mcu_init(  )
+void gstriker_state::mcu_init()
 {
 	m_dmmy_8f_ret = 0xFFFF;
 	m_pending_command = 0;
@@ -1024,6 +1012,9 @@ void gstriker_state::mcu_init(  )
 
 	m_maincpu->space(AS_PROGRAM).install_write_handler(0x20008e, 0x20008f, write16_delegate(FUNC(gstriker_state::twrldc94_prot_reg_w),this));
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x20008e, 0x20008f, read16_delegate(FUNC(gstriker_state::twrldc94_prot_reg_r),this));
+	
+	save_item(NAME(m_mcu_data));
+	save_item(NAME(m_prot_reg));
 }
 
 DRIVER_INIT_MEMBER(gstriker_state,twrldc94)
@@ -1049,12 +1040,13 @@ DRIVER_INIT_MEMBER(gstriker_state,vgoalsoc)
 
 /*** GAME DRIVERS ************************************************************/
 
-GAME( 1993, gstriker, 0,        gstriker, gstriker, driver_device, 0,        ROT0, "Human", "Grand Striker", GAME_IMPERFECT_GRAPHICS )
-GAME( 1993, gstrikera, gstriker, gstriker, gstriker, driver_device, 0,        ROT0, "Human", "Grand Striker (Americas)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1993, gstriker, 0,        gstriker, gstriker, driver_device, 0,        ROT0, "Human", "Grand Striker", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1993, gstrikera, gstriker, gstriker, gstriker, driver_device, 0,        ROT0, "Human", "Grand Striker (Americas)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1993, gstrikerj, gstriker, gstriker, gstriker, driver_device, 0,        ROT0, "Human", "Grand Striker (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
 
 
 /* Similar, but not identical hardware, appear to be protected by an MCU :-( */
-GAME( 1994, vgoalsoc, 0,        vgoal,    vgoalsoc, gstriker_state, vgoalsoc,   ROT0, "Tecmo", "V Goal Soccer (set 1)", GAME_NOT_WORKING )
-GAME( 1994, vgoalsca, vgoalsoc, vgoal,    vgoalsoc, gstriker_state, vgoalsoc,   ROT0, "Tecmo", "V Goal Soccer (set 2)", GAME_NOT_WORKING )
-GAME( 1994, twrldc94, 0,        twrldc94, twrldc94, gstriker_state, twrldc94,   ROT0, "Tecmo", "Tecmo World Cup '94 (set 1)", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_IMPERFECT_GRAPHICS )
-GAME( 1994, twrldc94a,twrldc94, twrldc94, twrldc94, gstriker_state, twrldc94a,  ROT0, "Tecmo", "Tecmo World Cup '94 (set 2)", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, vgoalsoc, 0,        vgoal,    vgoalsoc, gstriker_state, vgoalsoc,   ROT0, "Tecmo", "V Goal Soccer (Europe)",         GAME_NOT_WORKING | GAME_SUPPORTS_SAVE ) // has ger/hol/arg/bra/ita/eng/spa/fra
+GAME( 1994, vgoalsca, vgoalsoc, vgoal,    vgoalsoc, gstriker_state, vgoalsoc,   ROT0, "Tecmo", "V Goal Soccer (US/Japan/Korea)", GAME_NOT_WORKING | GAME_SUPPORTS_SAVE ) // has ger/hol/arg/bra/ita/kor/usa/jpn
+GAME( 1994, twrldc94, 0,        twc94,    twrldc94, gstriker_state, twrldc94,   ROT0, "Tecmo", "Tecmo World Cup '94 (set 1)",    GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1994, twrldc94a,twrldc94, twc94,    twrldc94, gstriker_state, twrldc94a,  ROT0, "Tecmo", "Tecmo World Cup '94 (set 2)",    GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )

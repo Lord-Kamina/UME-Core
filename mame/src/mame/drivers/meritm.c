@@ -1,5 +1,7 @@
+// license:BSD-3-Clause
+// copyright-holders:Mariusz Wojcieszek
 /*
-  Merit CRT250 and CRT260 hardware
+  Merit CRT-250 and CRT-260 hardware
 
   Driver by Mariusz Wojcieszek
 
@@ -35,7 +37,7 @@ Memory: Fujitsu MB81464-12 (or compatible) all socketted. The 3rd row of memory
 
 JP6 - 3 pin jumper: ROM size (1-2 = 27256, 2-3 = 27512)
 JP7 - 3 pin jumper: RAM / ROM for U13 to U16? (1-2 = RAM, 2-3 = ROM)
-J2 - 15 pin connector for harness to connect to the optional CRT-254 Video Billboard PCB
+J2 - 15 pin connector for the optional CRT-254
 J3 - 65 Pin connector:
 
  #1 - Blue  (video out)    #23 - V-Meter Lamp              #45 - P2 Discard 3 Switch
@@ -63,12 +65,14 @@ J3 - 65 Pin connector:
 
 Power & Common Ground wires are 18 gauge, all other wires are 20 or 22 gauge.
 
-  CRT 256: addon board for CRT 250, stores question roms (aka Memory Expansion board)
+  Optional addon boards for the CRT-250:
+  - CRT-254: Connects to a Dallas DS1204 electronic key
+  - CRT-256: Stores question roms (aka Memory Expansion board)
+  - CRT-258: Microtouch touch screen controller:
+              Connects through the Z80 socket & contains a PC16550DN UART,
+              relocated Z80, 1.8432MHz OSC, PAL labeled SC3980 & RS232C port
 
-  CRT 258: addon board for CRT 250, contains UART and Microtouch touch screen controller
-
-
-  CRT 260 same basic components as CRT 250 with these additional components:
+  CRT-260 same basic components as CRT-250 with these additional components:
   - Microtouch touch screen controller (SMT-3)
   - PC16550 UART (for communication with touch screen controller)
   - DS1204 Electronic Key (for protection)
@@ -82,26 +86,40 @@ Power & Common Ground wires are 18 gauge, all other wires are 20 or 22 gauge.
 
   Known Games:
 
-  CRT 250:
+  CRT-250:
+  Americana (c) 1987
   Dodge City (c) 1988
   Pit Boss II (c)1988
   Super Pit Boss (c)1988
   Pit Boss Superstar (c)1990
-  *Pit Boss Superstar 30 (c)1993 (program code 9233-xx)
-  *Pit Boss Superstar III 30 (c)1993?
+  *Pit Boss Superstar 30 (c)1993
+  Pit Boss Superstar III 30 (c)1993
   Pit Boss Megastar (c)1994
   Pit Boss Supertouch 30 (c)1993/4
+  Pit Boss Megatouch (c)1994
 
-  CRT 260:
-  *Megatouch Video (c)1994?
+Custom Program Versions (Superstar 30 / Supertouch 30):
+
+PROGRAM#    Program Version      Program Differences
+---------------------------------------------------------------------------------------------
+923x-00-01  Standard Version     Includes all Options, no Restrictions
+923x-00-02  Minnesota Version    Excludes Casino Games
+923x-00-03  Louisiana Version    Excludes all Poker Games
+923x-00-04  Wisconsin Version    Game Connot End if Player Busts; 1,000 Points are Added to End of Each Hand
+923x-00-05  Montana Version      Excludes Blackjack, Dice and Photo Finish
+923x-00-06  California Version   Excludes Poker Double-up feature
+9234-00-07  New Jersey Version   Excludes Sex Trivia and includes 2-Coin Limit with Lockout Coil (Only for Supertouch 30 & Megastar)
+
+
+  CRT-260:
   Megatouch II (c)1994
   Megatouch III (c)1995
   Megatouch III Tournament Edition (c)1996
   Megatouch IV (c)1996
   Megatouch IV Tournament Edition (c)1996
-  Super Megatouch IV (c) 1996  (rom labels 9255-41-0x, see below)
-  Super Megatouch IV Tournament Edition (c) 1996
-  *The Real Broadway (c) 1996 (single rom at U38 + DS1204 security key)
+  Super Megatouch IV (c)1996  (rom labels 9255-41-0x, see below)
+  Super Megatouch IV Tournament Edition (c)1996
+  The Real Broadway (c)1995
   Megatouch 5 (c)1997
   Megatouch 5 Tournament Edition (c)1997
   Megatouch 6 (c)1998
@@ -150,8 +168,7 @@ Not all regional versions are available for each Megatouch series
   - clean up V9938 interrupt implementation
   - finish inputs, dsw, outputs (lamps)
   - problem with registering touches on the bottom of the screen (currently hacked to work)
-  - megat5a: has jmp $0000 in the initialization code causing infinite loop, rom U38 is dumped at half size / bad dump
-  - for pbst30 only roms were found, it appears that two roms with graphics data were missing, using pitbossm roms for now
+  - megat5a: has jmp $0000 in the initialization code causing infinite loop - Dump verfied on 4 different sets. (watchdog issue???)
  */
 
 #include "emu.h"
@@ -159,24 +176,13 @@ Not all regional versions are available for each Megatouch series
 #include "cpu/z80/z80daisy.h"
 #include "sound/ay8910.h"
 #include "video/v9938.h"
+#include "machine/ds1204.h"
 #include "machine/i8255.h"
 #include "machine/z80pio.h"
 #include "machine/ins8250.h"
 #include "machine/microtch.h"
 #include "machine/nvram.h"
 
-
-struct ds1204_t
-{
-	int state;
-	int read_ptr;
-	int last_clk;
-	UINT8 key[8];
-	UINT8 nvram[16];
-	int out_bit;
-	UINT8 command[3];
-
-};
 
 class meritm_state : public driver_device
 {
@@ -185,11 +191,13 @@ public:
 		: driver_device(mconfig, type, tag),
 			m_z80pio_0(*this, "z80pio_0"),
 			m_z80pio_1(*this, "z80pio_1"),
+			m_ds1204(*this, "ds1204"),
 			m_v9938_0(*this, "v9938_0"),
 			m_v9938_1(*this, "v9938_1"),
 			m_microtouch(*this, "microtouch") ,
 			m_uart(*this, "ns16550"),
-			m_maincpu(*this, "maincpu") { }
+			m_maincpu(*this, "maincpu"),
+			m_palette(*this, "v9938_0:palette") { }
 
 	UINT8* m_ram;
 	required_device<z80pio_device> m_z80pio_0;
@@ -202,10 +210,10 @@ public:
 	int m_bank;
 	int m_psd_a15;
 	UINT16 m_questions_loword_address;
-	ds1204_t m_ds1204;
+	required_device<ds1204_device> m_ds1204;
 	required_device<v9938_device> m_v9938_0;
 	required_device<v9938_device> m_v9938_1;
-	optional_device<microtouch_serial_device> m_microtouch;
+	optional_device<microtouch_device> m_microtouch;
 	optional_device<ns16550_device> m_uart;
 	DECLARE_WRITE8_MEMBER(meritm_crt250_bank_w);
 	DECLARE_WRITE8_MEMBER(meritm_psd_a15_w);
@@ -224,18 +232,6 @@ public:
 	DECLARE_WRITE8_MEMBER(meritm_audio_pio_port_b_w);
 	DECLARE_WRITE8_MEMBER(meritm_io_pio_port_a_w);
 	DECLARE_WRITE8_MEMBER(meritm_io_pio_port_b_w);
-	DECLARE_DRIVER_INIT(megat4);
-	DECLARE_DRIVER_INIT(megat4st);
-	DECLARE_DRIVER_INIT(megat3);
-	DECLARE_DRIVER_INIT(pbst30b);
-	DECLARE_DRIVER_INIT(megat4c);
-	DECLARE_DRIVER_INIT(megat5);
-	DECLARE_DRIVER_INIT(megat5t);
-	DECLARE_DRIVER_INIT(megat6);
-	DECLARE_DRIVER_INIT(megat4te);
-	DECLARE_DRIVER_INIT(pitbossm);
-	DECLARE_DRIVER_INIT(megat2);
-	DECLARE_DRIVER_INIT(pbst30);
 	DECLARE_DRIVER_INIT(megat3te);
 	virtual void machine_start();
 	virtual void video_start();
@@ -247,9 +243,6 @@ public:
 	TIMER_DEVICE_CALLBACK_MEMBER(meritm_interrupt);
 	TIMER_DEVICE_CALLBACK_MEMBER(vblank_start_tick);
 	TIMER_DEVICE_CALLBACK_MEMBER(vblank_end_tick);
-	void ds1204_w( ds1204_t *ds1204, int rst, int clk, int dq );
-	int ds1204_r(ds1204_t *ds1204);
-	void ds1204_init(const UINT8* key, const UINT8* nvram);
 	void meritm_crt250_switch_banks(  );
 	void meritm_switch_banks(  );
 	int meritm_touch_coord_transform(int *touch_x, int *touch_y);
@@ -257,141 +250,13 @@ public:
 	DECLARE_WRITE_LINE_MEMBER(meritm_vdp0_interrupt);
 	DECLARE_WRITE_LINE_MEMBER(meritm_vdp1_interrupt);
 	required_device<cpu_device> m_maincpu;
+	required_device<palette_device> m_palette;
 };
 
 
-#define SYSTEM_CLK  21470000
+#define SYSTEM_CLK  XTAL_21_4772MHz
 #define UART_CLK    XTAL_1_8432MHz // standard 8250 clock
 
-
-
-/*************************************
- *
- *  DS1204 Electronic Key
- *
- *************************************/
-
-#define DS1204_STATE_IDLE           0
-#define DS1204_STATE_COMMAND            1
-#define DS1204_STATE_READ_KEY           2
-#define DS1204_STATE_WRITE_SECURITY_MATCH   3
-#define DS1204_STATE_READ_NVRAM         4
-
-void meritm_state::ds1204_w( ds1204_t *ds1204, int rst, int clk, int dq )
-{
-	//logerror("ds1204_w: rst = %d, clk = %d, dq = %d\n", rst, clk, dq );
-	if ( rst == 0 )
-	{
-		ds1204->state = DS1204_STATE_COMMAND;
-		ds1204->read_ptr = 0;
-	}
-	else
-	{
-		if ( (ds1204->last_clk == 1) && (clk == 0) )
-		{
-			switch(ds1204->state)
-			{
-				case DS1204_STATE_COMMAND:
-					//logerror("Command bit %d = %d\n", ds1204->read_ptr, dq);
-					if ( ds1204->read_ptr < 24 )
-					{
-						if ( dq == 1 )
-						{
-							ds1204->command[ds1204->read_ptr >> 3] |= (1 << (ds1204->read_ptr & 0x7));
-						}
-						else
-						{
-							ds1204->command[ds1204->read_ptr >> 3] &= ~(1 << (ds1204->read_ptr & 0x7));
-						}
-						ds1204->read_ptr++;
-					}
-					if ( ds1204->read_ptr == 24 )
-					{
-						ds1204->state = DS1204_STATE_READ_KEY;
-						ds1204->read_ptr = 0;
-					}
-					break;
-				case DS1204_STATE_READ_KEY:
-					//logerror("Key bit %d\n", ds1204->read_ptr);
-					if (ds1204->read_ptr < 64)
-					{
-						ds1204->out_bit = (ds1204->key[ds1204->read_ptr >> 3] >> (ds1204->read_ptr & 0x7)) & 0x01;
-						ds1204->read_ptr++;
-					}
-					if (ds1204->read_ptr == 64)
-					{
-						ds1204->state = DS1204_STATE_WRITE_SECURITY_MATCH;
-						ds1204->read_ptr = 0;
-					}
-					break;
-				case DS1204_STATE_WRITE_SECURITY_MATCH:
-					//logerror( "Security match bit %d = %d\n", ds1204->read_ptr, dq);
-					if (ds1204->read_ptr < 64)
-					{
-						ds1204->read_ptr++;
-					}
-					if (ds1204->read_ptr == 64)
-					{
-						ds1204->state = DS1204_STATE_READ_NVRAM;
-						ds1204->read_ptr = 0;
-					}
-					break;
-				case DS1204_STATE_READ_NVRAM:
-					//logerror( "Read nvram bit = %d\n", ds1204->read_ptr );
-					if (ds1204->read_ptr < 128)
-					{
-						ds1204->out_bit = (ds1204->nvram[ds1204->read_ptr >> 3] >> (ds1204->read_ptr & 0x7)) & 0x01;
-						ds1204->read_ptr++;
-					}
-					if (ds1204->read_ptr == 128)
-					{
-						ds1204->state = DS1204_STATE_IDLE;
-						ds1204->read_ptr = 0;
-					}
-					break;
-
-			}
-		}
-		ds1204->last_clk = clk;
-	}
-};
-
-int meritm_state::ds1204_r(ds1204_t *ds1204)
-{
-	//logerror("ds1204_r\n");
-	return ds1204->out_bit;
-};
-
-void meritm_state::ds1204_init(const UINT8* key, const UINT8* nvram)
-{
-	memset(&m_ds1204, 0, sizeof(m_ds1204));
-	if (key)
-		memcpy(m_ds1204.key, key, sizeof(m_ds1204.key));
-	if (nvram)
-		memcpy(m_ds1204.nvram, nvram, sizeof(m_ds1204.nvram));
-
-	state_save_register_item(machine(), "ds1204", NULL, 0, m_ds1204.state);
-	state_save_register_item(machine(), "ds1204", NULL, 0, m_ds1204.read_ptr);
-	state_save_register_item(machine(), "ds1204", NULL, 0, m_ds1204.last_clk);
-	state_save_register_item(machine(), "ds1204", NULL, 0, m_ds1204.out_bit);
-	state_save_register_item_array(machine(), "ds1204", NULL, 0, m_ds1204.command);
-};
-
-/*************************************
- *
- *  Microtouch <-> pc16550 interface
- *
- *************************************/
-
-static const ins8250_interface meritm_ns16550_interface =
-{
-	DEVCB_DEVICE_LINE_MEMBER("microtouch", microtouch_serial_device, rx),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
 
 /*************************************
  *
@@ -436,10 +301,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(meritm_state::meritm_interrupt)
 
 	if((scanline % 2) == 0)
 	{
-		m_v9938_0->set_resolution(RENDER_HIGH);
 		m_v9938_0->interrupt();
-
-		m_v9938_1->set_resolution(RENDER_HIGH);
 		m_v9938_1->interrupt();
 	}
 }
@@ -480,7 +342,7 @@ UINT32 meritm_state::screen_update_meritm(screen_device &screen, bitmap_ind16 &b
 		popmessage("Layer 1 %sabled",m_layer1_enabled ? "en" : "dis");
 	}
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	if ( m_layer0_enabled )
 	{
@@ -507,12 +369,12 @@ void meritm_state::meritm_crt250_switch_banks(  )
 
 	//logerror( "CRT250: Switching banks: rom = %0x (bank = %x)\n", rombank, m_bank );
 	membank("bank1")->set_entry(rombank );
-};
+}
 
 WRITE8_MEMBER(meritm_state::meritm_crt250_bank_w)
 {
 	meritm_crt250_switch_banks();
-};
+}
 
 void meritm_state::meritm_switch_banks(  )
 {
@@ -526,19 +388,19 @@ void meritm_state::meritm_switch_banks(  )
 	membank("bank1")->set_entry(rombank );
 	membank("bank2")->set_entry(rombank | 0x01);
 	membank("bank3")->set_entry(rambank);
-};
+}
 
 WRITE8_MEMBER(meritm_state::meritm_psd_a15_w)
 {
 	m_psd_a15 = data;
 	//logerror( "Writing PSD_A15 with %02x at PC=%04X\n", data, space.device().safe_pc() );
 	meritm_switch_banks();
-};
+}
 
 WRITE8_MEMBER(meritm_state::meritm_bank_w)
 {
 	meritm_switch_banks();
-};
+}
 
 /*************************************
  *
@@ -551,13 +413,13 @@ WRITE8_MEMBER(meritm_state::meritm_crt250_questions_lo_w)
 {
 	m_questions_loword_address &= 0xff00;
 	m_questions_loword_address |= data;
-};
+}
 
 WRITE8_MEMBER(meritm_state::meritm_crt250_questions_hi_w)
 {
 	m_questions_loword_address &= 0x00ff;
 	m_questions_loword_address |= (data << 8);
-};
+}
 
 WRITE8_MEMBER(meritm_state::meritm_crt250_questions_bank_w)
 {
@@ -601,7 +463,7 @@ WRITE8_MEMBER(meritm_state::meritm_crt250_questions_bank_w)
 		logerror( "Reading question byte at %06X\n", questions_address | m_questions_loword_address);
 		*dst = memregion("extra")->base()[questions_address | m_questions_loword_address];
 	}
-};
+}
 
 
 /*************************************
@@ -625,7 +487,7 @@ WRITE8_MEMBER(meritm_state::meritm_ds1644_w)
 		}
 		//logerror( "Writing RTC, reg = %d, data = %x\n", offset, data);
 	}
-};
+}
 
 UINT8 meritm_state::binary_to_BCD(UINT8 data)
 {
@@ -652,7 +514,7 @@ READ8_MEMBER(meritm_state::meritm_ds1644_r)
 		m_ram[0x7fff] = binary_to_BCD(systime.local_time.year % 100);
 	}
 	return m_ram[rambank*0x2000 + 0x1ff8 + offset];
-};
+}
 
 /*************************************
  *
@@ -748,23 +610,66 @@ INPUT_PORTS_END
 
 static INPUT_PORTS_START(meritm_crt250)
 	PORT_START("PIO1_PORTA")
-	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_BUTTON1 )
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_BUTTON2 )
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_BUTTON3 )
-	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_BUTTON4 )
-	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_BUTTON5 )
-	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_BUTTON6 )
-	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_BUTTON7 )
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_POKER_HOLD1 )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_POKER_HOLD2 )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_POKER_HOLD3 )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_POKER_HOLD4 )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_POKER_HOLD5 )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL ) PORT_NAME("Play")
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_GAMBLE_BET ) PORT_NAME("Raise")
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
 	PORT_START("PIO1_PORTB")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_COIN1 ) PORT_IMPULSE(2)
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN)
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_SERVICE )
-	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN)
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN ) /* Used as "IPT_OTHER" in some games for Calibration / Clear High Score ect */
 
 	PORT_START("DSW")   /* need for AY-8910 accesses */
-	PORT_BIT( 0xff, 0x00, IPT_UNUSED)
+	PORT_DIPUNKNOWN_DIPLOC( 0x01, IP_ACTIVE_LOW, "SW1:1" )
+	PORT_DIPUNKNOWN_DIPLOC( 0x02, IP_ACTIVE_LOW, "SW1:2" )
+	PORT_DIPUNKNOWN_DIPLOC( 0x04, IP_ACTIVE_LOW, "SW1:3" )
+	PORT_DIPUNKNOWN_DIPLOC( 0x08, IP_ACTIVE_LOW, "SW1:4" )
+	PORT_DIPUNKNOWN_DIPLOC( 0x10, IP_ACTIVE_LOW, "SW1:5" )
+	PORT_DIPUNKNOWN_DIPLOC( 0x20, IP_ACTIVE_LOW, "SW1:6" )
+	PORT_DIPUNKNOWN_DIPLOC( 0x40, IP_ACTIVE_LOW, "SW1:7" )
+	PORT_DIPUNKNOWN_DIPLOC( 0x80, IP_ACTIVE_LOW, "SW1:8" )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START(pitboss2)
+	PORT_INCLUDE(meritm_crt250)
+
+	PORT_MODIFY("DSW")
+	PORT_DIPNAME( 0x02, 0x02, "Enable Joker Poker / Super Stud" ) PORT_DIPLOCATION("SW1:2")
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x02, DEF_STR( On ) )
+	PORT_DIPNAME( 0x04, 0x04, "Sex Trivia Category" ) PORT_DIPLOCATION("SW1:3")
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x04, DEF_STR( On ) )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START(spitboss)
+	PORT_INCLUDE(meritm_crt250)
+
+	PORT_MODIFY("DSW")
+	PORT_DIPNAME( 0x04, 0x04, "Sex Trivia & Sex Phrases" ) PORT_DIPLOCATION("SW1:3")
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x04, DEF_STR( On ) )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START(pitbosss)
+	PORT_INCLUDE(meritm_crt250)
+
+	PORT_MODIFY("DSW")
+	PORT_DIPNAME( 0x01, 0x01, "In Tac Tac Triva" ) PORT_DIPLOCATION("SW1:1")
+	PORT_DIPSETTING(    0x00, "Categories are Lettered" )
+	PORT_DIPSETTING(    0x01, "Categories are Numbered" )
+	PORT_DIPNAME( 0x02, 0x02, "Enable Casino Games" ) PORT_DIPLOCATION("SW1:2")
+	PORT_DIPSETTING(    0x00, DEF_STR( No ) )
+	PORT_DIPSETTING(    0x02, DEF_STR( Yes ) )
+	PORT_DIPNAME( 0x04, 0x04, "Sex Trivia Category" ) PORT_DIPLOCATION("SW1:3")
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x04, DEF_STR( On ) )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START(dodgecty)
@@ -772,50 +677,96 @@ static INPUT_PORTS_START(dodgecty)
 
 	PORT_MODIFY("PIO1_PORTA")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_POKER_HOLD1 ) PORT_NAME( "Hold 1 / Take / Lo" )
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_POKER_HOLD2 )
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_POKER_HOLD3 )
-	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_POKER_HOLD4 )
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_POKER_HOLD5 ) PORT_NAME( "Hold 5 / Double Up / Hi" )
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_GAMBLE_BET )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL )
-	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
+
+	PORT_MODIFY("PIO1_PORTB")
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_COIN2 ) PORT_IMPULSE(2)
+INPUT_PORTS_END
+
+static INPUT_PORTS_START(mtjpoker)
+	PORT_INCLUDE(meritm_crt250)
+
+	PORT_MODIFY("PIO1_PORTA")
+	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED) /* Touchscreen based, no keys used for this one. */
+
+	PORT_MODIFY("PIO1_PORTB")
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_COIN2 ) PORT_IMPULSE(2)
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_OTHER ) PORT_CODE(KEYCODE_C) PORT_NAME("Calibrate Touchsceen")
 
 	PORT_MODIFY("DSW")
-	PORT_DIPNAME( 0x01, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:1")
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x01, DEF_STR( On ) )
-	PORT_DIPNAME( 0x02, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:2")
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x02, DEF_STR( On ) )
-	PORT_DIPNAME( 0x04, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:3")
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x04, DEF_STR( On ) )
-	PORT_DIPNAME( 0x08, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:4")
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x08, DEF_STR( On ) )
-	PORT_DIPNAME( 0x10, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:5")
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x10, DEF_STR( On ) )
-	PORT_DIPNAME( 0x20, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:6")
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x20, DEF_STR( On ) )
-	PORT_DIPNAME( 0x40, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:7")
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x40, DEF_STR( On ) )
-	PORT_DIPNAME( 0x80, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:8")
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x80, DEF_STR( On ) )
+	PORT_DIPNAME( 0x01, 0x00, "Enable Touchscreen" ) PORT_DIPLOCATION("SW1:1") /* MUST be ON or "touches" don't register */
+	PORT_DIPSETTING(    0x01, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x10, 0x10, "Points Per Coin" ) PORT_DIPLOCATION("SW1:5")
+	PORT_DIPSETTING(    0x10, "1 Point / Coin" )
+	PORT_DIPSETTING(    0x00, "5 Points / Coin" )
+	PORT_DIPNAME( 0xc0, 0xc0, "Max Play" )       PORT_DIPLOCATION("SW1:7,8")
+	PORT_DIPSETTING(    0x40, "10" )
+	PORT_DIPSETTING(    0xc0, "20" )
+	PORT_DIPSETTING(    0x80, "50" )
+	PORT_DIPSETTING(    0x00, "50 Raise Yes / 99 Raise No" )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START(americna)
+	PORT_INCLUDE(meritm_crt250)
+
+	PORT_MODIFY("PIO1_PORTA")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_POKER_HOLD1 ) PORT_NAME( "Hold 1 / Take / Lo" )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_POKER_HOLD5 ) PORT_NAME( "Hold 5 / Double Up / Hi" )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_GAMBLE_BET ) PORT_NAME("Bet / Raise")
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_GAMBLE_STAND ) PORT_NAME( "Hi-Score" )
+
+	PORT_MODIFY("PIO1_PORTB")
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_COIN2 ) PORT_IMPULSE(2)
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_OTHER ) PORT_CODE(KEYCODE_S) PORT_NAME("Setup / Test")
+
+	PORT_MODIFY("DSW")
+	PORT_DIPNAME( 0x10, 0x10, "Points Per Coin" ) PORT_DIPLOCATION("SW1:5")
+	PORT_DIPSETTING(    0x10, "1 Point / Coin" )
+	PORT_DIPSETTING(    0x00, "5 Points / Coin" )
+	PORT_DIPNAME( 0xc0, 0xc0, "Max Play" )       PORT_DIPLOCATION("SW1:7,8")
+	PORT_DIPSETTING(    0x40, "10" )
+	PORT_DIPSETTING(    0xc0, "20" )
+	PORT_DIPSETTING(    0x80, "50" )
+	PORT_DIPSETTING(    0x00, "50 Raise Yes / 99 Raise No" )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START(realbrod)
+	PORT_INCLUDE(meritm_crt250)
+
+	PORT_MODIFY("PIO1_PORTA")
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_GAMBLE_BET )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_GAMBLE_STAND ) PORT_NAME( "Stand / Clear Hi-Score" )
+
+	PORT_MODIFY("PIO1_PORTB")
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_COIN2 ) PORT_IMPULSE(2)
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_OTHER ) PORT_CODE(KEYCODE_S) PORT_NAME("Setup")
+
+	PORT_MODIFY("DSW")
+	PORT_DIPNAME( 0x0c, 0x0c, "Max Play" )       PORT_DIPLOCATION("SW1:3,4")
+	PORT_DIPSETTING(    0x04, "10" )
+	PORT_DIPSETTING(    0x0c, "20" )
+	PORT_DIPSETTING(    0x08, "50" )
+	PORT_DIPSETTING(    0x00, "50 Raise Yes / 99 Raise No" )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START(pitbossm)
 	PORT_INCLUDE(meritm_crt250)
+
+	PORT_MODIFY("PIO1_PORTA")
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL ) PORT_NAME("Pass/Play")
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_GAMBLE_BET ) PORT_NAME("Collect/Quit/Raise")
 
 	PORT_MODIFY("DSW")
 	PORT_DIPUNUSED_DIPLOC( 0x01, 0x00, "SW1:1" )                /* Unused */
 	PORT_DIPNAME( 0x02, 0x02, "Solitaire Timer Mode" ) PORT_DIPLOCATION("SW1:2")
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x02, DEF_STR( On ) )
-	PORT_DIPNAME( 0x04, 0x04, "Sex Trivia" ) PORT_DIPLOCATION("SW1:3")
+	PORT_DIPNAME( 0x04, 0x04, "Sex Trivia Category" ) PORT_DIPLOCATION("SW1:3")
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x04, DEF_STR( On ) )
 	PORT_DIPNAME( 0x08, 0x00, "Coin Limit" ) PORT_DIPLOCATION("SW1:4")
@@ -838,40 +789,65 @@ INPUT_PORTS_END
 static INPUT_PORTS_START(pitbossa)
 	PORT_INCLUDE(pitbossm)
 
+	PORT_MODIFY("PIO1_PORTA")
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL ) PORT_NAME("Play")
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_GAMBLE_BET ) PORT_NAME("Collect/Quit")
+
 	PORT_MODIFY("DSW")
 	PORT_DIPNAME( 0x20, 0x20, "Great Solitaire: Coins to start" ) PORT_DIPLOCATION("SW1:6")
 	PORT_DIPSETTING(    0x00, "4 Coins" )
 	PORT_DIPSETTING(    0x20, "2 Coins" )
 INPUT_PORTS_END
 
-static INPUT_PORTS_START(pbst30)
-	PORT_INCLUDE(meritm_crt260)
+static INPUT_PORTS_START(pbss330)
+	PORT_INCLUDE(meritm_crt250)
+
+	PORT_MODIFY("PIO1_PORTB")
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_OTHER ) PORT_CODE(KEYCODE_S) PORT_NAME("Clear High Score") /* In IDLE (Demo) mode */
 
 	PORT_MODIFY("DSW")
-	PORT_DIPNAME( 0x01, 0x00, "Invert Touch Screen Coordinates" ) PORT_DIPLOCATION("SW1:1") /* In case you installed the touch screen upside down??? */
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x01, DEF_STR( On ) )
+	PORT_DIPNAME( 0x01, 0x01, "In Tac Tac Triva" ) PORT_DIPLOCATION("SW1:1")
+	PORT_DIPSETTING(    0x00, "Categories are Lettered" )
+	PORT_DIPSETTING(    0x01, "Categories are Numbered" )
 	PORT_DIPNAME( 0x02, 0x02, "Enable Casino Games" ) PORT_DIPLOCATION("SW1:2")
 	PORT_DIPSETTING(    0x00, DEF_STR( No ) )
 	PORT_DIPSETTING(    0x02, DEF_STR( Yes ) )
-	PORT_DIPNAME( 0x04, 0x04, "Sexy Trivia Category" ) PORT_DIPLOCATION("SW1:3")
+	PORT_DIPNAME( 0x04, 0x04, "Sex Trivia & Sex Phrases" ) PORT_DIPLOCATION("SW1:3")
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x04, DEF_STR( On ) )
-	PORT_DIPNAME( 0x08, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:4") /* Likely Coin limit */
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x08, DEF_STR( On ) )
+	PORT_DIPNAME( 0x08, 0x00, "Coin Limit" ) PORT_DIPLOCATION("SW1:4")
+	PORT_DIPSETTING(    0x00, "No Coin Limit" )
+	PORT_DIPSETTING(    0x08, "2 Coin Limit" )  /* With Lockout coil */
 	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Coinage ) ) PORT_DIPLOCATION("SW1:5")
 	PORT_DIPSETTING(    0x00, DEF_STR( 2C_1C ) )
 	PORT_DIPSETTING(    0x10, DEF_STR( 1C_1C ) )
-	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:6")
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x20, DEF_STR( On ) )
-	PORT_DIPNAME( 0x40, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:7")
+	PORT_DIPNAME( 0x20, 0x20, "Balls (Pit Pong) / Paddles (Breakin' Bricks)" ) PORT_DIPLOCATION("SW1:6")
+	PORT_DIPSETTING(    0x00, "15 Balls / 5 Paddles" )
+	PORT_DIPSETTING(    0x20, "11 Balls / 3 Paddles" )
+	PORT_DIPNAME( 0x40, 0x00, "Sync Adjustment (Set by factory)" ) PORT_DIPLOCATION("SW1:7")    /* Sync Adjustment (Set by factory) */
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x40, DEF_STR( On ) )
-	PORT_DIPNAME( 0x80, 0x00, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW1:8")
+	PORT_DIPNAME( 0x80, 0x00, "Sync Adjustment (Set by factory)" ) PORT_DIPLOCATION("SW1:8")    /* Sync Adjustment (Set by factory) */
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x80, DEF_STR( On ) )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START(pbst30)
+	PORT_INCLUDE(pbss330)
+
+	PORT_MODIFY("PIO1_PORTA")
+	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED) /* Touchscreen based, no keys used for this one. */
+
+	PORT_MODIFY("PIO1_PORTB")
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_OTHER ) PORT_CODE(KEYCODE_C) PORT_NAME("Calibrate Touchsceen")
+
+	PORT_MODIFY("DSW")
+	PORT_DIPNAME( 0x01, 0x00, "Touchscreen Type" ) PORT_DIPLOCATION("SW1:1")
+	PORT_DIPSETTING(    0x00, "13 Inch" )
+	PORT_DIPSETTING(    0x01, "19 Inch (Inverts Screen Coordinates)" )
+	PORT_DIPNAME( 0x20, 0x20, "Balls (Pit Pong) / Paddles (Breakin' Bricks)" ) PORT_DIPLOCATION("SW1:6")
+	PORT_DIPSETTING(    0x00, "11 Balls / 5 Paddles" )
+	PORT_DIPSETTING(    0x20, "7 Balls / 3 Paddles" )
 INPUT_PORTS_END
 
 /*************************************
@@ -884,7 +860,7 @@ READ8_MEMBER(meritm_state::meritm_8255_port_c_r)
 {
 	//logerror( "8255 port C read\n" );
 	return 0xff;
-};
+}
 
 WRITE8_MEMBER(meritm_state::meritm_crt250_port_b_w)
 {
@@ -897,26 +873,6 @@ WRITE8_MEMBER(meritm_state::meritm_crt250_port_b_w)
 	output_set_value("P1 PLAY LAMP", !BIT(data,5));
 	output_set_value("P1 CANCEL LAMP", !BIT(data,6));
 }
-
-static I8255A_INTERFACE( crt260_ppi8255_intf )
-{
-	DEVCB_NULL,                         /* Port A read */
-	DEVCB_NULL,                         /* Port A write */
-	DEVCB_NULL,                         /* Port B read */
-	DEVCB_NULL,                         /* Port B write */
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_8255_port_c_r),/* Port C read */
-	DEVCB_NULL                          /* Port C write */
-};
-
-static I8255A_INTERFACE( crt250_ppi8255_intf )
-{
-	DEVCB_NULL,                         /* Port A read */
-	DEVCB_NULL,                         /* Port A write */
-	DEVCB_NULL,                         /* Port B read */
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_crt250_port_b_w),/* Port B write (used LMP x DRIVE) */
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_8255_port_c_r),/* Port C read */
-	DEVCB_NULL                          /* Port C write */
-};
 
 /*************************************
  *
@@ -932,17 +888,7 @@ static I8255A_INTERFACE( crt250_ppi8255_intf )
 WRITE8_MEMBER(meritm_state::meritm_ay8930_port_b_w)
 {
 	// lamps
-};
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSW"), /* Port A read */
-	DEVCB_NULL, /* Port B read */
-	DEVCB_NULL, /* Port A write */
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_ay8930_port_b_w)  /* Port B write */
-};
+}
 
 /*************************************
  *
@@ -968,7 +914,7 @@ READ8_MEMBER(meritm_state::meritm_audio_pio_port_a_r)
 	*/
 
 	return m_vint;
-};
+}
 
 READ8_MEMBER(meritm_state::meritm_audio_pio_port_b_r)
 {
@@ -987,8 +933,8 @@ READ8_MEMBER(meritm_state::meritm_audio_pio_port_b_r)
 
 	*/
 
-	return ds1204_r(&m_ds1204);
-};
+	return m_ds1204->read_dq();
+}
 
 WRITE8_MEMBER(meritm_state::meritm_audio_pio_port_a_w)
 {
@@ -1009,7 +955,7 @@ WRITE8_MEMBER(meritm_state::meritm_audio_pio_port_a_w)
 
 	m_bank = (data & 7) | ((data >> 2) & 0x18);
 	//logerror("Writing BANK with %x (raw = %x)\n", m_bank, data);
-};
+}
 
 WRITE8_MEMBER(meritm_state::meritm_audio_pio_port_b_w)
 {
@@ -1028,8 +974,10 @@ WRITE8_MEMBER(meritm_state::meritm_audio_pio_port_b_w)
 
 	*/
 
-	ds1204_w(&m_ds1204, (data & 0x4) >> 2, (data & 0x2) >> 1, data & 0x01);
-};
+	m_ds1204->write_rst((data >> 2) & 1);
+	m_ds1204->write_clk((data >> 1) & 1);
+	m_ds1204->write_dq(data & 0x01);
+}
 
 WRITE8_MEMBER(meritm_state::meritm_io_pio_port_a_w)
 {
@@ -1047,7 +995,7 @@ WRITE8_MEMBER(meritm_state::meritm_io_pio_port_a_w)
 	    7       J3 PE7
 
 	*/
-};
+}
 
 WRITE8_MEMBER(meritm_state::meritm_io_pio_port_b_w)
 {
@@ -1065,29 +1013,7 @@ WRITE8_MEMBER(meritm_state::meritm_io_pio_port_b_w)
 	    7       J3 PF7
 
 	*/
-};
-
-static Z80PIO_INTERFACE( meritm_audio_pio_intf )
-{
-	DEVCB_CPU_INPUT_LINE("maincpu", INPUT_LINE_IRQ0),
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_audio_pio_port_a_r),
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_audio_pio_port_a_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_audio_pio_port_b_r),
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_audio_pio_port_b_w),
-	DEVCB_NULL
-};
-
-static Z80PIO_INTERFACE( meritm_io_pio_intf )
-{
-	DEVCB_CPU_INPUT_LINE("maincpu", INPUT_LINE_IRQ0),
-	DEVCB_INPUT_PORT("PIO1_PORTA"),
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_io_pio_port_a_w),
-	DEVCB_NULL,
-	DEVCB_INPUT_PORT("PIO1_PORTB"),
-	DEVCB_DRIVER_MEMBER(meritm_state,meritm_io_pio_port_b_w),
-	DEVCB_NULL
-};
+}
 
 static const z80_daisy_config meritm_daisy_chain[] =
 {
@@ -1102,7 +1028,7 @@ MACHINE_START_MEMBER(meritm_state,merit_common)
 	m_z80pio_0->strobe_b(1);
 	m_z80pio_1->strobe_a(1);
 	m_z80pio_1->strobe_b(1);
-};
+}
 
 void meritm_state::machine_start()
 {
@@ -1112,13 +1038,13 @@ void meritm_state::machine_start()
 	MACHINE_START_CALL_MEMBER(merit_common);
 	save_item(NAME(m_bank));
 
-};
+}
 
 MACHINE_START_MEMBER(meritm_state,meritm_crt250_questions)
 {
 	meritm_state::machine_start();
 	save_item(NAME(m_questions_loword_address));
-};
+}
 
 MACHINE_START_MEMBER(meritm_state,meritm_crt250_crt252_crt258)
 {
@@ -1140,7 +1066,7 @@ MACHINE_START_MEMBER(meritm_state,meritm_crt260)
 	save_item(NAME(m_bank));
 	save_item(NAME(m_psd_a15));
 	save_pointer(NAME(m_ram), 0x8000);
-};
+}
 
 // from MSX2 driver, may be not accurate for merit games
 #define MSX2_XBORDER_PIXELS     16
@@ -1171,18 +1097,30 @@ static MACHINE_CONFIG_START( meritm_crt250, meritm_state )
 	MCFG_CPU_CONFIG(meritm_daisy_chain)
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", meritm_state, meritm_interrupt, "screen", 0, 1)
 
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(meritm_state, meritm_crt250_port_b_w))   // used LMP x DRIVE
+	MCFG_I8255_IN_PORTC_CB(READ8(meritm_state, meritm_8255_port_c_r))
 
-	MCFG_I8255A_ADD( "ppi8255", crt250_ppi8255_intf )
+	MCFG_DEVICE_ADD("z80pio_0", Z80PIO, SYSTEM_CLK/6)
+	MCFG_Z80PIO_OUT_INT_CB(INPUTLINE("maincpu", INPUT_LINE_IRQ0))
+	MCFG_Z80PIO_IN_PA_CB(READ8(meritm_state, meritm_audio_pio_port_a_r))
+	MCFG_Z80PIO_OUT_PA_CB(WRITE8(meritm_state, meritm_audio_pio_port_a_w))
+	MCFG_Z80PIO_IN_PB_CB(READ8(meritm_state, meritm_audio_pio_port_b_r))
+	MCFG_Z80PIO_OUT_PB_CB(WRITE8(meritm_state, meritm_audio_pio_port_b_w))
 
-	MCFG_Z80PIO_ADD( "z80pio_0", SYSTEM_CLK/6, meritm_audio_pio_intf )
-	MCFG_Z80PIO_ADD( "z80pio_1", SYSTEM_CLK/6, meritm_io_pio_intf )
+	MCFG_DEVICE_ADD("z80pio_1", Z80PIO, SYSTEM_CLK/6)
+	MCFG_Z80PIO_OUT_INT_CB(INPUTLINE("maincpu", INPUT_LINE_IRQ0))
+	MCFG_Z80PIO_IN_PA_CB(IOPORT("PIO1_PORTA"))
+	MCFG_Z80PIO_OUT_PA_CB(WRITE8(meritm_state, meritm_io_pio_port_a_w))
+	MCFG_Z80PIO_IN_PB_CB(IOPORT("PIO1_PORTB"))
+	MCFG_Z80PIO_OUT_PB_CB(WRITE8(meritm_state, meritm_io_pio_port_b_w))
 
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("vblank_start", meritm_state, vblank_start_tick, "screen", 259, 262)
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("vblank_end", meritm_state, vblank_end_tick, "screen", 262, 262)
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
+	MCFG_DS1204_ADD("ds1204")
 
 	MCFG_V9938_ADD("v9938_0", "screen", 0x20000)
 	MCFG_V99X8_INTERRUPT_CALLBACK(WRITELINE(meritm_state,meritm_vdp0_interrupt))
@@ -1191,21 +1129,20 @@ static MACHINE_CONFIG_START( meritm_crt250, meritm_state )
 	MCFG_V99X8_INTERRUPT_CALLBACK(WRITELINE(meritm_state,meritm_vdp1_interrupt))
 
 	MCFG_SCREEN_ADD("screen",RASTER)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 
 	MCFG_SCREEN_SIZE(MSX2_TOTAL_XRES_PIXELS, 262*2)
 	MCFG_SCREEN_VISIBLE_AREA(MSX2_XBORDER_PIXELS - MSX2_VISIBLE_XBORDER_PIXELS, MSX2_TOTAL_XRES_PIXELS - MSX2_XBORDER_PIXELS + MSX2_VISIBLE_XBORDER_PIXELS - 1, MSX2_YBORDER_PIXELS - MSX2_VISIBLE_YBORDER_PIXELS, MSX2_TOTAL_YRES_PIXELS - MSX2_YBORDER_PIXELS + MSX2_VISIBLE_YBORDER_PIXELS - 1)
 	MCFG_SCREEN_UPDATE_DRIVER(meritm_state, screen_update_meritm)
-	MCFG_PALETTE_LENGTH(512)
-
-	MCFG_PALETTE_INIT( v9938 )
-
+	MCFG_SCREEN_PALETTE("v9938_0:palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("aysnd", AY8910, SYSTEM_CLK/12)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSW")) /* Port A read */
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(meritm_state, meritm_ay8930_port_b_w))  /* Port B write */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -1220,8 +1157,9 @@ static MACHINE_CONFIG_DERIVED( meritm_crt250_crt252_crt258, meritm_crt250_questi
 	MCFG_CPU_IO_MAP(meritm_crt250_crt258_io_map)
 	MCFG_MACHINE_START_OVERRIDE(meritm_state,meritm_crt250_crt252_crt258)
 
-	MCFG_NS16550_ADD("ns16550", meritm_ns16550_interface, UART_CLK)
-	MCFG_MICROTOUCH_SERIAL_ADD("microtouch", 9600, DEVWRITELINE("ns16550", ins8250_uart_device, rx_w))
+	MCFG_DEVICE_ADD("ns16550", NS16550, UART_CLK)
+	MCFG_INS8250_OUT_TX_CB(DEVWRITELINE("microtouch", microtouch_device, rx))
+	MCFG_MICROTOUCH_ADD("microtouch", 9600, DEVWRITELINE("ns16550", ins8250_uart_device, rx_w))
 	MCFG_MICROTOUCH_TOUCH_CB(meritm_state, meritm_touch_coord_transform)
 MACHINE_CONFIG_END
 
@@ -1231,16 +1169,57 @@ static MACHINE_CONFIG_DERIVED( meritm_crt260, meritm_crt250 )
 	MCFG_CPU_IO_MAP(meritm_io_map)
 
 	MCFG_DEVICE_REMOVE("ppi8255")
-	MCFG_I8255A_ADD( "ppi8255", crt260_ppi8255_intf )
+	MCFG_DEVICE_ADD("ppi8255", I8255A, 0)
+	MCFG_I8255_IN_PORTC_CB(READ8(meritm_state, meritm_8255_port_c_r))
 
 	MCFG_WATCHDOG_TIME_INIT(attotime::from_msec(1200))  // DS1232, TD connected to VCC
 	MCFG_MACHINE_START_OVERRIDE(meritm_state,meritm_crt260)
 
-	MCFG_NS16550_ADD("ns16550", meritm_ns16550_interface, UART_CLK)
-	MCFG_MICROTOUCH_SERIAL_ADD("microtouch", 9600, DEVWRITELINE("ns16550", ins8250_uart_device, rx_w))
+	MCFG_DEVICE_ADD("ns16550", NS16550, UART_CLK)
+	MCFG_INS8250_OUT_TX_CB(DEVWRITELINE("microtouch", microtouch_device, rx))
+	MCFG_MICROTOUCH_ADD("microtouch", 9600, DEVWRITELINE("ns16550", ins8250_uart_device, rx_w))
 	MCFG_MICROTOUCH_TOUCH_CB(meritm_state, meritm_touch_coord_transform)
 MACHINE_CONFIG_END
 
+
+/*
+
+This set seems odd, it doesn't really have a title sequence or demo mode.
+ NOT 100% sure this is "Americana" or just a no name touch Joker poker
+
+The Touchscreen Calibration routine doesn't seem to work?
+
+*/
+ROM_START( mtjpoker ) /* Uses the CRT-258 touch controller board & Dallas DS1225Y NV SRAM */
+	ROM_REGION( 0x80000, "maincpu", 0 )
+	ROM_LOAD( "9132-00-02_u9-r0.u9", 0x00000, 0x10000, CRC(4ec683b6) SHA1(7cff76ba1517deede3dfa2a419e11fd603dcf695) ) /* 9132-00-02 R0 46  940416 */
+	ROM_LOAD( "9132-00_u10-r0.u10",  0x10000, 0x10000, CRC(d6f72934) SHA1(4f3d6a5227a3b0fc298533a03cc0a32f8e2f3840) ) // == 9131-00_u10-0.u10 from americna
+	ROM_LOAD( "9132-00_u11-r0.u11",  0x20000, 0x10000, CRC(f2db6f5d) SHA1(3f734a7e8c72c14bf4a3e6f595819311739394d3) ) // == 9131-00_u11-0.u11 from americna
+
+	ROM_REGION( 0x000022, "ds1204", 0 ) /* Connected via small CRT-254 daughter card through the J2 connector */
+	ROM_LOAD( "9132-00-r0-key", 0x000000, 0x000022, BAD_DUMP CRC(c8ab29f4) SHA1(8cd352fb9335c4acba8db1a9db8ac1e08752b072) )
+ROM_END
+
+/*
+
+Americana - Standard 5 card draw Joker Poker.
+
+Pressing Service Mode "F2" brings up a Coins in for Coin1 & Coin2 plus total coins.
+
+Entering the Setup menu "S":
+ Hold3 switches selection choice.
+ Hold5 advances through the list.
+ Hi-Score will clear the High Scores
+
+Is the "Stand" & "Hi-Score" keys the same? Without a separate Stand key, you cannot set up the "TWIN" bonus feature
+
+*/
+ROM_START( americna ) /* Uses a small daughter card CRT-251 & Dallas DS1225Y NV SRAM */
+	ROM_REGION( 0x80000, "maincpu", 0 )
+	ROM_LOAD( "9131-00_u9-2.u9",   0x00000, 0x10000, CRC(8a741fb6) SHA1(2d77c67e5a0bdaf6199c31c4055df214672db3e1) ) /* 9131-00 U9-2  888020 */
+	ROM_LOAD( "9131-00_u10-0.u10", 0x10000, 0x10000, CRC(d6f72934) SHA1(4f3d6a5227a3b0fc298533a03cc0a32f8e2f3840) )
+	ROM_LOAD( "9131-00_u11-0.u11", 0x20000, 0x10000, CRC(f2db6f5d) SHA1(3f734a7e8c72c14bf4a3e6f595819311739394d3) )
+ROM_END
 
 ROM_START( dodgecty ) /* Uses a small daughter card CRT-255 & Dallas DS1225Y NV SRAM */
 	ROM_REGION( 0x80000, "maincpu", 0 )
@@ -1248,31 +1227,6 @@ ROM_START( dodgecty ) /* Uses a small daughter card CRT-255 & Dallas DS1225Y NV 
 	ROM_LOAD( "9131-02_u10-0.u10", 0x10000, 0x10000, CRC(bc3391f3) SHA1(4df46f31489bc5e3de3f6fc917e23b9bb5231e5a) )
 	ROM_LOAD( "9131-02_u11-0.u11", 0x20000, 0x10000, CRC(f137d70c) SHA1(8ec04ec17300aa3a6ef14bcca1ca1c2aec0eea18) )
 ROM_END
-
-/*
-    Pit Boss II - Merit Industries Inc. 1988
-    ----------------------------------------
-
-    All eproms are 27C512
-
-    One 8 bank dip switch.
-
-    Two YAMAHA V9938 Video Processors.
-
-    21.47727 MHz Crystal
-
-    CPU Z80
-
-    Audio AY8930
-
-    Two Z80A-PIO
-
-    One bq4010YMA-150 NVRAM
-    Eight V53C464AP80 (41464) RAMS
-
-    One PAL16L8AN
-    One PAL20L10NC
-*/
 
 ROM_START( pitboss2 )
 	ROM_REGION( 0x80000, "maincpu", 0 )
@@ -1288,7 +1242,7 @@ ROM_END
 
 ROM_START( spitboss )
 	ROM_REGION( 0x80000, "maincpu", 0 )
-	ROM_LOAD( "9221-02_u9-0a.u9",   0x00000, 0x10000, CRC(e0c45c9c) SHA1(534bff67c8fee08f1c348275de8977659efa9f69) ) /* 9221-02A   886021  (actual, but should be 880621) */
+	ROM_LOAD( "9221-02_u9-0a.u9",   0x00000, 0x10000, CRC(e0c45c9c) SHA1(534bff67c8fee08f1c348275de8977659efa9f69) ) /* 9221-02A   886021 */
 	ROM_LOAD( "9221-02_u10-0.u10",  0x10000, 0x10000, CRC(ed010c58) SHA1(02750944a28c1c27ce2a9904d11b7e46272a940e) )
 	ROM_LOAD( "9221-02_u11-0a.u11", 0x20000, 0x10000, CRC(0c65fa86) SHA1(7906a8d615116ca67bf370dfb2da8cb2389a313d) )
 	ROM_LOAD( "9221-02_u12-0.u12",  0x30000, 0x10000, CRC(0cf95b0e) SHA1(c6ffc13703892b9ae0da39a02db37c4ec890f79e) )
@@ -1312,7 +1266,7 @@ ROM_END
 
 ROM_START( pitbosssa )
 	ROM_REGION( 0x80000, "maincpu", 0 )
-	ROM_LOAD( "9221-10_u9-0a.u9",   0x00000, 0x10000, CRC(41be6b30) SHA1(c4df87a599e310ce29ee9277e5adc916ff68f060) ) /* 9221-10-00A  090370  (actual, but should be 090390) */
+	ROM_LOAD( "9221-10_u9-0a.u9",   0x00000, 0x10000, CRC(41be6b30) SHA1(c4df87a599e310ce29ee9277e5adc916ff68f060) ) /* 9221-10-00A  090370 */
 	ROM_LOAD( "9221-10_u10-0.u10",  0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) )
 	ROM_LOAD( "9221-10_u11-0a.u11", 0x20000, 0x10000, CRC(c9137469) SHA1(618680609bdffa92b919a2417bd3ec41a4c8bf2b) )
 	ROM_LOAD( "9221-10_u12-0.u12",  0x30000, 0x10000, CRC(3577a203) SHA1(80f9c827ad9dea2c6af788bd3b46ab65e8c594eb) )
@@ -1320,6 +1274,121 @@ ROM_START( pitbosssa )
 	ROM_LOAD( "9221-10_u14-0.u14a", 0x50000, 0x10000, CRC(0a928852) SHA1(c6c623f63a73b3de6298f436a4ca339c1447888d) )
 	ROM_LOAD( "9221-10_u15-0.u15",  0x60000, 0x10000, CRC(c302b4c2) SHA1(d62d4bb33a9ccb95d1e550f9e439be3316b94c99) )
 	ROM_LOAD( "9221-10_u16-0.u16",  0x70000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) ) // matches pitboss2
+ROM_END
+
+ROM_START( pitbosssc ) /* ROMs at U9 and U11 are localized for California, denoted by the "-1" in the label */
+	ROM_REGION( 0x80000, "maincpu", 0 )
+	ROM_LOAD( "9221-12_u9-1.u9",   0x00000, 0x10000, CRC(6f55ba86) SHA1(6a9b09009f7640fe7862433a2d5ccee8ecd4f846) ) /* 9221-12-01  010892 */
+	ROM_LOAD( "9221-12_u10-0.u10", 0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) )
+	ROM_LOAD( "9221-12_u11-1.u11", 0x20000, 0x10000, CRC(869398d0) SHA1(50283ea8cf708ef177976245ec75a1a4c4408dfb) )
+	ROM_LOAD( "9221-12_u12-0.u12", 0x30000, 0x10000, CRC(b9fb4203) SHA1(84b514d9739d9c2ab1081cfc7cdedb41155ee038) )
+	ROM_LOAD( "9221-12_u13-0.u13", 0x40000, 0x10000, CRC(93880b55) SHA1(1bf48bb25ef85a5474d63d1a4912f46772b6be62) )
+	ROM_LOAD( "9221-12_u14-0.u14", 0x50000, 0x10000, CRC(128b4dff) SHA1(945825d654b1dce2e71b4f8613029651c7641fac) )
+	ROM_LOAD( "9221-12_u15-0.u15", 0x60000, 0x10000, CRC(b5beeaa9) SHA1(99db48f83d09616617b585b60614f5819f5dc607) )
+	ROM_LOAD( "9221-12_u16-0.u16", 0x70000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) ) // matches pitboss2
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "pitbosssc-key", 0x000000, 0x000022, BAD_DUMP CRC(77249fe0) SHA1(719f66742147cb8e5720250ce744e5eb4983ab82) )
+ROM_END
+
+ROM_START( pbss330 ) /* Dallas DS1204V security key attached to CRT-254 connected to J2 connector labeled 9233-01 U1-RO1 C1993 MII */
+	ROM_REGION( 0x80000, "maincpu", 0 )
+	ROM_LOAD( "9233-00-01_u9-r0",  0x00000, 0x10000, CRC(887da433) SHA1(2950803cef75e0d337fbcedaeea994ec82c9db71) ) /* 9233-00-01  072893 */
+	ROM_LOAD( "9233-00-01_u10-r0", 0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) )
+	ROM_LOAD( "9233-00-01_u11-r0", 0x20000, 0x10000, CRC(0c02e464) SHA1(9283f324a8582ad98495e084750637e2a02a7474) )
+	ROM_LOAD( "9233-00-01_u12-r0", 0x30000, 0x10000, CRC(b9fb4203) SHA1(84b514d9739d9c2ab1081cfc7cdedb41155ee038) )
+	ROM_LOAD( "9233-00-01_u13-r0", 0x40000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) )
+	ROM_LOAD( "9233-00-01_u14-r0", 0x50000, 0x10000, CRC(c6701f15) SHA1(d475c4490df8dfa6f2374bb70ef12c7afaecd501) )
+	ROM_LOAD( "9233-00-01_u15-r0", 0x60000, 0x10000, CRC(5810840e) SHA1(bad6457752ac212c3c11360a13a8d3473662a287) )
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9233-01_u1-r01_c1993_mii", 0x000000, 0x000022, BAD_DUMP CRC(93459659) SHA1(73ad4c3a7c52d3db3acb43662c535f8c2ed2376a) )
+
+	ROM_REGION( 0xc0000, "extra", 0 ) // question roms
+	ROM_LOAD( "qs9233-01_u7-r0",  0x00000, 0x40000, CRC(176dd688) SHA1(306cf78101219ef1122023a01d16dff5e9f2aecf) ) /* These 3 roms are on CRT-256 sattalite PCB */
+	ROM_LOAD( "qs9233-01_u6-r0",  0x40000, 0x40000, CRC(59c85a0a) SHA1(ef7f45c4e032d9dd14c4f5237f5b3c487be0cb2f) )
+	ROM_LOAD( "qs9233-01_u5-r0",  0x80000, 0x40000, CRC(740b1274) SHA1(14eab68fc137b905a5a2739c7081900a48cba562) )
+ROM_END
+
+/*
+Basically this Pit Boss Megatouch set is Pit Boss Supertouch 30 v2.0 but marks the first time Merit
+ started using the Megatouch name.
+
+NOTE: Once again U10, U12 & U13 doesn't change between this set and the Pit Boss Supertouch 30 sets
+      and the question roms are the same data with a new label and game number ID
+*/
+ROM_START( megat ) /* Dallas DS1204V security key attached to CRT-254 connected to J2 connector labeled 9234-20 U1-RO C1994 MII */
+	ROM_REGION( 0x80000, "maincpu", 0 )
+	ROM_LOAD( "9234-20-01_u9-r0a",  0x00000, 0x10000, CRC(5a9fd092) SHA1(756b6a925dafb17451e7dc37c95a26d09ecfe2d7) ) /* 9234-20-01 R0A 940519 */
+	ROM_LOAD( "9234-20-01_u10-r0a", 0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) ) /* Also found as PBC U10 */
+	ROM_LOAD( "9234-20-01_u11-r0a", 0x20000, 0x10000, CRC(8bd5f6bb) SHA1(95b23d7d14207fcafc01ee975400ebdd1e7b5ad5) )
+	ROM_LOAD( "9234-20-01_u12-r0a", 0x30000, 0x10000, CRC(b9fb4203) SHA1(84b514d9739d9c2ab1081cfc7cdedb41155ee038) ) /* Also found as PBC U12 */
+	ROM_LOAD( "9234-20-01_u13-r0a", 0x40000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) ) /* Also found as PBC U13 */
+	ROM_LOAD( "9234-20-01_u14-r0a", 0x50000, 0x10000, CRC(40d78506) SHA1(5e1d8e4ef8aa02faa2a323f5e988bf56d4747b60) )
+	ROM_LOAD( "9234-20-01_u15-r0a", 0x60000, 0x10000, CRC(9adc67b8) SHA1(271e6b6473eeea01f2923ef82c192a583bb5e338) )
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9234-20_u1-r0_c1994_mii", 0x000000, 0x000022, BAD_DUMP CRC(6cbdbde1) SHA1(b076ee21fc792a5e85cdaed427bc41554568811e) )
+
+	ROM_REGION( 0xc0000, "extra", 0 ) // question roms
+	ROM_LOAD( "qs9234-20_u7-r0",  0x00000, 0x40000, CRC(c0534aaa) SHA1(4b3cbf03f29fd5b4b8fd423e73c0c8147692fa75) ) /* These 3 roms are on CRT-256 sattalite PCB */
+	ROM_LOAD( "qs9234-20_u6-r0",  0x40000, 0x40000, CRC(fe2cd934) SHA1(623011dc53ed6eefefa0725dba6fd1efee2077c1) ) /* Same data as Pit Boss Supertouch 30 sets, different label - verified */
+	ROM_LOAD( "qs9234-20_u5-r0",  0x80000, 0x40000, CRC(293fe305) SHA1(8a551ae8fb4fa4bf329128be1bfd6f1c3ff5a366) )
+ROM_END
+
+ROM_START( pbst30 ) /* Dallas DS1204V security key attached to CRT-254 connected to J2 connector labeled 9234-10 U1-RO1 C1994 MII */
+	ROM_REGION( 0x80000, "maincpu", 0 )
+	ROM_LOAD( "9234-10-01_u9-r0",  0x00000, 0x10000, CRC(96f39c9a) SHA1(df698e94a5204cf050ceadc5c257ca5f68171114) ) /* 9234-10-01 032294 */
+	ROM_LOAD( "9234-00-01_u10-r0", 0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) )
+	ROM_LOAD( "9234-10-01_u11-r0", 0x20000, 0x10000, CRC(835fa041) SHA1(2ae754c5fcf50548eb214902409217d1643c6eaa) )
+	ROM_LOAD( "9234-00-01_u12-r0", 0x30000, 0x10000, CRC(b9fb4203) SHA1(84b514d9739d9c2ab1081cfc7cdedb41155ee038) )
+	ROM_LOAD( "9234-00-01_u13-r0", 0x40000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) )
+	ROM_LOAD( "9234-10-01_u14-r0", 0x50000, 0x10000, CRC(9b0873a4) SHA1(7362c6220aa4bf1a9ab7c11cb8a51587a2a0a992) )
+	ROM_LOAD( "9234-10-01_u15-r0", 0x60000, 0x10000, CRC(9fbd8582) SHA1(c0f68c8a7cdca34c8736cefc71767c421bcaba8a) )
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9234-10_u1-r01_c1994_mii", 0x000000, 0x000022, BAD_DUMP CRC(1c782f78) SHA1(8255afcffbe21a43f53cfb41867552681403ea47) )
+
+	ROM_REGION( 0xc0000, "extra", 0 ) // question roms
+	ROM_LOAD( "qs9234-01_u7-r0",  0x00000, 0x40000, CRC(c0534aaa) SHA1(4b3cbf03f29fd5b4b8fd423e73c0c8147692fa75) ) /* These 3 roms are on CRT-256 sattalite PCB */
+	ROM_LOAD( "qs9234-01_u6-r0",  0x40000, 0x40000, CRC(fe2cd934) SHA1(623011dc53ed6eefefa0725dba6fd1efee2077c1) )
+	ROM_LOAD( "qs9234-01_u5-r0",  0x80000, 0x40000, CRC(293fe305) SHA1(8a551ae8fb4fa4bf329128be1bfd6f1c3ff5a366) )
+ROM_END
+
+ROM_START( pbst30a ) /* Dallas DS1204V security key attached to CRT-254 connected to J2 connector labeled 9234-01 U1-RO1 C1993 MII */
+	ROM_REGION( 0x80000, "maincpu", 0 )
+	ROM_LOAD( "9234-00-01_u9-r0a",  0x00000, 0x10000, CRC(5f058f95) SHA1(98382935340a076bdb1b20c7f16c25b6084599fe) ) /* 9234-00-01  122293 */
+	ROM_LOAD( "9234-00-01_u10-r0",  0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) )
+	ROM_LOAD( "9234-00-01_u11-r0a", 0x20000, 0x10000, CRC(79125fb5) SHA1(6ca4f33c363cfb6f5c0f23b8fcc8cfcc076f68b1) )
+	ROM_LOAD( "9234-00-01_u12-r0",  0x30000, 0x10000, CRC(b9fb4203) SHA1(84b514d9739d9c2ab1081cfc7cdedb41155ee038) )
+	ROM_LOAD( "9234-00-01_u13-r0",  0x40000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) )
+	ROM_LOAD( "9234-00-01_u14-r0a", 0x50000, 0x10000, CRC(e83f91d5) SHA1(1d64c943787b239763f44be412ee7f5ad13eb37d) )
+	ROM_LOAD( "9234-00-01_u15-r0a", 0x60000, 0x10000, CRC(f10f0d39) SHA1(2b5d5a93adb5251e09160b10c067b6e70289f608) )
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9234-01_u1-r01_c1993_mii", 0x000000, 0x000022, BAD_DUMP CRC(74bf0546) SHA1(eb44a057cf797279ee3456a74e166fa711547ea4) )
+
+	ROM_REGION( 0xc0000, "extra", 0 ) // question roms
+	ROM_LOAD( "qs9234-01_u7-r0",  0x00000, 0x40000, CRC(c0534aaa) SHA1(4b3cbf03f29fd5b4b8fd423e73c0c8147692fa75) ) /* These 3 roms are on CRT-256 sattalite PCB */
+	ROM_LOAD( "qs9234-01_u6-r0",  0x40000, 0x40000, CRC(fe2cd934) SHA1(623011dc53ed6eefefa0725dba6fd1efee2077c1) )
+	ROM_LOAD( "qs9234-01_u5-r0",  0x80000, 0x40000, CRC(293fe305) SHA1(8a551ae8fb4fa4bf329128be1bfd6f1c3ff5a366) )
+ROM_END
+
+ROM_START( pitbossma ) /* Unprotected or patched??  The manual shows a DS1204 key for this set */
+	ROM_REGION( 0x80000, "maincpu", 0 )
+	ROM_LOAD( "9243-00-01_u9-r0",  0x00000, 0x10000, CRC(55e14fb1) SHA1(ec29764d1b63360f64b82452e0db8054b99fcca0) ) /* 9243-00-01  R0 940616 */
+	ROM_LOAD( "9243-00-01_u10-r0", 0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) ) /* Could also be labeled 9234-00-01 U10-R0 */
+	ROM_LOAD( "9243-00-01_u11-r0", 0x20000, 0x10000, CRC(47a9dfc7) SHA1(eca100003f5605bcf405f610a0458ccb67894d35) )
+	ROM_LOAD( "9243-00-01_u12-r0", 0x30000, 0x10000, CRC(b9fb4203) SHA1(84b514d9739d9c2ab1081cfc7cdedb41155ee038) ) /* Could also be labeled 9234-00-01 U12-R0 */
+	ROM_LOAD( "9243-00-01_u13-r0", 0x40000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) ) /* Could also be labeled 9234-00-01 U13-R0 */
+	ROM_RELOAD(     0x50000, 0x10000) /* U14 is unused for this set */
+	ROM_LOAD( "9243-00-01_u15-r0", 0x60000, 0x10000, CRC(27034061) SHA1(cff6be592a4a3ab01c204b081470f224e6186c4d) )
+	ROM_RELOAD(     0x70000, 0x10000)
+
+	ROM_REGION( 0xc0000, "extra", 0 ) // question roms
+	ROM_LOAD( "qs9243-00-01_u7-r0",  0x00000, 0x40000, CRC(35f4ca46) SHA1(87917b3017f505fae65d6bfa2c7d6fb503c2da6a) ) /* These 3 roms are on CRT-256 sattalite PCB */
+	ROM_LOAD( "qs9243-00-01_u6-r0",  0x40000, 0x40000, CRC(606f1656) SHA1(7f1e3a698a34d3c3b8f9f2cd8d5224b6c096e941) )
+	ROM_LOAD( "qs9243-00-01_u5-r0",  0x80000, 0x40000, CRC(590a1565) SHA1(b80ea967b6153847b2594e9c59bfe87559022b6c) )
 ROM_END
 
 /*
@@ -1354,12 +1423,11 @@ Description of Changes:
 1- Great Draw Poker and 7 Stud Poker have been added to the program set
 2- On page 3-1 legend artwork has changed. PASS has been replaced with
    PASS/PLAY and COLLECT/QUIT has been replaced with COLLECT/QUIT/RAISE
-3- An additional Solitaire Instruction decal has beed added to the kit.
-   This new Instruction decal is to be mounted in a visivle loction for
+3- An additional Solitaire Instruction decal has been added to the kit.
+   This new Instruction decal is to be mounted in a visible location for
    players use.
 
 */
-
 ROM_START( pitbossm ) /* Dallas DS1204V security key attached to CRT-254 connected to J2 connector labeled 9244-00 U1-RO1 C1994 MII */
 	ROM_REGION( 0x80000, "maincpu", 0 )
 	ROM_LOAD( "9244-00-01_u9-r0",  0x00000, 0x10000, CRC(8317fea1) SHA1(eb84fdca7cd51883153561785571790d12d0d612) ) /* 9244-00-01 R0  940822 */
@@ -1371,6 +1439,8 @@ ROM_START( pitbossm ) /* Dallas DS1204V security key attached to CRT-254 connect
 	ROM_LOAD( "9244-00-01_u15-r0", 0x60000, 0x10000, CRC(740e3734) SHA1(6440d258af114f3820683b4e6fba5db6aea02231) )
 	ROM_RELOAD(     0x70000, 0x10000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9244-00_u1-ro1_c1994_mii", 0x000000, 0x000022, BAD_DUMP CRC(0455e18b) SHA1(919b48c25888af0af34b2d0cf34370476a97b79e) )
 
 	ROM_REGION( 0xc0000, "extra", 0 ) // question roms
 	ROM_LOAD( "qs9243-00-01_u7-r0",  0x00000, 0x40000, CRC(35f4ca46) SHA1(87917b3017f505fae65d6bfa2c7d6fb503c2da6a) ) /* These 3 roms are on CRT-256 sattalite PCB */
@@ -1378,56 +1448,55 @@ ROM_START( pitbossm ) /* Dallas DS1204V security key attached to CRT-254 connect
 	ROM_LOAD( "qs9243-00-01_u5-r0",  0x80000, 0x40000, CRC(590a1565) SHA1(b80ea967b6153847b2594e9c59bfe87559022b6c) )
 ROM_END
 
-ROM_START( pitbossma ) /* Unprotected or patched??  The manual shows a DS1204 key for this set */
-	ROM_REGION( 0x80000, "maincpu", 0 )
-	ROM_LOAD( "9243-00-01_u9-r0",  0x00000, 0x10000, CRC(55e14fb1) SHA1(ec29764d1b63360f64b82452e0db8054b99fcca0) ) /* 9243-00-01  R0 940616 */
-	ROM_LOAD( "9243-00-01_u10-r0", 0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) ) /* Could also be labeled 9234-00-01 U10-R0 */
-	ROM_LOAD( "9243-00-01_u11-r0", 0x20000, 0x10000, CRC(47a9dfc7) SHA1(eca100003f5605bcf405f610a0458ccb67894d35) )
-	ROM_LOAD( "9243-00-01_u12-r0", 0x30000, 0x10000, CRC(b9fb4203) SHA1(84b514d9739d9c2ab1081cfc7cdedb41155ee038) ) /* Could also be labeled 9234-00-01 U12-R0 */
-	ROM_LOAD( "9243-00-01_u13-r0", 0x40000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) ) /* Could also be labeled 9234-00-01 U13-R0 */
-	ROM_RELOAD(     0x50000, 0x10000) /* U14 is unused for this set */
-	ROM_LOAD( "9243-00-01_u15-r0", 0x60000, 0x10000, CRC(27034061) SHA1(cff6be592a4a3ab01c204b081470f224e6186c4d) )
-	ROM_RELOAD(     0x70000, 0x10000)
+/*
 
+The Real Broadway - Standard 5 card draw Joker Poker.
 
-	ROM_REGION( 0xc0000, "extra", 0 ) // question roms
-	ROM_LOAD( "qs9243-00-01_u7-r0",  0x00000, 0x40000, CRC(35f4ca46) SHA1(87917b3017f505fae65d6bfa2c7d6fb503c2da6a) ) /* These 3 roms are on CRT-256 sattalite PCB */
-	ROM_LOAD( "qs9243-00-01_u6-r0",  0x40000, 0x40000, CRC(606f1656) SHA1(7f1e3a698a34d3c3b8f9f2cd8d5224b6c096e941) )
-	ROM_LOAD( "qs9243-00-01_u5-r0",  0x80000, 0x40000, CRC(590a1565) SHA1(b80ea967b6153847b2594e9c59bfe87559022b6c) )
-ROM_END
+ Single rom at U38 on a Merit CTR-260 PCB with a Dallas DS1204U-3 security key.
+ Uses standard draw poker keys - NOT a touchscreen based game.
+ Dipswitches are used for in game functions.
 
-ROM_START( pbst30 ) /* Dallas DS1204V security key attached to CRT-254 connected to J2 connector labeled 9234-10 U1-RO1 C1994 MII */
-	ROM_REGION( 0x80000, "maincpu", 0 )
-	ROM_LOAD( "9234-10-01_u9-r0",  0x00000, 0x10000, CRC(96f39c9a) SHA1(df698e94a5204cf050ceadc5c257ca5f68171114) ) /* 9234-10-01 032294 */
-	ROM_LOAD( "9234-00-01_u10-r0", 0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) )
-	ROM_LOAD( "9234-10-01_u11-r0", 0x20000, 0x10000, CRC(835fa041) SHA1(2ae754c5fcf50548eb214902409217d1643c6eaa) )
-	ROM_LOAD( "9234-00-01_u12-r0", 0x30000, 0x10000, CRC(b9fb4203) SHA1(84b514d9739d9c2ab1081cfc7cdedb41155ee038) )
-	ROM_LOAD( "9234-00-01_u13-r0", 0x40000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) )
-	ROM_LOAD( "9234-10-01_u14-r0", 0x50000, 0x10000, CRC(9b0873a4) SHA1(7362c6220aa4bf1a9ab7c11cb8a51587a2a0a992) )
-	ROM_LOAD( "9234-10-01_u15-r0", 0x60000, 0x10000, CRC(9fbd8582) SHA1(c0f68c8a7cdca34c8736cefc71767c421bcaba8a) )
+Pressing Service Mode "F2" brings up a Coins in for Coin1 & Coin2 plus total coins.
+  At this screen pressing in order Hold1 through Hold5 results in a simple system test.
+  The program responds with "STATUS OK."
 
+Entering the Setup menu "S":
+ Hold3 switches selection choice.
+ Hold5 advances through the list.
+ Stand will clear the High Scores
+  Pressing Stand a second time clears All Time High Scores
 
-	ROM_REGION( 0xc0000, "extra", 0 ) // question roms
-	ROM_LOAD( "qs9234-01_u7-r0",  0x00000, 0x40000, CRC(c0534aaa) SHA1(4b3cbf03f29fd5b4b8fd423e73c0c8147692fa75) ) /* These 3 roms are on CRT-256 sattalite PCB */
-	ROM_LOAD( "qs9234-01_u6-r0",  0x40000, 0x40000, CRC(fe2cd934) SHA1(623011dc53ed6eefefa0725dba6fd1efee2077c1) )
-	ROM_LOAD( "qs9234-01_u5-r0",  0x80000, 0x40000, CRC(293fe305) SHA1(8a551ae8fb4fa4bf329128be1bfd6f1c3ff5a366) )
-ROM_END
+In the rom there is text for:
+  Hi Lo Double Up mini game
+  DIP 5 use (unknown at this time)
+  PUSH STAND FOR BONUS SET UP
+  ENTER NEW PASSWORD
+  TEN STRAIGHT NO-WINS RETURNS FIRST NINE BETS
 
-ROM_START( pbst30b ) /* Dallas DS1204V security key attached to CRT-254 connected to J2 connector labeled 9234-01 U1-RO1 C1993 MII */
-	ROM_REGION( 0x80000, "maincpu", 0 )
-	ROM_LOAD( "9234-00-01_u9-r0a",  0x00000, 0x10000, CRC(5f058f95) SHA1(98382935340a076bdb1b20c7f16c25b6084599fe) ) /* 9234-00-01  122293 */
-	ROM_LOAD( "9234-00-01_u10-r0",  0x10000, 0x10000, CRC(853a1a99) SHA1(45e33442aa7e51c05c9ac8b8458937ee3ff4c21d) )
-	ROM_LOAD( "9234-00-01_u11-r0a", 0x20000, 0x10000, CRC(79125fb5) SHA1(6ca4f33c363cfb6f5c0f23b8fcc8cfcc076f68b1) )
-	ROM_LOAD( "9234-00-01_u12-r0",  0x30000, 0x10000, CRC(b9fb4203) SHA1(84b514d9739d9c2ab1081cfc7cdedb41155ee038) )
-	ROM_LOAD( "9234-00-01_u13-r0",  0x40000, 0x10000, CRC(574fb3c7) SHA1(213741df3055b97ddd9889c2aa3d3e863e2c86d3) )
-	ROM_LOAD( "9234-00-01_u14-r0a", 0x50000, 0x10000, CRC(e83f91d5) SHA1(1d64c943787b239763f44be412ee7f5ad13eb37d) )
-	ROM_LOAD( "9234-00-01_u15-r0a", 0x60000, 0x10000, CRC(f10f0d39) SHA1(2b5d5a93adb5251e09160b10c067b6e70289f608) )
+ Additional Setup menu items:
+  Double Up            Yes / No
+  Unlimited Double Up  Yes / No
+  Take 1/2, DBL 1/2    Yes / No
+  Bonus Feature        Yes / No
+  Bonus Type           10Loss / Twin
+  Re-Bet               Yes / No
+  Hi-Score             Yes / No
 
+It's unknown if the above is used for regional versions of the game or left over from previous
+ versions of games such as Americana or Dodge City which also contains many of the same text strings.
+It's currently unknown how to access / enable those features or if it's possible to do so.
 
-	ROM_REGION( 0xc0000, "extra", 0 ) // question roms
-	ROM_LOAD( "qs9234-01_u7-r0",  0x00000, 0x40000, CRC(c0534aaa) SHA1(4b3cbf03f29fd5b4b8fd423e73c0c8147692fa75) ) /* These 3 roms are on CRT-256 sattalite PCB */
-	ROM_LOAD( "qs9234-01_u6-r0",  0x40000, 0x40000, CRC(fe2cd934) SHA1(623011dc53ed6eefefa0725dba6fd1efee2077c1) )
-	ROM_LOAD( "qs9234-01_u5-r0",  0x80000, 0x40000, CRC(293fe305) SHA1(8a551ae8fb4fa4bf329128be1bfd6f1c3ff5a366) )
+*/
+ROM_START( realbrod ) /* Dallas DS1204U-3 security key labeled 9131-20-00-U5-R0A */
+	ROM_REGION( 0x400000, "maincpu", 0 )
+	/* U32 Empty */
+	/* U36 Empty */
+	/* U37 Empty */
+	ROM_LOAD( "9131-20-00_u38-r0a", 0x300000, 0x080000, CRC(28e2b4f2) SHA1(d4441034aa85fee61b93b99867ab21203165a6f5) ) /* Location U38, 9131-20-00 R0A 04/07/1995   14:45:21 */
+	ROM_RELOAD(                     0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9131-20-00-u5-r0a", 0x000000, 0x000022, BAD_DUMP CRC(89e45123) SHA1(6eddd33e1b465112e9442be46aee69d95130d780) )
 ROM_END
 
 
@@ -1439,7 +1508,7 @@ ROM_END
 
     System Info
     -----------
-     This is a counter top Touch screen game.
+     This is a counter top Touchscreen game.
 
     processor.. Z80 (Z0840006PSC)
     sound chip Yamaha YM2149F
@@ -1448,8 +1517,8 @@ ROM_END
              one PC16550DN
              one PB255a or L5220574
              One Dallas DS1204 Data Key
-             One Dallas DS1225Y 64k Non-volitile SRAM (Mega Touch 4)
-              or Dallas DS1230Y 256K Non-volitile SRAM (Mega Touch 6)
+             One Dallas DS1225Y 64k Non-volatile SRAM (Mega Touch 4)
+              or Dallas DS1230Y 256K Non-volatile SRAM (Mega Touch 6)
               or Dallas DS1644 32K NVRAM + RTC (Tournament sets)
              Two Z80APIO (Z0842004PSC)
 
@@ -1522,6 +1591,9 @@ ROM_START( megat2 ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 */
 	ROM_RELOAD(                        0x280000, 0x080000)
 	ROM_LOAD( "9255-10-01_u38-r0g",    0x300000, 0x080000, CRC(6bc7f1ce) SHA1(ca26afe19966f37e95f8ca25e69bbdcc1e8624d7) ) /* Location U38, 02/10/1995 09:14:15 - Standard version */
 	ROM_RELOAD(                        0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-10-01-u5-r0", 0x000000, 0x000022, BAD_DUMP CRC(b13c68d2) SHA1(99f9584ba005d32ad8abefd64159a8c296dcd580) )
 ROM_END
 
 ROM_START( megat2a ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 */
@@ -1534,6 +1606,9 @@ ROM_START( megat2a ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 *
 	ROM_RELOAD(                        0x280000, 0x080000)
 	ROM_LOAD( "9255-10-01_u38-r0e",    0x300000, 0x080000, CRC(797fbbaf) SHA1(8d093374f109831e469133aaebc3f7c2a5ed0623) ) /* Location U38, 11/29/1994 10:51:00 - Standard version */
 	ROM_RELOAD(                        0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-10-01-u5-r0", 0x000000, 0x000022, BAD_DUMP CRC(b13c68d2) SHA1(99f9584ba005d32ad8abefd64159a8c296dcd580) )
 ROM_END
 
 ROM_START( megat2b ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 */
@@ -1546,6 +1621,9 @@ ROM_START( megat2b ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 *
 	ROM_RELOAD(                        0x280000, 0x080000)
 	ROM_LOAD( "9255-10-01_u38-r0d",    0x300000, 0x080000, CRC(f43de55f) SHA1(456b4098e22982d5f1c6f872684eefb473939747) ) /* Location U38, 941123 514 - Standard version */
 	ROM_RELOAD(                        0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-10-01-u5-r0", 0x000000, 0x000022, BAD_DUMP CRC(b13c68d2) SHA1(99f9584ba005d32ad8abefd64159a8c296dcd580) )
 ROM_END
 
 ROM_START( megat2mn ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 */
@@ -1558,6 +1636,9 @@ ROM_START( megat2mn ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 
 	ROM_RELOAD(                        0x280000, 0x080000)
 	ROM_LOAD( "9255-10-02_u38-r0g",    0x300000, 0x080000, CRC(22f508be) SHA1(a34c9c1ae588ec8186f328119aa62600d05f192e) ) /* Location U38, 02/21/1995 16:46:14 - Minnesota version */
 	ROM_RELOAD(                        0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-10-01-u5-r0", 0x000000, 0x000022, BAD_DUMP CRC(b13c68d2) SHA1(99f9584ba005d32ad8abefd64159a8c296dcd580) )
 ROM_END
 
 ROM_START( megat2ca ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 */
@@ -1570,6 +1651,9 @@ ROM_START( megat2ca ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 
 	ROM_RELOAD(                        0x280000, 0x080000)
 	ROM_LOAD( "9255-10-06_u38-r0g",    0x300000, 0x080000, CRC(51b8160a) SHA1(f2dd44ff3bd62c86c385b5e1438c560947f6c253) ) /* Location U38, 02/10/1995 10:03:52 - California version */
 	ROM_RELOAD(                        0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-10-01-u5-r0", 0x000000, 0x000022, BAD_DUMP CRC(b13c68d2) SHA1(99f9584ba005d32ad8abefd64159a8c296dcd580) )
 ROM_END
 
 ROM_START( megat2caa ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0 */
@@ -1582,6 +1666,9 @@ ROM_START( megat2caa ) /* Dallas DS1204U-3 security key labeled 9255-10-01-U5-R0
 	ROM_RELOAD(                        0x280000, 0x080000)
 	ROM_LOAD( "9255-10-06_u38-r0e",    0x300000, 0x080000, CRC(b3c0e60a) SHA1(a633fec476f44ec7964329bd80257b9070043209) ) /* Location U38, 11/29/1994 11:23:00 - California version */
 	ROM_RELOAD(                        0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-10-01-u5-r0", 0x000000, 0x000022, BAD_DUMP CRC(b13c68d2) SHA1(99f9584ba005d32ad8abefd64159a8c296dcd580) )
 ROM_END
 
 ROM_START( megat3 ) /* Dallas DS1204V security key at U5 labeled 9255-20-01 U5-RO1 C1995 MII */
@@ -1593,6 +1680,9 @@ ROM_START( megat3 ) /* Dallas DS1204V security key at U5 labeled 9255-20-01 U5-R
 	ROM_LOAD( "qs9255-01_u37-r0",   0x200000, 0x100000, CRC(273560bd) SHA1(5de8b9f5a7c4b676f131dd7d47ec71d35fa1755c) ) /* Location U37 */
 	ROM_LOAD( "9255-20-01_u38-r0n", 0x300000, 0x080000, CRC(c3b1739d) SHA1(a12d4d4205e71cf306c7e4a7b03af017096e2492) ) /* Location U38, 02/20/1996 09:32:34 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-20-01_u5-ro1_c1995_mii", 0x000000, 0x000022, BAD_DUMP CRC(105fd1de) SHA1(da5e678b633df4d7eb5eac2647d7f1fbe04add7b) )
 
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
@@ -1611,6 +1701,9 @@ ROM_START( megat3a ) /* Dallas DS1204V security key at U5 labeled 9255-20-01 U5-
 	ROM_LOAD( "9255-20-01_u38-r0k", 0x300000, 0x080000, CRC(3c7dfff5) SHA1(b1265d6541199a1327a87881457616c56cbb8779) ) /* Location U38, 02/09/1996 14:11:24 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x080000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-20-01_u5-ro1_c1995_mii", 0x000000, 0x000022, BAD_DUMP CRC(105fd1de) SHA1(da5e678b633df4d7eb5eac2647d7f1fbe04add7b) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -1627,6 +1720,9 @@ ROM_START( megat3b ) /* Dallas DS1204V security key at U5 labeled 9255-20-01 U5-
 	ROM_LOAD( "qs9255-01_u37-r0",   0x200000, 0x100000, CRC(273560bd) SHA1(5de8b9f5a7c4b676f131dd7d47ec71d35fa1755c) ) /* Location U37 */
 	ROM_LOAD( "9255-20-01_u38-r0f", 0x300000, 0x080000, CRC(85f48b91) SHA1(7a38644ac7ee55a254c037122af919fb268744a1) ) /* Location U38, 10/27/1995 14:23:00 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-20-01_u5-ro1_c1995_mii", 0x000000, 0x000022, BAD_DUMP CRC(105fd1de) SHA1(da5e678b633df4d7eb5eac2647d7f1fbe04add7b) )
 
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
@@ -1645,6 +1741,9 @@ ROM_START( megat3c ) /* Dallas DS1204V security key at U5 labeled 9255-20-01 U5-
 	ROM_LOAD( "9255-20-01_u38-r0b", 0x300000, 0x080000, CRC(e2d7e2c5) SHA1(bf0be5f2142e5563eb3286f5b1a643943d685621) ) /* Location U38, 06/22/1995 15:30:06 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x080000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-20-01_u5-ro1_c1995_mii", 0x000000, 0x000022, BAD_DUMP CRC(105fd1de) SHA1(da5e678b633df4d7eb5eac2647d7f1fbe04add7b) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -1661,6 +1760,9 @@ ROM_START( megat3d ) /* Dallas DS1204V security key at U5 labeled 9255-20-01 U5-
 	ROM_LOAD( "qs9255-01_u37-r0",   0x200000, 0x100000, CRC(273560bd) SHA1(5de8b9f5a7c4b676f131dd7d47ec71d35fa1755c) ) /* Location U37 */
 	ROM_LOAD( "9255-20-01_u38-r0a", 0x300000, 0x080000, CRC(1292c90e) SHA1(d6ca81396ae4f6c62a55ec688b3a36272b9c29fd) ) /* Location U38, 06/21/1995 09:31:31 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-20-01_u5-ro1_c1995_mii", 0x000000, 0x000022, BAD_DUMP CRC(105fd1de) SHA1(da5e678b633df4d7eb5eac2647d7f1fbe04add7b) )
 
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
@@ -1679,6 +1781,9 @@ ROM_START( megat3ca ) /* Dallas DS1204V security key at U5 labeled 9255-20-01 U5
 	ROM_LOAD( "9255-20-06_u38-r0n", 0x300000, 0x080000, CRC(f9ff003a) SHA1(6c32098593c444785de2deca0f8748042980d84d) ) /* Location U38, 02/20/1996 09:24:17 - California version */
 	ROM_RELOAD(                     0x380000, 0x080000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-20-01_u5-ro1_c1995_mii", 0x000000, 0x000022, BAD_DUMP CRC(105fd1de) SHA1(da5e678b633df4d7eb5eac2647d7f1fbe04add7b) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -1695,6 +1800,9 @@ ROM_START( megat3caa ) /* Dallas DS1204V security key at U5 labeled 9255-20-01 U
 	ROM_LOAD( "qs9255-01_u37-r0",   0x200000, 0x100000, CRC(273560bd) SHA1(5de8b9f5a7c4b676f131dd7d47ec71d35fa1755c) ) /* Location U37 */
 	ROM_LOAD( "9255-20-06_u38-r0d", 0x300000, 0x080000, CRC(c40b3a57) SHA1(7a13172b94188c5cba32622016a05eb904714a86) ) /* Location U38, 07/24/1995 12:05:34 - California version */
 	ROM_RELOAD(                     0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-20-01_u5-ro1_c1995_mii", 0x000000, 0x000022, BAD_DUMP CRC(105fd1de) SHA1(da5e678b633df4d7eb5eac2647d7f1fbe04add7b) )
 
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
@@ -1713,6 +1821,9 @@ ROM_START( megat3nj ) /* Dallas DS1204V security key at U5 labeled 9255-20-01 U5
 	ROM_LOAD( "9255-20-07_u38-r0g", 0x300000, 0x080000, CRC(0ac673e7) SHA1(6b014366fcc5cdaa3d6a7e40da580d14def80174) ) /* Location U38, 11/17/1995 09:43:15 - New Jersey version */
 	ROM_RELOAD(                     0x380000, 0x080000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-20-01_u5-ro1_c1995_mii", 0x000000, 0x000022, BAD_DUMP CRC(105fd1de) SHA1(da5e678b633df4d7eb5eac2647d7f1fbe04add7b) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -1728,6 +1839,9 @@ ROM_START( megat3te ) /* Dallas DS1204V security key at U5 labeled 9255-30-01 U5
 	ROM_LOAD( "qs9255-01_u37-r0",   0x200000, 0x100000, CRC(273560bd) SHA1(5de8b9f5a7c4b676f131dd7d47ec71d35fa1755c) ) /* Location U37 */
 	ROM_LOAD( "9255-30-01_u38-r0e", 0x300000, 0x080000, CRC(52ca7dd8) SHA1(9f44f158d67d7443405b87a18fc89d9c88be1dea) ) /* Location U38, 02/15/1996 16:04:36 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x080000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-30-01_u5-ro1_c1995_mii", 0x000000, 0x000022, BAD_DUMP CRC(562e83c8) SHA1(865c8f18711df5dac9c7301f67be5bfcc925cd3d) )
 
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
@@ -1746,6 +1860,9 @@ ROM_START( megat4 ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U5-B
 	ROM_LOAD( "9255-40-01_u38-r0e", 0x300000, 0x80000,  CRC(407c5e57) SHA1(c7c907b3fd6a8e64dcc6c71288505980862effce) ) /* Location U38, 07/22/1996 14:52:24 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x80000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -1762,6 +1879,9 @@ ROM_START( megat4a ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U5-
 	ROM_RELOAD(                     0x280000, 0x80000)
 	ROM_LOAD( "9255-40-01_u38-r0d", 0x300000, 0x80000,  CRC(0d098424) SHA1(ef2810ccd636e69378fd353c8a95605274bb227f) ) /* Location U38, 07/08/1996 14:16:56 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x80000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
 
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
@@ -1780,6 +1900,9 @@ ROM_START( megat4b ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U5-
 	ROM_LOAD( "9255-40-01_u38-r0b", 0x300000, 0x80000,  CRC(0a16c846) SHA1(f0dcddb155f5e23a8dcf6bd8018cf6dc20c6bd34) ) /* Location U38, 05/03/1996 15:12 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x80000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -1796,6 +1919,9 @@ ROM_START( megat4c ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U5-
 	ROM_RELOAD(                     0x280000, 0x80000)
 	ROM_LOAD( "9255-40-01_u38-r0a", 0x300000, 0x80000,  CRC(74188592) SHA1(aaa4cb5eb413e963c4ff3705904449e244b984ca) ) /* Location U38, 04/22/1996 14:31 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x80000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
 
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
@@ -1814,6 +1940,9 @@ ROM_START( megat4d ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U5-
 	ROM_LOAD( "9255-40-01_u38-r0",  0x300000, 0x80000,  CRC(ec96813d) SHA1(f93bb08ae89ab5ec1c6b33d5b1040c50d3db9ef5) ) /* Location U38, 04/03/1996 14:01 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x80000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -1831,9 +1960,12 @@ ROM_START( megat4s ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U5-
 	ROM_LOAD( "9255-41-01_u38-r0g", 0x300000, 0x80000,  CRC(9c0a515a) SHA1(01b9761a8ddf95e32498ac204844144d9dc32012) ) /* Location U38, 12/10/1996  17:08:08 - Standard version */
 	ROM_RELOAD(                     0x380000, 0x80000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
-	ROM_LOAD( "sc3943(__megat4s).u20",     0x000, 0x117, CRC(f31864ff) SHA1(ff44820379a350e7bd788ffb6926612b3483e114) )
-	ROM_LOAD( "sc3944-0a(__megat4s).u19",  0x000, 0x2dd, CRC(ad4fddaa) SHA1(10c1575dcaa5ca4af5dc630d84f43a9ed1cb3ace) )
+	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(f31864ff) SHA1(ff44820379a350e7bd788ffb6926612b3483e114) ) // sldh
+	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(ad4fddaa) SHA1(10c1575dcaa5ca4af5dc630d84f43a9ed1cb3ace) ) // sldh
 	ROM_LOAD( "sc3980.u40",     0x000, 0x117, CRC(ee0cdab5) SHA1(216fef50a8a0f6a33b704d3501a4c5c3cbac2bad) )
 	ROM_LOAD( "sc3981-0a.u51",  0x000, 0x117, CRC(4fc750d0) SHA1(d09ff7a8c66aeb5c49e9fec84bd1521e3f5d8d0a) )
 ROM_END
@@ -1848,9 +1980,12 @@ ROM_START( megat4sa ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U5
 	ROM_LOAD( "9255-41-01_u38-r0e", 0x300000, 0x80000,  CRC(69cbf865) SHA1(ce555b6ab70fa57f3f87a0028db563ceee4a416b) ) /* Location U38, 10/22/1996  11:05:04 - Standard version */
 	ROM_RELOAD(                     0x380000, 0x80000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
-	ROM_LOAD( "sc3943(__megat4s).u20",     0x000, 0x117, CRC(f31864ff) SHA1(ff44820379a350e7bd788ffb6926612b3483e114) )
-	ROM_LOAD( "sc3944-0a(__megat4s).u19",  0x000, 0x2dd, CRC(ad4fddaa) SHA1(10c1575dcaa5ca4af5dc630d84f43a9ed1cb3ace) )
+	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(f31864ff) SHA1(ff44820379a350e7bd788ffb6926612b3483e114) ) // sldh
+	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(ad4fddaa) SHA1(10c1575dcaa5ca4af5dc630d84f43a9ed1cb3ace) ) // sldh
 	ROM_LOAD( "sc3980.u40",     0x000, 0x117, CRC(ee0cdab5) SHA1(216fef50a8a0f6a33b704d3501a4c5c3cbac2bad) )
 	ROM_LOAD( "sc3981-0a.u51",  0x000, 0x117, CRC(4fc750d0) SHA1(d09ff7a8c66aeb5c49e9fec84bd1521e3f5d8d0a) )
 ROM_END
@@ -1865,9 +2000,12 @@ ROM_START( megat4sb ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U5
 	ROM_LOAD( "9255-41-01_u38-r0c", 0x300000, 0x80000,  CRC(14b9fe96) SHA1(a324e1ef616b33ee4235f6bed04f6d4b0b537521) ) /* Location U38, 10/04/1996  09:39:04 - Standard version */
 	ROM_RELOAD(                     0x380000, 0x80000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
-	ROM_LOAD( "sc3943(__megat4s).u20",     0x000, 0x117, CRC(f31864ff) SHA1(ff44820379a350e7bd788ffb6926612b3483e114) )
-	ROM_LOAD( "sc3944-0a(__megat4s).u19",  0x000, 0x2dd, CRC(ad4fddaa) SHA1(10c1575dcaa5ca4af5dc630d84f43a9ed1cb3ace) )
+	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(f31864ff) SHA1(ff44820379a350e7bd788ffb6926612b3483e114) ) // sldh
+	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(ad4fddaa) SHA1(10c1575dcaa5ca4af5dc630d84f43a9ed1cb3ace) ) // sldh
 	ROM_LOAD( "sc3980.u40",     0x000, 0x117, CRC(ee0cdab5) SHA1(216fef50a8a0f6a33b704d3501a4c5c3cbac2bad) )
 	ROM_LOAD( "sc3981-0a.u51",  0x000, 0x117, CRC(4fc750d0) SHA1(d09ff7a8c66aeb5c49e9fec84bd1521e3f5d8d0a) )
 ROM_END
@@ -1881,6 +2019,9 @@ ROM_START( megat4smn ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U
 	ROM_RELOAD(                     0x280000, 0x80000)
 	ROM_LOAD( "9255-41-02_u38-r0c", 0x300000, 0x80000,  CRC(0493168d) SHA1(99da5454902aa5dbc5939d4bef22af3e467e61d2) ) /* Location U38, 10/08/1996 09:56:42 - Minnesota version */
 	ROM_RELOAD(                     0x380000, 0x80000)
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-c-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
 
 	ROM_REGION( 0x8000, "nvram", 0 ) // DS1225Y nv ram
 	ROM_LOAD( "mt4smn_ds1225y.u31",  0x0000, 0x8000, CRC(3f47e8e9) SHA1(ecf2937ddf05206c68262bccb8cb4a6c2a4048e8) ) /* No actual label, so use a unique name for this set */
@@ -1902,6 +2043,9 @@ ROM_START( megat4snj ) /* Dallas DS1204V security key at U5 labeled 9255-40-01 U
 	ROM_LOAD( "9255-41-07_u38-r0g", 0x300000, 0x80000,  CRC(71eac4d4) SHA1(73b9ed876f0af94bbd88503921a2b4f26bcfd397) ) /* Location U38, 02/11/1997 11:59:41 - New Jersey version */
 	ROM_RELOAD(                     0x380000, 0x80000)
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-40-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(f1de113a) SHA1(0ddd963e24a5c36f11967c2653ec5991a6eaa1a4) )
+
 	ROM_REGION( 0x8000, "nvram", 0 ) // DS1225Y nv ram
 	ROM_LOAD( "mt4snj_ds1225y.u31",  0x0000, 0x8000, CRC(8d2a97e7) SHA1(7cb01d9499fed1674da6a04a11ed1cef0a39b3c0) ) /* No actual label, so use a unique name for this set */
 
@@ -1921,6 +2065,9 @@ ROM_START( megat4te ) /* Dallas DS1204V security key at U5 labeled 9255-50-01 U5
 	ROM_RELOAD(                     0x280000, 0x80000)
 	ROM_LOAD( "9255-50-01_u38-r0d", 0x300000, 0x080000, CRC(124d5b84) SHA1(3c2117f56d0dc406bfb508989729e36781e215a4) ) /* Location U38, 07/02/1996 14:41:59 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x080000 )
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-50-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(9db02da4) SHA1(d4eec99e814dd6daa091f1ff2fb06bda314c5029) )
 
 	ROM_REGION( 0x8000, "nvram", 0 ) // DS1644 nv ram
 	ROM_LOAD( "mt4te_ds1644.u31",  0x00000,  0x8000,   CRC(d9485491) SHA1(c602bf954fe8b06f81b0f5002246e8fa89237705) ) /* No actual label, so use a unique name for this set */
@@ -1942,6 +2089,9 @@ ROM_START( megat4tea ) /* Dallas DS1204V security key at U5 labeled 9255-50-01 U
 	ROM_LOAD( "9255-50-01_u38-r0a", 0x300000, 0x080000, CRC(abf187a5) SHA1(d4d2327b4564f3cafa2640499f8c6ae818ed04b8) ) /* Location U38, 06/06/1996 13:43:39 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x080000 )
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-50-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(9db02da4) SHA1(d4eec99e814dd6daa091f1ff2fb06bda314c5029) )
+
 	ROM_REGION( 0x8000, "nvram", 0 ) // DS1644 nv ram
 	ROM_LOAD( "mt4tea_ds1644.u31",  0x00000,  0x8000,   CRC(11e2c7ed) SHA1(99ee83410f7dbf5a259b11193829bb5c706d9fca) ) /* No actual label, so use a unique name for this set */
 
@@ -1961,6 +2111,9 @@ ROM_START( megat4st ) /* Dallas DS1204V security key at U5 labeled 9255-51-01 U5
 	ROM_RELOAD(                     0x280000, 0x80000)
 	ROM_LOAD( "9255-51-01_u38-r0b", 0x300000, 0x080000, CRC(181a83cb) SHA1(b8f92ae76ebba3849db76b084f0ab7d82256d81a) ) /* Location U38, 12/10/1996 16:59:23 - Standard Version */
 	ROM_RELOAD(                     0x380000, 0x080000 )
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-51-01_u5-b-ro1_c1996_mii", 0x000000, 0x000022, BAD_DUMP CRC(14e4dfa8) SHA1(6a6a2a49c6862bbba3bde766e8f000828b1b3998) )
 
 	ROM_REGION( 0x8000, "nvram", 0 ) // DS1644 nv ram
 	ROM_LOAD( "mt4st_ds1644.u31",  0x00000,  0x8000,   CRC(c6226d91) SHA1(20c9fa7ad135ac229c6bdf85b901629a0ecb8a81) ) /* No actual label, so use a unique name for this set */
@@ -1982,6 +2135,9 @@ ROM_START( megat4stg ) /* Dallas DS1204V security key at U5 labeled 9255-51-50 U
 	ROM_LOAD( "9255-51-50_u38-r0a", 0x300000, 0x080000, CRC(f7c2914d) SHA1(5d05b8db5ca734f7b05c3e215c0ef5b917455537) ) /* Location U38, 11/18/1996 10:11:01 - Bi-Lingual GER/ENG Version */
 	ROM_RELOAD(                     0x380000, 0x080000 )
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-51-50_u5-b-ro1_c1996_mii", 0x000000, 0x000022, CRC(14e4dfa8) SHA1(6a6a2a49c6862bbba3bde766e8f000828b1b3998) )
+
 	ROM_REGION( 0x8000, "nvram", 0 ) // DS1644 nv ram
 	ROM_LOAD( "mt4stg_ds1644.u31",  0x00000,  0x8000,   CRC(7f6f8e57) SHA1(d65f20ae19afc05b33d7605143b8362d6e955e89) ) /* No actual label, so use a unique name for this set */
 
@@ -2001,6 +2157,9 @@ ROM_START( megat5 ) /* Dallas DS1204V security key at U5 labeled 9255-60-01 U5-C
 	ROM_RELOAD(                     0x280000, 0x80000)
 	ROM_LOAD( "9255-60-01_u38-r0i", 0x300000, 0x100000, CRC(82a4471d) SHA1(e66ab64bb7047e248f9edbf99eb83c480895dc68) ) /* Location U38, 09/26/1997 12:09:52 - Standard Version */
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-60-01_u5-c-ro1_c1998_mii", 0x000000, 0x000022, BAD_DUMP CRC(81f1c9b1) SHA1(e03ab8fae8225332edd353725039ad0cedcd9493) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -2018,6 +2177,9 @@ ROM_START( megat5a ) /* Dallas DS1204V security key at U5 labeled 9255-60-01 U5-
 	ROM_LOAD( "9255-60-01_u38-r0c", 0x300000, 0x100000, CRC(1091e7fd) SHA1(3c31c178eb7bea0d2c7e839dc3ec549463092296) ) /* Location U38, 07/10/1997 16:49:56 - Standard Version */
 	/* 9255-60-01_u38-r0c has been verified with 4 sets as correct. It's not working due to??? */
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-60-01_u5-c-ro1_c1998_mii", 0x000000, 0x000022, BAD_DUMP CRC(81f1c9b1) SHA1(e03ab8fae8225332edd353725039ad0cedcd9493) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -2034,6 +2196,9 @@ ROM_START( megat5nj ) /* Dallas DS1204V security key at U5 labeled 9255-60-01 U5
 	ROM_RELOAD(                     0x280000, 0x80000)
 	ROM_LOAD( "9255-60-07_u38-r0n", 0x300000, 0x100000, CRC(c8163fe8) SHA1(94199b892ce9e5f543e10f3f59a9aeee4782923f) ) /* Location U38, 07/13/1998 15:19:55 - New Jersey version */
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-60-01_u5-b-ro1_c1998_mii", 0x000000, 0x000022, BAD_DUMP CRC(81f1c9b1) SHA1(e03ab8fae8225332edd353725039ad0cedcd9493) )
+
 	ROM_REGION( 0x1000, "user2", 0 ) // PALs
 	ROM_LOAD( "sc3943.u20",     0x000, 0x117, CRC(5a72fe78) SHA1(4b1a36904eb7048518507fe14bdade5c2589dbd7) )
 	ROM_LOAD( "sc3944-0a.u19",  0x000, 0x2dd, CRC(4cc46c5e) SHA1(0bab970df1539ce905f43603ad13171b05449a01) )
@@ -2049,6 +2214,9 @@ ROM_START( megat5t ) /* Dallas DS1204V security key at U5 labeled 9255-70-01 U5-
 	ROM_LOAD( "qs9255-05_u37-r0",   0x200000, 0x80000,  CRC(b713a1c5) SHA1(d6ccba2ea90fd0e2ecf15249514231eed54000c1) )
 	ROM_RELOAD(                     0x280000, 0x80000)
 	ROM_LOAD( "9255-70-01_u38-r0c", 0x300000, 0x100000, CRC(e4d71764) SHA1(7c4e8b484dc744a93ce42e24f3b6d5bb2a7c09e4) ) /* Location U38, 09/30/1997 12:13:24 - Standard version */
+
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-70-01_u5-ro_c1997_mii", 0x000000, 0x000022, BAD_DUMP CRC(1888e4f2) SHA1(045b94d6600345c10098cae321811717071c4902) )
 
 	ROM_REGION( 0x8000, "nvram", 0 ) // DS1644 nv ram
 	ROM_LOAD( "mt5t_ds1644.u31",  0x00000,  0x8000,   CRC(d1b91acf) SHA1(5ae3449d83b35ba5b20f7ff60eba4359f29cb744) ) /* No actual label, so use a unique name for this set */
@@ -2069,6 +2237,9 @@ ROM_START( megat5tg ) /* Dallas DS1204V security key at U5 labeled 9255-70-50 U5
 	ROM_RELOAD(                     0x280000, 0x80000)
 	ROM_LOAD( "9255-70-50_u38-r0d", 0x300000, 0x100000, CRC(044d123f) SHA1(d73df1f97f6da03fdee2ca3fda3845ec262a0f9a) ) /* Location U38, 10/29/1997 10:19:08 - Bi-Lingual GER/ENG Version */
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-70-50_u5-c-ro1_c1998_mii", 0x000000, 0x000022, BAD_DUMP CRC(1888e4f2) SHA1(045b94d6600345c10098cae321811717071c4902) )
+
 	ROM_REGION( 0x8000, "nvram", 0 ) // DS1644 nv ram
 	ROM_LOAD( "mt5tg_ds1644.u31",  0x00000,  0x8000,   CRC(a054bb32) SHA1(4efc19cb0a671dfe9249ce85d31f6bd633f2a237) ) /* No actual label, so use a unique name for this set */
 
@@ -2087,6 +2258,9 @@ ROM_START( megat6 ) /* Dallas DS1204V security key at U5 labeled 9255-80 U5-B-RO
 	ROM_LOAD( "qs9255-08_u37-r0",   0x200000, 0x100000, CRC(5ba01949) SHA1(1598949ea18d07bbc78af0ddd279a687173c1229) ) /* Location U37 */
 	ROM_LOAD( "9255-80-01_u38-r0a", 0x300000, 0x100000, CRC(3df6b840) SHA1(31ba1ac04eed3e76cdf637507dedcc5f7e22c919) ) /* Location U38, 08/07/1998 15:54:23 - Standard Version */
 
+	ROM_REGION( 0x000022, "ds1204", 0 )
+	ROM_LOAD( "9255-80_u5-b-ro1_c1998_mii", 0x000000, 0x000022, BAD_DUMP CRC(975099f5) SHA1(bdb870b5d3aa1139320b426f8669418cf85a513e) )
+
 	ROM_REGION( 0x8000, "nvram", 0 ) // DS1230 nv ram
 	ROM_LOAD( "ds1230y.u31",  0x00000, 0x8000, CRC(51b6da5c) SHA1(1d53af89d7867bb48b9d46feff6fc3b7e8e80ac8) )
 
@@ -2097,198 +2271,67 @@ ROM_START( megat6 ) /* Dallas DS1204V security key at U5 labeled 9255-80 U5-B-RO
 	ROM_LOAD( "sc3981-0a.u51",  0x000, 0x117, CRC(4fc750d0) SHA1(d09ff7a8c66aeb5c49e9fec84bd1521e3f5d8d0a) )
 ROM_END
 
-DRIVER_INIT_MEMBER(meritm_state,pitbossm)
-{
-	static const UINT8 pitbossm_ds1204_key[8] =
-		{ 0xf0, 0xaa, 0x0f, 0x0f, 0x55, 0x55, 0xff, 0xab };
-
-	static const UINT8 pitbossm_ds1204_nvram[16] =
-		{ 0x16, 0x90, 0xa0, 0x52, 0xd8, 0x6c, 0x12, 0xaf, 0x36, 0x22, 0x61, 0x35, 0x0d, 0x58, 0x0c, 0x00 };
-
-	ds1204_init(pitbossm_ds1204_key, pitbossm_ds1204_nvram);
-
-};
-
-DRIVER_INIT_MEMBER(meritm_state,pbst30)
-{
-	static const UINT8 pbst30b_ds1204_key[8] =
-		{ 0xf0, 0xaa, 0x0f, 0x0f, 0x55, 0x55, 0xff, 0xab };
-
-	static const UINT8 pbst30b_ds1204_nvram[16] =
-		{ 0x3e, 0x9a, 0x3c, 0x3f, 0x1d, 0x51, 0x72, 0xc9, 0x28, 0x2c, 0x1d, 0x2d, 0x0e, 0x56, 0x41, 0x00 };
-
-	ds1204_init(pbst30b_ds1204_key, pbst30b_ds1204_nvram);
-
-};
-
-DRIVER_INIT_MEMBER(meritm_state,pbst30b)
-{
-	static const UINT8 pbst30b_ds1204_key[8] =
-		{ 0xf0, 0xaa, 0x0f, 0x0f, 0x55, 0x55, 0xff, 0xab };
-
-	static const UINT8 pbst30b_ds1204_nvram[16] =
-		{ 0xa9, 0xdb, 0x41, 0xf8, 0xe4, 0x42, 0x20, 0x6e, 0xde, 0xaf, 0x4f, 0x046, 0x3d, 0x55, 0x44, 0x00 };
-
-	ds1204_init(pbst30b_ds1204_key, pbst30b_ds1204_nvram);
-
-};
-
-DRIVER_INIT_MEMBER(meritm_state,megat2)
-{
-	static const UINT8 pitbosmt_ds1204_key[8] =
-		{ 0xf0, 0xaa, 0x0f, 0x0f, 0x55, 0x55, 0xff, 0xab };
-
-	static const UINT8 pitbosmt_ds1204_nvram[16] =
-		{ 0x00, 0xfe, 0x03, 0x03, 0x08, 0x00, 0xa2, 0x03, 0x4b, 0x07, 0x00, 0xe6, 0x02, 0xd3, 0x05, 0x00 };
-
-	ds1204_init(pitbosmt_ds1204_key, pitbosmt_ds1204_nvram);
-
-};
-
-DRIVER_INIT_MEMBER(meritm_state,megat3)
-{
-	static const UINT8 megat3_ds1204_key[8] =
-		{ 0xf0, 0xaa, 0x0f, 0x0f, 0x55, 0x55, 0xff, 0xab };
-
-	static const UINT8 megat3_ds1204_nvram[16] =
-		{ 0x51, 0xa1, 0xc0, 0x7c, 0x27, 0x6e, 0x51, 0xb9, 0xa5, 0xb2, 0x27, 0x0c, 0xb9, 0x88, 0x82, 0x2c };
-
-	ds1204_init(megat3_ds1204_key, megat3_ds1204_nvram);
-
-};
-
 DRIVER_INIT_MEMBER(meritm_state,megat3te)
 {
-	static const UINT8 megat3_ds1204_key[8] =
-		{ 0xf0, 0xaa, 0x0f, 0x0f, 0x55, 0x55, 0xff, 0xab };
-
-	static const UINT8 megat3_ds1204_nvram[16] =
-		{ 0x99, 0x53, 0xfc, 0x29, 0x3a, 0x95, 0x8b, 0x58, 0xca, 0xca, 0x00, 0xc2, 0x30, 0x62, 0x0b, 0x96 };
-
-	ds1204_init(megat3_ds1204_key, megat3_ds1204_nvram);
-
 	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xfff8, 0xffff, read8_delegate(FUNC(meritm_state::meritm_ds1644_r), this), write8_delegate(FUNC(meritm_state::meritm_ds1644_w), this));
-
-};
-
-DRIVER_INIT_MEMBER(meritm_state,megat4)
-{
-	static const UINT8 megat4_ds1204_nvram[16] =
-		{ 0xe3, 0x08, 0x39, 0xd8, 0x4c, 0xbb, 0xc4, 0xf8, 0xf0, 0xe2, 0xd8, 0x77, 0xa8, 0x3d, 0x95, 0x02 };
-
-	ds1204_init(0, megat4_ds1204_nvram);
 }
 
-DRIVER_INIT_MEMBER(meritm_state,megat4c)
-{
-	static const UINT8 megat4c_ds1204_key[8] =
-		{ 0xf0, 0xaa, 0x0f, 0x0f, 0x55, 0x55, 0xff, 0xab };
+/* CRT-250 */
+GAME( 1987, americna,  0,        meritm_crt250, americna,  driver_device, 0,        ROT0, "Merit", "Americana (9131-00)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1988, dodgecty,  0,        meritm_crt250, dodgecty,  driver_device, 0,        ROT0, "Merit", "Dodge City (9131-02)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1988, pitboss2,  0,        meritm_crt250, pitboss2,  driver_device, 0,        ROT0, "Merit", "Pit Boss II (9221-01C)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1988, spitboss,  0,        meritm_crt250, spitboss,  driver_device, 0,        ROT0, "Merit", "Super Pit Boss (9221-02A)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1990, pitbosss,  0,        meritm_crt250, pitbosss,  driver_device, 0,        ROT0, "Merit", "Pit Boss Superstar (9221-10-00B)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1990, pitbosssa, pitbosss, meritm_crt250, pitbosss,  driver_device, 0,        ROT0, "Merit", "Pit Boss Superstar (9221-10-00A)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1992, pitbosssc, pitbosss, meritm_crt250, pitbosss,  driver_device, 0,        ROT0, "Merit", "Pit Boss Superstar (9221-12-01)", GAME_IMPERFECT_GRAPHICS )
 
-	static const UINT8 megat4_ds1204_nvram[16] =
-		{ 0xe3, 0x08, 0x39, 0xd8, 0x4c, 0xbb, 0xc4, 0xf8, 0xf0, 0xe2, 0xd8, 0x77, 0xa8, 0x3d, 0x95, 0x02 };
+/* CRT-250 + CRT-252 + CRT-256 + CRT-258 */
+GAME( 1994, mtjpoker,  0,        meritm_crt250_crt252_crt258, mtjpoker,   driver_device, 0,  ROT0, "Merit", "Merit Touch Joker Poker (9132-00)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, megat,     0,        meritm_crt250_crt252_crt258, pbst30,     driver_device, 0,  ROT0, "Merit", "Pit Boss Megatouch (9234-20-01)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, pbst30,    0,        meritm_crt250_crt252_crt258, pbst30,     driver_device, 0,  ROT0, "Merit", "Pit Boss Supertouch 30 (9234-10-01)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1993, pbst30a,   pbst30,   meritm_crt250_crt252_crt258, pbst30,     driver_device, 0,  ROT0, "Merit", "Pit Boss Supertouch 30 (9234-00-01)", GAME_IMPERFECT_GRAPHICS )
 
-	ds1204_init(megat4c_ds1204_key, megat4_ds1204_nvram);
-}
+/* CRT-250 + CRT-254 + CRT-256 */
+GAME( 1993, pbss330,   0,        meritm_crt250_questions, pbss330,  driver_device, 0, ROT0, "Merit", "Pit Boss Superstar III 30 (9233-00-01)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, pitbossm,  0,        meritm_crt250_questions, pitbossm, driver_device, 0, ROT0, "Merit", "Pit Boss Megastar (9244-00-01)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, pitbossma, pitbossm, meritm_crt250_questions, pitbossa, driver_device, 0, ROT0, "Merit", "Pit Boss Megastar (9243-00-01)", GAME_IMPERFECT_GRAPHICS )
 
-DRIVER_INIT_MEMBER(meritm_state,megat4te)
-{
-	static const UINT8 megat4te_ds1204_nvram[16] =
-		{ 0x05, 0x21, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00 };
+/* CRT-260 NON-touchscreen based */
+GAME( 1995, realbrod,  0,        meritm_crt260, realbrod,    driver_device, 0,        ROT0, "Merit", "The Real Broadway (9131-20-00 R0A)", GAME_IMPERFECT_GRAPHICS )
 
-	ds1204_init(0, megat4te_ds1204_nvram);
-
-	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xfff8, 0xffff, read8_delegate(FUNC(meritm_state::meritm_ds1644_r), this), write8_delegate(FUNC(meritm_state::meritm_ds1644_w), this));
-
-};
-
-DRIVER_INIT_MEMBER(meritm_state,megat4st)
-{
-	static const UINT8 megat4te_ds1204_nvram[16] =
-		{ 0x11, 0x04, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00 };
-
-	ds1204_init(0, megat4te_ds1204_nvram);
-
-	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xfff8, 0xffff, read8_delegate(FUNC(meritm_state::meritm_ds1644_r), this), write8_delegate(FUNC(meritm_state::meritm_ds1644_w), this));
-
-};
-
-DRIVER_INIT_MEMBER(meritm_state,megat5)
-{
-	static const UINT8 megat5_ds1204_nvram[16] =
-		{ 0x06, 0x23, 0x97, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00 };
-
-	ds1204_init(0, megat5_ds1204_nvram);
-
-}
-
-DRIVER_INIT_MEMBER(meritm_state,megat5t)
-{
-	static const UINT8 megat5_ds1204_nvram[16] =
-		{ 0x08, 0x22, 0x97, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00 };
-
-	ds1204_init(0, megat5_ds1204_nvram);
-
-	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xfff8, 0xffff, read8_delegate(FUNC(meritm_state::meritm_ds1644_r), this), write8_delegate(FUNC(meritm_state::meritm_ds1644_w), this));
-
-}
-
-DRIVER_INIT_MEMBER(meritm_state,megat6)
-{
-	static const UINT8 megat6_ds1204_nvram[16] =
-		{ 0x07, 0x15, 0x98, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00 };
-
-	ds1204_init(0, megat6_ds1204_nvram);
-
-}
-
-/* CRT 250 */
-GAME( 1988, dodgecty,  0,        meritm_crt250, dodgecty,      driver_device, 0, ROT0, "Merit", "Dodge City (9131-02)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1988, pitboss2,  0,        meritm_crt250, meritm_crt250, driver_device, 0, ROT0, "Merit", "Pit Boss II (9221-01C)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1988, spitboss,  0,        meritm_crt250, meritm_crt250, driver_device, 0, ROT0, "Merit", "Super Pit Boss (9221-02A)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1990, pitbosss,  0,        meritm_crt250, meritm_crt250, driver_device, 0, ROT0, "Merit", "Pit Boss Superstar (9221-10-00B)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1990, pitbosssa, pitbosss, meritm_crt250, meritm_crt250, driver_device, 0, ROT0, "Merit", "Pit Boss Superstar (9221-10-00A)", GAME_IMPERFECT_GRAPHICS )
-
-/* CRT 250 + CRT 254 + CRT 256 */
-GAME( 1994, pbst30,    0,      meritm_crt250_crt252_crt258, pbst30, meritm_state, pbst30,  ROT0, "Merit", "Pit Boss Supertouch 30 (9234-10-01)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1993, pbst30b,   pbst30, meritm_crt250_crt252_crt258, pbst30, meritm_state, pbst30b, ROT0, "Merit", "Pit Boss Supertouch 30 (9234-00-01)", GAME_IMPERFECT_GRAPHICS )
-
-/* CRT 250 + CRT 254 + CRT 256 */
-GAME( 1994, pitbossm,  0,         meritm_crt250_questions, pitbossm, meritm_state,  pitbossm, ROT0, "Merit", "Pit Boss Megastar (9244-00-01)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1994, pitbossma, pitbossm,  meritm_crt250_questions, pitbossa, driver_device, 0,        ROT0, "Merit", "Pit Boss Megastar (9243-00-01)", GAME_IMPERFECT_GRAPHICS )
-
-/* CRT 260 */
-GAME( 1994, megat2,    0,      meritm_crt260, meritm_crt260, meritm_state, megat2,   ROT0, "Merit", "Pit Boss Megatouch II (9255-10-01 ROG, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1994, megat2a ,  megat2, meritm_crt260, meritm_crt260, meritm_state, megat2,   ROT0, "Merit", "Pit Boss Megatouch II (9255-10-01 ROE, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1994, megat2b ,  megat2, meritm_crt260, meritm_crt260, meritm_state, megat2,   ROT0, "Merit", "Pit Boss Megatouch II (9255-10-01 ROD, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1994, megat2mn,  megat2, meritm_crt260, meritm_crt260, meritm_state, megat2,   ROT0, "Merit", "Pit Boss Megatouch II (9255-10-02 ROG, Minnesota version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1994, megat2ca,  megat2, meritm_crt260, meritm_crt260, meritm_state, megat2,   ROT0, "Merit", "Pit Boss Megatouch II (9255-10-06 ROG, California version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1994, megat2caa, megat2, meritm_crt260, meritm_crt260, meritm_state, megat2,   ROT0, "Merit", "Pit Boss Megatouch II (9255-10-06 ROE, California version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat3,    0,      meritm_crt260, meritm_crt260, meritm_state, megat3,   ROT0, "Merit", "Megatouch III (9255-20-01 RON, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1995, megat3a,   megat3, meritm_crt260, meritm_crt260, meritm_state, megat3,   ROT0, "Merit", "Megatouch III (9255-20-01 ROK, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1995, megat3b,   megat3, meritm_crt260, meritm_crt260, meritm_state, megat3,   ROT0, "Merit", "Megatouch III (9255-20-01 ROF, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1995, megat3c,   megat3, meritm_crt260, meritm_crt260, meritm_state, megat3,   ROT0, "Merit", "Megatouch III (9255-20-01 ROB, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1995, megat3d,   megat3, meritm_crt260, meritm_crt260, meritm_state, megat3,   ROT0, "Merit", "Megatouch III (9255-20-01 ROA, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat3ca,  megat3, meritm_crt260, meritm_crt260, meritm_state, megat3,   ROT0, "Merit", "Megatouch III (9255-20-06 RON, California version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1995, megat3caa, megat3, meritm_crt260, meritm_crt260, meritm_state, megat3,   ROT0, "Merit", "Megatouch III (9255-20-06 ROD, California version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1995, megat3nj,  megat3, meritm_crt260, meritm_crt260, meritm_state, megat3,   ROT0, "Merit", "Megatouch III (9255-20-07 ROG, New Jersey version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat3te,  megat3, meritm_crt260, meritm_crt260, meritm_state, megat3te, ROT0, "Merit", "Megatouch III Tournament Edition (9255-30-01 ROE, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4,    0,      meritm_crt260, meritm_crt260, meritm_state, megat4,   ROT0, "Merit", "Megatouch IV (9255-40-01 ROE, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4a,   megat4, meritm_crt260, meritm_crt260, meritm_state, megat4,   ROT0, "Merit", "Megatouch IV (9255-40-01 ROD, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4b,   megat4, meritm_crt260, meritm_crt260, meritm_state, megat4,   ROT0, "Merit", "Megatouch IV (9255-40-01 ROB, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4c,   megat4, meritm_crt260, meritm_crt260, meritm_state, megat4c,  ROT0, "Merit", "Megatouch IV (9255-40-01 ROA, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4d,   megat4, meritm_crt260, meritm_crt260, meritm_state, megat4c,  ROT0, "Merit", "Megatouch IV (9255-40-01 RO, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4s,   megat4, meritm_crt260, meritm_crt260, meritm_state, megat4,   ROT0, "Merit", "Super Megatouch IV (9255-41-01 ROG, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4sa,  megat4, meritm_crt260, meritm_crt260, meritm_state, megat4,   ROT0, "Merit", "Super Megatouch IV (9255-41-01 ROE, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4sb,  megat4, meritm_crt260, meritm_crt260, meritm_state, megat4,   ROT0, "Merit", "Super Megatouch IV (9255-41-01 ROC, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4smn, megat4, meritm_crt260, meritm_crt260, meritm_state, megat4,   ROT0, "Merit", "Super Megatouch IV (9255-41-02 ROC, Minnesota version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4snj, megat4, meritm_crt260, meritm_crt260, meritm_state, megat4,   ROT0, "Merit", "Super Megatouch IV (9255-41-07 ROG, New Jersey version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4te,  megat4, meritm_crt260, meritm_crt260, meritm_state, megat4te, ROT0, "Merit", "Megatouch IV Tournament Edition (9255-50-01 ROD, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4tea, megat4, meritm_crt260, meritm_crt260, meritm_state, megat4te, ROT0, "Merit", "Megatouch IV Tournament Edition (9255-50-01 ROA, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4st,  megat4, meritm_crt260, meritm_crt260, meritm_state, megat4st, ROT0, "Merit", "Super Megatouch IV Tournament Edition (9255-51-01 ROB, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1996, megat4stg, megat4, meritm_crt260, meritm_crt260, meritm_state, megat4st, ROT0, "Merit", "Super Megatouch IV Turnier Version (9255-51-50 ROA, Bi-Lingual GER/ENG version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1997, megat5,    0,      meritm_crt260, meritm_crt260, meritm_state, megat5,   ROT0, "Merit", "Megatouch 5 (9255-60-01 ROI, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1997, megat5a,   megat5, meritm_crt260, meritm_crt260, meritm_state, megat5,   ROT0, "Merit", "Megatouch 5 (9255-60-01 ROC, Standard version)", GAME_IMPERFECT_GRAPHICS|GAME_NOT_WORKING )
-GAME( 1998, megat5nj,  megat5, meritm_crt260, meritm_crt260, meritm_state, megat5,   ROT0, "Merit", "Megatouch 5 (9255-60-07 RON, New Jersey version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1998, megat5t,   megat5, meritm_crt260, meritm_crt260, meritm_state, megat5t,  ROT0, "Merit", "Megatouch 5 Tournament Edition (9255-70-01 ROC, Standard version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1998, megat5tg,  megat5, meritm_crt260, meritm_crt260, meritm_state, megat5t,  ROT0, "Merit", "Megatouch 5 Turnier Version (9255-70-50 ROD, Bi-Lingual GER/ENG version)", GAME_IMPERFECT_GRAPHICS )
-GAME( 1998, megat6,    0,      meritm_crt260, meritm_crt260, meritm_state, megat6,   ROT0, "Merit", "Megatouch 6 (9255-80-01 ROA, Standard version)", GAME_IMPERFECT_GRAPHICS )
+/* CRT-260 */
+GAME( 1994, megat2,    0,      meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Pit Boss Megatouch II (9255-10-01 ROG, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, megat2a ,  megat2, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Pit Boss Megatouch II (9255-10-01 ROE, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, megat2b ,  megat2, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Pit Boss Megatouch II (9255-10-01 ROD, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, megat2mn,  megat2, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Pit Boss Megatouch II (9255-10-02 ROG, Minnesota version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, megat2ca,  megat2, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Pit Boss Megatouch II (9255-10-06 ROG, California version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1994, megat2caa, megat2, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Pit Boss Megatouch II (9255-10-06 ROE, California version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat3,    0,      meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch III (9255-20-01 RON, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1995, megat3a,   megat3, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch III (9255-20-01 ROK, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1995, megat3b,   megat3, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch III (9255-20-01 ROF, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1995, megat3c,   megat3, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch III (9255-20-01 ROB, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1995, megat3d,   megat3, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch III (9255-20-01 ROA, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat3ca,  megat3, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch III (9255-20-06 RON, California version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1995, megat3caa, megat3, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch III (9255-20-06 ROD, California version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1995, megat3nj,  megat3, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch III (9255-20-07 ROG, New Jersey version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat3te,  megat3, meritm_crt260, meritm_crt260, meritm_state,  megat3te, ROT0, "Merit", "Megatouch III Tournament Edition (9255-30-01 ROE, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4,    0,      meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch IV (9255-40-01 ROE, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4a,   megat4, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch IV (9255-40-01 ROD, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4b,   megat4, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch IV (9255-40-01 ROB, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4c,   megat4, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch IV (9255-40-01 ROA, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4d,   megat4, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch IV (9255-40-01 RO, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4s,   megat4, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Super Megatouch IV (9255-41-01 ROG, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4sa,  megat4, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Super Megatouch IV (9255-41-01 ROE, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4sb,  megat4, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Super Megatouch IV (9255-41-01 ROC, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4smn, megat4, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Super Megatouch IV (9255-41-02 ROC, Minnesota version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4snj, megat4, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Super Megatouch IV (9255-41-07 ROG, New Jersey version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4te,  megat4, meritm_crt260, meritm_crt260, meritm_state,  megat3te, ROT0, "Merit", "Megatouch IV Tournament Edition (9255-50-01 ROD, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4tea, megat4, meritm_crt260, meritm_crt260, meritm_state,  megat3te, ROT0, "Merit", "Megatouch IV Tournament Edition (9255-50-01 ROA, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4st,  megat4, meritm_crt260, meritm_crt260, meritm_state,  megat3te, ROT0, "Merit", "Super Megatouch IV Tournament Edition (9255-51-01 ROB, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1996, megat4stg, megat4, meritm_crt260, meritm_crt260, meritm_state,  megat3te, ROT0, "Merit", "Super Megatouch IV Turnier Version (9255-51-50 ROA, Bi-Lingual GER/ENG version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1997, megat5,    0,      meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch 5 (9255-60-01 ROI, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1997, megat5a,   megat5, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch 5 (9255-60-01 ROC, Standard version)", GAME_IMPERFECT_GRAPHICS|GAME_NOT_WORKING )
+GAME( 1998, megat5nj,  megat5, meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch 5 (9255-60-07 RON, New Jersey version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1998, megat5t,   megat5, meritm_crt260, meritm_crt260, meritm_state,  megat3te, ROT0, "Merit", "Megatouch 5 Tournament Edition (9255-70-01 ROC, Standard version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1998, megat5tg,  megat5, meritm_crt260, meritm_crt260, meritm_state,  megat3te, ROT0, "Merit", "Megatouch 5 Turnier Version (9255-70-50 ROD, Bi-Lingual GER/ENG version)", GAME_IMPERFECT_GRAPHICS )
+GAME( 1998, megat6,    0,      meritm_crt260, meritm_crt260, driver_device, 0,        ROT0, "Merit", "Megatouch 6 (9255-80-01 ROA, Standard version)", GAME_IMPERFECT_GRAPHICS )

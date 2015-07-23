@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli, Barry Rodewald
 /*
 
   Malzak
@@ -13,17 +15,16 @@
 
 
 #include "emu.h"
-#include "video/s2636.h"
 #include "video/saa5050.h"
 #include "includes/malzak.h"
 
 UINT32 malzak_state::screen_update_malzak(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	const rgb_t *palette = palette_entry_list_raw(bitmap.palette());
+	const rgb_t *palette = m_palette->palette()->entry_list_raw();
 	int sx, sy;
 	int x,y;
 
-	bitmap.fill(RGB_BLACK);
+	bitmap.fill(rgb_t::black);
 
 	m_trom->screen_update(screen, bitmap, cliprect);
 
@@ -39,12 +40,12 @@ UINT32 malzak_state::screen_update_malzak(screen_device &screen, bitmap_rgb32 &b
 			if (sx < -15*2)
 				sx += 256*2;
 
-			drawgfxzoom_transpen(bitmap,cliprect, machine().gfx[0], m_playfield_code[x * 16 + y], 2, 0, 0, sx, sy, 0x20000, 0x20000, 0);
+			m_gfxdecode->gfx(0)->zoom_transpen(bitmap,cliprect, m_playfield_code[x * 16 + y], 2, 0, 0, sx, sy, 0x20000, 0x20000, 0);
 		}
 
 	/* update the S2636 chips */
-	bitmap_ind16 &s2636_0_bitmap = s2636_update(m_s2636_0, cliprect);
-	bitmap_ind16 &s2636_1_bitmap = s2636_update(m_s2636_1, cliprect);
+	bitmap_ind16 &s2636_0_bitmap = m_s2636_0->update(cliprect);
+	bitmap_ind16 &s2636_1_bitmap = m_s2636_1->update(cliprect);
 
 	/* copy the S2636 images into the main bitmap */
 	{

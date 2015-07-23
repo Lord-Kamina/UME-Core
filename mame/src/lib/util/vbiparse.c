@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     vbiparse.c
 
     Parse Philips codes and other data from VBI lines.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -305,6 +276,18 @@ int vbi_parse_white_flag(const UINT16 *source, int sourcewidth, int sourceshift)
     frame
 -------------------------------------------------*/
 
+/**
+ * @fn  void vbi_parse_all(const UINT16 *source, int sourcerowpixels, int sourcewidth, int sourceshift, vbi_metadata *vbi)
+ *
+ * @brief   Vbi parse all.
+ *
+ * @param   source          Source for the.
+ * @param   sourcerowpixels The sourcerowpixels.
+ * @param   sourcewidth     The sourcewidth.
+ * @param   sourceshift     The sourceshift.
+ * @param [in,out]  vbi     If non-null, the vbi.
+ */
+
 void vbi_parse_all(const UINT16 *source, int sourcerowpixels, int sourcewidth, int sourceshift, vbi_metadata *vbi)
 {
 	UINT32 bits[2][24];
@@ -367,6 +350,16 @@ void vbi_parse_all(const UINT16 *source, int sourcerowpixels, int sourcewidth, i
     into a smaller form for storage
 -------------------------------------------------*/
 
+/**
+ * @fn  void vbi_metadata_pack(UINT8 *dest, UINT32 framenum, const vbi_metadata *vbi)
+ *
+ * @brief   Vbi metadata pack.
+ *
+ * @param [in,out]  dest    If non-null, destination for the.
+ * @param   framenum        The framenum.
+ * @param   vbi             The vbi.
+ */
+
 void vbi_metadata_pack(UINT8 *dest, UINT32 framenum, const vbi_metadata *vbi)
 {
 	dest[0] = framenum >> 16;
@@ -392,6 +385,16 @@ void vbi_metadata_pack(UINT8 *dest, UINT32 framenum, const vbi_metadata *vbi)
     vbi_metadata_unpack - unpack the VBI data
     from a smaller form into the full structure
 -------------------------------------------------*/
+
+/**
+ * @fn  void vbi_metadata_unpack(vbi_metadata *vbi, UINT32 *framenum, const UINT8 *source)
+ *
+ * @brief   Vbi metadata unpack.
+ *
+ * @param [in,out]  vbi         If non-null, the vbi.
+ * @param [in,out]  framenum    If non-null, the framenum.
+ * @param   source              Source for the.
+ */
 
 void vbi_metadata_unpack(vbi_metadata *vbi, UINT32 *framenum, const UINT8 *source)
 {

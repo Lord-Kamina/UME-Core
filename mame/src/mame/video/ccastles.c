@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Patrick Lawrence, Aaron Giles
 /***************************************************************************
 
     Atari Crystal Castles hardware
@@ -31,7 +33,7 @@ void ccastles_state::video_start()
 			3,  resistances, m_bweights, 1000, 0);
 
 	/* allocate a bitmap for drawing sprites */
-	machine().primary_screen->register_screen_bitmap(m_spritebitmap);
+	m_screen->register_screen_bitmap(m_spritebitmap);
 
 	/* register for savestates */
 	save_item(NAME(m_video_control));
@@ -50,7 +52,7 @@ void ccastles_state::video_start()
 
 WRITE8_MEMBER(ccastles_state::ccastles_hscroll_w)
 {
-	machine().primary_screen->update_partial(machine().primary_screen->vpos());
+	m_screen->update_partial(m_screen->vpos());
 	m_hscroll = data;
 }
 
@@ -103,7 +105,7 @@ WRITE8_MEMBER(ccastles_state::ccastles_paletteram_w)
 	bit2 = (~b >> 2) & 0x01;
 	b = combine_3_weights(m_bweights, bit0, bit1, bit2);
 
-	palette_set_color(machine(), offset & 0x1f, MAKE_RGB(r, g, b));
+	m_palette->set_pen_color(offset & 0x1f, rgb_t(r, g, b));
 }
 
 
@@ -255,7 +257,7 @@ UINT32 ccastles_state::screen_update_ccastles(screen_device &screen, bitmap_ind1
 {
 	UINT8 *spriteaddr = &m_spriteram[m_video_control[7] * 0x100];   /* BUF1/BUF2 */
 	int flip = m_video_control[4] ? 0xff : 0x00;    /* PLAYER2 */
-	pen_t black = get_black_pen(machine());
+	pen_t black = m_palette->black_pen();
 	int x, y, offs;
 
 	/* draw the sprites */
@@ -267,7 +269,7 @@ UINT32 ccastles_state::screen_update_ccastles(screen_device &screen, bitmap_ind1
 		int which = spriteaddr[offs];
 		int color = spriteaddr[offs + 2] >> 7;
 
-		drawgfx_transpen(m_spritebitmap, cliprect, machine().gfx[0], which, color, flip, flip, x, y, 7);
+		m_gfxdecode->gfx(0)->transpen(m_spritebitmap,cliprect, which, color, flip, flip, x, y, 7);
 	}
 
 	/* draw the bitmap to the screen, looping over Y */

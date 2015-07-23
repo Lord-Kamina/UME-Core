@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Carlos A. Lozano
 /******************************************************************
 Terra Cresta (preliminary)
 Nichibutsu 1985
@@ -33,21 +35,19 @@ Stephh's notes (based on the games M68000 code and some tests) :
 
   - Each high-score name is made up of 3 chars.
 
-  - There is a "debug mode" ! To activate it, you need to have cheats ON.
+  - There is a "debug mode" !
     Set "Debug Mode" Dip Switch to ON and be sure that "Cabinet" Dip Switch
     is set to "Upright". Its features (see below) only affect player 1 !
     Features :
       * invulnerability and infinite time :
           . insert a coin
-          . press FAKE button 3 and START1 (player 1 buttons 1 and 2 must NOT be pressed !)
+          . press player 2 button 1 and 2 and START1 (player 1 buttons 1 and 2 must NOT be pressed !)
       * level select (there are 32 levels) :
           . insert a coin
-          . press FAKE button 3 ("00" will be displayed - this is an hex. display)
-          . press FAKE button 3 and player 1 button 1 to increase level
-          . press FAKE button 3 and player 1 button 2 to decrease level
+          . press player 2 button 1 and 2 ("00" will be displayed - this is an hex. display)
+          . press player 2 button 1 and 2 and player 1 button 1 to increase level
+          . press player 2 button 1 and 2 and player 1 button 2 to decrease level
           . press START1 to start a game with the selected level
-    FAKE button 3 is in fact the same as pressing simultaneously player 2 buttons 1 and 2.
-    (I've code this that way because my keyboard doesn't accept too many keys pressed)
 
 
 
@@ -131,19 +131,6 @@ static const UINT16 mHoreKidProtData[] =
 	0x1800 /* checksum */
 };
 
-READ16_MEMBER(terracre_state::horekid_IN2_r)
-{
-	int data = ioport("IN2")->read();
-
-	if (!(data & 0x40))     // FAKE button 3 for "Debug Mode"
-	{
-		data &=  0x40;
-		data |= ~0x30;
-	}
-
-	return data;
-}
-
 WRITE16_MEMBER(terracre_state::amazon_sound_w)
 {
 	soundlatch_byte_w(space,0,((data & 0x7f) << 1) | 1);
@@ -197,7 +184,7 @@ static ADDRESS_MAP_START( terracre_map, AS_PROGRAM, 16, terracre_state )
 	AM_RANGE(0x000000, 0x01ffff) AM_ROM
 	AM_RANGE(0x020000, 0x0201ff) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0x020200, 0x021fff) AM_RAM
-	AM_RANGE(0x022000, 0x022fff) AM_WRITE(amazon_background_w) AM_SHARE("amazon_videoram")
+	AM_RANGE(0x022000, 0x022fff) AM_WRITE(amazon_background_w) AM_SHARE("bg_videoram")
 	AM_RANGE(0x023000, 0x023fff) AM_RAM
 	AM_RANGE(0x024000, 0x024001) AM_READ_PORT("P1")
 	AM_RANGE(0x024002, 0x024003) AM_READ_PORT("P2")
@@ -207,14 +194,14 @@ static ADDRESS_MAP_START( terracre_map, AS_PROGRAM, 16, terracre_state )
 	AM_RANGE(0x026002, 0x026003) AM_WRITE(amazon_scrollx_w)
 	AM_RANGE(0x026004, 0x026005) AM_WRITE(amazon_scrolly_w)
 	AM_RANGE(0x02600c, 0x02600d) AM_WRITE(amazon_sound_w)
-	AM_RANGE(0x028000, 0x0287ff) AM_WRITE(amazon_foreground_w) AM_SHARE("videoram")
+	AM_RANGE(0x028000, 0x0287ff) AM_WRITE(amazon_foreground_w) AM_SHARE("fg_videoram")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( amazon_map, AS_PROGRAM, 16, terracre_state )
 	AM_RANGE(0x000000, 0x01ffff) AM_ROM
 	AM_RANGE(0x040000, 0x0401ff) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0x040200, 0x040fff) AM_RAM
-	AM_RANGE(0x042000, 0x042fff) AM_WRITE(amazon_background_w) AM_SHARE("amazon_videoram")
+	AM_RANGE(0x042000, 0x042fff) AM_WRITE(amazon_background_w) AM_SHARE("bg_videoram")
 	AM_RANGE(0x044000, 0x044001) AM_READ_PORT("IN0")
 	AM_RANGE(0x044002, 0x044003) AM_READ_PORT("IN1")
 	AM_RANGE(0x044004, 0x044005) AM_READ_PORT("IN2")
@@ -223,7 +210,7 @@ static ADDRESS_MAP_START( amazon_map, AS_PROGRAM, 16, terracre_state )
 	AM_RANGE(0x046002, 0x046003) AM_WRITE(amazon_scrollx_w)
 	AM_RANGE(0x046004, 0x046005) AM_WRITE(amazon_scrolly_w)
 	AM_RANGE(0x04600c, 0x04600d) AM_WRITE(amazon_sound_w)
-	AM_RANGE(0x050000, 0x050fff) AM_WRITE(amazon_foreground_w) AM_SHARE("videoram")
+	AM_RANGE(0x050000, 0x050fff) AM_WRITE(amazon_foreground_w) AM_SHARE("fg_videoram")
 	AM_RANGE(0x070000, 0x070003) AM_READWRITE(amazon_protection_r, amazon_protection_w)
 ADDRESS_MAP_END
 
@@ -435,7 +422,7 @@ static INPUT_PORTS_START( horekid )
 	PORT_DIPNAME( 0x2000, 0x2000, DEF_STR( Flip_Screen ) )
 	PORT_DIPSETTING(      0x2000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0xc000, 0xc000, "Debug Mode (Cheat)")
+	PORT_DIPNAME( 0xc000, 0xc000, "Debug Mode" )
 	PORT_DIPSETTING(      0xc000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x8000, DEF_STR( On ) )       // "Cabinet" Dip Switch must be set to "Upright" too !
 //  PORT_DIPSETTING(      0x4000, DEF_STR( Off ) )      // duplicated setting
@@ -458,7 +445,7 @@ static INPUT_PORTS_START( horekid )
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_8WAY PORT_PLAYER(2)
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2)
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(2)
-	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_NAME ("P2 Buttons 1+2 (Debug Cheat)")     // fake button for "Debug Mode" (see read handler)
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
 	PORT_START("IN3")
@@ -525,40 +512,6 @@ static GFXDECODE_START( terracre )
 	GFXDECODE_ENTRY( "gfx3", 0, sprite_layout, 1*16+16*16, 256 )
 GFXDECODE_END
 
-static MACHINE_CONFIG_START( amazon, terracre_state )
-	MCFG_CPU_ADD("maincpu", M68000, XTAL_16MHz/2)   // 8mhz
-	MCFG_CPU_PROGRAM_MAP(amazon_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", terracre_state,  irq1_line_hold)
-
-	MCFG_CPU_ADD("audiocpu", Z80, XTAL_16MHz/4)     // 4mhz? should be derived from XTAL_22MHz? how?
-	MCFG_CPU_PROGRAM_MAP(sound_map)
-	MCFG_CPU_IO_MAP(sound_3526_io_map)
-	MCFG_CPU_PERIODIC_INT_DRIVER(terracre_state, irq0_line_hold,  XTAL_16MHz/4/512) // ?
-
-	MCFG_MACHINE_START_OVERRIDE(terracre_state,amazon)
-
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_REFRESH_RATE( 60 )
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
-	MCFG_SCREEN_SIZE(32*8, 32*8)
-	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(terracre_state, screen_update_amazon)
-
-	MCFG_GFXDECODE(terracre)
-	MCFG_PALETTE_LENGTH(1*16+16*16+16*256)
-
-
-	MCFG_SPEAKER_STANDARD_MONO("mono")
-
-	MCFG_SOUND_ADD("ymsnd", YM3526, XTAL_16MHz/4)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-
-	MCFG_DAC_ADD("dac1")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
-
-	MCFG_DAC_ADD("dac2")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
-MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( ym3526, terracre_state )
 	MCFG_CPU_ADD("maincpu", M68000, XTAL_16MHz/2)   // 8mhz
@@ -570,16 +523,21 @@ static MACHINE_CONFIG_START( ym3526, terracre_state )
 	MCFG_CPU_IO_MAP(sound_3526_io_map)
 	MCFG_CPU_PERIODIC_INT_DRIVER(terracre_state, irq0_line_hold,  XTAL_16MHz/4/512) // ?
 
+	MCFG_BUFFERED_SPRITERAM16_ADD("spriteram")
+
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE( 60 )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(terracre_state, screen_update_amazon)
+	MCFG_SCREEN_VBLANK_DEVICE("spriteram", buffered_spriteram16_device, vblank_copy_rising)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(terracre)
-	MCFG_PALETTE_LENGTH(1*16+16*16+16*256)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", terracre)
+	MCFG_PALETTE_ADD("palette", 1*16+16*16+16*256)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256)
+	MCFG_PALETTE_INIT_OWNER(terracre_state, terracre)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
@@ -593,46 +551,24 @@ static MACHINE_CONFIG_START( ym3526, terracre_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_START( ym2203, terracre_state )
-	MCFG_CPU_ADD("maincpu", M68000, XTAL_16MHz/2)   // 8mhz
-	MCFG_CPU_PROGRAM_MAP(terracre_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", terracre_state,  irq1_line_hold)
-
-	MCFG_CPU_ADD("audiocpu", Z80, XTAL_16MHz/4)     // 4.0mhz when compared to sound recordings, should be derived from XTAL_22MHz? how?
-	MCFG_CPU_PROGRAM_MAP(sound_map)
+static MACHINE_CONFIG_DERIVED( ym2203, ym3526 )
+	MCFG_CPU_MODIFY("audiocpu")
 	MCFG_CPU_IO_MAP(sound_2203_io_map)
-	MCFG_CPU_PERIODIC_INT_DRIVER(terracre_state, irq0_line_hold,  XTAL_16MHz/4/512) // ?
 
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_REFRESH_RATE(60)
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
-	MCFG_SCREEN_SIZE(32*8, 32*8)
-	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(terracre_state, screen_update_amazon)
-
-	MCFG_GFXDECODE(terracre)
-	MCFG_PALETTE_LENGTH(1*16+16*16+16*256)
-
-
-	MCFG_SPEAKER_STANDARD_MONO("mono")
+	MCFG_DEVICE_REMOVE("ymsnd")
 
 	MCFG_SOUND_ADD("ym1", YM2203, XTAL_16MHz/4)
 	MCFG_SOUND_ROUTE(0, "mono", 0.20)
 	MCFG_SOUND_ROUTE(1, "mono", 0.20)
 	MCFG_SOUND_ROUTE(2, "mono", 0.20)
 	MCFG_SOUND_ROUTE(3, "mono", 0.40)
+MACHINE_CONFIG_END
 
-	MCFG_SOUND_ADD("ym2", YM2203, XTAL_16MHz/4)
-	MCFG_SOUND_ROUTE(0, "mono", 0.20)
-	MCFG_SOUND_ROUTE(1, "mono", 0.20)
-	MCFG_SOUND_ROUTE(2, "mono", 0.20)
-	MCFG_SOUND_ROUTE(3, "mono", 0.40)
+static MACHINE_CONFIG_DERIVED( amazon, ym3526 )
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_PROGRAM_MAP(amazon_map)
 
-	MCFG_DAC_ADD("dac1")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
-
-	MCFG_DAC_ADD("dac2")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
+	MCFG_MACHINE_START_OVERRIDE(terracre_state,amazon)
 MACHINE_CONFIG_END
 
 
@@ -1014,7 +950,6 @@ DRIVER_INIT_MEMBER(terracre_state,amatelas)
 DRIVER_INIT_MEMBER(terracre_state,horekid)
 {
 	m_mpProtData = mHoreKidProtData;
-	m_maincpu->space(AS_PROGRAM).install_read_handler(0x44004, 0x44005, read16_delegate(FUNC(terracre_state::horekid_IN2_r),this));
 }
 
 /*    YEAR, NAME,   PARENT,     MACHINE, INPUT,    INIT,     MONITOR,  COMPANY,      FULLNAME, FLAGS */

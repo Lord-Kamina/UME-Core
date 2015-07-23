@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Couriersud
 /*
 
 Battlezone sound info, courtesy of Al Kossow:
@@ -124,6 +126,7 @@ static const discrete_lfsr_desc bzone_lfsr =
 	15                  /* Output bit */
 };
 
+#if 0
 static const discrete_op_amp_filt_info bzone_explo_0 =
 {
 		BZ_R18 + BZ_R19, 0, 0, 0,       /* r1, r2, r3, r4 */
@@ -159,6 +162,7 @@ static const discrete_op_amp_filt_info bzone_shell_1 =
 		0,                              /* vRef - not used */
 		22, 0                           /* vP, vN */
 };
+#endif
 
 static const discrete_555_desc bzone_vco_desc =
 {
@@ -337,7 +341,7 @@ static DISCRETE_SOUND_START(bzone)
 		5.0 * RES_VOLTAGE_DIVIDER(BZ_R7, BZ_R6),            /* INP0 */
 		5.0 * RES_VOLTAGE_DIVIDER(BZ_R7, RES_2_PARALLEL(CD4066_R_ON + BZ_R5, BZ_R6)))   /* INP1 */
 	/* R5, R6, R7 all affect the following circuit charge discharge rates */
-	/* they are not emulated as their effect is less the the 5% component tolerance */
+	/* they are not emulated as their effect is less than the 5% component tolerance */
 	DISCRETE_RCDISC3(NODE_62,                               /* IC K5, pin 7 */
 		1, NODE_61, BZ_R8, BZ_R9, BZ_C13, -0.5)
 
@@ -381,15 +385,9 @@ static DISCRETE_SOUND_START(bzone)
 
 DISCRETE_SOUND_END
 
-static const pokey_interface bzone_pokey_interface =
-{
-	{ DEVCB_NULL },
-	DEVCB_INPUT_PORT("IN3")
-};
-
 WRITE8_MEMBER(bzone_state::bzone_sounds_w)
 {
-	discrete_sound_w(m_discrete, space, BZ_INPUT, data);
+	m_discrete->write(space, BZ_INPUT, data);
 
 	output_set_value("startled", (data >> 6) & 1);
 	machine().sound().system_enable(data & 0x20);
@@ -400,13 +398,13 @@ MACHINE_CONFIG_FRAGMENT( bzone_audio )
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_POKEY_ADD("pokey", BZONE_MASTER_CLOCK / 8)
-	MCFG_POKEY_CONFIG(bzone_pokey_interface)
+	MCFG_SOUND_ADD("pokey", POKEY, BZONE_MASTER_CLOCK / 8)
+	MCFG_POKEY_ALLPOT_R_CB(IOPORT("IN3"))
 	MCFG_POKEY_OUTPUT_RC(RES_K(10), CAP_U(0.015), 5.0)
 	MCFG_SOUND_ROUTE_EX(0, "discrete", 1.0, 0)
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(bzone)
+	MCFG_DISCRETE_INTF(bzone)
 
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END

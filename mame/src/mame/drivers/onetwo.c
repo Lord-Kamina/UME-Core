@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Pierpaolo Prazzoli
 /*
 
  One + Two
@@ -55,7 +57,9 @@ public:
 		m_paletteram2(*this, "paletteram2"),
 		m_fgram(*this, "fgram"),
 		m_maincpu(*this, "maincpu"),
-		m_audiocpu(*this, "audiocpu"){ }
+		m_audiocpu(*this, "audiocpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_paletteram;
@@ -68,6 +72,9 @@ public:
 	/* devices */
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	DECLARE_WRITE8_MEMBER(onetwo_fgram_w);
 	DECLARE_WRITE8_MEMBER(onetwo_cpubank_w);
 	DECLARE_WRITE8_MEMBER(onetwo_coin_counters_w);
@@ -79,7 +86,6 @@ public:
 	virtual void video_start();
 	UINT32 screen_update_onetwo(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void set_color(int offset);
-	DECLARE_WRITE_LINE_MEMBER(irqhandler);
 };
 
 
@@ -102,12 +108,12 @@ TILE_GET_INFO_MEMBER(onetwo_state::get_fg_tile_info)
 
 void onetwo_state::video_start()
 {
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(onetwo_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(onetwo_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
 }
 
 UINT32 onetwo_state::screen_update_onetwo(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -148,7 +154,7 @@ void onetwo_state::set_color(int offset)
 	r = m_paletteram[offset] & 0x1f;
 	g = m_paletteram2[offset] & 0x1f;
 	b = ((m_paletteram[offset] & 0x60) >> 2) | ((m_paletteram2[offset] & 0xe0) >> 5);
-	palette_set_color_rgb(machine(), offset, pal5bit(r), pal5bit(g), pal5bit(b));
+	m_palette->set_pen_color(offset, pal5bit(r), pal5bit(g), pal5bit(b));
 }
 
 WRITE8_MEMBER(onetwo_state::palette1_w)
@@ -326,16 +332,6 @@ static GFXDECODE_START( onetwo )
 	GFXDECODE_ENTRY( "gfx1", 0, tiles8x8x6_layout, 0, 2 )
 GFXDECODE_END
 
-/*************************************
- *
- *  Sound interface
- *
- *************************************/
-
-WRITE_LINE_MEMBER(onetwo_state::irqhandler)
-{
-	m_audiocpu->set_input_line(0, state);
-}
 
 /*************************************
  *
@@ -371,16 +367,17 @@ static MACHINE_CONFIG_START( onetwo, onetwo_state )
 	MCFG_SCREEN_SIZE(512, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 512-1, 0, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(onetwo_state, screen_update_onetwo)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(onetwo)
-	MCFG_PALETTE_LENGTH(0x80)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", onetwo)
+	MCFG_PALETTE_ADD("palette", 0x80)
 
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM3812, MASTER_CLOCK)
-	MCFG_YM3812_IRQ_HANDLER(WRITELINE(onetwo_state, irqhandler))
+	MCFG_YM3812_IRQ_HANDLER(INPUTLINE("audiocpu", 0))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
 	MCFG_OKIM6295_ADD("oki", 1056000*2, OKIM6295_PIN7_LOW) // clock frequency & pin 7 not verified

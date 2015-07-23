@@ -1,15 +1,16 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 #pragma once
 
 #ifndef __VIXEN__
 #define __VIXEN__
 
-#include "emu.h"
+#include "bus/rs232/rs232.h"
 #include "cpu/z80/z80.h"
 #include "machine/i8155.h"
 #include "machine/i8251.h"
-#include "machine/ieee488.h"
+#include "bus/ieee488/ieee488.h"
 #include "machine/ram.h"
-#include "machine/serial.h"
 #include "machine/wd_fdc.h"
 #include "sound/discrete.h"
 
@@ -33,6 +34,7 @@ public:
 			m_usart(*this, P8251A_TAG),
 			m_discrete(*this, DISCRETE_TAG),
 			m_ieee488(*this, IEEE488_TAG),
+			m_palette(*this, "palette"),
 			m_ram(*this, RAM_TAG),
 			m_floppy0(*this, FDC1797_TAG":0"),
 			m_floppy1(*this, FDC1797_TAG":1"),
@@ -41,14 +43,8 @@ public:
 			m_sync_rom(*this, "video"),
 			m_char_rom(*this, "chargen"),
 			m_video_ram(*this, "video_ram"),
-			m_y0(*this, "Y0"),
-			m_y1(*this, "Y1"),
-			m_y2(*this, "Y2"),
-			m_y3(*this, "Y3"),
-			m_y4(*this, "Y4"),
-			m_y5(*this, "Y5"),
-			m_y6(*this, "Y6"),
-			m_y7(*this, "Y7"),
+			m_key(*this, "KEY"),
+			m_cmd_d1(0),
 			m_fdint(0),
 			m_vsync(0),
 			m_srq(1),
@@ -63,22 +59,16 @@ public:
 	required_device<i8251_device> m_usart;
 	required_device<discrete_sound_device> m_discrete;
 	required_device<ieee488_device> m_ieee488;
+	required_device<palette_device> m_palette;
 	required_device<ram_device> m_ram;
 	required_device<floppy_connector> m_floppy0;
 	required_device<floppy_connector> m_floppy1;
 	required_device<rs232_port_device> m_rs232;
-	required_memory_region m_rom;
-	required_memory_region m_sync_rom;
-	required_memory_region m_char_rom;
+	required_region_ptr<UINT8> m_rom;
+	required_region_ptr<UINT8> m_sync_rom;
+	required_region_ptr<UINT8> m_char_rom;
 	required_shared_ptr<UINT8> m_video_ram;
-	required_ioport m_y0;
-	required_ioport m_y1;
-	required_ioport m_y2;
-	required_ioport m_y3;
-	required_ioport m_y4;
-	required_ioport m_y5;
-	required_ioport m_y6;
-	required_ioport m_y7;
+	required_ioport_array<8> m_key;
 
 	virtual void machine_start();
 	virtual void machine_reset();
@@ -103,7 +93,7 @@ public:
 	DECLARE_WRITE_LINE_MEMBER( atn_w );
 	DECLARE_WRITE_LINE_MEMBER( rxrdy_w );
 	DECLARE_WRITE_LINE_MEMBER( txrdy_w );
-	void fdc_intrq_w(bool state);
+	DECLARE_WRITE_LINE_MEMBER( fdc_intrq_w );
 	DIRECT_UPDATE_MEMBER(vixen_direct_update_handler);
 
 	// memory state

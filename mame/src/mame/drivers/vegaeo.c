@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli
 /********************************************************************
  Eolith 32 bits hardware: Vega system
 
@@ -16,7 +18,6 @@
 #include "machine/at28c16.h"
 #include "sound/qs1000.h"
 #include "includes/eolith.h"
-#include "includes/eolithsp.h"
 
 
 class vegaeo_state : public eolith_state
@@ -27,20 +28,20 @@ public:
 
 	UINT32 *m_vega_vram;
 	UINT8 m_vega_vbuffer;
+
 	DECLARE_WRITE32_MEMBER(vega_vram_w);
 	DECLARE_READ32_MEMBER(vega_vram_r);
-	DECLARE_WRITE32_MEMBER(vega_palette_w);
 	DECLARE_WRITE32_MEMBER(vega_misc_w);
 	DECLARE_READ32_MEMBER(vegaeo_custom_read);
 	DECLARE_WRITE32_MEMBER(soundlatch_w);
-
 	DECLARE_READ8_MEMBER(qs1000_p1_r);
-
 	DECLARE_WRITE8_MEMBER(qs1000_p1_w);
 	DECLARE_WRITE8_MEMBER(qs1000_p2_w);
 	DECLARE_WRITE8_MEMBER(qs1000_p3_w);
+
 	DECLARE_DRIVER_INIT(vegaeo);
 	DECLARE_VIDEO_START(vega);
+
 	UINT32 screen_update_vega(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 };
 
@@ -63,12 +64,10 @@ WRITE8_MEMBER( vegaeo_state::qs1000_p3_w )
 	// ...x .... - ?
 	// ..x. .... - /IRQ clear
 
-	qs1000_device *qs1000 = machine().device<qs1000_device>("qs1000");
-
 	membank("qs1000:bank")->set_entry(data & 0x07);
 
 	if (!BIT(data, 5))
-		qs1000->set_irq(CLEAR_LINE);
+		m_qs1000->set_irq(CLEAR_LINE);
 }
 
 WRITE32_MEMBER(vegaeo_state::vega_vram_w)
@@ -106,16 +105,6 @@ READ32_MEMBER(vegaeo_state::vega_vram_r)
 	return m_vega_vram[offset + (0x14000/4) * m_vega_vbuffer];
 }
 
-WRITE32_MEMBER(vegaeo_state::vega_palette_w)
-{
-	UINT16 paldata;
-
-	COMBINE_DATA(&m_generic_paletteram_32[offset]);
-
-	paldata = m_generic_paletteram_32[offset] & 0x7fff;
-	palette_set_color_rgb(machine(), offset, pal5bit(paldata >> 10), pal5bit(paldata >> 5), pal5bit(paldata >> 0));
-}
-
 WRITE32_MEMBER(vegaeo_state::vega_misc_w)
 {
 	// other bits ???
@@ -126,16 +115,14 @@ WRITE32_MEMBER(vegaeo_state::vega_misc_w)
 
 READ32_MEMBER(vegaeo_state::vegaeo_custom_read)
 {
-	eolith_speedup_read(space);
+	speedup_read();
 	return ioport("SYSTEM")->read();
 }
 
 WRITE32_MEMBER(vegaeo_state::soundlatch_w)
 {
-	qs1000_device *qs1000 = space.machine().device<qs1000_device>("qs1000");
-
 	soundlatch_byte_w(space, 0, data);
-	qs1000->set_irq(ASSERT_LINE);
+	m_qs1000->set_irq(ASSERT_LINE);
 
 	machine().scheduler().boost_interleave(attotime::zero, attotime::from_usec(100));
 }
@@ -145,7 +132,7 @@ static ADDRESS_MAP_START( vega_map, AS_PROGRAM, 32, vegaeo_state )
 	AM_RANGE(0x00000000, 0x001fffff) AM_RAM
 	AM_RANGE(0x80000000, 0x80013fff) AM_READWRITE(vega_vram_r, vega_vram_w)
 	AM_RANGE(0xfc000000, 0xfc0000ff) AM_DEVREADWRITE8("at28c16", at28c16_device, read, write, 0x000000ff)
-	AM_RANGE(0xfc200000, 0xfc2003ff) AM_RAM_WRITE(vega_palette_w) AM_SHARE("paletteram")
+	AM_RANGE(0xfc200000, 0xfc2003ff) AM_DEVREADWRITE16("palette", palette_device, read, write, 0x0000ffff) AM_SHARE("palette")
 	AM_RANGE(0xfc400000, 0xfc40005b) AM_WRITENOP // crt registers ?
 	AM_RANGE(0xfc600000, 0xfc600003) AM_WRITE(soundlatch_w)
 	AM_RANGE(0xfca00000, 0xfca00003) AM_WRITE(vega_misc_w)
@@ -191,6 +178,8 @@ INPUT_PORTS_END
 VIDEO_START_MEMBER(vegaeo_state,vega)
 {
 	m_vega_vram = auto_alloc_array(machine(), UINT32, 0x14000*2/4);
+	save_pointer(NAME(m_vega_vram), 0x14000*2/4);
+	save_item(NAME(m_vega_vbuffer));
 }
 
 UINT32 vegaeo_state::screen_update_vega(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
@@ -222,30 +211,6 @@ UINT32 vegaeo_state::screen_update_vega(screen_device &screen, bitmap_ind16 &bit
 }
 
 
-
-/*************************************
- *
- *  QS1000 interface
- *
- *************************************/
-
-static QS1000_INTERFACE( qs1000_intf )
-{
-	/* External ROM */
-	true,
-
-	/* P1-P3 read handlers */
-	DEVCB_DRIVER_MEMBER(vegaeo_state, qs1000_p1_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-
-	/* P1-P3 write handlers */
-	DEVCB_DRIVER_MEMBER(vegaeo_state, qs1000_p1_w),
-	DEVCB_DRIVER_MEMBER(vegaeo_state, qs1000_p2_w),
-	DEVCB_DRIVER_MEMBER(vegaeo_state, qs1000_p3_w)
-};
-
-
 static MACHINE_CONFIG_START( vega, vegaeo_state )
 	MCFG_CPU_ADD("maincpu", GMS30C2132, XTAL_55MHz)
 	MCFG_CPU_PROGRAM_MAP(vega_map)
@@ -260,16 +225,23 @@ static MACHINE_CONFIG_START( vega, vegaeo_state )
 	MCFG_SCREEN_SIZE(512, 262)
 	MCFG_SCREEN_VISIBLE_AREA(0, 319, 0, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(vegaeo_state, screen_update_vega)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
+	MCFG_PALETTE_MEMBITS(16)
 
 	MCFG_VIDEO_START_OVERRIDE(vegaeo_state,vega)
 
 	/* sound hardware */
-	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	MCFG_QS1000_ADD("qs1000", XTAL_24MHz, qs1000_intf)
+	MCFG_SOUND_ADD("qs1000", QS1000, XTAL_24MHz)
+	MCFG_QS1000_EXTERNAL_ROM(true)
+	MCFG_QS1000_IN_P1_CB(READ8(vegaeo_state, qs1000_p1_r))
+	MCFG_QS1000_OUT_P1_CB(WRITE8(vegaeo_state, qs1000_p1_w))
+	MCFG_QS1000_OUT_P2_CB(WRITE8(vegaeo_state, qs1000_p2_w))
+	MCFG_QS1000_OUT_P3_CB(WRITE8(vegaeo_state, qs1000_p3_w))
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -356,7 +328,7 @@ DRIVER_INIT_MEMBER(vegaeo_state,vegaeo)
 	machine().device("qs1000:cpu")->memory().space(AS_IO).install_read_bank(0x0100, 0xffff, "bank");
 	membank("qs1000:bank")->configure_entries(0, 8, memregion("qs1000:cpu")->base()+0x100, 0x10000);
 
-	init_eolith_speedup(machine());
+	init_speedup();
 }
 
-GAME( 2002, crazywar, 0, vega, crazywar, vegaeo_state, vegaeo, ROT0, "Eolith", "Crazy War", GAME_IMPERFECT_SOUND )
+GAME( 2002, crazywar, 0, vega, crazywar, vegaeo_state, vegaeo, ROT0, "Eolith", "Crazy War", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )

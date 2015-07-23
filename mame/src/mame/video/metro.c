@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia, David Haywood
 /***************************************************************************
 
                               -= Metro Games =-
@@ -53,14 +55,12 @@ Note:   if MAME_DEBUG is defined, pressing Z with:
 
 #include "emu.h"
 #include "includes/metro.h"
-#include "video/konicdev.h"
 
 TILE_GET_INFO_MEMBER(metro_state::metro_k053936_get_tile_info)
 {
 	int code = m_k053936_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			4,
+	SET_TILE_INFO_MEMBER(4,
 			code & 0x7fff,
 			0xe,
 			0);
@@ -70,8 +70,7 @@ TILE_GET_INFO_MEMBER(metro_state::metro_k053936_gstrik2_get_tile_info)
 {
 	int code = m_k053936_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			4,
+	SET_TILE_INFO_MEMBER(4,
 			(code & 0x7fff)>>2,
 			0xe,
 			0);
@@ -159,7 +158,7 @@ inline UINT8 metro_state::get_tile_pix( UINT16 code, UINT8 x, UINT8 y, int big, 
 	}
 	else if (((tile & 0x00f00000) == 0x00f00000)    && (m_support_8bpp)) /* draw tile as 8bpp (e.g. balcube bg) */
 	{
-		gfx_element *gfx1 = machine().gfx[big?3:1];
+		gfx_element *gfx1 = m_gfxdecode->gfx(big?3:1);
 		UINT32 tile2 = big ? ((tile & 0xfffff) + 8*(code & 0xf)) :
 								((tile & 0xfffff) + 2*(code & 0xf));
 		const UINT8* data;
@@ -191,7 +190,7 @@ inline UINT8 metro_state::get_tile_pix( UINT16 code, UINT8 x, UINT8 y, int big, 
 	}
 	else
 	{
-		gfx_element *gfx1 = machine().gfx[big?2:0];
+		gfx_element *gfx1 = m_gfxdecode->gfx(big?2:0);
 		UINT32 tile2 = big ? ((tile & 0xfffff) + 4*(code & 0xf)) :
 								((tile & 0xfffff) +   (code & 0xf));
 		const UINT8* data;
@@ -221,9 +220,6 @@ inline UINT8 metro_state::get_tile_pix( UINT16 code, UINT8 x, UINT8 y, int big, 
 		else
 			return 0;
 	}
-
-	// shouldn't get here..
-	return 0;
 }
 
 
@@ -255,10 +251,6 @@ WRITE16_MEMBER(metro_state::metro_window_w)
 
 /*
  Sprites are not tile based, so we decode their graphics at runtime.
-
- We can't do it at startup because drawgfx requires the tiles to be
- pre-rotated to support vertical games, and that, in turn, requires
- the tile's sizes to be known at startup - which we don't!
 */
 
 void metro_state::expand_gfx1()
@@ -327,7 +319,7 @@ VIDEO_START_MEMBER(metro_state,blzntrnd)
 
 	m_has_zoom = 1;
 
-	m_k053936_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(metro_state::metro_k053936_get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 256, 512);
+	m_k053936_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(metro_state::metro_k053936_get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 256, 512);
 
 	m_tilemap_scrolldx[0] = 8;
 	m_tilemap_scrolldx[1] = 8;
@@ -340,7 +332,7 @@ VIDEO_START_MEMBER(metro_state,gstrik2)
 
 	m_has_zoom = 1;
 
-	m_k053936_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(metro_state::metro_k053936_gstrik2_get_tile_info),this), tilemap_mapper_delegate(FUNC(metro_state::tilemap_scan_gstrik2),this), 16, 16, 128, 256);
+	m_k053936_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(metro_state::metro_k053936_gstrik2_get_tile_info),this), tilemap_mapper_delegate(FUNC(metro_state::tilemap_scan_gstrik2),this), 16, 16, 128, 256);
 
 	m_tilemap_scrolldx[0] = 8;
 	m_tilemap_scrolldx[1] = 0;
@@ -407,14 +399,14 @@ VIDEO_START_MEMBER(metro_state,gstrik2)
 
 ***************************************************************************/
 
-void metro_state::metro_draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
+void metro_state::metro_draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
 	UINT8 *base_gfx4 = m_expanded_gfx1;
 	UINT8 *base_gfx8 = memregion("gfx1")->base();
 	UINT32 gfx_size = memregion("gfx1")->bytes();
 
-	int max_x = machine().primary_screen->width();
-	int max_y = machine().primary_screen->height();
+	int max_x = m_screen->width();
+	int max_y = m_screen->height();
 
 	int max_sprites = m_spriteram.bytes() / 8;
 	int sprites     = m_videoregs[0x00/2] % max_sprites;
@@ -503,15 +495,15 @@ void metro_state::metro_draw_sprites( bitmap_ind16 &bitmap, const rectangle &cli
 				if ((gfxstart + width * height - 1) >= gfx_size)
 					continue;
 
-				gfx_element gfx(machine(), base_gfx8 + gfxstart, width, height, width, 0, 256);
+				gfx_element gfx(m_palette, base_gfx8 + gfxstart, width, height, width, m_palette->entries(), 0, 256);
 
-				pdrawgfxzoom_transpen(  bitmap,cliprect, &gfx,
+				gfx.prio_zoom_transpen(bitmap,cliprect,
 								0,
 								color_start >> 4,
 								flipx, flipy,
 								x, y,
 								zoom, zoom,
-								machine().priority_bitmap,primask[pri], 255);
+								screen.priority(),primask[pri], 255);
 			}
 			else
 			{
@@ -519,15 +511,15 @@ void metro_state::metro_draw_sprites( bitmap_ind16 &bitmap, const rectangle &cli
 				if ((gfxstart + width / 2 * height - 1) >= gfx_size)
 					continue;
 
-				gfx_element gfx(machine(), base_gfx4 + 2 * gfxstart, width, height, width, 0, 16);
+				gfx_element gfx(m_palette, base_gfx4 + 2 * gfxstart, width, height, width, m_palette->entries(),0, 16);
 
-				pdrawgfxzoom_transpen(  bitmap,cliprect, &gfx,
+				gfx.prio_zoom_transpen(bitmap,cliprect,
 								0,
 								color + color_start,
 								flipx, flipy,
 								x, y,
 								zoom, zoom,
-								machine().priority_bitmap,primask[pri], 15);
+								screen.priority(),primask[pri], 15);
 			}
 #if 0
 {   /* Display priority + zoom on each sprite */
@@ -553,12 +545,12 @@ void metro_state::metro_draw_sprites( bitmap_ind16 &bitmap, const rectangle &cli
 
 // Copy a 'window' from the large 2048x2048 (or 4096x4096 for 16x16 tiles) tilemap
 
-void metro_state::draw_tilemap( bitmap_ind16 &bitmap, const rectangle &cliprect, UINT32 flags, UINT32 pcode,
+void metro_state::draw_tilemap( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, UINT32 flags, UINT32 pcode,
 							int sx, int sy, int wx, int wy, int big, UINT16 *tilemapram, int layer )
 {
 	int y;
 
-	bitmap_ind8 &priority_bitmap = machine().priority_bitmap;
+	bitmap_ind8 &priority_bitmap = m_screen->priority();
 
 	int width  = big ? 4096 : 2048;
 	int height = big ? 4096 : 2048;
@@ -633,7 +625,7 @@ void metro_state::draw_tilemap( bitmap_ind16 &bitmap, const rectangle &cliprect,
 
 // Draw all the layers that match the given priority
 
-void metro_state::draw_layers( bitmap_ind16 &bitmap, const rectangle &cliprect, int pri, int layers_ctrl )
+void metro_state::draw_layers( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int pri, int layers_ctrl )
 {
 	UINT16 layers_pri = m_videoregs[0x10 / 2];
 	int layer;
@@ -660,7 +652,7 @@ void metro_state::draw_layers( bitmap_ind16 &bitmap, const rectangle &cliprect, 
 
 				int big = m_support_16x16 && (*m_screenctrl & (0x0020 << layer));
 
-				draw_tilemap(bitmap, cliprect, 0, 1 << (3 - pri), sx, sy, wx, wy, big, tilemapram, layer);
+				draw_tilemap(screen, bitmap, cliprect, 0, 1 << (3 - pri), sx, sy, wx, wy, big, tilemapram, layer);
 			}
 		}
 	}
@@ -675,7 +667,7 @@ UINT32 metro_state::screen_update_metro(screen_device &screen, bitmap_ind16 &bit
 	m_sprite_xoffs = m_videoregs[0x06 / 2] - screen.width()  / 2 + m_sprite_xoffs_dx;
 	m_sprite_yoffs = m_videoregs[0x04 / 2] - screen.height() / 2;
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	// The background color is selected by a register
 	bitmap.fill(m_videoregs[0x12/2] & 0x0fff, cliprect);
@@ -704,7 +696,7 @@ if (machine().input().code_pressed(KEYCODE_Z))
 	if (machine().input().code_pressed(KEYCODE_A))  msk |= 8;
 	if (msk != 0)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		layers_ctrl &= msk;
 	}
 
@@ -716,13 +708,13 @@ if (machine().input().code_pressed(KEYCODE_Z))
 #endif
 
 	if (m_has_zoom)
-		k053936_zoom_draw(m_k053936, bitmap, cliprect, m_k053936_tilemap, 0, 0, 1);
+		m_k053936->zoom_draw(screen, bitmap, cliprect, m_k053936_tilemap, 0, 0, 1);
 
 	for (pri = 3; pri >= 0; pri--)
-		draw_layers(bitmap, cliprect, pri, layers_ctrl);
+		draw_layers(screen, bitmap, cliprect, pri, layers_ctrl);
 
 	if (layers_ctrl & 0x08)
-		metro_draw_sprites(bitmap, cliprect);
+		metro_draw_sprites(screen, bitmap, cliprect);
 
 	return 0;
 }

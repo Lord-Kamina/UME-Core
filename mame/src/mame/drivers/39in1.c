@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, Ryan Holtz, Andreas Naive
 /**************************************************************************
  *
  * 39in1.c - bootleg MAME-based "39-in-1" arcade PCB
@@ -23,7 +25,7 @@
 #include "emu.h"
 #include "cpu/arm7/arm7.h"
 #include "cpu/arm7/arm7core.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "machine/pxa255.h"
 #include "sound/dmadac.h"
 
@@ -34,7 +36,8 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_ram(*this, "ram"),
 		m_eeprom(*this, "eeprom"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_palette(*this, "palette")  { }
 
 	UINT32 m_seed;
 	UINT32 m_magic;
@@ -50,7 +53,7 @@ public:
 	PXA255_LCD_Regs m_lcd_regs;
 
 	dmadac_sound_device *m_dmadac[2];
-	required_device<eeprom_device> m_eeprom;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
 	UINT32 m_pxa255_lcd_palette[0x100];
 	UINT8 m_pxa255_lcd_framebuffer[0x100000];
 
@@ -94,6 +97,7 @@ public:
 	void pxa255_lcd_check_load_next_branch(int channel);
 	void pxa255_start();
 	required_device<cpu_device> m_maincpu;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -806,7 +810,7 @@ READ32_MEMBER(_39in1_state::pxa255_gpio_r)
 	{
 		case PXA255_GPLR0:
 			verboselog( machine(), 3, "pxa255_gpio_r: GPIO Pin-Level Register 0: %08x & %08x\n", gpio_regs->gplr0 | (1 << 1), mem_mask );
-			return gpio_regs->gplr0 | (1 << 1) | (m_eeprom->read_bit() << 5); // Must be on.  Probably a DIP switch.
+			return gpio_regs->gplr0 | (1 << 1) | (m_eeprom->do_read() << 5); // Must be on.  Probably a DIP switch.
 		case PXA255_GPLR1:
 			verboselog( machine(), 3, "pxa255_gpio_r: *Not Yet Implemented* GPIO Pin-Level Register 1: %08x & %08x\n", gpio_regs->gplr1, mem_mask );
 			return 0xff9fffff;
@@ -927,15 +931,15 @@ WRITE32_MEMBER(_39in1_state::pxa255_gpio_w)
 			gpio_regs->gpsr0 |= data & gpio_regs->gpdr0;
 			if(data & 0x00000004)
 			{
-				m_eeprom->set_cs_line(CLEAR_LINE);
+				m_eeprom->cs_write(ASSERT_LINE);
 			}
 			if(data & 0x00000008)
 			{
-				m_eeprom->set_clock_line(ASSERT_LINE);
+				m_eeprom->clk_write(ASSERT_LINE);
 			}
 			if(data & 0x00000010)
 			{
-				m_eeprom->write_bit(1);
+				m_eeprom->di_write(1);
 			}
 			break;
 		case PXA255_GPSR1:
@@ -951,15 +955,15 @@ WRITE32_MEMBER(_39in1_state::pxa255_gpio_w)
 			gpio_regs->gpsr0 &= ~(data & gpio_regs->gpdr0);
 			if(data & 0x00000004)
 			{
-				m_eeprom->set_cs_line(ASSERT_LINE);
+				m_eeprom->cs_write(ASSERT_LINE);
 			}
 			if(data & 0x00000008)
 			{
-				m_eeprom->set_clock_line(CLEAR_LINE);
+				m_eeprom->clk_write(CLEAR_LINE);
 			}
 			if(data & 0x00000010)
 			{
-				m_eeprom->write_bit(0);
+				m_eeprom->di_write(0);
 			}
 			break;
 		case PXA255_GPCR1:
@@ -1101,7 +1105,7 @@ void _39in1_state::pxa255_lcd_dma_kickoff(int channel)
 			{
 				UINT16 color = space.read_word((lcd_regs->dma[channel].fsadr &~ 1) + index);
 				m_pxa255_lcd_palette[index >> 1] = (((((color >> 11) & 0x1f) << 3) | (color >> 13)) << 16) | (((((color >> 5) & 0x3f) << 2) | ((color >> 9) & 0x3)) << 8) | (((color & 0x1f) << 3) | ((color >> 2) & 0x7));
-				palette_set_color_rgb(machine(), index >> 1, (((color >> 11) & 0x1f) << 3) | (color >> 13), (((color >> 5) & 0x3f) << 2) | ((color >> 9) & 0x3), ((color & 0x1f) << 3) | ((color >> 2) & 0x7));
+				m_palette->set_pen_color(index >> 1, (((color >> 11) & 0x1f) << 3) | (color >> 13), (((color >> 5) & 0x3f) << 2) | ((color >> 9) & 0x3), ((color & 0x1f) << 3) | ((color >> 2) & 0x7));
 			}
 		}
 		else
@@ -1512,14 +1516,10 @@ UINT32 _39in1_state::screen_update_39in1(screen_device &screen, bitmap_rgb32 &bi
 	return 0;
 }
 
-/* To be moved to DEVICE_START( pxa255 ) upon completion */
+/* To be moved to device start of pxa255 upon completion */
 void _39in1_state::pxa255_start()
 {
 	int index = 0;
-
-	//pxa255_t* pxa255 = pxa255_get_safe_token( device );
-
-	//pxa255->iface = device->base_config().static_config();
 
 	for(index = 0; index < 16; index++)
 	{
@@ -1541,8 +1541,6 @@ void _39in1_state::pxa255_start()
 	m_lcd_regs.dma[1].eof = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(_39in1_state::pxa255_lcd_dma_eof),this));
 	m_lcd_regs.trgbr = 0x00aa5500;
 	m_lcd_regs.tcr = 0x0000754f;
-
-	//pxa255_register_state_save(device);
 }
 
 void _39in1_state::machine_start()
@@ -1580,8 +1578,6 @@ static MACHINE_CONFIG_START( 39in1, _39in1_state )
 	MCFG_CPU_PROGRAM_MAP(39in1_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", _39in1_state,  pxa255_vblank_start)
 
-	MCFG_PALETTE_LENGTH(32768)
-
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
@@ -1589,9 +1585,9 @@ static MACHINE_CONFIG_START( 39in1, _39in1_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 295, 0, 479)
 	MCFG_SCREEN_UPDATE_DRIVER(_39in1_state, screen_update_39in1)
 
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_PALETTE_ADD("palette", 256)
 
-	MCFG_EEPROM_93C66B_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_93C66_ADD("eeprom")
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 

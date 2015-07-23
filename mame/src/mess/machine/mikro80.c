@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         Mikro-80 machine driver by Miodrag Milanovic
@@ -55,17 +57,6 @@ WRITE8_MEMBER(mikro80_state::mikro80_8255_porta_w)
 WRITE8_MEMBER(mikro80_state::mikro80_8255_portc_w)
 {
 }
-
-I8255_INTERFACE( mikro80_ppi8255_interface )
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(mikro80_state, mikro80_8255_porta_w),
-	DEVCB_DRIVER_MEMBER(mikro80_state, mikro80_8255_portb_r),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(mikro80_state, mikro80_8255_portc_r),
-	DEVCB_NULL,
-};
-
 
 void mikro80_state::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
 {

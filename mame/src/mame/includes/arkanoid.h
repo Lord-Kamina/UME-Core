@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Brad Oliver
 /* This it the best way to allow game specific kludges until the system is fully understood */
 enum {
 	ARKUNK = 0,  /* unknown bootlegs for inclusion of possible new sets */
@@ -19,7 +21,9 @@ public:
 		m_spriteram(*this,"spriteram"),
 		m_protram(*this,"protram"),
 		m_mcu(*this, "mcu"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
@@ -47,6 +51,10 @@ public:
 	UINT8    m_ddr_c;
 	UINT8    m_bootleg_cmd;
 
+	/* hexaa */
+	UINT8 hexaa_from_main;
+	UINT8 hexaa_from_sub;
+
 	/* devices */
 	optional_device<cpu_device> m_mcu;
 	DECLARE_READ8_MEMBER(arkanoid_Z80_mcu_r);
@@ -67,6 +75,10 @@ public:
 	DECLARE_WRITE8_MEMBER(tetrsark_d008_w);
 	DECLARE_WRITE8_MEMBER(brixian_d008_w);
 	DECLARE_WRITE8_MEMBER(hexa_d008_w);
+	DECLARE_READ8_MEMBER(hexaa_f000_r);
+	DECLARE_WRITE8_MEMBER(hexaa_f000_w);
+	DECLARE_WRITE8_MEMBER(hexaa_sub_80_w);
+	DECLARE_READ8_MEMBER(hexaa_sub_90_r);
 	DECLARE_CUSTOM_INPUT_MEMBER(arkanoid_68705_input_r);
 	DECLARE_CUSTOM_INPUT_MEMBER(arkanoid_input_mux);
 	DECLARE_DRIVER_INIT(block2);
@@ -89,4 +101,6 @@ public:
 	void draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect );
 	void arkanoid_bootleg_init(  );
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };

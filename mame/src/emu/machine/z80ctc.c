@@ -1,11 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /***************************************************************************
 
     Z80 CTC (Z8430) implementation
 
     based on original version (c) 1997, Tatsuyuki Satoh
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 ***************************************************************************/
 
@@ -33,14 +32,14 @@
 // these are the bits of the incoming commands to the CTC
 const int INTERRUPT         = 0x80;
 const int INTERRUPT_ON      = 0x80;
-const int INTERRUPT_OFF     = 0x00;
+//const int INTERRUPT_OFF     = 0x00;
 
 const int MODE              = 0x40;
 const int MODE_TIMER        = 0x00;
 const int MODE_COUNTER      = 0x40;
 
 const int PRESCALER         = 0x20;
-const int PRESCALER_256     = 0x20;
+//const int PRESCALER_256     = 0x20;
 const int PRESCALER_16      = 0x00;
 
 const int EDGE              = 0x10;
@@ -49,14 +48,14 @@ const int EDGE_RISING       = 0x10;
 
 const int TRIGGER           = 0x08;
 const int TRIGGER_AUTO      = 0x00;
-const int TRIGGER_CLOCK     = 0x08;
+//const int TRIGGER_CLOCK     = 0x08;
 
 const int CONSTANT          = 0x04;
 const int CONSTANT_LOAD     = 0x04;
-const int CONSTANT_NONE     = 0x00;
+//const int CONSTANT_NONE     = 0x00;
 
 const int RESET             = 0x02;
-const int RESET_CONTINUE    = 0x00;
+//const int RESET_CONTINUE    = 0x00;
 const int RESET_ACTIVE      = 0x02;
 
 const int CONTROL           = 0x01;
@@ -80,8 +79,13 @@ const device_type Z80CTC = &device_creator<z80ctc_device>;
 //-------------------------------------------------
 
 z80ctc_device::z80ctc_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, Z80CTC, "Zilog Z80 CTC", tag, owner, clock),
-		device_z80daisy_interface(mconfig, *this)
+	: device_t(mconfig, Z80CTC, "Z80 CTC", tag, owner, clock, "z80ctc", __FILE__),
+		device_z80daisy_interface(mconfig, *this),
+		m_intr_cb(*this),
+		m_zc0_cb(*this),
+		m_zc1_cb(*this),
+		m_zc2_cb(*this),
+		m_zc3_cb(*this)
 {
 }
 
@@ -92,7 +96,7 @@ z80ctc_device::z80ctc_device(const machine_config &mconfig, const char *tag, dev
 
 READ8_MEMBER( z80ctc_device::read )
 {
-	return read(offset & 3);
+	return m_channel[offset & 3].read();
 }
 
 
@@ -102,7 +106,7 @@ READ8_MEMBER( z80ctc_device::read )
 
 WRITE8_MEMBER( z80ctc_device::write )
 {
-	write(offset & 3, data);
+	m_channel[offset & 3].write(data);
 }
 
 
@@ -111,34 +115,10 @@ WRITE8_MEMBER( z80ctc_device::write )
 //  trigger
 //-------------------------------------------------
 
-WRITE_LINE_MEMBER( z80ctc_device::trg0 ) { trigger(0, state); }
-WRITE_LINE_MEMBER( z80ctc_device::trg1 ) { trigger(1, state); }
-WRITE_LINE_MEMBER( z80ctc_device::trg2 ) { trigger(2, state); }
-WRITE_LINE_MEMBER( z80ctc_device::trg3 ) { trigger(3, state); }
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void z80ctc_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const z80ctc_interface *intf = reinterpret_cast<const z80ctc_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<z80ctc_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_intr_cb, 0, sizeof(m_intr_cb));
-		memset(&m_zc0_cb, 0, sizeof(m_zc0_cb));
-		memset(&m_zc1_cb, 0, sizeof(m_zc1_cb));
-		memset(&m_zc2_cb, 0, sizeof(m_zc2_cb));
-	}
-}
+WRITE_LINE_MEMBER( z80ctc_device::trg0 ) { m_channel[0].trigger(state); }
+WRITE_LINE_MEMBER( z80ctc_device::trg1 ) { m_channel[1].trigger(state); }
+WRITE_LINE_MEMBER( z80ctc_device::trg2 ) { m_channel[2].trigger(state); }
+WRITE_LINE_MEMBER( z80ctc_device::trg3 ) { m_channel[3].trigger(state); }
 
 
 //-------------------------------------------------
@@ -151,14 +131,17 @@ void z80ctc_device::device_start()
 	m_period256 = attotime::from_hz(m_clock) * 256;
 
 	// resolve callbacks
-	m_intr.resolve(m_intr_cb, *this);
+	m_intr_cb.resolve_safe();
+	m_zc0_cb.resolve_safe();
+	m_zc1_cb.resolve_safe();
+	m_zc2_cb.resolve_safe();
+	m_zc3_cb.resolve_safe();
 
 	// start each channel
-	devcb_write_line nullcb = DEVCB_NULL;
-	m_channel[0].start(this, 0, m_zc0_cb);
-	m_channel[1].start(this, 1, m_zc1_cb);
-	m_channel[2].start(this, 2, m_zc2_cb);
-	m_channel[3].start(this, 3, nullcb);
+	m_channel[0].start(this, 0);
+	m_channel[1].start(this, 1);
+	m_channel[2].start(this, 2);
+	m_channel[3].start(this, 3);
 
 	// register for save states
 	save_item(NAME(m_vector));
@@ -240,7 +223,7 @@ int z80ctc_device::z80daisy_irq_ack()
 		}
 	}
 
-	logerror("z80ctc_irq_ack: failed to find an interrupt to ack!\n");
+	//logerror("z80ctc_irq_ack: failed to find an interrupt to ack!\n");
 	return m_vector;
 }
 
@@ -269,7 +252,7 @@ void z80ctc_device::z80daisy_irq_reti()
 		}
 	}
 
-	logerror("z80ctc_irq_reti: failed to find an interrupt to clear IEO on!\n");
+	//logerror("z80ctc_irq_reti: failed to find an interrupt to clear IEO on!\n");
 }
 
 
@@ -286,7 +269,7 @@ void z80ctc_device::z80daisy_irq_reti()
 void z80ctc_device::interrupt_check()
 {
 	int state = (z80daisy_irq_state() & Z80_DAISY_INT) ? ASSERT_LINE : CLEAR_LINE;
-	m_intr(state);
+	m_intr_cb(state);
 }
 
 
@@ -307,7 +290,6 @@ z80ctc_device::ctc_channel::ctc_channel()
 		m_timer(NULL),
 		m_int_state(0)
 {
-	memset(&m_zc, 0, sizeof(m_zc));
 }
 
 
@@ -315,12 +297,11 @@ z80ctc_device::ctc_channel::ctc_channel()
 //  start - set up at device start time
 //-------------------------------------------------
 
-void z80ctc_device::ctc_channel::start(z80ctc_device *device, int index, const devcb_write_line &write_line)
+void z80ctc_device::ctc_channel::start(z80ctc_device *device, int index)
 {
 	// initialize state
 	m_device = device;
 	m_index = index;
-	m_zc.resolve(write_line, *m_device);
 	m_timer = m_device->machine().scheduler().timer_alloc(FUNC(static_timer_callback), this);
 
 	// register for save states
@@ -519,8 +500,25 @@ void z80ctc_device::ctc_channel::timer_callback()
 	}
 
 	// generate the clock pulse
-	m_zc(1);
-	m_zc(0);
+	switch (m_index)
+	{
+		case 0:
+			m_device->m_zc0_cb(1);
+			m_device->m_zc0_cb(0);
+			break;
+		case 1:
+			m_device->m_zc1_cb(1);
+			m_device->m_zc1_cb(0);
+			break;
+		case 2:
+			m_device->m_zc2_cb(1);
+			m_device->m_zc2_cb(0);
+			break;
+		case 3:
+			m_device->m_zc3_cb(1);
+			m_device->m_zc3_cb(0);
+			break;
+	}
 
 	// reset the down counter
 	m_down = m_tconst;

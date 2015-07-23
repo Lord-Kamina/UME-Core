@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Barry Rodewald
 /**********************************************************************************************
  *
  *   OKI MSM6258 ADPCM
@@ -45,7 +47,7 @@ const device_type OKIM6258 = &device_creator<okim6258_device>;
 //-------------------------------------------------
 
 okim6258_device::okim6258_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, OKIM6258, "OKI6258", tag, owner, clock),
+	: device_t(mconfig, OKIM6258, "OKI6258", tag, owner, clock, "okim6258", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_status(0),
 		m_master_clock(0),
@@ -108,16 +110,11 @@ static void compute_tables(void)
 
 void okim6258_device::device_start()
 {
-	const okim6258_interface *intf = (const okim6258_interface *)static_config();
-
 	compute_tables();
 
 	m_master_clock = clock();
-	m_adpcm_type = intf->adpcm_type;
 
-	/* D/A precision is 10-bits but 12-bit data can be output serially to an external DAC */
-	m_output_bits = intf->output_12bits ? 12 : 10;
-	m_divider = dividers[intf->divider];
+	m_divider = dividers[m_start_divider];
 
 	m_stream = stream_alloc(0, 1, clock()/m_divider);
 

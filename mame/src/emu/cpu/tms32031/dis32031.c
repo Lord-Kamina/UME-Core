@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     dis32031.c
@@ -28,6 +30,7 @@
     CODE CODE
 ***************************************************************************/
 
+#if 0
 INLINE char *signed_16bit(INT16 val)
 {
 	static char temp[10];
@@ -37,6 +40,7 @@ INLINE char *signed_16bit(INT16 val)
 		sprintf(temp, "$%x", val);
 	return temp;
 }
+#endif
 
 static const char *const regname[32] =
 {
@@ -188,7 +192,7 @@ static void append_immediate(UINT16 data, int is_float, int is_unsigned, char *b
 		else
 			expanded_data += ((-data & 0x0fff) << 12);
 		float_val = *(float *)&expanded_data;
-		sprintf(dst, "%8f", float_val);
+		sprintf(dst, "%8f", (double) float_val);
 	}
 	else if (!is_unsigned && (INT16)data < 0)
 		sprintf(dst, "-$%04X", -data & 0xffff);

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Jarek Parchanski
 /***************************************************************************
 
   video.c
@@ -28,8 +30,8 @@ remove all the code writing the $a0000 area.)
 
 WRITE16_MEMBER(toki_state::toki_control_w)
 {
-	machine().primary_screen->update_partial(machine().primary_screen->vpos() - 1);
-	COMBINE_DATA(&m_scrollram16[offset]);
+	m_screen->update_partial(m_screen->vpos() - 1);
+	COMBINE_DATA(&m_scrollram[offset]);
 }
 
 TILE_GET_INFO_MEMBER(toki_state::get_text_tile_info)
@@ -40,8 +42,7 @@ TILE_GET_INFO_MEMBER(toki_state::get_text_tile_info)
 
 	tile &= 0xfff;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile,
 			color,
 			0);
@@ -49,13 +50,12 @@ TILE_GET_INFO_MEMBER(toki_state::get_text_tile_info)
 
 TILE_GET_INFO_MEMBER(toki_state::get_back_tile_info)
 {
-	int tile = m_background1_videoram16[tile_index];
+	int tile = m_background1_videoram[tile_index];
 	int color = (tile >> 12) & 0xf;
 
 	tile &= 0xfff;
 
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			tile,
 			color,
 			0);
@@ -63,13 +63,12 @@ TILE_GET_INFO_MEMBER(toki_state::get_back_tile_info)
 
 TILE_GET_INFO_MEMBER(toki_state::get_fore_tile_info)
 {
-	int tile = m_background2_videoram16[tile_index];
+	int tile = m_background2_videoram[tile_index];
 	int color = (tile >> 12) & 0xf;
 
 	tile &= 0xfff;
 
-	SET_TILE_INFO_MEMBER(
-			3,
+	SET_TILE_INFO_MEMBER(3,
 			tile,
 			color,
 			0);
@@ -84,9 +83,9 @@ TILE_GET_INFO_MEMBER(toki_state::get_fore_tile_info)
 
 void toki_state::video_start()
 {
-	m_text_layer       = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(toki_state::get_text_tile_info),this),TILEMAP_SCAN_ROWS,  8,8,32,32);
-	m_background_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(toki_state::get_back_tile_info),this),TILEMAP_SCAN_ROWS,16,16,32,32);
-	m_foreground_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(toki_state::get_fore_tile_info),this),TILEMAP_SCAN_ROWS,16,16,32,32);
+	m_text_layer       = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(toki_state::get_text_tile_info),this),TILEMAP_SCAN_ROWS,  8,8,32,32);
+	m_background_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(toki_state::get_back_tile_info),this),TILEMAP_SCAN_ROWS,16,16,32,32);
+	m_foreground_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(toki_state::get_fore_tile_info),this),TILEMAP_SCAN_ROWS,16,16,32,32);
 
 	m_text_layer->set_transparent_pen(15);
 	m_background_layer->set_transparent_pen(15);
@@ -95,22 +94,22 @@ void toki_state::video_start()
 
 /*************************************/
 
-WRITE16_MEMBER(toki_state::toki_foreground_videoram16_w)
+WRITE16_MEMBER(toki_state::foreground_videoram_w)
 {
 	UINT16 *videoram = m_videoram;
 	COMBINE_DATA(&videoram[offset]);
 	m_text_layer->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(toki_state::toki_background1_videoram16_w)
+WRITE16_MEMBER(toki_state::background1_videoram_w)
 {
-	COMBINE_DATA(&m_background1_videoram16[offset]);
+	COMBINE_DATA(&m_background1_videoram[offset]);
 	m_background_layer->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(toki_state::toki_background2_videoram16_w)
+WRITE16_MEMBER(toki_state::background2_videoram_w)
 {
-	COMBINE_DATA(&m_background2_videoram16[offset]);
+	COMBINE_DATA(&m_background2_videoram[offset]);
 	m_foreground_layer->mark_tile_dirty(offset);
 }
 
@@ -196,7 +195,7 @@ void toki_state::toki_draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprec
 				flipy=1;
 			}
 
-			drawgfx_transpen (bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					tile,
 					color,
 					flipx,flipy,
@@ -233,7 +232,7 @@ void toki_state::tokib_draw_sprites(bitmap_ind16 &bitmap,const rectangle &clipre
 			tile    = sprite_word[1] & 0x1fff;
 			color   = sprite_word[2] >> 12;
 
-			drawgfx_transpen (bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					tile,
 					color,
 					flipx,0,
@@ -252,33 +251,33 @@ UINT32 toki_state::screen_update_toki(screen_device &screen, bitmap_ind16 &bitma
 {
 	int background_y_scroll,foreground_y_scroll,background_x_scroll,foreground_x_scroll;
 
-	background_x_scroll=((m_scrollram16[0x06] &0x7f) << 1)
-									|((m_scrollram16[0x06] &0x80) >> 7)
-									|((m_scrollram16[0x05] &0x10) << 4);
-	background_y_scroll=((m_scrollram16[0x0d]&0x10)<<4)+((m_scrollram16[0x0e]&0x7f)<<1)+((m_scrollram16[0x0e]&0x80)>>7);
+	background_x_scroll=((m_scrollram[0x06] &0x7f) << 1)
+									|((m_scrollram[0x06] &0x80) >> 7)
+									|((m_scrollram[0x05] &0x10) << 4);
+	background_y_scroll=((m_scrollram[0x0d]&0x10)<<4)+((m_scrollram[0x0e]&0x7f)<<1)+((m_scrollram[0x0e]&0x80)>>7);
 
 	m_background_layer->set_scrollx(0, background_x_scroll );
 	m_background_layer->set_scrolly(0, background_y_scroll );
 
-	foreground_x_scroll= ((m_scrollram16[0x16] &0x7f) << 1)
-									|((m_scrollram16[0x16] &0x80) >> 7)
-									|((m_scrollram16[0x15] &0x10) << 4);
-	foreground_y_scroll=((m_scrollram16[0x1d]&0x10)<<4)+((m_scrollram16[0x1e]&0x7f)<<1)+((m_scrollram16[0x1e]&0x80)>>7);
+	foreground_x_scroll= ((m_scrollram[0x16] &0x7f) << 1)
+									|((m_scrollram[0x16] &0x80) >> 7)
+									|((m_scrollram[0x15] &0x10) << 4);
+	foreground_y_scroll=((m_scrollram[0x1d]&0x10)<<4)+((m_scrollram[0x1e]&0x7f)<<1)+((m_scrollram[0x1e]&0x80)>>7);
 
 	m_foreground_layer->set_scrollx(0, foreground_x_scroll );
 	m_foreground_layer->set_scrolly(0, foreground_y_scroll );
 
-	flip_screen_set((m_scrollram16[0x28]&0x8000)==0);
+	flip_screen_set((m_scrollram[0x28]&0x8000)==0);
 
-	if (m_scrollram16[0x28]&0x100) {
-		m_background_layer->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE,0);
-		m_foreground_layer->draw(bitmap, cliprect, 0,0);
+	if (m_scrollram[0x28]&0x100) {
+		m_background_layer->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE,0);
+		m_foreground_layer->draw(screen, bitmap, cliprect, 0,0);
 	} else {
-		m_foreground_layer->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE,0);
-		m_background_layer->draw(bitmap, cliprect, 0,0);
+		m_foreground_layer->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE,0);
+		m_background_layer->draw(screen, bitmap, cliprect, 0,0);
 	}
 	toki_draw_sprites(bitmap,cliprect);
-	m_text_layer->draw(bitmap, cliprect, 0,0);
+	m_text_layer->draw(screen, bitmap, cliprect, 0,0);
 	return 0;
 }
 
@@ -286,20 +285,20 @@ UINT32 toki_state::screen_update_tokib(screen_device &screen, bitmap_ind16 &bitm
 {
 	m_foreground_layer->set_scroll_rows(1);
 	m_background_layer->set_scroll_rows(1);
-	m_background_layer->set_scrolly(0, m_scrollram16[0]+1 );
-	m_background_layer->set_scrollx(0, m_scrollram16[1]-0x103 );
-	m_foreground_layer->set_scrolly(0, m_scrollram16[2]+1 );
-	m_foreground_layer->set_scrollx(0, m_scrollram16[3]-0x101 );
+	m_background_layer->set_scrolly(0, m_scrollram[0]+1 );
+	m_background_layer->set_scrollx(0, m_scrollram[1]-0x103 );
+	m_foreground_layer->set_scrolly(0, m_scrollram[2]+1 );
+	m_foreground_layer->set_scrollx(0, m_scrollram[3]-0x101 );
 
-	if (m_scrollram16[3]&0x2000) {
-		m_background_layer->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE,0);
-		m_foreground_layer->draw(bitmap, cliprect, 0,0);
+	if (m_scrollram[3]&0x2000) {
+		m_background_layer->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE,0);
+		m_foreground_layer->draw(screen, bitmap, cliprect, 0,0);
 	} else {
-		m_foreground_layer->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE,0);
-		m_background_layer->draw(bitmap, cliprect, 0,0);
+		m_foreground_layer->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE,0);
+		m_background_layer->draw(screen, bitmap, cliprect, 0,0);
 	}
 
 	tokib_draw_sprites(bitmap,cliprect);
-	m_text_layer->draw(bitmap, cliprect, 0,0);
+	m_text_layer->draw(screen, bitmap, cliprect, 0,0);
 	return 0;
 }

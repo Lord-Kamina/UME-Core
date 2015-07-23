@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, Miodrag Milanovic
 /*********************************************************************
 
     cassette.c
@@ -9,7 +11,7 @@
 #include "emu.h"
 #include "formats/imageutl.h"
 #include "cassette.h"
-#include "ui.h"
+#include "ui/ui.h"
 
 
 #define ANIMATION_FPS       1
@@ -17,17 +19,6 @@
 
 #define VERBOSE             0
 #define LOG(x) do { if (VERBOSE) logerror x; } while (0)
-
-/* Default cassette_interface for drivers only wav files */
-const cassette_interface default_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	CASSETTE_PLAY,
-	"cass",
-	NULL
-};
-
 
 // device type definition
 const device_type CASSETTE = &device_creator<cassette_image_device>;
@@ -37,8 +28,13 @@ const device_type CASSETTE = &device_creator<cassette_image_device>;
 //-------------------------------------------------
 
 cassette_image_device::cassette_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, CASSETTE, "Cassette", tag, owner, clock),
-		device_image_interface(mconfig, *this)
+	: device_t(mconfig, CASSETTE, "Cassette", tag, owner, clock, "cassette_image", __FILE__),
+	device_image_interface(mconfig, *this),
+	m_state(CASSETTE_STOPPED),
+	m_formats(cassette_default_formats),
+	m_create_opts(NULL),
+	m_default_state(CASSETTE_PLAY),
+	m_interface(NULL)
 {
 }
 
@@ -58,21 +54,6 @@ cassette_image_device::~cassette_image_device()
 
 void cassette_image_device::device_config_complete()
 {
-	// inherit a copy of the static data
-	const cassette_interface *intf = reinterpret_cast<const cassette_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<cassette_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_formats, 0, sizeof(m_formats));
-		memset(&m_create_opts, 0, sizeof(m_create_opts));
-		memset(&m_default_state, 0, sizeof(m_default_state));
-		memset(&m_interface, 0, sizeof(m_interface));
-		memset(&m_device_displayinfo, 0, sizeof(m_device_displayinfo));
-	}
-
 	m_extension_list[0] = '\0';
 	for (int i = 0; m_formats[i]; i++ )
 		image_specify_extension( m_extension_list, 256, m_formats[i]->extensions );
@@ -294,14 +275,14 @@ bool cassette_image_device::call_load()
 		{
 			is_writable = !is_readonly();
 			cassette_flags = is_writable ? (CASSETTE_FLAG_READWRITE|CASSETTE_FLAG_SAVEONEXIT) : CASSETTE_FLAG_READONLY;
-			astring fname;
+			std::string fname;
 			if (software_entry()==NULL) {
 				extension = filetype();
 			} else {
 				fname = m_mame_file->filename();
-				int loc = fname.rchr(0,'.');
+				int loc = fname.find_last_of('.');
 				if (loc!=-1) {
-					extension = fname.substr(loc + 1,fname.len()-loc).cstr();
+					extension = fname.substr(loc + 1,fname.length()-loc).c_str();
 				} else {
 					extension = "";
 				}
@@ -406,7 +387,7 @@ void cassette_image_device::call_display()
 	for (dev = iter.first(); dev != NULL && strcmp( dev->tag(), device().tag() ); dev = iter.next())
 		y += 1;
 
-	y *= ui_get_line_height(device().machine()) + 2.0f * UI_BOX_TB_BORDER;
+	y *= device().machine().ui().get_line_height() + 2.0f * UI_BOX_TB_BORDER;
 	/* choose which frame of the animation we are at */
 	n = ((int) position / ANIMATION_FPS) % ANIMATION_FRAMES;
 	/* Since you can have anything in a BDF file, we will use crude ascii characters instead */
@@ -430,8 +411,8 @@ void cassette_image_device::call_display()
 		((int) length % 60),
 		(int) length);
 
-	/* draw the cassette */
-	ui_draw_text_box(&device().machine().render().ui_container(), buf, JUSTIFY_LEFT, x, y, UI_BACKGROUND_COLOR);
+	// draw the cassette
+	device().machine().ui().draw_text_box(&device().machine().render().ui_container(), buf, JUSTIFY_LEFT, x, y, UI_BACKGROUND_COLOR);
 
 	// make sure tape stops at end when playing
 	if ((m_state & CASSETTE_MASK_UISTATE) == CASSETTE_PLAY)

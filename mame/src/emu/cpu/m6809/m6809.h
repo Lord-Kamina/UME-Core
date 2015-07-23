@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /*********************************************************************
 
     m6809.h
@@ -30,12 +32,34 @@ class m6809_base_device : public cpu_device
 {
 public:
 	// construction/destruction
-	m6809_base_device(const machine_config &mconfig, const char *name, const char *tag, device_t *owner, UINT32 clock, const device_type type, int divider);
+	m6809_base_device(const machine_config &mconfig, const char *name, const char *tag, device_t *owner, UINT32 clock, const device_type type, int divider, const char *shortname, const char *source);
 
 	DECLARE_WRITE_LINE_MEMBER( irq_line );
 	DECLARE_WRITE_LINE_MEMBER( firq_line );
+	DECLARE_WRITE_LINE_MEMBER( nmi_line );
 
 protected:
+	class memory_interface {
+	public:
+		address_space *m_program, *m_sprogram;
+		direct_read_data *m_direct, *m_sdirect;
+
+		virtual ~memory_interface() {}
+		virtual UINT8 read(UINT16 adr) = 0;
+		virtual UINT8 read_opcode(UINT16 adr) = 0;
+		virtual UINT8 read_opcode_arg(UINT16 adr) = 0;
+		virtual void write(UINT16 adr, UINT8 val) = 0;
+	};
+
+	class mi_default : public memory_interface {
+	public:
+		virtual ~mi_default() {}
+		virtual UINT8 read(UINT16 adr);
+		virtual UINT8 read_opcode(UINT16 adr);
+		virtual UINT8 read_opcode_arg(UINT16 adr);
+		virtual void write(UINT16 adr, UINT8 val);
+	};
+
 	// device-level overrides
 	virtual void device_start();
 	virtual void device_reset();
@@ -60,7 +84,7 @@ protected:
 	virtual offs_t disasm_disassemble(char *buffer, offs_t pc, const UINT8 *oprom, const UINT8 *opram, UINT32 options);
 
 	// device_state_interface overrides
-	virtual void state_string_export(const device_state_entry &entry, astring &string);
+	virtual void state_string_export(const device_state_entry &entry, std::string &str);
 
 	// addressing modes
 	enum
@@ -116,6 +140,9 @@ protected:
 		VECTOR_RESET_FFFE   = 0xFFFE
 	};
 
+	// Memory interface
+	memory_interface *          m_mintf;
+
 	// CPU registers
 	PAIR16                      m_pc;               // program counter
 	PAIR16                      m_ppc;              // previous program counter
@@ -128,6 +155,9 @@ protected:
 	UINT8                       m_opcode;
 
 	// other internal state
+	UINT8 *                     m_reg8;
+	PAIR16 *                    m_reg16;
+	int                         m_reg;
 	bool                        m_nmi_line;
 	bool                        m_nmi_asserted;
 	bool                        m_firq_line;
@@ -137,28 +167,31 @@ protected:
 	int                         m_addressing_mode;
 	PAIR16                      m_ea;               // effective address
 
+	// Callbacks
+	devcb_write_line           m_lic_func;         // LIC pin on the 6809E
+
 	// eat cycles
-	ATTR_FORCE_INLINE void eat(int cycles)                          { m_icount -= cycles; }
+	inline void eat(int cycles)                          { m_icount -= cycles; }
 	void eat_remaining();
 
 	// read a byte from given memory location
-	ATTR_FORCE_INLINE UINT8 read_memory(UINT16 address)             { eat(1); return m_program->read_byte(address); }
+	inline UINT8 read_memory(UINT16 address)             { eat(1); return m_mintf->read(address); }
 
 	// write a byte to given memory location
-	ATTR_FORCE_INLINE void write_memory(UINT16 address, UINT8 data) { eat(1); m_program->write_byte(address, data); }
+	inline void write_memory(UINT16 address, UINT8 data) { eat(1); m_mintf->write(address, data); }
 
 	// read_opcode() is like read_memory() except it is used for reading opcodes. In  the case of a system
 	// with memory mapped I/O, this function can be used  to greatly speed up emulation.
-	ATTR_FORCE_INLINE UINT8 read_opcode(UINT16 address)             { eat(1); return m_direct->read_decrypted_byte(address); }
+	inline UINT8 read_opcode(UINT16 address)             { eat(1); return m_mintf->read_opcode(address); }
 
 	// read_opcode_arg() is identical to read_opcode() except it is used for reading opcode  arguments. This
 	// difference can be used to support systems that use different encoding mechanisms for opcodes
 	// and opcode arguments.
-	ATTR_FORCE_INLINE UINT8 read_opcode_arg(UINT16 address)         { eat(1); return m_direct->read_raw_byte(address); }
+	inline UINT8 read_opcode_arg(UINT16 address)         { eat(1); return m_mintf->read_opcode_arg(address); }
 
 	// read_opcode() and bump the program counter
-	ATTR_FORCE_INLINE UINT8 read_opcode()                           { return read_opcode(m_pc.w++); }
-	ATTR_FORCE_INLINE UINT8 read_opcode_arg()                       { return read_opcode_arg(m_pc.w++); }
+	inline UINT8 read_opcode()                           { return read_opcode(m_pc.w++); }
+	inline UINT8 read_opcode_arg()                       { return read_opcode_arg(m_pc.w++); }
 
 	// state stack - implemented as a UINT32
 	void push_state(UINT8 state)                    { m_state = (m_state << 8) | state; }
@@ -177,10 +210,6 @@ protected:
 	UINT8 read_operand(int ordinal);
 	void write_operand(UINT8 data);
 	void write_operand(int ordinal, UINT8 data);
-
-	// delay loops
-	bool match_target_bytes(UINT16 address, const UINT8 *bytes, int length);
-	void burn_any_delay_loops();
 
 	// instructions
 	void daa();
@@ -210,15 +239,15 @@ protected:
 	template<class T> T set_flags(UINT8 mask, T r);
 
 	// branch conditions
-	ATTR_FORCE_INLINE bool cond_hi() { return !(m_cc & CC_ZC); }                                                // BHI/BLS
-	ATTR_FORCE_INLINE bool cond_cc() { return !(m_cc & CC_C);   }                                               // BCC/BCS
-	ATTR_FORCE_INLINE bool cond_ne() { return !(m_cc & CC_Z);   }                                               // BNE/BEQ
-	ATTR_FORCE_INLINE bool cond_vc() { return !(m_cc & CC_V);   }                                               // BVC/BVS
-	ATTR_FORCE_INLINE bool cond_pl() { return !(m_cc & CC_N);   }                                               // BPL/BMI
-	ATTR_FORCE_INLINE bool cond_ge() { return (m_cc & CC_N ? true : false) == (m_cc & CC_V ? true : false); }   // BGE/BLT
-	ATTR_FORCE_INLINE bool cond_gt() { return cond_ge() && !(m_cc & CC_Z); }                                    // BGT/BLE
-	ATTR_FORCE_INLINE void set_cond(bool cond)  { m_cond = cond; }
-	ATTR_FORCE_INLINE bool branch_taken()       { return m_cond; }
+	inline bool cond_hi() { return !(m_cc & CC_ZC); }                                                // BHI/BLS
+	inline bool cond_cc() { return !(m_cc & CC_C);   }                                               // BCC/BCS
+	inline bool cond_ne() { return !(m_cc & CC_Z);   }                                               // BNE/BEQ
+	inline bool cond_vc() { return !(m_cc & CC_V);   }                                               // BVC/BVS
+	inline bool cond_pl() { return !(m_cc & CC_N);   }                                               // BPL/BMI
+	inline bool cond_ge() { return (m_cc & CC_N ? true : false) == (m_cc & CC_V ? true : false); }   // BGE/BLT
+	inline bool cond_gt() { return cond_ge() && !(m_cc & CC_Z); }                                    // BGT/BLE
+	inline void set_cond(bool cond)  { m_cond = cond; }
+	inline bool branch_taken()       { return m_cond; }
 
 	// interrupt registers
 	bool firq_saves_entire_state()      { return false; }
@@ -226,32 +255,27 @@ protected:
 	UINT16 entire_state_registers()     { return 0xFF; }
 
 	// miscellaneous
-	exgtfr_register read_exgtfr_register(UINT8 reg);
-	void write_exgtfr_register(UINT8 reg, exgtfr_register value);
+	inline exgtfr_register read_exgtfr_register(UINT8 reg);
+	inline void write_exgtfr_register(UINT8 reg, exgtfr_register value);
 	bool is_register_addressing_mode();
 	bool is_ea_addressing_mode() { return m_addressing_mode == ADDRESSING_MODE_EA; }
 	UINT16 get_pending_interrupt();
-	UINT16 check_pending_interrupt();
 	void log_illegal();
 
 private:
 	// address spaces
 	const address_space_config  m_program_config;
-	address_space *             m_program;
-	direct_read_data *          m_direct;
+	const address_space_config  m_sprogram_config;
 
 	// other state
 	UINT32                      m_state;
-	int                         m_reg;
-	UINT8 *                     m_reg8;
-	PAIR16 *                    m_reg16;
 	bool                        m_cond;
 
 	// incidentals
 	int                         m_clock_divider;
 
 	// functions
-	void execute_one();
+	inline void execute_one();
 	const char *inputnum_string(int inputnum);
 };
 
@@ -266,11 +290,18 @@ public:
 
 // ======================> m6809e_device
 
+#define MCFG_M6809E_LIC_CB(_devcb) \
+	m6809e_device::set_lic_cb(*device, DEVCB_##_devcb);
+
+
 class m6809e_device : public m6809_base_device
 {
 public:
 	// construction/destruction
 	m6809e_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+	// static configuration helpers
+	template<class _Object> static devcb_base &set_lic_cb(device_t &device, _Object object) { return downcast<m6809e_device &>(device).m_lic_func.set_callback(object); }
 };
 
 enum

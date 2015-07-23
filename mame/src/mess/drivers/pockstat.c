@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ryan Holtz
 /***************************************************************************
 
     Sony PocketStation
@@ -26,13 +28,25 @@
     Currently, a handful of games run, but some die due to odd hardware
     issues.
 
+To start a game:
+- Wait for the set-date screen to appear
+- Press down arrow
+- set date with arrows (optional)
+- Press Ctrl, wait a sec, press ctrl, press right arrow, game starts
+
+It doesn't save the date so you have to go through this procedure every time.
+
+If you do nothing for about 20 secs, it turns itself off (screen goes white).
+
 ****************************************************************************/
 
 #include "emu.h"
 #include "cpu/arm7/arm7.h"
 #include "cpu/arm7/arm7core.h"
-#include "imagedev/cartslot.h"
 #include "sound/dac.h"
+
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 
 #define MAX_PS_TIMERS   3
 
@@ -94,9 +108,16 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_lcd_buffer(*this, "lcd_buffer"),
 		m_maincpu(*this, "maincpu"),
-		m_dac(*this, "dac") { }
+		m_dac(*this, "dac"),
+		m_cart(*this, "cartslot")
+	{ }
 
 	required_shared_ptr<UINT32> m_lcd_buffer;
+	required_device<cpu_device> m_maincpu;
+	required_device<dac_device> m_dac;
+	required_device<generic_slot_device> m_cart;
+	memory_region *m_cart_rom;
+
 	ps_ftlb_regs_t m_ftlb_regs;
 	ps_intc_regs_t m_intc_regs;
 	ps_timer_regs_t m_timer_regs;
@@ -118,6 +139,7 @@ public:
 	DECLARE_READ32_MEMBER(ps_lcd_r);
 	DECLARE_WRITE32_MEMBER(ps_lcd_w);
 	DECLARE_READ32_MEMBER(ps_rombank_r);
+	DECLARE_READ32_MEMBER(ps_flash_r);
 	DECLARE_WRITE32_MEMBER(ps_flash_w);
 	DECLARE_READ32_MEMBER(ps_audio_r);
 	DECLARE_WRITE32_MEMBER(ps_audio_w);
@@ -133,8 +155,6 @@ public:
 	UINT32 ps_intc_get_interrupt_line(UINT32 line);
 	void ps_intc_set_interrupt_line(UINT32 line, int state);
 	void ps_timer_start(int index);
-	required_device<cpu_device> m_maincpu;
-	required_device<dac_device> m_dac;
 };
 
 
@@ -164,9 +184,9 @@ static const int CPU_FREQ[16] =
 
 #define ENABLE_VERBOSE_LOG  (0)
 
-#if ENABLE_VERBOSE_LOG
 inline void ATTR_PRINTF(3,4) pockstat_state::verboselog( int n_level, const char *s_fmt, ... )
 {
+#if ENABLE_VERBOSE_LOG
 	if( VERBOSE_LEVEL >= n_level )
 	{
 		va_list v;
@@ -176,10 +196,8 @@ inline void ATTR_PRINTF(3,4) pockstat_state::verboselog( int n_level, const char
 		va_end( v );
 		logerror( "%s: %s", machine().describe_context(), buf );
 	}
-}
-#else
-#define verboselog(x,y,z,...)
 #endif
+}
 
 #define PS_INT_BTN_ACTION       0x00000001 // "Action button"
 #define PS_INT_BTN_RIGHT        0x00000002 // "Right button"
@@ -765,19 +783,18 @@ INPUT_CHANGED_MEMBER(pockstat_state::input_update)
 READ32_MEMBER(pockstat_state::ps_rombank_r)
 {
 	INT32 bank = (offset >> 11) & 0x0f;
-	int index = 0;
-	for(index = 0; index < 32; index++)
+	for (int index = 0; index < 32; index++)
 	{
-		if(m_ftlb_regs.valid & (1 << index))
+		if (m_ftlb_regs.valid & (1 << index))
 		{
-			if(m_ftlb_regs.entry[index] == bank)
+			if (m_ftlb_regs.entry[index] == bank)
 			{
 				//printf( "Address %08x is assigned to %08x in entry %d\n", 0x02000000 + (offset << 2), index * 0x2000 + ((offset << 2) & 0x1fff), index );
-				return memregion("flash")->u32(index * (0x2000/4) + (offset & (0x1fff/4)));
+				return m_cart->read32_rom(space, index * (0x2000/4) + (offset & (0x1fff/4)), mem_mask);
 			}
 		}
 	}
-	return memregion("flash")->u32(offset & 0x7fff);
+	return m_cart->read32_rom(space, offset & 0x7fff, mem_mask);
 }
 
 
@@ -803,8 +820,13 @@ WRITE32_MEMBER(pockstat_state::ps_flash_w)
 	if(m_ps_flash_write_count)
 	{
 		m_ps_flash_write_count--;
-		COMBINE_DATA(&((UINT32*)(*memregion("flash")))[offset]);
+		COMBINE_DATA(&((UINT32*)(m_cart_rom->base()))[offset]);
 	}
+}
+
+READ32_MEMBER(pockstat_state::ps_flash_r)
+{
+	return m_cart->read32_rom(space, offset, mem_mask);
 }
 
 READ32_MEMBER(pockstat_state::ps_audio_r)
@@ -828,7 +850,7 @@ static ADDRESS_MAP_START(pockstat_mem, AS_PROGRAM, 32, pockstat_state )
 	AM_RANGE(0x02000000, 0x02ffffff) AM_READ(ps_rombank_r)
 	AM_RANGE(0x04000000, 0x04003fff) AM_ROM AM_REGION("maincpu", 0)
 	AM_RANGE(0x06000000, 0x06000307) AM_READWRITE(ps_ftlb_r, ps_ftlb_w)
-	AM_RANGE(0x08000000, 0x0801ffff) AM_ROM AM_WRITE(ps_flash_w) AM_REGION("flash", 0)
+	AM_RANGE(0x08000000, 0x0801ffff) AM_READWRITE(ps_flash_r, ps_flash_w)
 	AM_RANGE(0x0a000000, 0x0a000013) AM_READWRITE(ps_intc_r, ps_intc_w)
 	AM_RANGE(0x0a800000, 0x0a80002b) AM_READWRITE(ps_timer_r, ps_timer_w)
 	AM_RANGE(0x0b000000, 0x0b000007) AM_READWRITE(ps_clock_r, ps_clock_w)
@@ -853,7 +875,7 @@ INPUT_PORTS_END
 void pockstat_state::machine_start()
 {
 	int index = 0;
-	for(index = 0; index < 3; index++)
+	for (index = 0; index < 3; index++)
 	{
 		m_timer_regs.timer[index].timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(pockstat_state::timer_tick),this));
 		m_timer_regs.timer[index].timer->adjust(attotime::never, index);
@@ -864,6 +886,9 @@ void pockstat_state::machine_start()
 
 	m_rtc_regs.timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(pockstat_state::rtc_tick),this));
 	m_rtc_regs.timer->adjust(attotime::from_hz(1), index);
+
+	std::string region_tag;
+	m_cart_rom = memregion(region_tag.assign(m_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
 
 	save_item(NAME(m_ftlb_regs.control));
 	save_item(NAME(m_ftlb_regs.stat));
@@ -897,11 +922,13 @@ void pockstat_state::machine_start()
 
 	save_item(NAME(m_ps_flash_write_enable_count));
 	save_item(NAME(m_ps_flash_write_count));
+
+	save_item(NAME(m_lcd_control));
 }
 
 void pockstat_state::machine_reset()
 {
-	m_maincpu->set_pc(0x4000000);
+	m_maincpu->set_state_int(ARM7_R15, 0x4000000);
 
 	m_ps_flash_write_enable_count = 0;
 	m_ps_flash_write_count = 0;
@@ -909,28 +936,20 @@ void pockstat_state::machine_reset()
 
 UINT32 pockstat_state::screen_update_pockstat(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	int x = 0;
-	int y = 0;
-	for(y = 0; y < 32; y++)
+	for (int y = 0; y < 32; y++)
 	{
 		UINT32 *scanline = &bitmap.pix32(y);
-		for(x = 0; x < 32; x++)
+		for (int x = 0; x < 32; x++)
 		{
-			if(m_lcd_control != 0) // Hack
+			if (m_lcd_control != 0) // Hack
 			{
-				if(m_lcd_buffer[y] & (1 << x))
-				{
+				if (m_lcd_buffer[y] & (1 << x))
 					scanline[x] = 0x00000000;
-				}
 				else
-				{
 					scanline[x] = 0x00ffffff;
-				}
 			}
 			else
-			{
 				scanline[x] = 0x00ffffff;
-			}
 		}
 	}
 	return 0;
@@ -938,26 +957,23 @@ UINT32 pockstat_state::screen_update_pockstat(screen_device &screen, bitmap_rgb3
 
 DEVICE_IMAGE_LOAD_MEMBER( pockstat_state, pockstat_flash )
 {
-	int i, length;
-	UINT8 *cart = memregion("flash")->base();
 	static const char *gme_id = "123-456-STD";
+	char cart_id[0xf40];
+	UINT32 size = image.length();
 
-	length = image.fread( cart, 0x20f40);
-
-	if(length != 0x20f40)
-	{
+	if (size != 0x20f40)
 		return IMAGE_INIT_FAIL;
-	}
 
-	for(i = 0; i < strlen(gme_id); i++)
+	image.fread(cart_id, 0xf40);
+
+	for (int i = 0; i < strlen(gme_id); i++)
 	{
-		if(cart[i] != gme_id[i])
-		{
+		if (cart_id[i] != gme_id[i])
 			return IMAGE_INIT_FAIL;
-		}
 	}
 
-	memcpy(cart, cart + 0xf40, 0x20000);
+	m_cart->rom_alloc(0x20000, GENERIC_ROM32_WIDTH, ENDIANNESS_LITTLE);
+	image.fread(m_cart->get_rom_base(), 0x20000);
 
 	return IMAGE_INIT_PASS;
 }
@@ -967,7 +983,6 @@ static MACHINE_CONFIG_START( pockstat, pockstat_state )
 	MCFG_CPU_ADD("maincpu", ARM7, DEFAULT_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(pockstat_mem)
 
-
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", LCD)
 	MCFG_SCREEN_REFRESH_RATE(50)
@@ -976,26 +991,24 @@ static MACHINE_CONFIG_START( pockstat, pockstat_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 32-1, 0, 32-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pockstat_state, screen_update_pockstat)
 
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(black_and_white)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("dac", DAC, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
 	/* cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("gme")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_LOAD(pockstat_state, pockstat_flash)
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "pockstat_cart")
+	MCFG_GENERIC_EXTENSIONS("gme")
+	MCFG_GENERIC_WIDTH(GENERIC_ROM32_WIDTH)
+	MCFG_GENERIC_ENDIAN(ENDIANNESS_LITTLE)
+	MCFG_GENERIC_LOAD(pockstat_state, pockstat_flash)
 MACHINE_CONFIG_END
 
 /* ROM definition */
 ROM_START( pockstat )
 	ROM_REGION( 0x4000, "maincpu", 0 )
 	ROM_LOAD( "kernel.bin", 0x0000, 0x4000, CRC(5fb47dd8) SHA1(6ae880493ddde880827d1e9f08e9cb2c38f9f2ec) )
-
-	ROM_REGION( 0x20f40, "flash", ROMREGION_ERASEFF )
 ROM_END
 
 /* Driver */

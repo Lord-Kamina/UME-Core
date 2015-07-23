@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Brad Oliver
 /***************************************************************************
 
   video.c
@@ -21,17 +23,8 @@ WRITE8_MEMBER(arkanoid_state::arkanoid_d008_w)
 	int bank;
 
 	/* bits 0 and 1 flip X and Y, I don't know which is which */
-	if (flip_screen_x() != (data & 0x01))
-	{
-		flip_screen_x_set(data & 0x01);
-		m_bg_tilemap->mark_all_dirty();
-	}
-
-	if (flip_screen_y() != (data & 0x02))
-	{
-		flip_screen_y_set(data & 0x02);
-		m_bg_tilemap->mark_all_dirty();
-	}
+	flip_screen_x_set(data & 0x01);
+	flip_screen_y_set(data & 0x02);
 
 	/* bit 2 selects the input paddle */
 	m_paddle_select = data & 0x04;
@@ -76,17 +69,8 @@ WRITE8_MEMBER(arkanoid_state::brixian_d008_w)
 	int bank;
 
 	/* bits 0 and 1 flip X and Y, I don't know which is which */
-	if (flip_screen_x() != (data & 0x01))
-	{
-		flip_screen_x_set(data & 0x01);
-		m_bg_tilemap->mark_all_dirty();
-	}
-
-	if (flip_screen_y() != (data & 0x02))
-	{
-		flip_screen_y_set(data & 0x02);
-		m_bg_tilemap->mark_all_dirty();
-	}
+	flip_screen_x_set(data & 0x01);
+	flip_screen_y_set(data & 0x02);
 
 	/* bit 2 selects the input paddle */
 	/*  - not relevant to brixian */
@@ -125,17 +109,8 @@ WRITE8_MEMBER(arkanoid_state::tetrsark_d008_w)
 	int bank;
 
 	/* bits 0 and 1 flip X and Y, I don't know which is which */
-	if (flip_screen_x() != (data & 0x01))
-	{
-		flip_screen_x_set(data & 0x01);
-		m_bg_tilemap->mark_all_dirty();
-	}
-
-	if (flip_screen_y() != (data & 0x02))
-	{
-		flip_screen_y_set(data & 0x02);
-		m_bg_tilemap->mark_all_dirty();
-	}
+	flip_screen_x_set(data & 0x01);
+	flip_screen_y_set(data & 0x02);
 
 	/* bit 2 selects the input paddle? */
 	m_paddle_select = data & 0x04;
@@ -169,18 +144,8 @@ WRITE8_MEMBER(arkanoid_state::tetrsark_d008_w)
 WRITE8_MEMBER(arkanoid_state::hexa_d008_w)
 {
 	/* bit 0 = flipx (or y?) */
-	if (flip_screen_x() != (data & 0x01))
-	{
-		flip_screen_x_set(data & 0x01);
-		m_bg_tilemap->mark_all_dirty();
-	}
-
-	/* bit 1 = flipy (or x?) */
-	if (flip_screen_y() != (data & 0x02))
-	{
-		flip_screen_y_set(data & 0x02);
-		m_bg_tilemap->mark_all_dirty();
-	}
+	flip_screen_x_set(data & 0x01);
+	flip_screen_y_set(data & 0x02);
 
 	/* bit 2 - 3 unknown */
 
@@ -208,7 +173,7 @@ TILE_GET_INFO_MEMBER(arkanoid_state::get_bg_tile_info)
 
 VIDEO_START_MEMBER(arkanoid_state,arkanoid)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(arkanoid_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(arkanoid_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 }
 
 void arkanoid_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
@@ -228,12 +193,12 @@ void arkanoid_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 
 		code = m_spriteram[offs + 3] + ((m_spriteram[offs + 2] & 0x03) << 8) + 1024 * m_gfxbank;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				2 * code,
 				((m_spriteram[offs + 2] & 0xf8) >> 3) + 32 * m_palettebank,
 				flip_screen_x(),flip_screen_y(),
 				sx,sy + (flip_screen_y() ? 8 : -8),0);
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				2 * code + 1,
 				((m_spriteram[offs + 2] & 0xf8) >> 3) + 32 * m_palettebank,
 				flip_screen_x(),flip_screen_y(),
@@ -244,13 +209,13 @@ void arkanoid_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 
 UINT32 arkanoid_state::screen_update_arkanoid(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }
 
 UINT32 arkanoid_state::screen_update_hexa(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

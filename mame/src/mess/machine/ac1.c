@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         AC1 video driver by Miodrag Milanovic
@@ -95,17 +97,6 @@ WRITE8_MEMBER(ac1_state::ac1_port_b_w)
 	*/
 	m_cassette->output((data & 0x40) ? -1.0 : +1.0);
 }
-
-Z80PIO_INTERFACE( ac1_z80pio_intf )
-{
-	DEVCB_NULL, /* callback when change interrupt status */
-	DEVCB_DRIVER_MEMBER(ac1_state,ac1_port_a_r),
-	DEVCB_DRIVER_MEMBER(ac1_state,ac1_port_a_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(ac1_state,ac1_port_b_r),
-	DEVCB_DRIVER_MEMBER(ac1_state,ac1_port_b_w),
-	DEVCB_NULL
-};
 
 /* Driver initialization */
 DRIVER_INIT_MEMBER(ac1_state,ac1)

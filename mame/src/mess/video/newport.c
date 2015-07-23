@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ryan Holtz
 /*
     SGI "Newport" graphics board used in the Indy and some Indigo2s
 
@@ -29,6 +31,7 @@
 
 #define VERBOSE_LEVEL ( 0 )
 
+#if 0
 INLINE void ATTR_PRINTF(3,4) verboselog(running_machine &machine, int n_level, const char *s_fmt, ... )
 {
 	if( VERBOSE_LEVEL >= n_level )
@@ -41,6 +44,7 @@ INLINE void ATTR_PRINTF(3,4) verboselog(running_machine &machine, int n_level, c
 		logerror( "%08x: %s", machine.device("maincpu")->safe_pc(), buf );
 	}
 }
+#endif
 
 #define VC2_VIDENTRY        m_VC2.nRegister[0x00]
 #define VC2_CURENTRY        m_VC2.nRegister[0x01]
@@ -80,7 +84,7 @@ const device_type NEWPORT_VIDEO = &device_creator<newport_video_device>;
 
 
 newport_video_device::newport_video_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-				: device_t(mconfig, NEWPORT_VIDEO, "SGI Newport graphics board", tag, owner, clock)
+				: device_t(mconfig, NEWPORT_VIDEO, "SGI Newport graphics board", tag, owner, clock, "newport_video", __FILE__)
 {
 }
 
@@ -469,7 +473,6 @@ READ32_MEMBER( newport_video_device::vc2_r )
 		//verboselog(machine(), 2, "Unknown VC2 Register Read: %02x\n", m_REX3.nDCBRegSelect );
 		return 0;
 	}
-	return 0;
 }
 
 WRITE32_MEMBER( newport_video_device::vc2_w )
@@ -871,7 +874,6 @@ READ32_MEMBER( newport_video_device::rex3_r )
 		//verboselog(machine(), 2, "Unknown REX3 Read: %08x (%08x)\n", 0x1f0f0000 + ( offset << 2 ), mem_mask );
 		return 0;
 	}
-	return 0;
 }
 
 void newport_video_device::DoREX3Command()

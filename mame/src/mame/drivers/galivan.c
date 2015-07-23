@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia, Olivier Galibert
 /***************************************************************************
 
 TODO:
@@ -32,7 +34,6 @@ Takahiro Nogi (nogi@kt.rim.or.jp) 1999/12/17 -
 #include "sound/dac.h"
 #include "sound/3526intf.h"
 #include "includes/galivan.h"
-#include "includes/nb1414m4.h"
 
 
 WRITE8_MEMBER(galivan_state::galivan_sound_command_w)
@@ -91,7 +92,7 @@ ADDRESS_MAP_END
 
 WRITE8_MEMBER(galivan_state::blit_trigger_w)
 {
-	nb_1414m4_exec(space,(m_videoram[0] << 8) | (m_videoram[1] & 0xff),m_videoram,m_scrollx,m_scrolly,m_tx_tilemap);
+	m_nb1414m4->exec((m_videoram[0] << 8) | (m_videoram[1] & 0xff),m_videoram,m_scrollx,m_scrolly,m_tx_tilemap);
 }
 
 static ADDRESS_MAP_START( ninjemak_io_map, AS_IO, 8, galivan_state )
@@ -317,24 +318,22 @@ static INPUT_PORTS_START( ninjemak )
 INPUT_PORTS_END
 
 
-#define CHARLAYOUT(NUM) static const gfx_layout charlayout_##NUM =  \
-{                                                                   \
-	8,8,    /* 8*8 characters */                                    \
-	NUM,    /* NUM characters */                                    \
-	4,  /* 4 bits per pixel */                                      \
-	{ 0, 1, 2, 3 },                                                 \
-	{ 1*4, 0*4, 3*4, 2*4, 5*4, 4*4, 7*4, 6*4 },                     \
-	{ 0*32, 1*32, 2*32, 3*32, 4*32, 5*32, 6*32, 7*32 },             \
-	32*8    /* every char takes 32 consecutive bytes */             \
-}
 
-CHARLAYOUT(512);
-CHARLAYOUT(1024);
+static const gfx_layout charlayout =
+{
+	8,8,
+	RGN_FRAC(1,1),
+	4,
+	{ 0, 1, 2, 3 },
+	{ 1*4, 0*4, 3*4, 2*4, 5*4, 4*4, 7*4, 6*4 },
+	{ 0*32, 1*32, 2*32, 3*32, 4*32, 5*32, 6*32, 7*32 },
+	32*8
+};
 
 static const gfx_layout tilelayout =
 {
 	16,16,
-	1024,
+	RGN_FRAC(1,1),
 	4,
 	{ 0, 1, 2, 3 },
 	{ 4,0,12,8,20,16,28,24,36,32,44,40,52,48,60,56 },
@@ -343,33 +342,23 @@ static const gfx_layout tilelayout =
 	16*16*4
 };
 
-#define SPRITELAYOUT(NUM) static const gfx_layout spritelayout_##NUM =  \
-{                                                                       \
-	16,16,  /* 16*16 sprites */                                         \
-	NUM,    /* NUM sprites */                                           \
-	4,  /* 4 bits per pixel */                                          \
-	{ 0, 1, 2, 3 },                                                     \
-	{ 1*4, 0*4, 1*4+NUM*64*8, 0*4+NUM*64*8, 3*4, 2*4, 3*4+NUM*64*8, 2*4+NUM*64*8,           \
-			5*4, 4*4, 5*4+NUM*64*8, 4*4+NUM*64*8, 7*4, 6*4, 7*4+NUM*64*8, 6*4+NUM*64*8 },   \
-	{ 0*32, 1*32, 2*32, 3*32, 4*32, 5*32, 6*32, 7*32,                   \
-			8*32, 9*32, 10*32, 11*32, 12*32, 13*32, 14*32, 15*32 },     \
-	64*8    /* every sprite takes 64 consecutive bytes */               \
-}
-
-SPRITELAYOUT(512);
-SPRITELAYOUT(1024);
-
+static const gfx_layout spritelayout =
+{
+	16,16,
+	RGN_FRAC(1,2),
+	4,
+	{ 0, 1, 2, 3 },
+	{ 1*4, 0*4, RGN_FRAC(1,2)+1*4, RGN_FRAC(1,2)+0*4, 3*4, 2*4, RGN_FRAC(1,2)+3*4, RGN_FRAC(1,2)+2*4,
+			5*4, 4*4, RGN_FRAC(1,2)+5*4, RGN_FRAC(1,2)+4*4, 7*4, 6*4, RGN_FRAC(1,2)+7*4, RGN_FRAC(1,2)+6*4},
+	{ 0*32, 1*32, 2*32, 3*32, 4*32, 5*32, 6*32, 7*32,
+			8*32, 9*32, 10*32, 11*32, 12*32, 13*32, 14*32, 15*32 },
+	64*8
+};
 
 static GFXDECODE_START( galivan )
-	GFXDECODE_ENTRY( "gfx1", 0, charlayout_512,            0,   8 )
-	GFXDECODE_ENTRY( "gfx2", 0, tilelayout,             8*16,  16 )
-	GFXDECODE_ENTRY( "gfx3", 0, spritelayout_512, 8*16+16*16, 256 )
-GFXDECODE_END
-
-static GFXDECODE_START( ninjemak )
-	GFXDECODE_ENTRY( "gfx1", 0, charlayout_1024,            0,   8 )
-	GFXDECODE_ENTRY( "gfx2", 0, tilelayout,              8*16,  16 )
-	GFXDECODE_ENTRY( "gfx3", 0, spritelayout_1024, 8*16+16*16, 256 )
+	GFXDECODE_ENTRY( "gfx1", 0, charlayout,            0,   8 )
+	GFXDECODE_ENTRY( "gfx2", 0, tilelayout,         8*16,  16 )
+	GFXDECODE_ENTRY( "gfx3", 0, spritelayout, 8*16+16*16, 256 )
 GFXDECODE_END
 
 
@@ -384,7 +373,6 @@ MACHINE_START_MEMBER(galivan_state,galivan)
 	/* register for saving */
 	save_item(NAME(m_scrollx));
 	save_item(NAME(m_scrolly));
-	save_item(NAME(m_flipscreen));
 	save_item(NAME(m_write_layers));
 	save_item(NAME(m_layers));
 }
@@ -399,7 +387,6 @@ MACHINE_START_MEMBER(galivan_state,ninjemak)
 	/* register for saving */
 	save_item(NAME(m_scrollx));
 	save_item(NAME(m_scrolly));
-	save_item(NAME(m_flipscreen));
 	save_item(NAME(m_ninjemak_dispdisable));
 }
 
@@ -412,7 +399,6 @@ MACHINE_RESET_MEMBER(galivan_state,galivan)
 	m_write_layers = 0;
 	m_galivan_scrollx[0] = m_galivan_scrollx[1] = 0;
 	m_galivan_scrolly[0] = m_galivan_scrolly[1] = 0;
-	m_flipscreen = 0;
 }
 
 MACHINE_RESET_MEMBER(galivan_state,ninjemak)
@@ -421,7 +407,6 @@ MACHINE_RESET_MEMBER(galivan_state,ninjemak)
 
 	m_scrollx = 0;
 	m_scrolly = 0;
-	m_flipscreen = 0;
 	m_ninjemak_dispdisable = 0;
 }
 
@@ -442,15 +427,21 @@ static MACHINE_CONFIG_START( galivan, galivan_state )
 	MCFG_MACHINE_RESET_OVERRIDE(galivan_state,galivan)
 
 	/* video hardware */
+	MCFG_BUFFERED_SPRITERAM8_ADD("spriteram")
+
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(galivan_state, screen_update_galivan)
+	MCFG_SCREEN_VBLANK_DEVICE("spriteram", buffered_spriteram8_device, vblank_copy_rising)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(galivan)
-	MCFG_PALETTE_LENGTH(8*16+16*16+256*16)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", galivan)
+	MCFG_PALETTE_ADD("palette", 8*16+16*16+256*16)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256)
+	MCFG_PALETTE_INIT_OWNER(galivan_state, galivan)
 
 	MCFG_VIDEO_START_OVERRIDE(galivan_state,galivan)
 
@@ -483,16 +474,24 @@ static MACHINE_CONFIG_START( ninjemak, galivan_state )
 	MCFG_MACHINE_START_OVERRIDE(galivan_state,ninjemak)
 	MCFG_MACHINE_RESET_OVERRIDE(galivan_state,ninjemak)
 
+	MCFG_DEVICE_ADD("nb1414m4", NB1414M4, 0)
+
 	/* video hardware */
+	MCFG_BUFFERED_SPRITERAM8_ADD("spriteram")
+
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(galivan_state, screen_update_ninjemak)
+	MCFG_SCREEN_VBLANK_DEVICE("spriteram", buffered_spriteram8_device, vblank_copy_rising)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(ninjemak)
-	MCFG_PALETTE_LENGTH(8*16+16*16+256*16)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", galivan)
+	MCFG_PALETTE_ADD("palette", 8*16+16*16+256*16)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256)
+	MCFG_PALETTE_INIT_OWNER(galivan_state, galivan)
 
 	MCFG_VIDEO_START_OVERRIDE(galivan_state,ninjemak)
 
@@ -509,7 +508,10 @@ static MACHINE_CONFIG_START( ninjemak, galivan_state )
 MACHINE_CONFIG_END
 
 
+MACHINE_CONFIG_DERIVED(youmab, ninjemak)
 
+	MCFG_DEVICE_REMOVE("nb1414m4")
+MACHINE_CONFIG_END
 /***************************************************************************
 
   Game driver(s)
@@ -767,7 +769,7 @@ ROM_START( ninjemak )
 	ROM_LOAD( "ninjemak.7",   0x0000, 0x4000, CRC(80c20d36) SHA1(f20724754824030d62059388f3ea2224f5b7a60e) )
 	ROM_LOAD( "ninjemak.6",   0x4000, 0x4000, CRC(1da7a651) SHA1(5307452058164a0bc39d144dd204627a9ead7543) )
 
-	ROM_REGION( 0x4000, "blit_data", 0 )    /* data for mcu/blitter? */
+	ROM_REGION( 0x4000, "nb1414m4", 0 )    /* data for mcu/blitter? */
 	ROM_LOAD( "ninjemak.5",   0x0000, 0x4000, CRC(5f91dd30) SHA1(3513c0a2e4ca83f602cacad6af9c07fe9e4b16a1) )    /* text layer data */
 
 	ROM_REGION( 0x0400, "proms", 0 )    /* Region 3 - color data */
@@ -809,7 +811,7 @@ ROM_START( youma )
 	ROM_LOAD( "ninjemak.7",   0x0000, 0x4000, CRC(80c20d36) SHA1(f20724754824030d62059388f3ea2224f5b7a60e) )
 	ROM_LOAD( "ninjemak.6",   0x4000, 0x4000, CRC(1da7a651) SHA1(5307452058164a0bc39d144dd204627a9ead7543) )
 
-	ROM_REGION( 0x4000, "blit_data", 0 )    /* data for mcu/blitter? */
+	ROM_REGION( 0x4000, "nb1414m4", 0 )    /* data for mcu/blitter? */
 	ROM_LOAD( "ync-5.bin",    0x0000, 0x4000, CRC(993e4ab2) SHA1(aceafc83b36db4db923d27f77ad045e626678bae) )    /* text layer data */
 
 	ROM_REGION( 0x0400, "proms", 0 )    /* Region 3 - color data */
@@ -851,7 +853,7 @@ ROM_START( youma2 )
 	ROM_LOAD( "ninjemak.7",   0x0000, 0x4000, CRC(80c20d36) SHA1(f20724754824030d62059388f3ea2224f5b7a60e) )
 	ROM_LOAD( "ninjemak.6",   0x4000, 0x4000, CRC(1da7a651) SHA1(5307452058164a0bc39d144dd204627a9ead7543) )
 
-	ROM_REGION( 0x4000, "blit_data", 0 )    /* data for mcu/blitter? */
+	ROM_REGION( 0x4000, "nb1414m4", 0 )    /* data for mcu/blitter? */
 	ROM_LOAD( "5.15d",    0x0000, 0x4000, CRC(1b4f64aa) SHA1(2cb2db946bf93e0928d6aa2e2dd29acb92981567) )    /* text layer data x */
 
 	ROM_REGION( 0x0400, "proms", 0 )    /* Region 3 - color data */
@@ -979,8 +981,8 @@ PR.8E        [ffb4b287] = YNCP-8E.BIN  from Youma Ninpou Chou (Nichibutsu, Ninja
 
 ROM_START( youmab2 )
 	ROM_REGION( 0x18000, "maincpu", 0 ) /* main cpu code */
-	ROM_LOAD( "1(__bootleg).1d",     0x00000, 0x8000, CRC(692ae497) SHA1(572e5a1eae9b0bb48f65dce5de2df5c5ae95a3bd) )
-	ROM_LOAD( "3(__bootleg).4d",     0x10000, 0x8000, CRC(ebf61afc) SHA1(30235a90e8316f5033d44d31f02cca97c64f2d5e) )
+	ROM_LOAD( "1.1d",     0x00000, 0x8000, CRC(692ae497) SHA1(572e5a1eae9b0bb48f65dce5de2df5c5ae95a3bd) ) // sldh
+	ROM_LOAD( "3.4d",     0x10000, 0x8000, CRC(ebf61afc) SHA1(30235a90e8316f5033d44d31f02cca97c64f2d5e) ) // sldh
 
 	ROM_REGION( 0x10000, "user2", 0 )   /* main cpu code */
 	/* This rom is double the size of the original one, appears to have extra (banked) code for 0x8000 */
@@ -991,7 +993,7 @@ ROM_START( youmab2 )
 	ROM_LOAD( "12.15b",  0x4000, 0x8000, CRC(ac3a0b81) SHA1(39f2c305706e313d5256c357a3c8b57bbe45d3d7) )
 
 	ROM_REGION( 0x08000, "gfx1", 0 )
-	ROM_LOAD( "4(__bootleg).7d",     0x00000, 0x8000, CRC(a1954f44) SHA1(b10a22b51bd1a02c0d7b116b4d7390003c41decf) )    /* chars */
+	ROM_LOAD( "4.7d",     0x00000, 0x8000, CRC(a1954f44) SHA1(b10a22b51bd1a02c0d7b116b4d7390003c41decf) ) /* chars */ // sldh
 
 	ROM_REGION( 0x20000, "gfx2", 0 )
 	ROM_LOAD( "7.13f",   0x00000, 0x8000, CRC(655f0a58) SHA1(8ffe73cec68d52c7b09651b546289613d6d4dde4) ) /* tiles */
@@ -1097,5 +1099,5 @@ GAME( 1986, dangarb,  dangar,   galivan,  dangarb, driver_device,  0, ROT270, "b
 GAME( 1986, ninjemak, 0,        ninjemak, ninjemak, driver_device, 0, ROT270, "Nichibutsu",   "Ninja Emaki (US)", GAME_SUPPORTS_SAVE|GAME_UNEMULATED_PROTECTION )
 GAME( 1986, youma,    ninjemak, ninjemak, ninjemak, driver_device, 0, ROT270, "Nichibutsu",   "Youma Ninpou Chou (Japan)", GAME_SUPPORTS_SAVE|GAME_UNEMULATED_PROTECTION )
 GAME( 1986, youma2,   ninjemak, ninjemak, ninjemak, driver_device, 0, ROT270, "Nichibutsu",   "Youma Ninpou Chou (Japan, alt)", GAME_SUPPORTS_SAVE|GAME_UNEMULATED_PROTECTION )
-GAME( 1986, youmab,   ninjemak, ninjemak, ninjemak, galivan_state, youmab, ROT270, "bootleg", "Youma Ninpou Chou (Game Electronics bootleg, set 1)", GAME_NOT_WORKING|GAME_SUPPORTS_SAVE|GAME_UNEMULATED_PROTECTION ) // player is invincible
-GAME( 1986, youmab2,  ninjemak, ninjemak, ninjemak, galivan_state, youmab, ROT270, "bootleg", "Youma Ninpou Chou (Game Electronics bootleg, set 2)", GAME_NOT_WORKING|GAME_SUPPORTS_SAVE|GAME_UNEMULATED_PROTECTION ) // ""
+GAME( 1986, youmab,   ninjemak, youmab,   ninjemak, galivan_state, youmab, ROT270, "bootleg", "Youma Ninpou Chou (Game Electronics bootleg, set 1)", GAME_NOT_WORKING|GAME_SUPPORTS_SAVE|GAME_UNEMULATED_PROTECTION ) // player is invincible
+GAME( 1986, youmab2,  ninjemak, youmab,   ninjemak, galivan_state, youmab, ROT270, "bootleg", "Youma Ninpou Chou (Game Electronics bootleg, set 2)", GAME_NOT_WORKING|GAME_SUPPORTS_SAVE|GAME_UNEMULATED_PROTECTION ) // ""

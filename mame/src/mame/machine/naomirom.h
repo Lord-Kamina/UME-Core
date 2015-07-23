@@ -1,10 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #ifndef _NAOMIROM_H_
 #define _NAOMIROM_H_
 
 #include "naomibd.h"
 
-#define MCFG_NAOMI_ROM_BOARD_ADD(_tag, _eeprom_tag, _irq_cb) \
-	MCFG_NAOMI_BOARD_ADD(_tag, NAOMI_ROM_BOARD, _eeprom_tag, _irq_cb)
+#define MCFG_NAOMI_ROM_BOARD_ADD(_tag, _eeprom_tag, _actel_tag, _irq_cb) \
+	MCFG_NAOMI_BOARD_ADD(_tag, NAOMI_ROM_BOARD, _eeprom_tag, _actel_tag, _irq_cb)
 
 class naomi_rom_board : public naomi_board
 {

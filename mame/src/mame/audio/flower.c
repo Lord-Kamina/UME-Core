@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:hap, insideoutboy
 /* Clarue Flower sound driver.
 Initial version was based on the Wiping sound driver, which was based on the old namco.c sound driver.
 
@@ -22,7 +24,7 @@ TODO:
 const device_type FLOWER = &device_creator<flower_sound_device>;
 
 flower_sound_device::flower_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, FLOWER, "Flower Custom Sound", tag, owner, clock),
+	: device_t(mconfig, FLOWER, "Flower Audio Custom", tag, owner, clock, "flower_sound", __FILE__),
 		device_sound_interface(mconfig, *this)
 {
 }
@@ -46,7 +48,7 @@ void flower_sound_device::device_start()
 	flower_sound_channel *voice;
 
 	m_effect_timer = timer_alloc(TIMER_CLOCK_EFFECT);
-	m_stream = machine().sound().stream_alloc(*this, 0, 1, MIXER_SAMPLERATE, this);
+	m_stream = machine().sound().stream_alloc(*this, 0, 1, MIXER_SAMPLERATE);
 	m_mixer_buffer = auto_alloc_array(machine(), short, MIXER_SAMPLERATE);
 	make_mixer_table(8, MIXER_DEFGAIN);
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
     coco12.c
@@ -116,30 +118,3 @@ void coco12_state::update_cart_base(UINT8 *cart_base)
 {
 	m_sam->configure_bank(3, cart_base, 0x4000, true);      // $C000-$FEFF
 }
-
-
-
-//-------------------------------------------------
-//  mc6847_config
-//-------------------------------------------------
-
-const mc6847_interface coco12_state::mc6847_config =
-{
-	SCREEN_TAG,
-	DEVCB_DEVICE_MEMBER(SAM_TAG, sam6883_device, display_read),
-	DEVCB_DRIVER_LINE_MEMBER(coco12_state, horizontal_sync),
-	DEVCB_DRIVER_LINE_MEMBER(coco12_state, field_sync)
-};
-
-
-
-//-------------------------------------------------
-//  sam6883_config
-//-------------------------------------------------
-
-const sam6883_interface coco12_state::sam6883_config =
-{
-	MAINCPU_TAG,
-	AS_PROGRAM,
-	DEVCB_DRIVER_MEMBER(coco12_state, sam_read)
-};

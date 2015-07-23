@@ -1,67 +1,85 @@
+// license:GPL-2.0+
+// copyright-holders:Angelo Salese, Jonathan Edwards, Christopher Edwards,Robbbert
 /**************************************************************************************
 
-    Basic Master Level 3 (MB-6890) (c) 1980 Hitachi
+    Basic Master Level 3 (MB-689x) (c) 1980 Hitachi
 
-    preliminary driver by Angelo Salese
+    Driver by Angelo Salese, Jonathan Edwards and Christopher Edwards
 
     TODO:
-    - keyboard is actually tied to crtc hsync timer
-    - understand how to load a tape
-    - some NEWON commands now makes the keyboard to not work anymore (it does if you
-      soft reset)
-    - video bugs for the interlaced video modes.
-    - LINE command doesn't work? It says "type mismatch"
-
-    NOTES:
-    - NEWON changes the video mode, they are:
-        0: 320 x 200, bit 5 active
-        1: 320 x 200, bit 5 unactive
-        2: 320 x 375, bit 5 active
-        3: 320 x 375, bit 5 unactive
-        4: 640 x 200, bit 5 active
-        5: 640 x 200, bit 5 unactive
-        6: 640 x 375, bit 5 active
-        7: 640 x 375, bit 5 unactive
-        8-15: same as above plus sets bit 4
-        16-31: same as above plus shows the bar at the bottom
+    - implement sound as a bml3bus slot device
+    - account for hardware differences between MB-6890, MB-6891 and MB-6892
+      (e.g. custom font support on the MB-6892)
 
 **************************************************************************************/
 
 #include "emu.h"
 #include "cpu/m6809/m6809.h"
 #include "video/mc6845.h"
-// #$# ? remove if not using proper mc6843?
-// #include "machine/mc6843.h"
-#include "sound/beep.h"
 #include "machine/6821pia.h"
 #include "machine/6850acia.h"
+#include "machine/clock.h"
 #include "sound/2203intf.h"
+#include "sound/speaker.h"
+#include "sound/wave.h"
+#include "imagedev/cassette.h"
+#include "bus/bml3/bml3bus.h"
+#include "bus/bml3/bml3mp1802.h"
+#include "bus/bml3/bml3mp1805.h"
+#include "bus/bml3/bml3kanji.h"
 
-//#include "imagedev/cassette.h"
-#include "imagedev/flopdrv.h"
-// #$# ? needed
-// #include "formats/basicdsk.h"
-#include "formats/bml3_dsk.h"
-#include "machine/wd17xx.h"
+// System clock definitions, from the MB-6890 servce manual, p.48:
+
+#define MASTER_CLOCK ( 32256000 )   // Master clock crystal (X1) frequency, 32.256 MHz.  "fx" in the manual.
+
+#define D80_CLOCK ( MASTER_CLOCK / 2 )  // Graphics dot clock in 80-column mode. ~16 MHz.
+#define D40_CLOCK ( D80_CLOCK / 2 )     // Graphics dot clock in 40-column mode.  ~8 MHz.
+
+#define CPU_EXT_CLOCK ( D40_CLOCK / 2 ) // IC37, 4.032 MHz signal to EXTAL on the 6809 MPU.
+#define CPU_CLOCK     ( CPU_EXT_CLOCK / 4 ) // Actual MPU clock frequency ("fE" in the manual). The division yielding CPU_CLOCK is done in the 6809 itself.  Also used as the 40-column character clock.
+
+#define C80_CLOCK ( CPU_EXT_CLOCK / 2 ) // 80-column character mode.  IC37, "80CHRCK"; ~2 MHz.
+#define C40_CLOCK ( CPU_CLOCK )         // 40-column character mode; same as MPU clock.  "40CHRCK";       ~1 MHz.
+
+// Video signal clocks from the HD4650SSP CRTC (IC36)
+// In the real hardware, the 80-/40-column Mode switch changes the CRTC character clock input source.  However, it just uses a different divider, so the end result is the same horizontal vsync frequency.
+#define H_CLOCK ( C80_CLOCK / 128 ) // in 80-column mode
+//#define H_CLOCK ( C40_CLOCK / 64 )    // in 40-column mode (either way the frequency is the same: 15.75 kHz)
+#define V_CLOCK ( 2 * H_CLOCK / 525 )   // Vertical refresh rate comes out at exactly 60 Hz.
+
+// TODO: ACIA RS-232C and cassette interface clocks (service manual p.67); perhaps reverse the order and simply divide by 2 from each previous frequency.
+// IC111 (74LS157P) takes 16.128 MHz and 1.008 MHz TTL clock inputs.  The RS/C SW input line determines the mode (high -> RS-232C).
+
+// Frequencies for RS-232C mode:
+// D80_CLOCK / 840.0    // 19200 Hz
+// D80_CLOCK / 420  // 38400 Hz
+// D80_CLOCK / 210  // 76800 Hz
+// D80_CLOCK / 105.0    // 153600 Hz
+
+// Frequencies for cassette mode:
+// / 13440  //1200
+// / 6720   // 2400
+// / 3360   // 4800
+// / 1680   // 9600
+
 
 class bml3_state : public driver_device
 {
 public:
-	bml3_state(const machine_config &mconfig, device_type type, const char *tag)
-		: driver_device(mconfig, type, tag),
+	bml3_state(const machine_config &mconfig, device_type type, const char *tag) :
+		driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
+		m_bml3bus(*this, "bml3bus"),
 		m_crtc(*this, "crtc"),
-		//m_cass(*this, "cassette"),
-		m_beep(*this, "beeper"),
-		m_ym2203(*this, "ym2203")
+		m_cass(*this, "cassette"),
+		m_speaker(*this, "speaker"),
+		m_ym2203(*this, "ym2203"),
+		m_acia6850(*this, "acia6850"),
+		m_palette(*this, "palette")
 	{
 	}
 
-	required_device<cpu_device> m_maincpu;
-	required_device<mc6845_device> m_crtc;
-	//required_device<cassette_image_device> m_cass;
-	required_device<beep_device> m_beep;
-	required_device<ym2203_device> m_ym2203;
+	DECLARE_READ8_MEMBER(bml3_6845_r);
 	DECLARE_WRITE8_MEMBER(bml3_6845_w);
 	DECLARE_READ8_MEMBER(bml3_keyboard_r);
 	DECLARE_WRITE8_MEMBER(bml3_keyboard_w);
@@ -69,14 +87,6 @@ public:
 	DECLARE_WRITE8_MEMBER(bml3_vres_reg_w);
 	DECLARE_READ8_MEMBER(bml3_vram_r);
 	DECLARE_WRITE8_MEMBER(bml3_vram_w);
-	DECLARE_READ8_MEMBER(bml3_wd179x_r);
-	DECLARE_WRITE8_MEMBER(bml3_wd179x_w);
-	DECLARE_READ8_MEMBER(bml3_mc6843_r);
-	DECLARE_WRITE8_MEMBER(bml3_mc6843_w);
-	DECLARE_READ8_MEMBER(bml3_fdd_r);
-	DECLARE_WRITE8_MEMBER(bml3_fdd_w);
-	DECLARE_READ8_MEMBER(bml3_kanji_r);
-	DECLARE_WRITE8_MEMBER(bml3_kanji_w);
 	DECLARE_READ8_MEMBER(bml3_psg_latch_r);
 	DECLARE_WRITE8_MEMBER(bml3_psg_latch_w);
 	DECLARE_READ8_MEMBER(bml3_vram_attr_r);
@@ -87,14 +97,14 @@ public:
 	DECLARE_READ8_MEMBER(bml3_keyb_nmi_r);
 	DECLARE_WRITE8_MEMBER(bml3_firq_mask_w);
 	DECLARE_READ8_MEMBER(bml3_firq_status_r);
-
-
-	DECLARE_READ_LINE_MEMBER( bml3_acia_rx_r );
-	DECLARE_WRITE_LINE_MEMBER( bml3_acia_tx_w );
-	DECLARE_READ_LINE_MEMBER( bml3_acia_dts_r );
-	DECLARE_WRITE_LINE_MEMBER( bml3_acia_rts_w );
-	DECLARE_READ_LINE_MEMBER(bml3_acia_dcd_r);
+	DECLARE_WRITE8_MEMBER(relay_w);
+	DECLARE_WRITE_LINE_MEMBER(bml3bus_nmi_w);
+	DECLARE_WRITE_LINE_MEMBER(bml3bus_irq_w);
+	DECLARE_WRITE_LINE_MEMBER(bml3bus_firq_w);
+	DECLARE_WRITE_LINE_MEMBER(bml3_acia_tx_w);
+	DECLARE_WRITE_LINE_MEMBER(bml3_acia_rts_w);
 	DECLARE_WRITE_LINE_MEMBER(bml3_acia_irq_w);
+	DECLARE_WRITE_LINE_MEMBER(write_acia_clock);
 
 	DECLARE_READ8_MEMBER(bml3_a000_r); DECLARE_WRITE8_MEMBER(bml3_a000_w);
 	DECLARE_READ8_MEMBER(bml3_c000_r); DECLARE_WRITE8_MEMBER(bml3_c000_w);
@@ -102,42 +112,51 @@ public:
 	DECLARE_READ8_MEMBER(bml3_f000_r); DECLARE_WRITE8_MEMBER(bml3_f000_w);
 	DECLARE_READ8_MEMBER(bml3_fff0_r); DECLARE_WRITE8_MEMBER(bml3_fff0_w);
 
-	UINT8 m_attr_latch;
-	UINT8 m_io_latch;
-	UINT8 m_hres_reg;
-	UINT8 m_vres_reg;
-	UINT8 m_keyb_press;
-	UINT8 m_keyb_press_flag;
-	// #$# change to UINT8?
-	int m_keyb_interrupt_disabled;
-	int m_keyb_nmi_disabled;
-	int m_keyb_counter_operation_disabled;
-	int m_keyb_empty_scan;
-	int m_keyb_scancode;
-	int m_keyb_capslock_led_on;
-	int m_keyb_hiragana_led_on;
-	int m_keyb_katakana_led_on;
+	MC6845_UPDATE_ROW(crtc_update_row);
+
+	UINT8 *m_p_videoram;
 	UINT8 *m_p_chargen;
-	UINT8 m_psg_latch;
-	void m6845_change_clock(UINT8 setting);
-	UINT8 m_crtc_vreg[0x100],m_crtc_index;
-	UINT16 m_kanji_addr;
-	UINT8 *m_extram;
-	UINT8 m_firq_mask,m_firq_status;
-
-protected:
-	virtual void machine_reset();
-
-	virtual void machine_start();
-	virtual void video_start();
-	virtual void palette_init();
-public:
-	UINT32 screen_update_bml3(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	INTERRUPT_GEN_MEMBER(bml3_irq);
+	UINT8 m_hres_reg;
+	UINT8 m_crtc_vreg[0x100];
+	// INTERRUPT_GEN_MEMBER(bml3_irq);
 	INTERRUPT_GEN_MEMBER(bml3_timer_firq);
+	TIMER_DEVICE_CALLBACK_MEMBER(bml3_c);
+	TIMER_DEVICE_CALLBACK_MEMBER(bml3_p);
 	TIMER_DEVICE_CALLBACK_MEMBER(keyboard_callback);
 	DECLARE_READ8_MEMBER(bml3_ym2203_r);
 	DECLARE_WRITE8_MEMBER(bml3_ym2203_w);
+	DECLARE_PALETTE_INIT(bml3);
+private:
+	UINT8 m_psg_latch;
+	UINT8 m_attr_latch;
+	UINT8 m_vres_reg;
+	bool m_keyb_interrupt_disabled;
+	bool m_keyb_nmi_disabled; // not used yet
+	bool m_keyb_counter_operation_disabled;
+	UINT8 m_keyb_empty_scan;
+	UINT8 m_keyb_scancode;
+	bool m_keyb_capslock_led_on;
+	bool m_keyb_hiragana_led_on;
+	bool m_keyb_katakana_led_on;
+	bool m_cassbit;
+	bool m_cassold;
+	UINT8 m_cass_data[4];
+	virtual void machine_reset();
+	virtual void machine_start();
+	void m6845_change_clock(UINT8 setting);
+	UINT8 m_crtc_index;
+	UINT8 *m_extram;
+	UINT8 m_firq_mask;
+	UINT8 m_firq_status;
+	required_device<cpu_device> m_maincpu;
+	required_device<bml3bus_device> m_bml3bus;
+	required_device<mc6845_device> m_crtc;
+	required_device<cassette_image_device> m_cass;
+	required_device<speaker_sound_device> m_speaker;
+	optional_device<ym2203_device> m_ym2203;
+	required_device<acia6850_device> m_acia6850;
+public:
+	required_device<palette_device> m_palette;
 };
 
 #define mc6845_h_char_total     (m_crtc_vreg[0])
@@ -158,126 +177,13 @@ public:
 #define mc6845_update_addr      (((m_crtc_vreg[0x12]<<8) & 0x3f00) | (m_crtc_vreg[0x13] & 0xff))
 
 
-void bml3_state::video_start()
+
+READ8_MEMBER( bml3_state::bml3_6845_r )
 {
-	m_p_chargen = memregion("chargen")->base();
-}
-
-UINT32 bml3_state::screen_update_bml3(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
-{
-	int x,y,hf,count;
-	int xi,yi;
-	int width,interlace,lowres;
-	int rawbits,dots[2],color,reverse,graphic;
-	UINT8 *vram = memregion("vram")->base();
-
-	count = 0x0000;
-
-	width = (m_hres_reg & 0x80) ? 80 : 40;
-	interlace = (m_vres_reg & 0x08) ? 1 : 0;
-	lowres = (m_hres_reg & 0x40) ? 1 : 0;
-
-	// redundant initializers to keep compiler happy
-	rawbits = dots[0] = dots[1] = color = reverse = graphic = 0;
-
-//  popmessage("%02x %02x",m_hres_reg,m_vres_reg);
-
-	for(y=0;y<25;y++)
-	{
-		for(x=0;x<width;x++)
-		{
-			for(yi=0;yi<8;yi++)
-			{
-				if (!lowres || yi == 0) {
-					int offset = count + yi * (width / 40 * 0x400) + mc6845_start_addr - 0x400;
-					if (offset >= 0x0000 && offset < 0x4000) {
-						rawbits = vram[offset+0x0000];
-						color = vram[offset+0x4000] & 7;
-						reverse = vram[offset+0x4000] & 8;
-						graphic = vram[offset+0x4000] & 0x10;
-					}
-					else {
-						// outside vram - don't know what should happen here
-						rawbits = color = reverse = graphic = 0;
-					}
-				}
-				if (graphic) {
-					if (lowres) {
-						// low-res graphics, each tile has 8 bits arranged as follows:
-						// 4 0
-						// 5 1
-						// 6 2
-						// 7 3
-						dots[0] = dots[1] = (rawbits >> yi/2 & 0x11) * 0xf;
-					}
-					else {
-						dots[0] = dots[1] = rawbits;
-					}
-				}
-				else {
-					// character mode
-					int tile = rawbits  & 0x7f;
-					int tile_bank = (rawbits & 0x80) >> 7;
-					if (interlace) {
-						dots[0] = m_p_chargen[(tile_bank<<11)|(tile<<4)|(yi<<1)];
-						dots[1] = m_p_chargen[(tile_bank<<11)|(tile<<4)|(yi<<1)|tile_bank];
-					}
-					else {
-						dots[0] = dots[1] = m_p_chargen[(tile<<4)|(yi<<1)|tile_bank];
-					}
-				}
-				for(hf=0;hf<=interlace;hf++)
-				{
-					for(xi=0;xi<8;xi++)
-					{
-						int pen;
-
-						if(reverse)
-							pen = (dots[hf] >> (7-xi) & 1) ? 0 : color;
-						else
-							pen = (dots[hf] >> (7-xi) & 1) ? color : 0;
-
-						bitmap.pix16((y*8+yi)*(interlace+1)+hf, x*8+xi) = pen;
-					}
-				}
-			}
-
-			if(mc6845_cursor_addr-mc6845_start_addr == count)
-			{
-				int xc,yc,cursor_on;
-
-				cursor_on = 0;
-				switch(mc6845_cursor_y_start & 0x60)
-				{
-					case 0x00: cursor_on = 1; break; //always on
-					case 0x20: cursor_on = 0; break; //always off
-					case 0x40: if(machine().primary_screen->frame_number() & 0x10) { cursor_on = 1; } break; //fast blink
-					case 0x60: if(machine().primary_screen->frame_number() & 0x20) { cursor_on = 1; } break; //slow blink
-				}
-
-				if(cursor_on)
-				{
-					for(yc=0;yc<(8-(mc6845_cursor_y_start & 7));yc++)
-					{
-						for(xc=0;xc<8;xc++)
-						{
-							if(interlace)
-							{
-								bitmap.pix16((y*8+yc+7)*2+0, x*8+xc) = 7;
-								bitmap.pix16((y*8+yc+7)*2+1, x*8+xc) = 7;
-							}
-							else
-								bitmap.pix16(y*8+yc+7, x*8+xc) = 7;
-						}
-					}
-				}
-			}
-
-			count++;
-		}
-	}
-
-	return 0;
+	if (offset)
+		return m_crtc->register_r(space, 0);
+	else
+		return m_crtc->status_r(space, 0);
 }
 
 WRITE8_MEMBER( bml3_state::bml3_6845_w )
@@ -296,33 +202,31 @@ WRITE8_MEMBER( bml3_state::bml3_6845_w )
 
 READ8_MEMBER( bml3_state::bml3_keyboard_r )
 {
-	m_keyb_press_flag = 0;
-	logerror("bml_keyboard_r %02x\n", m_keyb_press);
-	// #$# not sure what to return if no key pressed, some number from 0-9?  maybe low three bits of scancode?
-	return m_keyb_press;
+	UINT8 ret = m_keyb_scancode;
+	m_keyb_scancode &= 0x7f;
+	return ret;
 }
 
 WRITE8_MEMBER( bml3_state::bml3_keyboard_w )
 {
-	logerror("bml_keyboard_w %02x\n", data);
-	m_keyb_katakana_led_on = (data & 0x01) != 0;
-	m_keyb_hiragana_led_on = (data & 0x02) != 0;
-	m_keyb_capslock_led_on = (data & 0x04) != 0;
-	m_keyb_counter_operation_disabled = (data & 0x08) != 0;
-	m_keyb_interrupt_disabled = (data & 0x40) == 0;
-	m_keyb_nmi_disabled = (data & 0x80) == 0;
+	m_keyb_katakana_led_on = BIT(data, 0);
+	m_keyb_hiragana_led_on = BIT(data, 1);
+	m_keyb_capslock_led_on = BIT(data, 2);
+	m_keyb_counter_operation_disabled = BIT(data, 3);
+	m_keyb_interrupt_disabled = !BIT(data, 6);
+	m_keyb_nmi_disabled = !BIT(data, 7);
 }
 
 void bml3_state::m6845_change_clock(UINT8 setting)
 {
-	int m6845_clock = XTAL_1MHz;
+	int m6845_clock = CPU_CLOCK;    // CRTC and MPU are synchronous by default
 
 	switch(setting & 0x88)
 	{
-		case 0x00: m6845_clock = XTAL_1MHz; break; //320 x 200
-		case 0x08: m6845_clock = XTAL_1MHz*2; break; //320 x 375
-		case 0x80: m6845_clock = XTAL_1MHz*2; break; //640 x 200
-		case 0x88: m6845_clock = XTAL_1MHz*4; break; //640 x 375
+		case 0x00: m6845_clock = C40_CLOCK; break; //320 x 200
+		case 0x08: m6845_clock = C40_CLOCK; break; //320 x 200, interlace
+		case 0x80: m6845_clock = C80_CLOCK; break; //640 x 200
+		case 0x88: m6845_clock = C80_CLOCK; break; //640 x 200, interlace
 	}
 
 	m_crtc->set_clock(m6845_clock);
@@ -330,10 +234,12 @@ void bml3_state::m6845_change_clock(UINT8 setting)
 
 WRITE8_MEMBER( bml3_state::bml3_hres_reg_w )
 {
+	// MODE SEL register (see service manual p.43).
 	/*
-	x--- ---- width (1) 80 / (0) 40
-	-x-- ---- used in some modes, unknown purpose
-	--x- ---- used in some modes, unknown purpose (also wants $ffc4 to be 0xff), color / monochrome switch?
+	x--- ---- "W" bit: 0 = 40 columns, 1 = 80 columns
+	-x-- ---- "HR" bit: 0 = high resolution, 1 = normal
+	--x- ---- "C" bit - ACIA mode: 0 = cassette, 1 = RS-232C
+	---- -RGB Background colour
 	*/
 
 	m_hres_reg = data;
@@ -343,8 +249,9 @@ WRITE8_MEMBER( bml3_state::bml3_hres_reg_w )
 
 WRITE8_MEMBER( bml3_state::bml3_vres_reg_w )
 {
+	// The MB-6890 had an interlaced video mode which was used for displaying Japanese (Hiragana and Katakana) text (8x16 character glyph bitmaps).
 	/*
-	---- x--- char height
+	---- x--- Interlace select: 0 = non-interlace, 1 = interlace
 	*/
 	m_vres_reg = data;
 
@@ -354,181 +261,20 @@ WRITE8_MEMBER( bml3_state::bml3_vres_reg_w )
 
 READ8_MEMBER( bml3_state::bml3_vram_r )
 {
-	UINT8 *vram = memregion("vram")->base();
-
 	// Bit 7 masks reading back to the latch
-	if ((m_attr_latch & 0x80) == 0) {
-		m_attr_latch = vram[offset+0x4000];
+	if (!BIT(m_attr_latch, 7))
+	{
+		m_attr_latch = m_p_videoram[offset+0x4000];
 	}
 
-	return vram[offset];
+	return m_p_videoram[offset];
 }
 
 WRITE8_MEMBER( bml3_state::bml3_vram_w )
 {
-	UINT8 *vram = memregion("vram")->base();
-
-	vram[offset] = data;
+	m_p_videoram[offset] = data;
 	// color ram is 5-bit
-	vram[offset+0x4000] = m_attr_latch & 0x1F;
-}
-
-READ8_MEMBER( bml3_state::bml3_wd179x_r)
-{
-	device_t* dev = machine().device("fdc");
-	switch(offset)
-	{
-		case 0:
-			return ~wd17xx_status_r(dev,space,offset);
-		case 1:
-			return ~wd17xx_track_r(dev,space,offset);
-		case 2:
-			return ~wd17xx_sector_r(dev,space,offset);
-		case 3:
-			return ~wd17xx_data_r(dev,space,offset);
-		case 4:
-			return wd17xx_drq_r(dev) ? 0x00 : 0x80;
-		default:
-			return -1;
-	}
-}
-
-WRITE8_MEMBER( bml3_state::bml3_wd179x_w)
-{
-	device_t* dev = machine().device("fdc");
-	switch(offset)
-	{
-		case 0:
-			wd17xx_command_w(dev,space,offset,~data);
-			break;
-		case 1:
-			wd17xx_track_w(dev,space,offset,~data);
-			break;
-		case 2:
-			wd17xx_sector_w(dev,space,offset,~data);
-			break;
-		case 3:
-			wd17xx_data_w(dev,space,offset,~data);
-			break;
-		case 4:
-			// #$# support four drives - should be & 0x03 here?
-			int drive = data & 0x01;
-			int side = BIT(data, 4);
-			int motor = BIT(data, 3);
-			wd17xx_set_drive(dev,drive);
-			floppy_mon_w(floppy_get_device(machine(),drive), !motor);
-			floppy_drive_set_ready_state(floppy_get_device(machine(), drive), ASSERT_LINE, 0);
-			wd17xx_set_side(dev,side);
-			break;
-	}
-}
-
-READ8_MEMBER( bml3_state::bml3_mc6843_r)
-{
-	device_t* dev = machine().device("fdc");
-	// #$# JME debug
-	logerror("bml3_state::bml3_mc6843_r(offset=%04X)\n", offset);
-	switch(offset)
-	{
-		case 0:
-			return wd17xx_data_r(dev,space,offset);
-		case 1:
-			return m_io_latch;
-		case 2:
-			// b3 is something?
-			return 0;
-		case 3:
-			// ???
-			// return 0x04;
-			// return wd17xx_status_r(dev,offset);
-			return 0x04 | (wd17xx_drq_r(dev) ? 0x01 : 0x00) | (wd17xx_status_r(dev,space,offset) & 0x01 ? 0x80 : 0x00);
-		case 4:
-			// ???
-			return 0;
-		default:
-			return 0;
-	}
-}
-
-WRITE8_MEMBER( bml3_state::bml3_mc6843_w)
-{
-	device_t* dev = machine().device("fdc");
-	// #$# JME debug
-	logerror("bml3_state::bml3_mc6843_w(offset=%04X, data=%02X)\n", offset, data);
-	switch(offset)
-	{
-		case 0:
-			break;
-		case 1:
-			// ???
-			m_io_latch = data;
-			break;
-		case 2:
-			// not sure if this is wd17xx command or something a bit different...
-			if (data == 0xE4)
-				// read a sector
-				wd17xx_command_w(dev,space,offset,0x80);
-			else
-				// ROM also uses data == 0xC2, not sure what for
-				wd17xx_command_w(dev,space,offset,data);
-			break;
-		case 3:
-			// ? something here, gets 0x66 written to it
-		{
-			// Nasty hack... code in boot sector sets an NMI handler address
-			// at 010A, but it assumes a JMP opcode (7E) is already in 0109.
-			// But nothing ever writes the opcode 8-(
-			// The workaround here is to write the following NMI handler, which
-			// simply jumps to an RTI instruction in ROM.
-			// JMP $EAD5
-			address_space &mem = machine().device("maincpu")->memory().space(AS_PROGRAM);
-			mem.write_byte(0x0109, 0x7E);
-			mem.write_byte(0x010A, 0xEA);
-			mem.write_byte(0x010B, 0xD5);
-		}
-			break;
-		case 4:
-			wd17xx_sector_w(dev,space,offset,data);
-			break;
-		case 7:
-			wd17xx_track_w(dev,space,offset,data);
-			break;
-		default:
-			break;
-	}
-}
-
-READ8_MEMBER( bml3_state::bml3_fdd_r )
-{
-	//printf("FDD 0xff20 R\n");
-	return -1;
-}
-
-WRITE8_MEMBER( bml3_state::bml3_fdd_w )
-{
-	//printf("FDD 0xff20 W %02x\n",data);
-	device_t* dev = machine().device("fdc");
-	// ? something here, gets 0x81 written to it if latch found at FF19, or 0x00 if not
-	// don't know which bits are what
-	int drive = 0;
-	int side = 0;
-	int motor = BIT(data, 7);
-	wd17xx_set_drive(dev,drive);
-	floppy_mon_w(floppy_get_device(machine(),drive), motor);
-	floppy_drive_set_ready_state(floppy_get_device(machine(), drive), ASSERT_LINE, 0);
-	wd17xx_set_side(dev,side);
-}
-
-READ8_MEMBER( bml3_state::bml3_kanji_r )
-{
-//  return m_kanji_rom[m_kanji_addr << 1 + offset];
-	return machine().rand();
-}
-
-WRITE8_MEMBER( bml3_state::bml3_kanji_w )
-{
-	m_kanji_addr &= (0xff << (offset*8));
-	m_kanji_addr |= (data << ((offset^1)*8));
+	m_p_videoram[offset+0x4000] = m_attr_latch & 0x1F;
 }
 
 READ8_MEMBER( bml3_state::bml3_psg_latch_r)
@@ -557,11 +303,22 @@ WRITE8_MEMBER(bml3_state::bml3_ym2203_w)
 
 READ8_MEMBER( bml3_state::bml3_vram_attr_r)
 {
+	// C-REG-SELECT register
+	// Reads from a VRAM address copy the corresponding 'colour RAM' address to the low-order 5 bits of this register as a side-effect
+	// (unless MK bit indicates 'prohibit write')
 	return m_attr_latch;
 }
 
 WRITE8_MEMBER( bml3_state::bml3_vram_attr_w)
 {
+	// C-REG-SELECT register
+	// Writes to a VRAM address copy the low-order 5 bits of this register to the corresponding 'colour RAM' address as a side-effect
+	/*
+	x--- ---- "MK" bit: 0 = enable write, 1 = prohibit write
+	---x ---- "GC" bit: 0 = character, 1 = graphic
+	---- x--- "RV" bit: 0 = normal, 1 - reverse
+	---- -RGB Foreground colour
+	*/
 	m_attr_latch = data;
 }
 
@@ -572,7 +329,13 @@ READ8_MEMBER( bml3_state::bml3_beep_r)
 
 WRITE8_MEMBER( bml3_state::bml3_beep_w)
 {
-	m_beep->set_state(!BIT(data, 7));
+	m_speaker->level_w(BIT(data, 7));
+}
+
+WRITE8_MEMBER( bml3_state::relay_w )
+{
+	m_cass->change_state(
+		BIT(data,7) ? CASSETTE_MOTOR_ENABLED : CASSETTE_MOTOR_DISABLED, CASSETTE_MASK_MOTOR);
 }
 
 READ8_MEMBER( bml3_state::bml3_a000_r) { return m_extram[offset + 0xa000]; }
@@ -609,40 +372,59 @@ READ8_MEMBER( bml3_state::bml3_firq_status_r )
 	return res;
 }
 
+WRITE_LINE_MEMBER(bml3_state::bml3bus_nmi_w)
+{
+	m_maincpu->set_input_line(INPUT_LINE_NMI, state);
+}
+
+WRITE_LINE_MEMBER(bml3_state::bml3bus_irq_w)
+{
+	m_maincpu->set_input_line(M6809_IRQ_LINE, state);
+}
+
+WRITE_LINE_MEMBER(bml3_state::bml3bus_firq_w)
+{
+	m_maincpu->set_input_line(M6809_FIRQ_LINE, state);
+}
+
+
 static ADDRESS_MAP_START(bml3_mem, AS_PROGRAM, 8, bml3_state)
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x0000, 0x03ff) AM_RAM
 	AM_RANGE(0x0400, 0x43ff) AM_READWRITE(bml3_vram_r,bml3_vram_w)
 	AM_RANGE(0x4400, 0x9fff) AM_RAM
-	// Floppy boot block code and disk basic use this controller
-	AM_RANGE(0xff00, 0xff04) AM_READWRITE(bml3_wd179x_r,bml3_wd179x_w)
-	// #$# WD179X floppy controller also occupies this address space... maybe ym2203 can be relocated?
-	// AM_RANGE(0xff00, 0xff00) AM_READWRITE(bml3_ym2203_r,bml3_ym2203_w)
-	// AM_RANGE(0xff02, 0xff02) AM_READWRITE(bml3_psg_latch_r,bml3_psg_latch_w) // PSG address/data select
-	// #$# ? is it possible to use a proper mc6843 driver here? Apparently the wd179x and mc6843 both control the same drive.
-	// Disk bootstrap in ROM uses this controller to load boot blocks from disk
-	AM_RANGE(0xff18, 0xff1f) AM_READWRITE(bml3_mc6843_r,bml3_mc6843_w)
-	// AM_RANGE(0xff18, 0xff1f) AM_DEVREADWRITE_LEGACY("mc6843",mc6843_r,mc6843_w)
-	AM_RANGE(0xff20, 0xff20) AM_READWRITE(bml3_fdd_r,bml3_fdd_w) // FDD drive select
-	AM_RANGE(0xff75, 0xff76) AM_READWRITE(bml3_kanji_r,bml3_kanji_w)// kanji i/f
+	AM_RANGE(0xff40, 0xff46) AM_NOP // lots of unknown reads and writes
 	AM_RANGE(0xffc0, 0xffc3) AM_DEVREADWRITE("pia6821", pia6821_device, read, write)
-	AM_RANGE(0xffc4, 0xffc4) AM_DEVREADWRITE("acia6850", acia6850_device, status_read, control_write)
-	AM_RANGE(0xffc5, 0xffc5) AM_DEVREADWRITE("acia6850", acia6850_device, data_read, data_write)
-	AM_RANGE(0xffc6, 0xffc7) AM_WRITE(bml3_6845_w)
+	AM_RANGE(0xffc4, 0xffc4) AM_DEVREADWRITE("acia6850", acia6850_device, status_r, control_w)
+	AM_RANGE(0xffc5, 0xffc5) AM_DEVREADWRITE("acia6850", acia6850_device, data_r, data_w)
+	AM_RANGE(0xffc6, 0xffc7) AM_READWRITE(bml3_6845_r,bml3_6845_w)
+	// KBNMI - Keyboard "Break" key non-maskable interrupt
 	AM_RANGE(0xffc8, 0xffc8) AM_READ(bml3_keyb_nmi_r) // keyboard nmi
+	// DIPSW - DIP switches on system mainboard
 	AM_RANGE(0xffc9, 0xffc9) AM_READ_PORT("DSW")
+	// TIMER - System timer enable
 	AM_RANGE(0xffca, 0xffca) AM_READ(bml3_firq_status_r) // timer irq
-//  AM_RANGE(0xffcb, 0xffcb) light pen flag
-	AM_RANGE(0xffd0, 0xffd0) AM_WRITE(bml3_hres_reg_w) // mode select
-//  AM_RANGE(0xffd1, 0xffd1) trace counter
-//  AM_RANGE(0xffd2, 0xffd2) remote switch
-	AM_RANGE(0xffd3, 0xffd3) AM_READWRITE(bml3_beep_r,bml3_beep_w) // music select
+	// LPFLG - Light pen interrupt
+//  AM_RANGE(0xffcb, 0xffcb)
+	// MODE_SEL - Graphics mode select
+	AM_RANGE(0xffd0, 0xffd0) AM_WRITE(bml3_hres_reg_w)
+	// TRACE - Trace counter
+//  AM_RANGE(0xffd1, 0xffd1)
+	// REMOTE - Remote relay control for cassette - bit 7
+	AM_RANGE(0xffd2, 0xffd2) AM_WRITE(relay_w)
+	// MUSIC_SEL - Music select: toggle audio output level when rising
+	AM_RANGE(0xffd3, 0xffd3) AM_READWRITE(bml3_beep_r,bml3_beep_w)
+	// TIME_MASK - Prohibit timer IRQ
 	AM_RANGE(0xffd4, 0xffd4) AM_WRITE(bml3_firq_mask_w)
-//  AM_RANGE(0xffd5, 0xffd5) light pen
-	AM_RANGE(0xffd6, 0xffd6) AM_WRITE(bml3_vres_reg_w) // interlace select
+	// LPENBL - Light pen operation enable
+	AM_RANGE(0xffd5, 0xffd5) AM_NOP
+	// INTERLACE_SEL - Interlaced video mode (manual has "INTERACE SEL"!)
+	AM_RANGE(0xffd6, 0xffd6) AM_WRITE(bml3_vres_reg_w)
 //  AM_RANGE(0xffd7, 0xffd7) baud select
-	AM_RANGE(0xffd8, 0xffd8) AM_READWRITE(bml3_vram_attr_r,bml3_vram_attr_w) // attribute register
-	AM_RANGE(0xffe0, 0xffe0) AM_READWRITE(bml3_keyboard_r,bml3_keyboard_w) // keyboard mode register
+	// C_REG_SEL - Attribute register (character/video mode and colours)
+	AM_RANGE(0xffd8, 0xffd8) AM_READWRITE(bml3_vram_attr_r,bml3_vram_attr_w)
+	// KB - Keyboard mode register, interrupt control, keyboard LEDs
+	AM_RANGE(0xffe0, 0xffe0) AM_READWRITE(bml3_keyboard_r,bml3_keyboard_w)
 //  AM_RANGE(0xffe8, 0xffe8) bank register
 //  AM_RANGE(0xffe9, 0xffe9) IG mode register
 //  AM_RANGE(0xffea, 0xffea) IG enable register
@@ -653,48 +435,79 @@ static ADDRESS_MAP_START(bml3_mem, AS_PROGRAM, 8, bml3_state)
 	AM_RANGE(0xe000, 0xefff) AM_WRITE(bml3_e000_w)
 	AM_RANGE(0xf000, 0xfeff) AM_WRITE(bml3_f000_w)
 	AM_RANGE(0xfff0, 0xffff) AM_WRITE(bml3_fff0_w)
+
+#if 0
+	AM_RANGE(0xff00, 0xff00) AM_READWRITE(bml3_ym2203_r,bml3_ym2203_w)
+	AM_RANGE(0xff02, 0xff02) AM_READWRITE(bml3_psg_latch_r,bml3_psg_latch_w) // PSG address/data select
+#endif
 ADDRESS_MAP_END
 
+static ADDRESS_MAP_START(bml3mk2_mem, AS_PROGRAM, 8, bml3_state)
+	AM_IMPORT_FROM(bml3_mem)
+	// TODO: anything to add here?
+
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START(bml3mk5_mem, AS_PROGRAM, 8, bml3_state)
+	AM_IMPORT_FROM(bml3_mem)
+	// TODO: anything to add here?
+
+ADDRESS_MAP_END
 
 /* Input ports */
 
 static INPUT_PORTS_START( bml3 )
+
+	// DIP switches (service manual p.88)
+	// Note the NEWON command reboots with a soft override for the DIP switch
 	PORT_START("DSW")
-	PORT_DIPNAME( 0x07, 0x01, "NewOn" ) // TODO
-	PORT_DIPSETTING(    0x00, "0" )
-	PORT_DIPSETTING(    0x01, "1" )
-	PORT_DIPSETTING(    0x02, "2" )
-	PORT_DIPSETTING(    0x03, "3" )
-	PORT_DIPSETTING(    0x04, "4" )
-	PORT_DIPSETTING(    0x05, "5" )
-	PORT_DIPSETTING(    0x06, "6" )
-	PORT_DIPSETTING(    0x07, "7" )
-	PORT_DIPNAME( 0x08, 0x00, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x08, DEF_STR( On ) )
-	PORT_DIPNAME( 0x10, 0x10, "Show F help" )
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x10, DEF_STR( On ) )
-	PORT_DIPNAME( 0x20, 0x00, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x20, DEF_STR( On ) )
-	PORT_DIPNAME( 0x40, 0x00, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x40, DEF_STR( On ) )
-	PORT_DIPNAME( 0x80, 0x00, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x80, DEF_STR( On ) )
+	PORT_DIPNAME(     0x01, 0x01, "BASIC/terminal mode")
+		PORT_DIPSETTING(0x00, "Terminal mode")
+		PORT_DIPSETTING(0x01, "BASIC mode")
+	PORT_DIPNAME(     0x02, 0x02, "Interlaced video")
+		PORT_DIPSETTING(0x00, DEF_STR( Off ) )
+		PORT_DIPSETTING(0x02, DEF_STR( On ))
+	// This is overridden by the 'Mode' toggle button
+	PORT_DIPNAME(     0x04, 0x04, "40-/80-column")
+		PORT_DIPSETTING(0x00, "40 chars/line")
+		PORT_DIPSETTING(0x04, "80 chars/line")
+	PORT_DIPNAME(     0x08, 0x00, "Video resolution")
+		PORT_DIPSETTING(0x00, "High")
+		PORT_DIPSETTING(0x08, "Low")
+	PORT_DIPNAME(     0x10, 0x00, "Show PF key content")
+		PORT_DIPSETTING(0x00, DEF_STR ( Off ) )
+		PORT_DIPSETTING(0x10, DEF_STR ( On ))
+	PORT_DIPNAME(     0x20, 0x00, "Terminal duplex")
+		PORT_DIPSETTING(0x00, "Full duplex")
+		PORT_DIPSETTING(0x20, "Half duplex")
+	PORT_DIPNAME(     0x40, 0x00, "Terminal bits")
+		PORT_DIPSETTING(0x00, "8 bits/char")
+		PORT_DIPSETTING(0x40, "7 bits/char")
+	PORT_DIPNAME(     0x80, 0x00, "Hiragana->Katakana")
+		PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+		PORT_DIPSETTING(    0x80, DEF_STR( On ) )
+
+// TODO: also model the CS jumper block?
+
+	// RAM expansion configurations (see service manual p.76)
+/*
+    PORT_START("RAM")
+    PORT_DIPNAME( 0x0003, 0x0002, "RAM size" )
+    PORT_DIPSETTING(   0x0000, "32 kiB (standard)" )
+    PORT_DIPSETTING(   0x0001, "40 kiB (32 kiB + 8 kiB)" )
+    PORT_DIPSETTING(   0x0002, "60 kiB (32 kiB + 28 kiB)" )
+*/
 
 	PORT_START("key1") //0x00-0x1f
 	PORT_BIT(0x00000001,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Space") PORT_CODE(KEYCODE_SPACE) PORT_CHAR(' ')
 	PORT_BIT(0x00000002,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Up") PORT_CODE(KEYCODE_UP)
-	PORT_BIT(0x00000004,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("? PAD")
+	PORT_BIT(0x00000004,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("? PAD") PORT_CHAR('?')
 	PORT_BIT(0x00000008,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Left") PORT_CODE(KEYCODE_LEFT)
 	PORT_BIT(0x00000010,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Down") PORT_CODE(KEYCODE_DOWN)
 	PORT_BIT(0x00000020,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Right") PORT_CODE(KEYCODE_RIGHT)
-	PORT_BIT(0x00000040,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("X1") PORT_CODE(KEYCODE_LCONTROL)
+	PORT_BIT(0x00000040,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Control") PORT_CODE(KEYCODE_LCONTROL)
 	PORT_BIT(0x00000080,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Shift")PORT_CODE(KEYCODE_LSHIFT)
-	PORT_BIT(0x00000100,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("X2")
+	PORT_BIT(0x00000100,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("X2")  // ???
 	PORT_BIT(0x00000200,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Caps Lock") PORT_CODE(KEYCODE_CAPSLOCK)
 	PORT_BIT(0x00000400,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Kana Lock") PORT_CODE(KEYCODE_NUMLOCK)
 	PORT_BIT(0x00000800,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Kana Shift")  PORT_CODE(KEYCODE_LALT)
@@ -710,14 +523,14 @@ static INPUT_PORTS_START( bml3 )
 	PORT_BIT(0x00200000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("^") PORT_CODE(KEYCODE_BACKSLASH)
 	PORT_BIT(0x00400000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("-") PORT_CODE(KEYCODE_MINUS) PORT_CHAR('-')
 	PORT_BIT(0x00800000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("3") PORT_CODE(KEYCODE_3) PORT_CHAR('3')
-	PORT_BIT(0x01000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Backspace") PORT_CODE(KEYCODE_BACKSPACE)
+	PORT_BIT(0x01000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Delete") PORT_CODE(KEYCODE_BACKSPACE)
 	PORT_BIT(0x02000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("5") PORT_CODE(KEYCODE_5) PORT_CHAR('5')
 	PORT_BIT(0x04000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("1") PORT_CODE(KEYCODE_1) PORT_CHAR('1')
 	PORT_BIT(0x08000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("2") PORT_CODE(KEYCODE_2) PORT_CHAR('2')
 	PORT_BIT(0x10000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("9") PORT_CODE(KEYCODE_9) PORT_CHAR('9')
 	PORT_BIT(0x20000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("7 PAD") PORT_CODE(KEYCODE_7_PAD) PORT_CHAR('7')
-	PORT_BIT(0x40000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("X7") //backspace
-	PORT_BIT(0x80000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("\xC2\xA5") //PORT_NAME("?")
+	PORT_BIT(0x40000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Delete PAD") //backspace
+	PORT_BIT(0x80000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("\xC2\xA5") PORT_CODE(KEYCODE_TAB) // yen sign
 
 	PORT_START("key2") //0x20-0x3f
 	PORT_BIT(0x00000001,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("U") PORT_CODE(KEYCODE_U)
@@ -733,7 +546,7 @@ static INPUT_PORTS_START( bml3 )
 	PORT_BIT(0x00000400,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("W") PORT_CODE(KEYCODE_W)
 	PORT_BIT(0x00000800,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("E") PORT_CODE(KEYCODE_E)
 	PORT_BIT(0x00001000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("O") PORT_CODE(KEYCODE_O)
-	PORT_BIT(0x00002000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(".")
+	PORT_BIT(0x00002000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(". PAD")  PORT_CODE(KEYCODE_DEL_PAD) PORT_CHAR('.')
 	PORT_BIT(0x00004000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("HOME") PORT_CODE(KEYCODE_HOME) //or cls?
 	PORT_BIT(0x00008000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("ENTER") PORT_CODE(KEYCODE_ENTER)
 	PORT_BIT(0x00010000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("J") PORT_CODE(KEYCODE_J)
@@ -751,7 +564,7 @@ static INPUT_PORTS_START( bml3 )
 	PORT_BIT(0x10000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("L") PORT_CODE(KEYCODE_L)
 	PORT_BIT(0x20000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("5 PAD") PORT_CODE(KEYCODE_5_PAD) PORT_CHAR('5')
 	PORT_BIT(0x40000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("6 PAD") PORT_CODE(KEYCODE_6_PAD) PORT_CHAR('6')
-	PORT_BIT(0x80000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("-") PORT_CODE(KEYCODE_MINUS_PAD) PORT_CHAR('-')
+	PORT_BIT(0x80000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("- PAD") PORT_CODE(KEYCODE_MINUS_PAD) PORT_CHAR('-')
 
 	PORT_START("key3") //0x40-0x5f
 	PORT_BIT(0x00000001,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("M") PORT_CODE(KEYCODE_M)
@@ -759,15 +572,15 @@ static INPUT_PORTS_START( bml3 )
 	PORT_BIT(0x00000004,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("N") PORT_CODE(KEYCODE_N)
 	PORT_BIT(0x00000008,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(",") PORT_CODE(KEYCODE_COMMA)
 	PORT_BIT(0x00000010,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("/") PORT_CODE(KEYCODE_SLASH)
-	PORT_BIT(0x00000020,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("/ PAD") PORT_CODE(KEYCODE_SLASH_PAD)
-	PORT_BIT(0x00000040,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("_")
-	PORT_BIT(0x00000080,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("1") PORT_CODE(KEYCODE_1_PAD) PORT_CHAR('1')
+	PORT_BIT(0x00000020,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("/ PAD") PORT_CODE(KEYCODE_SLASH_PAD) PORT_CHAR('/')
+	PORT_BIT(0x00000040,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("_") PORT_CODE(KEYCODE_TILDE)
+	PORT_BIT(0x00000080,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("1 PAD") PORT_CODE(KEYCODE_1_PAD) PORT_CHAR('1')
 	PORT_BIT(0x00000100,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Z") PORT_CODE(KEYCODE_Z)
 	PORT_BIT(0x00000200,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("B") PORT_CODE(KEYCODE_B)
 	PORT_BIT(0x00000400,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("X") PORT_CODE(KEYCODE_X)
 	PORT_BIT(0x00000800,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("C") PORT_CODE(KEYCODE_C)
 	PORT_BIT(0x00001000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(".") PORT_CODE(KEYCODE_STOP)
-	PORT_BIT(0x00002000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("X8")
+	PORT_BIT(0x00002000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("2 PAD") PORT_CODE(KEYCODE_2_PAD) PORT_CHAR('2')
 	PORT_BIT(0x00004000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("3 PAD") PORT_CODE(KEYCODE_3_PAD) PORT_CHAR('3')
 	PORT_BIT(0x00008000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("+") PORT_CODE(KEYCODE_PLUS_PAD)
 	PORT_BIT(0x00010000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("PF1") PORT_CODE(KEYCODE_F1)
@@ -778,57 +591,123 @@ static INPUT_PORTS_START( bml3 )
 	PORT_BIT(0xffe00000,IP_ACTIVE_HIGH,IPT_UNKNOWN)
 INPUT_PORTS_END
 
-
-static MC6845_INTERFACE( mc6845_intf )
+MC6845_UPDATE_ROW( bml3_state::crtc_update_row )
 {
-	"screen",   /* screen we are acting on */
-	false,      /* show border area */
-	8,          /* number of pixels per video memory address */
-	NULL,       /* before pixel update callback */
-	NULL,       /* row update callback */
-	NULL,       /* after pixel update callback */
-	DEVCB_NULL, /* callback for display state changes */
-	DEVCB_NULL, /* callback for cursor state changes */
-	DEVCB_NULL, /* HSYNC callback */
-	DEVCB_NULL, /* VSYNC callback */
-	NULL        /* update address callback */
-};
+	const rgb_t *palette = m_palette->palette()->entry_list_raw();
+	// The MB-6890 has a 5-bit colour RAM region.  The meaning of the bits are:
+	// 0: blue
+	// 1: red
+	// 2: green
+	// 3: reverse/inverse video
+	// 4: graphic (not character)
 
-static WRITE_LINE_DEVICE_HANDLER( bml3_fdc_intrq_w )
-{
-	// #$# ? HOLD_LINE or PULSE_LINE
-	// #$#debug
-	logerror("bml3_fdc_intrq_w called %d\n", state);
-	if (state)
-		device->machine().device("maincpu")->execute().set_input_line(INPUT_LINE_NMI, PULSE_LINE);
+	UINT8 x=0,hf=0,xi=0,interlace=0,bgcolor=0,rawbits=0,dots[2],color=0,pen=0;
+	bool reverse=0,graphic=0,lowres=0;
+	UINT16 mem=0;
+
+	interlace = (m_crtc_vreg[8] & 3) ? 1 : 0;
+	lowres = BIT(m_hres_reg, 6);
+	bgcolor = m_hres_reg & 7;
+
+	if (interlace)
+	{
+		ra >>= 1;
+		if (y > 0x176) return;
+	}
+
+	// redundant initializers to keep compiler happy
+	dots[0] = dots[1] = 0;
+
+	for(x=0; x<x_count; x++)
+	{
+		if (lowres)
+			mem = (ma + x - 0x400) & 0x3fff;
+		else
+			mem = (ma + x + ra * x_count/40 * 0x400 -0x400) & 0x3fff;
+
+		color = m_p_videoram[mem|0x4000] & 7;
+		reverse = BIT(m_p_videoram[mem|0x4000], 3) ^ (x == cursor_x);
+		graphic = BIT(m_p_videoram[mem|0x4000], 4);
+
+		rawbits = m_p_videoram[mem];
+
+		if (graphic)
+		{
+			if (lowres)
+			{
+				// low-res graphics, each tile has 8 bits arranged as follows:
+				// 4 0
+				// 5 1
+				// 6 2
+				// 7 3
+				dots[0] = dots[1] = (rawbits >> ra/2 & 0x11) * 0xf;
+			}
+			else
+			{
+				dots[0] = dots[1] = rawbits;
+			}
+		}
+		else
+		{
+			// character mode
+			int tile = rawbits & 0x7f;
+			int tile_bank = BIT(rawbits, 7);
+			if (interlace)
+			{
+				dots[0] = m_p_chargen[(tile_bank<<11)|(tile<<4)|(ra<<1)];
+				dots[1] = m_p_chargen[(tile_bank<<11)|(tile<<4)|(ra<<1)|tile_bank];
+			}
+			else
+			{
+				dots[0] = dots[1] = m_p_chargen[(tile<<4)|(ra<<1)|tile_bank];
+			}
+		}
+
+		for(hf=0;hf<=interlace;hf++)
+		{
+			for(xi=0;xi<8;xi++)
+			{
+				if(reverse)
+					pen = (dots[hf] >> (7-xi) & 1) ? bgcolor : color;
+				else
+					pen = (dots[hf] >> (7-xi) & 1) ? color : bgcolor;
+
+				bitmap.pix32(y, x*8+xi) = palette[pen];
+				// when the mc6845 device gains full interlace&video support, replace the line above with the line below
+				// bitmap.pix32(y*(interlace+1)+hf, x*8+xi) = palette[pen];
+			}
+		}
+	}
 }
+
 
 TIMER_DEVICE_CALLBACK_MEMBER(bml3_state::keyboard_callback)
 {
 	static const char *const portnames[3] = { "key1","key2","key3" };
-	int i,port_i,scancode,trigger = 0;
+	int i,port_i,trigger = 0;
 
-	if(!m_keyb_press_flag)
+	if(!(m_keyb_scancode & 0x80))
 	{
 		m_keyb_scancode = (m_keyb_scancode + 1) & 0x7F;
-		scancode = m_keyb_scancode;
+		if (m_keyb_counter_operation_disabled)
+		{
+			m_keyb_scancode &= 0x7;
+		}
 
-		if (scancode == 0x7F)
+		if (m_keyb_scancode == 0x7F)
 		{
 			if (m_keyb_empty_scan == 1)
 			{
 				// full scan completed with no keypress
-				m_keyb_press = 0;
-				if (!m_keyb_counter_operation_disabled)
-					trigger = !0;
+				trigger = !0;
 			}
 			if (m_keyb_empty_scan > 0)
 				m_keyb_empty_scan--;
 		}
-		else if (scancode < 32*3)
+		else if (m_keyb_scancode < 32*3)
 		{
-			port_i = scancode / 32;
-			i = scancode % 32;
+			port_i = m_keyb_scancode / 32;
+			i = m_keyb_scancode % 32;
 			if((ioport(portnames[port_i])->read()>>i) & 1)
 			{
 				m_keyb_empty_scan = 2;
@@ -837,19 +716,31 @@ TIMER_DEVICE_CALLBACK_MEMBER(bml3_state::keyboard_callback)
 		}
 		if (trigger)
 		{
-			m_keyb_press_flag = 1;
-			m_keyb_press = m_keyb_scancode | 0x80;
+			m_keyb_scancode |= 0x80;
 			if (!m_keyb_interrupt_disabled)
 				m_maincpu->set_input_line(M6809_IRQ_LINE, HOLD_LINE);
 		}
-		/*
-		else {
-		    // #$# ? don't need this
+		/* Don't need this apparently...
+		else
+		{
 		    m_maincpu->set_input_line(M6809_IRQ_LINE, CLEAR_LINE);
 		}
 		*/
 	}
+}
 
+TIMER_DEVICE_CALLBACK_MEMBER( bml3_state::bml3_p )
+{
+	/* cassette - turn 1200/2400Hz to a bit */
+	m_cass_data[1]++;
+	UINT8 cass_ws = (m_cass->input() > +0.03) ? 1 : 0;
+
+	if (cass_ws != m_cass_data[0])
+	{
+		m_cass_data[0] = cass_ws;
+		m_acia6850->write_rxd((m_cass_data[1] < 12) ? 1 : 0);
+		m_cass_data[1] = 0;
+	}
 }
 
 #if 0
@@ -869,19 +760,34 @@ INTERRUPT_GEN_MEMBER(bml3_state::bml3_timer_firq)
 	}
 }
 
-void bml3_state::palette_init()
+PALETTE_INIT_MEMBER(bml3_state, bml3)
 {
 	int i;
 
 	for(i=0;i<8;i++)
-		palette_set_color_rgb(machine(), i, pal1bit(i >> 1),pal1bit(i >> 2),pal1bit(i >> 0));
+		palette.set_pen_color(i, pal1bit(i >> 1),pal1bit(i >> 2),pal1bit(i >> 0));
 }
 
 void bml3_state::machine_start()
 {
-	m_beep->set_frequency(1200); //guesswork
-	m_beep->set_state(0);
 	m_extram = auto_alloc_array(machine(),UINT8,0x10000);
+	m_p_chargen = memregion("chargen")->base();
+	m_p_videoram = memregion("vram")->base();
+	m_psg_latch = 0;
+	m_attr_latch = 0;
+	m_vres_reg = 0;
+	m_keyb_interrupt_disabled = 0;
+	m_keyb_nmi_disabled = 0;
+	m_keyb_counter_operation_disabled = 0;
+	m_keyb_empty_scan = 0;
+	m_keyb_scancode = 0;
+	m_keyb_capslock_led_on = 0;
+	m_keyb_hiragana_led_on = 0;
+	m_keyb_katakana_led_on = 0;
+	m_crtc_index = 0;
+	m_firq_status = 0;
+	m_cassbit = 0;
+	m_cassold = 0;
 }
 
 void bml3_state::machine_reset()
@@ -900,55 +806,6 @@ void bml3_state::machine_reset()
 	m_firq_mask = -1; // disable firq
 }
 
-/* F4 Character Displayer */
-static const gfx_layout bml3_charlayout8x8even =
-{
-	8, 8,                   /* 8 x 8 characters */
-	RGN_FRAC(1,1),                  /* 256 characters */
-	1,                  /* 1 bits per pixel */
-	{ 0 },                  /* no bitplanes */
-	/* x offsets */
-	{ 0, 1, 2, 3, 4, 5, 6, 7 },
-	/* y offsets */
-	{ 0*8, 2*8,4*8, 6*8, 8*8, 10*8, 12*8, 14*8 },
-	8*16                    /* every char takes 8 bytes */
-};
-
-static const gfx_layout bml3_charlayout8x8odd =
-{
-	8, 8,                   /* 8 x 8 characters */
-	RGN_FRAC(1,1),                  /* 256 characters */
-	1,                  /* 1 bits per pixel */
-	{ 0 },                  /* no bitplanes */
-	/* x offsets */
-	{ 0, 1, 2, 3, 4, 5, 6, 7 },
-	/* y offsets */
-	{ 1*8, 3*8, 5*8, 7*8, 9*8, 11*8, 13*8, 15*8 },
-	8*16                    /* every char takes 8 bytes */
-};
-
-static const gfx_layout bml3_charlayout8x16 =
-{
-	8, 16,                  /* 8 x 8 characters */
-	RGN_FRAC(1,1),                  /* 256 characters */
-	1,                  /* 1 bits per pixel */
-	{ 0 },                  /* no bitplanes */
-	/* x offsets */
-	{ 0, 1, 2, 3, 4, 5, 6, 7 },
-	/* y offsets */
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8, 8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
-	8*16                    /* every char takes 8 bytes */
-};
-
-static GFXDECODE_START( bml3 )
-	GFXDECODE_ENTRY( "chargen", 0, bml3_charlayout8x8even, 0, 4 )
-	GFXDECODE_ENTRY( "chargen", 0, bml3_charlayout8x8odd, 0, 4 )
-	GFXDECODE_ENTRY( "chargen", 0, bml3_charlayout8x16, 0, 4 )
-GFXDECODE_END
-
-// #$# ? remove if not using proper mc6843?
-// const mc6843_interface bml3_6843_if = { NULL };
-
 WRITE8_MEMBER(bml3_state::bml3_piaA_w)
 {
 	address_space &mem = m_maincpu->space(AS_PROGRAM);
@@ -965,7 +822,7 @@ WRITE8_MEMBER(bml3_state::bml3_piaA_w)
 	---- ---x 0xf000 - 0xfeff (0) ROM R RAM W (1) RAM R/W
 	---- --x- 0xfff0 - 0xffff (0) ROM R RAM W (1) RAM R/W
 	*/
-	printf("Check banking PIA A -> %02x\n",data);
+	logerror("Check banking PIA A -> %02x\n",data);
 
 	if(!(data & 0x2))
 	{
@@ -1052,63 +909,46 @@ WRITE8_MEMBER(bml3_state::bml3_piaA_w)
 	}
 }
 
-static const pia6821_interface bml3_pia_config =
-{
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL,
-
-	DEVCB_DRIVER_MEMBER(bml3_state, bml3_piaA_w),   /* port A output */
-	DEVCB_NULL,
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL
-};
-
-
-READ_LINE_MEMBER( bml3_state::bml3_acia_rx_r )
-{
-	printf("TAPE R\n");
-	return 1;
-}
-
 WRITE_LINE_MEMBER( bml3_state::bml3_acia_tx_w )
 {
-	printf("%02x TAPE\n",state);
+	//logerror("%02x TAPE\n",state);
+	m_cassbit = state;
 }
 
-
-READ_LINE_MEMBER( bml3_state::bml3_acia_dts_r )
-{
-	printf("TAPE R DTS\n");
-	return 1;
-}
 
 WRITE_LINE_MEMBER( bml3_state::bml3_acia_rts_w )
 {
-	printf("%02x TAPE RTS\n",state);
-}
-
-READ_LINE_MEMBER( bml3_state::bml3_acia_dcd_r )
-{
-	printf("TAPE R DCD\n");
-	return 1;
+	logerror("%02x TAPE RTS\n",state);
 }
 
 WRITE_LINE_MEMBER( bml3_state::bml3_acia_irq_w )
 {
-	printf("%02x TAPE IRQ\n",state);
+	logerror("%02x TAPE IRQ\n",state);
 }
 
-
-static ACIA6850_INTERFACE( bml3_acia_if )
+WRITE_LINE_MEMBER( bml3_state::write_acia_clock )
 {
-	600,
-	600,
-	DEVCB_DRIVER_LINE_MEMBER(bml3_state, bml3_acia_rx_r),
-	DEVCB_DRIVER_LINE_MEMBER(bml3_state, bml3_acia_tx_w),
-	DEVCB_DRIVER_LINE_MEMBER(bml3_state, bml3_acia_dts_r),
-	DEVCB_DRIVER_LINE_MEMBER(bml3_state, bml3_acia_rts_w),
-	DEVCB_DRIVER_LINE_MEMBER(bml3_state, bml3_acia_dcd_r),
-	DEVCB_DRIVER_LINE_MEMBER(bml3_state, bml3_acia_irq_w)
-};
+	m_acia6850->write_txc(state);
+	m_acia6850->write_rxc(state);
+}
 
+TIMER_DEVICE_CALLBACK_MEMBER( bml3_state::bml3_c )
+{
+	m_cass_data[3]++;
+
+	if (m_cassbit != m_cassold)
+	{
+		m_cass_data[3] = 0;
+		m_cassold = m_cassbit;
+	}
+
+	if (m_cassbit)
+		m_cass->output(BIT(m_cass_data[3], 0) ? -1.0 : +1.0); // 2400Hz
+	else
+		m_cass->output(BIT(m_cass_data[3], 1) ? -1.0 : +1.0); // 1200Hz
+}
+
+#if 0
 static const ay8910_interface ay8910_config =
 {
 	AY8910_LEGACY_OUTPUT,
@@ -1118,31 +958,18 @@ static const ay8910_interface ay8910_config =
 	DEVCB_NULL, // write A
 	DEVCB_NULL  // write B
 };
+#endif
 
-static const floppy_interface bml3_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_DSDD,
-	LEGACY_FLOPPY_OPTIONS_NAME(bml3),
-	NULL
-};
+static SLOT_INTERFACE_START(bml3_cards)
+	SLOT_INTERFACE("bml3mp1802", BML3BUS_MP1802)  /* MP-1802 Floppy Controller Card */
+	SLOT_INTERFACE("bml3mp1805", BML3BUS_MP1805)  /* MP-1805 Floppy Controller Card */
+	SLOT_INTERFACE("bml3kanji",  BML3BUS_KANJI)
+SLOT_INTERFACE_END
 
-const wd17xx_interface bml3_wd17xx_interface =
-{
-	DEVCB_NULL,
-	DEVCB_LINE(bml3_fdc_intrq_w),
-	DEVCB_NULL,
-	{FLOPPY_0, FLOPPY_1}
-};
 
-static MACHINE_CONFIG_START( bml3, bml3_state )
+static MACHINE_CONFIG_START( bml3_common, bml3_state )
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu",M6809, XTAL_1MHz)
-	MCFG_CPU_PROGRAM_MAP(bml3_mem)
+	MCFG_CPU_ADD("maincpu",M6809, CPU_CLOCK)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", bml3_state,  bml3_timer_firq)
 //  MCFG_CPU_PERIODIC_INT_DRIVER(bml3_state, bml3_firq, 45)
 
@@ -1151,45 +978,118 @@ static MACHINE_CONFIG_START( bml3, bml3_state )
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
-	MCFG_SCREEN_SIZE(640, 480)
+	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2400)) /* Service manual specifies "Raster return period" as 2.4 ms (p.64), although the total vertical non-displaying time seems to be 4 ms. */
+	MCFG_SCREEN_SIZE(640, 400)
 	MCFG_SCREEN_VISIBLE_AREA(0, 320-1, 0, 200-1)
-	MCFG_SCREEN_UPDATE_DRIVER(bml3_state, screen_update_bml3)
-	MCFG_PALETTE_LENGTH(8)
-	MCFG_GFXDECODE(bml3)
+	MCFG_SCREEN_UPDATE_DEVICE("crtc", mc6845_device, screen_update)
+	MCFG_PALETTE_ADD("palette", 8)
+	MCFG_PALETTE_INIT_OWNER(bml3_state, bml3)
 
 	/* Devices */
-	MCFG_MC6845_ADD("crtc", H46505, XTAL_1MHz, mc6845_intf)
-	// fire once per scan of an individual key
-	MCFG_TIMER_DRIVER_ADD_PERIODIC("keyboard_timer", bml3_state, keyboard_callback, attotime::from_hz(15750/2))
-	// #$# ? remove if not using proper mc6843?
-	// MCFG_MC6843_ADD( "mc6843", bml3_6843_if )
-	MCFG_PIA6821_ADD("pia6821", bml3_pia_config)
-	MCFG_ACIA6850_ADD("acia6850", bml3_acia_if)
+	// CRTC clock should be synchronous with the CPU clock.
+	MCFG_MC6845_ADD("crtc", H46505, "screen", CPU_CLOCK)
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
+	MCFG_MC6845_UPDATE_ROW_CB(bml3_state, crtc_update_row)
 
-	/* floppy */
-	// #$# not sure what wd17xx model, this is just a guess
-	MCFG_WD1773_ADD("fdc", bml3_wd17xx_interface )
-	MCFG_LEGACY_FLOPPY_2_DRIVES_ADD(bml3_floppy_interface)
+	// fire once per scan of an individual key
+	// According to the service manual (p.65), the keyboard timer is driven by the horizontal video sync clock.
+	MCFG_TIMER_DRIVER_ADD_PERIODIC("keyboard_timer", bml3_state, keyboard_callback, attotime::from_hz(H_CLOCK/2))
+	MCFG_TIMER_DRIVER_ADD_PERIODIC("bml3_c", bml3_state, bml3_c, attotime::from_hz(4800))
+	MCFG_TIMER_DRIVER_ADD_PERIODIC("bml3_p", bml3_state, bml3_p, attotime::from_hz(40000))
+
+	MCFG_DEVICE_ADD("pia6821", PIA6821, 0)
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(bml3_state, bml3_piaA_w))
+
+	MCFG_DEVICE_ADD("acia6850", ACIA6850, 0)
+	MCFG_ACIA6850_TXD_HANDLER(WRITELINE(bml3_state, bml3_acia_tx_w))
+	MCFG_ACIA6850_RTS_HANDLER(WRITELINE(bml3_state, bml3_acia_rts_w))
+	MCFG_ACIA6850_IRQ_HANDLER(WRITELINE(bml3_state, bml3_acia_irq_w))
+
+	MCFG_DEVICE_ADD("acia_clock", CLOCK, 9600) // 600 baud x 16(divider) = 9600
+	MCFG_CLOCK_SIGNAL_HANDLER(WRITELINE(bml3_state, write_acia_clock))
+
+	MCFG_CASSETTE_ADD( "cassette" )
 
 	/* Audio */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
-	MCFG_SOUND_ADD("beeper", BEEP, 0)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS,"mono",0.50)
+	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
+	MCFG_SOUND_ADD("speaker", SPEAKER_SOUND, 0)
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
+	/* slot devices */
+	MCFG_DEVICE_ADD("bml3bus", BML3BUS, 0)
+	MCFG_BML3BUS_CPU("maincpu")
+	MCFG_BML3BUS_OUT_NMI_CB(WRITELINE(bml3_state, bml3bus_nmi_w))
+	MCFG_BML3BUS_OUT_IRQ_CB(WRITELINE(bml3_state, bml3bus_irq_w))
+	MCFG_BML3BUS_OUT_FIRQ_CB(WRITELINE(bml3_state, bml3bus_firq_w))
+	/* Default to MP-1805 disk (3" or 5.25" SS/SD), as our MB-6892 ROM dump includes
+	   the MP-1805 ROM.
+	   User may want to switch this to MP-1802 (5.25" DS/DD).
+	   Note it isn't feasible to use both, as they each place boot ROM at F800.
+	 */
+	MCFG_BML3BUS_SLOT_ADD("bml3bus", "sl1", bml3_cards, "bml3mp1805")
+	MCFG_BML3BUS_SLOT_ADD("bml3bus", "sl2", bml3_cards, NULL)
+	MCFG_BML3BUS_SLOT_ADD("bml3bus", "sl3", bml3_cards, NULL)
+	MCFG_BML3BUS_SLOT_ADD("bml3bus", "sl4", bml3_cards, NULL)
+	MCFG_BML3BUS_SLOT_ADD("bml3bus", "sl5", bml3_cards, NULL)
+	MCFG_BML3BUS_SLOT_ADD("bml3bus", "sl6", bml3_cards, "bml3kanji")
+
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( bml3, bml3_common )
+	MCFG_CPU_MODIFY( "maincpu" )
+	MCFG_CPU_PROGRAM_MAP(bml3_mem)
+
+#if 0
+	// TODO: slot device for sound card
+	// audio
 	MCFG_SOUND_ADD("ym2203", YM2203, 2000000) //unknown clock / divider
 	MCFG_YM2203_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(0, "mono", 0.25)
 	MCFG_SOUND_ROUTE(1, "mono", 0.25)
 	MCFG_SOUND_ROUTE(2, "mono", 0.50)
 	MCFG_SOUND_ROUTE(3, "mono", 0.50)
+#endif
 MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( bml3mk2, bml3_common )
+	MCFG_CPU_MODIFY( "maincpu" )
+	MCFG_CPU_PROGRAM_MAP(bml3mk2_mem)
+
+	// TODO: anything to add here?
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( bml3mk5, bml3_common )
+	MCFG_CPU_MODIFY( "maincpu" )
+	MCFG_CPU_PROGRAM_MAP(bml3mk5_mem)
+
+	// TODO: anything to add here?
+MACHINE_CONFIG_END
+
+
 
 /* ROM definition */
 ROM_START( bml3 )
 	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
 //  ROM_LOAD( "l3bas.rom", 0xa000, 0x6000, BAD_DUMP CRC(d81baa07) SHA1(a8fd6b29d8c505b756dbf5354341c48f9ac1d24d)) //original, 24k isn't a proper rom size!
-	/* Handcrafted ROMs, rom labels and contents might not match */
+	// TODO: replace with MB-6890 ROMs (these are from an MB-6892)
+	ROM_LOAD( "598 p16611.ic3", 0xa000, 0x2000, BAD_DUMP CRC(954b9bad) SHA1(047948fac6808717c60a1d0ac9205a5725362430))
+	ROM_LOAD( "599 p16561.ic4", 0xc000, 0x2000, BAD_DUMP CRC(b27a48f5) SHA1(94cb616df4caa6415c5076f9acdf675acb7453e2))
+	// TODO: Replace checksums with a ROM dump without a disk controller patch (checksums here are inclusive of the MP1805 patch)
+	ROM_LOAD( "600 p16681.ic5", 0xe000, 0x2000, BAD_DUMP CRC(fe3988a5) SHA1(edc732f1cd421e0cf45ffcfc71c5589958ceaae7))
+
+	ROM_REGION( 0x1000, "chargen", 0 )
+	ROM_LOAD("font.rom", 0x00000, 0x1000, BAD_DUMP CRC(0b6f2f10) SHA1(dc411b447ca414e94843636d8b5f910c954581fb) ) // handcrafted
+
+	ROM_REGION( 0x8000, "vram", ROMREGION_ERASEFF )
+ROM_END
+
+ROM_START( bml3mk2 )
+	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
+//  ROM_LOAD( "l3bas.rom", 0xa000, 0x6000, BAD_DUMP CRC(d81baa07) SHA1(a8fd6b29d8c505b756dbf5354341c48f9ac1d24d)) //original, 24k isn't a proper rom size!
+	// TODO: replace with MB-6891 ROMs (these are from an MB-6892)
 	ROM_LOAD( "598 p16611.ic3", 0xa000, 0x2000, BAD_DUMP CRC(954b9bad) SHA1(047948fac6808717c60a1d0ac9205a5725362430))
 	ROM_LOAD( "599 p16561.ic4", 0xc000, 0x2000, BAD_DUMP CRC(b27a48f5) SHA1(94cb616df4caa6415c5076f9acdf675acb7453e2))
 	ROM_LOAD( "600 p16681.ic5", 0xe000, 0x2000, BAD_DUMP CRC(fe3988a5) SHA1(edc732f1cd421e0cf45ffcfc71c5589958ceaae7))
@@ -1198,12 +1098,26 @@ ROM_START( bml3 )
 	ROM_LOAD("font.rom", 0x00000, 0x1000, BAD_DUMP CRC(0b6f2f10) SHA1(dc411b447ca414e94843636d8b5f910c954581fb) ) // handcrafted
 
 	ROM_REGION( 0x8000, "vram", ROMREGION_ERASEFF )
+ROM_END
 
-	ROM_REGION( 0x20000, "kanji", ROMREGION_ERASEFF )
-	ROM_LOAD("kanji.rom", 0x00000, 0x20000, NO_DUMP )
+ROM_START( bml3mk5 )
+	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
+//  ROM_LOAD( "l3bas.rom", 0xa000, 0x6000, BAD_DUMP CRC(d81baa07) SHA1(a8fd6b29d8c505b756dbf5354341c48f9ac1d24d)) //original, 24k isn't a proper rom size!
+	/* Handcrafted ROMs, rom labels and contents might not match */
+	ROM_LOAD( "598 p16611.ic3", 0xa000, 0x2000, BAD_DUMP CRC(954b9bad) SHA1(047948fac6808717c60a1d0ac9205a5725362430))
+	ROM_LOAD( "599 p16561.ic4", 0xc000, 0x2000, BAD_DUMP CRC(b27a48f5) SHA1(94cb616df4caa6415c5076f9acdf675acb7453e2))
+	// TODO: Replace checksums with a ROM dump without a disk controller patch (checksums here are inclusive of the MP1805 patch)
+	ROM_LOAD( "600 p16681.ic5", 0xe000, 0x2000, BAD_DUMP CRC(fe3988a5) SHA1(edc732f1cd421e0cf45ffcfc71c5589958ceaae7))
+
+	ROM_REGION( 0x1000, "chargen", 0 )
+	ROM_LOAD("font.rom", 0x00000, 0x1000, BAD_DUMP CRC(0b6f2f10) SHA1(dc411b447ca414e94843636d8b5f910c954581fb) ) // handcrafted
+
+	ROM_REGION( 0x8000, "vram", ROMREGION_ERASEFF )
 ROM_END
 
 /* Driver */
 
-/*    YEAR  NAME    PARENT  COMPAT   MACHINE    INPUT    INIT     COMPANY         FULLNAME           FLAGS */
-COMP( 1980, bml3,   0,      0,       bml3,      bml3, driver_device,    0,      "Hitachi", "Basic Master Level 3", GAME_NOT_WORKING | GAME_NO_SOUND)
+/*    YEAR  NAME    PARENT  COMPAT   MACHINE    INPUT    INIT                      COMPANY    FULLNAME                        FLAGS */
+COMP( 1980, bml3,   0,      0,       bml3,      bml3,    driver_device,    0,      "Hitachi", "MB-6890 Basic Master Level 3", GAME_NOT_WORKING)
+COMP( 1982, bml3mk2,bml3,   0,       bml3mk2,   bml3,    driver_device,    0,      "Hitachi", "MB-6891 Basic Master Level 3 Mark 2", GAME_NOT_WORKING)
+COMP( 1983, bml3mk5,bml3,   0,       bml3mk5,   bml3,    driver_device,    0,      "Hitachi", "MB-6892 Basic Master Level 3 Mark 5", GAME_NOT_WORKING)

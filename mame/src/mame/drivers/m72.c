@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
 IREM M72 board
@@ -84,9 +86,8 @@ other supported games as well.
 #include "emu.h"
 #include "cpu/z80/z80.h"
 #include "cpu/nec/nec.h"
+#include "cpu/nec/v25.h"
 #include "machine/irem_cpu.h"
-#include "audio/m72.h"
-#include "sound/dac.h"
 #include "sound/2151intf.h"
 #include "includes/iremipt.h"
 #include "includes/m72.h"
@@ -97,26 +98,16 @@ other supported games as well.
 
 
 
-
-
-
 /***************************************************************************/
 
-MACHINE_START_MEMBER(m72_state,m72)
+void m72_state::machine_start()
 {
-	m_audio = machine().device("m72");
-	m_scanline_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(m72_state::m72_scanline_interrupt),this));
-
-	save_item(NAME(m_mcu_sample_addr));
-	save_item(NAME(m_mcu_snd_cmd_latch));
+	m_scanline_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(m72_state::scanline_interrupt),this));
 }
 
 MACHINE_START_MEMBER(m72_state,kengo)
 {
 	m_scanline_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(m72_state::kengo_scanline_interrupt),this));
-
-	save_item(NAME(m_mcu_sample_addr));
-	save_item(NAME(m_mcu_snd_cmd_latch));
 }
 
 TIMER_CALLBACK_MEMBER(m72_state::synch_callback)
@@ -125,49 +116,49 @@ TIMER_CALLBACK_MEMBER(m72_state::synch_callback)
 	machine().scheduler().boost_interleave(attotime::from_hz(MASTER_CLOCK/4/12), attotime::from_seconds(25));
 }
 
-MACHINE_RESET_MEMBER(m72_state,m72)
+void m72_state::machine_reset()
 {
 	m_irq_base = 0x20;
 	m_mcu_sample_addr = 0;
 	m_mcu_snd_cmd_latch = 0;
 
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(0));
+	m_scanline_timer->adjust(m_screen->time_until_pos(0));
 	machine().scheduler().synchronize(timer_expired_delegate(FUNC(m72_state::synch_callback),this));
 }
 
 MACHINE_RESET_MEMBER(m72_state,xmultipl)
 {
+	m72_state::machine_reset();
 	m_irq_base = 0x08;
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(0));
 }
 
 MACHINE_RESET_MEMBER(m72_state,kengo)
 {
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(0));
+	m_scanline_timer->adjust(m_screen->time_until_pos(0));
 }
 
-TIMER_CALLBACK_MEMBER(m72_state::m72_scanline_interrupt)
+TIMER_CALLBACK_MEMBER(m72_state::scanline_interrupt)
 {
 	int scanline = param;
 
 	/* raster interrupt - visible area only? */
 	if (scanline < 256 && scanline == m_raster_irq_position - 128)
 	{
-		machine().primary_screen->update_partial(scanline);
+		m_screen->update_partial(scanline);
 		m_maincpu->set_input_line_and_vector(0, HOLD_LINE, m_irq_base + 2);
 	}
 
 	/* VBLANK interrupt */
 	else if (scanline == 256)
 	{
-		machine().primary_screen->update_partial(scanline);
+		m_screen->update_partial(scanline);
 		m_maincpu->set_input_line_and_vector(0, HOLD_LINE, m_irq_base + 0);
 	}
 
 	/* adjust for next scanline */
-	if (++scanline >= machine().primary_screen->height())
+	if (++scanline >= m_screen->height())
 		scanline = 0;
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(scanline), scanline);
+	m_scanline_timer->adjust(m_screen->time_until_pos(scanline), scanline);
 }
 
 TIMER_CALLBACK_MEMBER(m72_state::kengo_scanline_interrupt)
@@ -177,7 +168,7 @@ TIMER_CALLBACK_MEMBER(m72_state::kengo_scanline_interrupt)
 	/* raster interrupt - visible area only? */
 	if (scanline < 256 && scanline == m_raster_irq_position - 128)
 	{
-		machine().primary_screen->update_partial(scanline);
+		m_screen->update_partial(scanline);
 		m_maincpu->set_input_line(NEC_INPUT_LINE_INTP2, ASSERT_LINE);
 	}
 	else
@@ -186,24 +177,21 @@ TIMER_CALLBACK_MEMBER(m72_state::kengo_scanline_interrupt)
 	/* VBLANK interrupt */
 	if (scanline == 256)
 	{
-		machine().primary_screen->update_partial(scanline);
+		m_screen->update_partial(scanline);
 		m_maincpu->set_input_line(NEC_INPUT_LINE_INTP0, ASSERT_LINE);
 	}
 	else
 		m_maincpu->set_input_line(NEC_INPUT_LINE_INTP0, CLEAR_LINE);
 
 	/* adjust for next scanline */
-	if (++scanline >= machine().primary_screen->height())
+	if (++scanline >= m_screen->height())
 		scanline = 0;
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(scanline), scanline);
+	m_scanline_timer->adjust(m_screen->time_until_pos(scanline), scanline);
 }
 
 /***************************************************************************
 
 Protection emulation
-
-Currently only available for lohtb2, since this is the only game
-with a dumped 8751.
 
 The protection device does
 
@@ -223,7 +211,7 @@ TIMER_CALLBACK_MEMBER(m72_state::delayed_ram16_w)
 }
 
 
-WRITE16_MEMBER(m72_state::m72_main_mcu_sound_w)
+WRITE16_MEMBER(m72_state::main_mcu_sound_w)
 {
 	if (data & 0xfff0)
 		logerror("sound_w: %04x %04x\n", mem_mask, data);
@@ -235,7 +223,7 @@ WRITE16_MEMBER(m72_state::m72_main_mcu_sound_w)
 	}
 }
 
-WRITE16_MEMBER(m72_state::m72_main_mcu_w)
+WRITE16_MEMBER(m72_state::main_mcu_w)
 {
 	UINT16 val = m_protection_ram[offset];
 
@@ -257,7 +245,7 @@ WRITE16_MEMBER(m72_state::m72_main_mcu_w)
 		machine().scheduler().synchronize( timer_expired_delegate(FUNC(m72_state::delayed_ram16_w),this), (offset<<16) | val, m_protection_ram);
 }
 
-WRITE8_MEMBER(m72_state::m72_mcu_data_w)
+WRITE8_MEMBER(m72_state::mcu_data_w)
 {
 	UINT16 val;
 	if (offset&1) val = (m_protection_ram[offset/2] & 0x00ff) | (data << 8);
@@ -266,7 +254,7 @@ WRITE8_MEMBER(m72_state::m72_mcu_data_w)
 	machine().scheduler().synchronize( timer_expired_delegate(FUNC(m72_state::delayed_ram16_w),this), ((offset >>1 ) << 16) | val, m_protection_ram);
 }
 
-READ8_MEMBER(m72_state::m72_mcu_data_r)
+READ8_MEMBER(m72_state::mcu_data_r)
 {
 	UINT8 ret;
 
@@ -281,38 +269,38 @@ READ8_MEMBER(m72_state::m72_mcu_data_r)
 	return ret;
 }
 
-INTERRUPT_GEN_MEMBER(m72_state::m72_mcu_int)
+INTERRUPT_GEN_MEMBER(m72_state::mcu_int)
 {
 	//m_mcu_snd_cmd_latch |= 0x11; /* 0x10 is special as well - FIXME */
 	m_mcu_snd_cmd_latch = 0x11;// | (machine.rand() & 1); /* 0x10 is special as well - FIXME */
 	device.execute().set_input_line(1, ASSERT_LINE);
 }
 
-READ8_MEMBER(m72_state::m72_mcu_sample_r)
+READ8_MEMBER(m72_state::mcu_sample_r)
 {
 	UINT8 sample;
 	sample = memregion("samples")->base()[m_mcu_sample_addr++];
 	return sample;
 }
 
-WRITE8_MEMBER(m72_state::m72_mcu_ack_w)
+WRITE8_MEMBER(m72_state::mcu_ack_w)
 {
 	m_mcu->set_input_line(1, CLEAR_LINE);
 	m_mcu_snd_cmd_latch = 0;
 }
 
-READ8_MEMBER(m72_state::m72_mcu_snd_r)
+READ8_MEMBER(m72_state::mcu_snd_r)
 {
 	return m_mcu_snd_cmd_latch;
 }
 
-READ8_MEMBER(m72_state::m72_mcu_port_r)
+READ8_MEMBER(m72_state::mcu_port_r)
 {
 	logerror("port read: %02x\n", offset);
 	return 0;
 }
 
-WRITE8_MEMBER(m72_state::m72_mcu_port_w)
+WRITE8_MEMBER(m72_state::mcu_port_w)
 {
 	if (offset == 1)
 	{
@@ -324,25 +312,19 @@ WRITE8_MEMBER(m72_state::m72_mcu_port_w)
 
 }
 
-WRITE8_MEMBER(m72_state::m72_mcu_low_w)
+WRITE8_MEMBER(m72_state::mcu_low_w)
 {
 	m_mcu_sample_addr = (m_mcu_sample_addr & 0xffe000) | (data<<5);
 	logerror("low: %02x %02x %08x\n", offset, data, m_mcu_sample_addr);
 }
 
-WRITE8_MEMBER(m72_state::m72_mcu_high_w)
+WRITE8_MEMBER(m72_state::mcu_high_w)
 {
 	m_mcu_sample_addr = (m_mcu_sample_addr & 0x1fff) | (data<<(8+5));
 	logerror("high: %02x %02x %08x\n", offset, data, m_mcu_sample_addr);
 }
 
-WRITE8_MEMBER(m72_state::m72_snd_cpu_sample_w)
-{
-	//m_dac->write_signed8(data);
-	m_dac->write_unsigned8(data);
-}
-
-READ8_MEMBER(m72_state::m72_snd_cpu_sample_r)
+READ8_MEMBER(m72_state::snd_cpu_sample_r)
 {
 	return m_mcu_sample_latch;
 }
@@ -355,15 +337,20 @@ DRIVER_INIT_MEMBER(m72_state,m72_8751)
 
 	m_protection_ram = auto_alloc_array(machine(), UINT16, 0x10000/2);
 	program.install_read_bank(0xb0000, 0xbffff, "bank1");
-	program.install_write_handler(0xb0000, 0xb0fff, write16_delegate(FUNC(m72_state::m72_main_mcu_w),this));
-	membank("bank1")->set_base(m_protection_ram);
+	program.install_write_handler(0xb0000, 0xb0fff, write16_delegate(FUNC(m72_state::main_mcu_w),this));
+	membank("bank1")->configure_entry(0, m_protection_ram);
 
-	//io.install_legacy_write_handler(0xc0, 0xc1, FUNC(loht_sample_trigger_w));
-	io.install_write_handler(0xc0, 0xc1, write16_delegate(FUNC(m72_state::m72_main_mcu_sound_w),this));
+	save_pointer(NAME(m_protection_ram), 0x10000/2);
+	save_item(NAME(m_mcu_sample_latch));
+	save_item(NAME(m_mcu_sample_addr));
+	save_item(NAME(m_mcu_snd_cmd_latch));
+
+	//io.install_write_handler(0xc0, 0xc1, write16_delegate(FUNC(m72_state::loht_sample_trigger_w),this));
+	io.install_write_handler(0xc0, 0xc1, write16_delegate(FUNC(m72_state::main_mcu_sound_w),this));
 
 	/* sound cpu */
-	sndio.install_write_handler(0x82, 0x82, 0xff, 0, write8_delegate(FUNC(m72_state::m72_snd_cpu_sample_w),this));
-	sndio.install_read_handler (0x84, 0x84, 0xff, 0, read8_delegate(FUNC(m72_state::m72_snd_cpu_sample_r),this));
+	sndio.install_write_handler(0x82, 0x82, 0xff, 0, write8_delegate(FUNC(dac_device::write_unsigned8),(dac_device*)m_dac));
+	sndio.install_read_handler (0x84, 0x84, 0xff, 0, read8_delegate(FUNC(m72_state::snd_cpu_sample_r),this));
 
 	/* lohtb2 */
 #if 0
@@ -433,46 +420,42 @@ int m72_state::find_sample(int num)
 INTERRUPT_GEN_MEMBER(m72_state::fake_nmi)
 {
 	address_space &space = generic_space();
-	int sample = m72_sample_r(m_audio,space,0);
+	int sample = m_audio->sample_r(space,0);
 	if (sample)
-		m72_sample_w(m_audio,space,0,sample);
+		m_audio->sample_w(space,0,sample);
 }
 
 
 WRITE16_MEMBER(m72_state::bchopper_sample_trigger_w)
 {
 	static const int a[6] = { 0x0000, 0x0010, 0x2510, 0x6510, 0x8510, 0x9310 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 6) m72_set_sample_start(m_audio, a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 6) m_audio->set_sample_start(a[data & 0xff]);
 }
 
 WRITE16_MEMBER(m72_state::nspirit_sample_trigger_w)
 {
 	static const int a[9] = { 0x0000, 0x0020, 0x2020, 0, 0x5720, 0, 0x7b60, 0x9b60, 0xc360 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9) m72_set_sample_start(m_audio, a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9) m_audio->set_sample_start(a[data & 0xff]);
 }
 
 WRITE16_MEMBER(m72_state::imgfight_sample_trigger_w)
 {
 	static const int a[7] = { 0x0000, 0x0020, 0x44e0, 0x98a0, 0xc820, 0xf7a0, 0x108c0 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7) m72_set_sample_start(m_audio, a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7) m_audio->set_sample_start(a[data & 0xff]);
 }
 
 WRITE16_MEMBER(m72_state::loht_sample_trigger_w)
 {
 	static const int a[7] = { 0x0000, 0x0020, 0, 0x2c40, 0x4320, 0x7120, 0xb200 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7) m72_set_sample_start(m_audio, a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7) m_audio->set_sample_start(a[data & 0xff]);
 }
 
-WRITE16_MEMBER(m72_state::xmultiplm72_sample_trigger_w)
-{
-	static const int a[3] = { 0x0000, 0x0020, 0x1a40 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 3) m72_set_sample_start(m_audio, a[data & 0xff]);
-}
+
 
 WRITE16_MEMBER(m72_state::dbreedm72_sample_trigger_w)
 {
 	static const int a[9] = { 0x00000, 0x00020, 0x02c40, 0x08160, 0x0c8c0, 0x0ffe0, 0x13000, 0x15820, 0x15f40 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9) m72_set_sample_start(m_audio, a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9) m_audio->set_sample_start(a[data & 0xff]);
 }
 
 WRITE16_MEMBER(m72_state::airduel_sample_trigger_w)
@@ -480,7 +463,7 @@ WRITE16_MEMBER(m72_state::airduel_sample_trigger_w)
 	static const int a[16] = {
 		0x00000, 0x00020, 0x03ec0, 0x05640, 0x06dc0, 0x083a0, 0x0c000, 0x0eb60,
 		0x112e0, 0x13dc0, 0x16520, 0x16d60, 0x18ae0, 0x1a5a0, 0x1bf00, 0x1c340 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 16) m72_set_sample_start(m_audio, a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 16) m_audio->set_sample_start(a[data & 0xff]);
 }
 
 WRITE16_MEMBER(m72_state::dkgenm72_sample_trigger_w)
@@ -491,7 +474,7 @@ WRITE16_MEMBER(m72_state::dkgenm72_sample_trigger_w)
 		0x10fa0, 0x10fc0, 0x10fe0, 0x11f40, 0x12b20, 0x130a0, 0x13c60, 0x14740,
 		0x153c0, 0x197e0, 0x1af40, 0x1c080 };
 
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 28) m72_set_sample_start(m_audio, a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 28) m_audio->set_sample_start(a[data & 0xff]);
 }
 
 WRITE16_MEMBER(m72_state::gallop_sample_trigger_w)
@@ -502,7 +485,7 @@ WRITE16_MEMBER(m72_state::gallop_sample_trigger_w)
 		0x10200, 0x10220, 0x10240, 0x11380, 0x12760, 0x12780, 0x127a0, 0x13c40,
 		0x140a0, 0x16760, 0x17e40, 0x18ee0, 0x19f60, 0x1bbc0, 0x1cee0 };
 
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 31) m72_set_sample_start(m_audio, a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 31) m_audio->set_sample_start(a[data & 0xff]);
 }
 
 
@@ -558,16 +541,10 @@ static const UINT8 bchopper_code[CODE_LEN] =
 	0xc6,0x06,0x00,0x00,0xcb^0xff,  // mov [0000h], byte 0cbh ; retf : bypass protection check during the game
 	0x68,0x00,0xd0,             // push 0d000h
 	0x1f,                       // pop ds
-	// the following is for mrheli only, the game checks for
-	// "This game can only be played in Japan..." message in the video text buffer
-	// the message is nowhere to be found in the ROMs, so has to be displayed by the mcu
-	0xc6,0x06,0x70,0x16,0x77,   // mov [1670h], byte 077h
 	0xea,0x68,0x01,0x40,0x00    // jmp  0040:$0168
 };
 static const UINT8 bchopper_crc[CRC_LEN] =  {   0x1a,0x12,0x5c,0x08, 0x84,0xb6,0x73,0xd1,
 												0x54,0x91,0x94,0xeb, 0x00,0x00 };
-static const UINT8 mrheli_crc[CRC_LEN] =      { 0x24,0x21,0x1f,0x14, 0xf9,0x28,0xfb,0x47,
-												0x4c,0x77,0x9e,0xc2, 0x00,0x00 };
 
 /* Ninja Spirit */
 static const UINT8 nspirit_code[CODE_LEN] =
@@ -642,13 +619,7 @@ static const UINT8 loht_code[CODE_LEN] =
 static const UINT8 loht_crc[CRC_LEN] =    { 0x39,0x00,0x82,0xae, 0x2c,0x9d,0x4b,0x73,
 												0xfb,0xac,0xd4,0x6d, 0x6d,0x5b,0x77,0xc0, 0x00,0x00 };
 
-/* X Multiply */
-static const UINT8 xmultiplm72_code[CODE_LEN] =
-{
-	0xea,0x30,0x02,0x00,0x0e    // jmp  0e00:$0230
-};
-static const UINT8 xmultiplm72_crc[CRC_LEN] =  {    0x73,0x82,0x4e,0x3f, 0xfc,0x56,0x59,0x06,
-												0x05,0x48,0xa8,0xf4, 0x00,0x00 };
+
 
 /* Dragon Breed */
 static const UINT8 dbreedm72_code[CODE_LEN] =
@@ -715,7 +686,9 @@ void m72_state::install_protection_handler(const UINT8 *code,const UINT8 *crc)
 	m_maincpu->space(AS_PROGRAM).install_read_bank(0xb0000, 0xb0fff, "bank1");
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0xb0ffa, 0xb0ffb, read16_delegate(FUNC(m72_state::protection_r),this));
 	m_maincpu->space(AS_PROGRAM).install_write_handler(0xb0000, 0xb0fff, write16_delegate(FUNC(m72_state::protection_w),this));
-	membank("bank1")->set_base(m_protection_ram);
+	membank("bank1")->configure_entry(0, m_protection_ram);
+
+	save_pointer(NAME(m_protection_ram), 0x1000/2);
 }
 
 DRIVER_INIT_MEMBER(m72_state,bchopper)
@@ -724,11 +697,6 @@ DRIVER_INIT_MEMBER(m72_state,bchopper)
 	m_maincpu->space(AS_IO).install_write_handler(0xc0, 0xc1, write16_delegate(FUNC(m72_state::bchopper_sample_trigger_w),this));
 }
 
-DRIVER_INIT_MEMBER(m72_state,mrheli)
-{
-	install_protection_handler(bchopper_code,mrheli_crc);
-	m_maincpu->space(AS_IO).install_write_handler(0xc0, 0xc1, write16_delegate(FUNC(m72_state::bchopper_sample_trigger_w),this));
-}
 
 DRIVER_INIT_MEMBER(m72_state,nspirit)
 {
@@ -752,11 +720,6 @@ DRIVER_INIT_MEMBER(m72_state,loht)
 	memset(m_videoram2,0,0x4000);
 }
 
-DRIVER_INIT_MEMBER(m72_state,xmultiplm72)
-{
-	install_protection_handler(xmultiplm72_code,xmultiplm72_crc);
-	m_maincpu->space(AS_IO).install_write_handler(0xc0, 0xc1, write16_delegate(FUNC(m72_state::xmultiplm72_sample_trigger_w),this));
-}
 
 DRIVER_INIT_MEMBER(m72_state,dbreedm72)
 {
@@ -836,10 +799,10 @@ static ADDRESS_MAP_START( NAME##_map, AS_PROGRAM, 16 , m72_state )      \
 	AM_RANGE(0x00000, ROMSIZE-1) AM_ROM                                 \
 	AM_RANGE(WORKRAM, WORKRAM+0x3fff) AM_RAM    /* work RAM */          \
 	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_SHARE("spriteram") \
-	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_SHARE("paletteram")          \
-	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_SHARE("paletteram2")     \
-	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_SHARE("videoram1")      \
-	AM_RANGE(0xd8000, 0xdbfff) AM_RAM_WRITE(m72_videoram2_w) AM_SHARE("videoram2")      \
+	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(palette1_r, palette1_w) AM_SHARE("paletteram")          \
+	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(palette2_r, palette2_w) AM_SHARE("paletteram2")     \
+	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(videoram1_w) AM_SHARE("videoram1")      \
+	AM_RANGE(0xd8000, 0xdbfff) AM_RAM_WRITE(videoram2_w) AM_SHARE("videoram2")      \
 	AM_RANGE(0xe0000, 0xeffff) AM_READWRITE(soundram_r, soundram_w)                         \
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM                                   \
 ADDRESS_MAP_END
@@ -856,10 +819,10 @@ static ADDRESS_MAP_START( xmultipl_map, AS_PROGRAM, 16, m72_state )
 	AM_RANGE(0x9c000, 0x9ffff) AM_RAM   /* work RAM */
 	AM_RANGE(0xb0ffe, 0xb0fff) AM_WRITEONLY /* leftover from protection?? */
 	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_SHARE("paletteram")
-	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_SHARE("paletteram2")
-	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_SHARE("videoram1")
-	AM_RANGE(0xd8000, 0xdbfff) AM_RAM_WRITE(m72_videoram2_w) AM_SHARE("videoram2")
+	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(palette1_r, palette1_w) AM_SHARE("paletteram")
+	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(palette2_r, palette2_w) AM_SHARE("paletteram2")
+	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(videoram1_w) AM_SHARE("videoram1")
+	AM_RANGE(0xd8000, 0xdbfff) AM_RAM_WRITE(videoram2_w) AM_SHARE("videoram2")
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM
 ADDRESS_MAP_END
 
@@ -868,22 +831,22 @@ static ADDRESS_MAP_START( dbreed_map, AS_PROGRAM, 16, m72_state )
 	AM_RANGE(0x88000, 0x8bfff) AM_RAM   /* work RAM */
 	AM_RANGE(0xb0ffe, 0xb0fff) AM_WRITEONLY /* leftover from protection?? */
 	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_SHARE("paletteram")
-	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_SHARE("paletteram2")
-	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_SHARE("videoram1")
-	AM_RANGE(0xd8000, 0xdbfff) AM_RAM_WRITE(m72_videoram2_w) AM_SHARE("videoram2")
+	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(palette1_r, palette1_w) AM_SHARE("paletteram")
+	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(palette2_r, palette2_w) AM_SHARE("paletteram2")
+	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(videoram1_w) AM_SHARE("videoram1")
+	AM_RANGE(0xd8000, 0xdbfff) AM_RAM_WRITE(videoram2_w) AM_SHARE("videoram2")
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( rtype2_map, AS_PROGRAM, 16, m72_state )
 	AM_RANGE(0x00000, 0x7ffff) AM_ROM
-	AM_RANGE(0xb0000, 0xb0001) AM_WRITE(m72_irq_line_w)
-	AM_RANGE(0xbc000, 0xbc001) AM_WRITE(m72_dmaon_w)
+	AM_RANGE(0xb0000, 0xb0001) AM_WRITE(irq_line_w)
+	AM_RANGE(0xbc000, 0xbc001) AM_WRITE(dmaon_w)
 	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_SHARE("paletteram")
-	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_SHARE("videoram1")
-	AM_RANGE(0xd4000, 0xd7fff) AM_RAM_WRITE(m72_videoram2_w) AM_SHARE("videoram2")
-	AM_RANGE(0xd8000, 0xd8bff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_SHARE("paletteram2")
+	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(palette1_r, palette1_w) AM_SHARE("paletteram")
+	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(videoram1_w) AM_SHARE("videoram1")
+	AM_RANGE(0xd4000, 0xd7fff) AM_RAM_WRITE(videoram2_w) AM_SHARE("videoram2")
+	AM_RANGE(0xd8000, 0xd8bff) AM_READWRITE(palette2_r, palette2_w) AM_SHARE("paletteram2")
 	AM_RANGE(0xe0000, 0xe3fff) AM_RAM   /* work RAM */
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM
 ADDRESS_MAP_END
@@ -891,16 +854,16 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( majtitle_map, AS_PROGRAM, 16, m72_state )
 	AM_RANGE(0x00000, 0x7ffff) AM_ROM
 	AM_RANGE(0xa0000, 0xa03ff) AM_RAM AM_SHARE("majtitle_rowscr")
-	AM_RANGE(0xa4000, 0xa4bff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_SHARE("paletteram2")
-	AM_RANGE(0xac000, 0xaffff) AM_RAM_WRITE(m72_videoram1_w) AM_SHARE("videoram1")
-	AM_RANGE(0xb0000, 0xbffff) AM_RAM_WRITE(m72_videoram2_w) AM_SHARE("videoram2")  /* larger than the other games */
+	AM_RANGE(0xa4000, 0xa4bff) AM_READWRITE(palette2_r, palette2_w) AM_SHARE("paletteram2")
+	AM_RANGE(0xac000, 0xaffff) AM_RAM_WRITE(videoram1_w) AM_SHARE("videoram1")
+	AM_RANGE(0xb0000, 0xbffff) AM_RAM_WRITE(videoram2_w) AM_SHARE("videoram2")  /* larger than the other games */
 	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0xc8000, 0xc83ff) AM_RAM AM_SHARE("spriteram2")
-	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_SHARE("paletteram")
+	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(palette1_r, palette1_w) AM_SHARE("paletteram")
 	AM_RANGE(0xd0000, 0xd3fff) AM_RAM   /* work RAM */
-	AM_RANGE(0xe0000, 0xe0001) AM_WRITE(m72_irq_line_w)
+	AM_RANGE(0xe0000, 0xe0001) AM_WRITE(irq_line_w)
 	AM_RANGE(0xe4000, 0xe4001) AM_WRITEONLY /* playfield enable? 1 during screen transitions, 0 otherwise */
-	AM_RANGE(0xec000, 0xec001) AM_WRITE(m72_dmaon_w)
+	AM_RANGE(0xec000, 0xec001) AM_WRITE(dmaon_w)
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM
 ADDRESS_MAP_END
 
@@ -909,37 +872,37 @@ static ADDRESS_MAP_START( hharry_map, AS_PROGRAM, 16, m72_state )
 	AM_RANGE(0xa0000, 0xa3fff) AM_RAM   /* work RAM */
 	AM_RANGE(0xb0ffe, 0xb0fff) AM_WRITEONLY /* leftover from protection?? */
 	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_SHARE("paletteram")
-	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_SHARE("paletteram2")
-	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_SHARE("videoram1")
-	AM_RANGE(0xd8000, 0xdbfff) AM_RAM_WRITE(m72_videoram2_w) AM_SHARE("videoram2")
+	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(palette1_r, palette1_w) AM_SHARE("paletteram")
+	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(palette2_r, palette2_w) AM_SHARE("paletteram2")
+	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(videoram1_w) AM_SHARE("videoram1")
+	AM_RANGE(0xd8000, 0xdbfff) AM_RAM_WRITE(videoram2_w) AM_SHARE("videoram2")
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( hharryu_map, AS_PROGRAM, 16, m72_state )
 	AM_RANGE(0x00000, 0x7ffff) AM_ROM
-	AM_RANGE(0xa0000, 0xa0bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_SHARE("paletteram")
-	AM_RANGE(0xa8000, 0xa8bff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_SHARE("paletteram2")
-	AM_RANGE(0xb0000, 0xb0001) AM_WRITE(m72_irq_line_w)
-	AM_RANGE(0xbc000, 0xbc001) AM_WRITE(m72_dmaon_w)
+	AM_RANGE(0xa0000, 0xa0bff) AM_READWRITE(palette1_r, palette1_w) AM_SHARE("paletteram")
+	AM_RANGE(0xa8000, 0xa8bff) AM_READWRITE(palette2_r, palette2_w) AM_SHARE("paletteram2")
+	AM_RANGE(0xb0000, 0xb0001) AM_WRITE(irq_line_w)
+	AM_RANGE(0xbc000, 0xbc001) AM_WRITE(dmaon_w)
 	AM_RANGE(0xb0ffe, 0xb0fff) AM_WRITEONLY /* leftover from protection?? */
 	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_SHARE("videoram1")
-	AM_RANGE(0xd4000, 0xd7fff) AM_RAM_WRITE(m72_videoram2_w) AM_SHARE("videoram2")
+	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(videoram1_w) AM_SHARE("videoram1")
+	AM_RANGE(0xd4000, 0xd7fff) AM_RAM_WRITE(videoram2_w) AM_SHARE("videoram2")
 	AM_RANGE(0xe0000, 0xe3fff) AM_RAM   /* work RAM */
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( kengo_map, AS_PROGRAM, 16, m72_state )
 	AM_RANGE(0x00000, 0x7ffff) AM_ROM
-	AM_RANGE(0xa0000, 0xa0bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_SHARE("paletteram")
-	AM_RANGE(0xa8000, 0xa8bff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_SHARE("paletteram2")
-	AM_RANGE(0xb0000, 0xb0001) AM_WRITE(m72_irq_line_w)
+	AM_RANGE(0xa0000, 0xa0bff) AM_READWRITE(palette1_r, palette1_w) AM_SHARE("paletteram")
+	AM_RANGE(0xa8000, 0xa8bff) AM_READWRITE(palette2_r, palette2_w) AM_SHARE("paletteram2")
+	AM_RANGE(0xb0000, 0xb0001) AM_WRITE(irq_line_w)
 	AM_RANGE(0xb4000, 0xb4001) AM_WRITENOP  /* ??? */
-	AM_RANGE(0xbc000, 0xbc001) AM_WRITE(m72_dmaon_w)
+	AM_RANGE(0xbc000, 0xbc001) AM_WRITE(dmaon_w)
 	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0x80000, 0x83fff) AM_RAM_WRITE(m72_videoram1_w) AM_SHARE("videoram1")
-	AM_RANGE(0x84000, 0x87fff) AM_RAM_WRITE(m72_videoram2_w) AM_SHARE("videoram2")
+	AM_RANGE(0x80000, 0x83fff) AM_RAM_WRITE(videoram1_w) AM_SHARE("videoram1")
+	AM_RANGE(0x84000, 0x87fff) AM_RAM_WRITE(videoram2_w) AM_SHARE("videoram2")
 	AM_RANGE(0xe0000, 0xe3fff) AM_RAM   /* work RAM */
 	AM_RANGE(0xffff0, 0xfffff) AM_ROM
 ADDRESS_MAP_END
@@ -948,15 +911,15 @@ static ADDRESS_MAP_START( m72_portmap, AS_IO, 16, m72_state )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_DEVWRITE_LEGACY("m72", m72_sound_command_w)
-	AM_RANGE(0x02, 0x03) AM_WRITE(m72_port02_w) /* coin counters, reset sound cpu, other stuff? */
-	AM_RANGE(0x04, 0x05) AM_WRITE(m72_dmaon_w)
-	AM_RANGE(0x06, 0x07) AM_WRITE(m72_irq_line_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_audio_device, sound_command_w)
+	AM_RANGE(0x02, 0x03) AM_WRITE(port02_w) /* coin counters, reset sound cpu, other stuff? */
+	AM_RANGE(0x04, 0x05) AM_WRITE(dmaon_w)
+	AM_RANGE(0x06, 0x07) AM_WRITE(irq_line_w)
 	//AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
-	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
-	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
-	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
-	AM_RANGE(0x86, 0x87) AM_WRITE(m72_scrollx2_w)
+	AM_RANGE(0x80, 0x81) AM_WRITE(scrolly1_w)
+	AM_RANGE(0x82, 0x83) AM_WRITE(scrollx1_w)
+	AM_RANGE(0x84, 0x85) AM_WRITE(scrolly2_w)
+	AM_RANGE(0x86, 0x87) AM_WRITE(scrollx2_w)
 /*  { 0xc0, 0xc0      trigger sample, filled by init_ function */
 ADDRESS_MAP_END
 
@@ -964,39 +927,39 @@ static ADDRESS_MAP_START( rtype2_portmap, AS_IO, 16, m72_state )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_DEVWRITE_LEGACY("m72", m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_audio_device, sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
 	AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
-	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
-	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
-	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
-	AM_RANGE(0x86, 0x87) AM_WRITE(m72_scrollx2_w)
+	AM_RANGE(0x80, 0x81) AM_WRITE(scrolly1_w)
+	AM_RANGE(0x82, 0x83) AM_WRITE(scrollx1_w)
+	AM_RANGE(0x84, 0x85) AM_WRITE(scrolly2_w)
+	AM_RANGE(0x86, 0x87) AM_WRITE(scrollx2_w)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( poundfor_portmap, AS_IO, 16, m72_state )
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
 	AM_RANGE(0x08, 0x0f) AM_READ(poundfor_trackball_r)
-	AM_RANGE(0x00, 0x01) AM_DEVWRITE_LEGACY("m72", m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_audio_device, sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
 	AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
-	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
-	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
-	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
-	AM_RANGE(0x86, 0x87) AM_WRITE(m72_scrollx2_w)
+	AM_RANGE(0x80, 0x81) AM_WRITE(scrolly1_w)
+	AM_RANGE(0x82, 0x83) AM_WRITE(scrollx1_w)
+	AM_RANGE(0x84, 0x85) AM_WRITE(scrolly2_w)
+	AM_RANGE(0x86, 0x87) AM_WRITE(scrollx2_w)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( majtitle_portmap, AS_IO, 16, m72_state )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_DEVWRITE_LEGACY("m72", m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_audio_device, sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
 	AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
-	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
-	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
-	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
-	AM_RANGE(0x86, 0x87) AM_WRITE(m72_scrollx2_w)
+	AM_RANGE(0x80, 0x81) AM_WRITE(scrolly1_w)
+	AM_RANGE(0x82, 0x83) AM_WRITE(scrollx1_w)
+	AM_RANGE(0x84, 0x85) AM_WRITE(scrolly2_w)
+	AM_RANGE(0x86, 0x87) AM_WRITE(scrollx2_w)
 	AM_RANGE(0x8e, 0x8f) AM_WRITE(majtitle_gfx_ctrl_w)
 ADDRESS_MAP_END
 
@@ -1004,27 +967,27 @@ static ADDRESS_MAP_START( hharry_portmap, AS_IO, 16, m72_state )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_DEVWRITE_LEGACY("m72", m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_audio_device, sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)  /* coin counters, reset sound cpu, other stuff? */
-	AM_RANGE(0x04, 0x05) AM_WRITE(m72_dmaon_w)
-	AM_RANGE(0x06, 0x07) AM_WRITE(m72_irq_line_w)
+	AM_RANGE(0x04, 0x05) AM_WRITE(dmaon_w)
+	AM_RANGE(0x06, 0x07) AM_WRITE(irq_line_w)
 	AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
-	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
-	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
-	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
-	AM_RANGE(0x86, 0x87) AM_WRITE(m72_scrollx2_w)
+	AM_RANGE(0x80, 0x81) AM_WRITE(scrolly1_w)
+	AM_RANGE(0x82, 0x83) AM_WRITE(scrollx1_w)
+	AM_RANGE(0x84, 0x85) AM_WRITE(scrolly2_w)
+	AM_RANGE(0x86, 0x87) AM_WRITE(scrollx2_w)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( kengo_portmap, AS_IO, 16, m72_state )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_DEVWRITE_LEGACY("m72", m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_audio_device, sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
-	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
-	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
-	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
-	AM_RANGE(0x86, 0x87) AM_WRITE(m72_scrollx2_w)
+	AM_RANGE(0x80, 0x81) AM_WRITE(scrolly1_w)
+	AM_RANGE(0x82, 0x83) AM_WRITE(scrollx1_w)
+	AM_RANGE(0x84, 0x85) AM_WRITE(scrolly2_w)
+	AM_RANGE(0x86, 0x87) AM_WRITE(scrollx2_w)
 //  AM_RANGE(0x8c, 0x8f) AM_WRITENOP    /* ??? */
 ADDRESS_MAP_END
 
@@ -1042,48 +1005,48 @@ static ADDRESS_MAP_START( rtype_sound_portmap, AS_IO, 8, m72_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x01) AM_DEVREADWRITE("ymsnd", ym2151_device, read, write)
 	AM_RANGE(0x02, 0x02) AM_READ(soundlatch_byte_r)
-	AM_RANGE(0x06, 0x06) AM_DEVWRITE_LEGACY("m72", m72_sound_irq_ack_w)
-	AM_RANGE(0x84, 0x84) AM_DEVREAD_LEGACY("m72", m72_sample_r)
+	AM_RANGE(0x06, 0x06) AM_DEVWRITE("m72", m72_audio_device, sound_irq_ack_w)
+	AM_RANGE(0x84, 0x84) AM_DEVREAD("m72", m72_audio_device, sample_r)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( sound_portmap, AS_IO, 8, m72_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x01) AM_DEVREADWRITE("ymsnd", ym2151_device, read, write)
 	AM_RANGE(0x02, 0x02) AM_READ(soundlatch_byte_r)
-	AM_RANGE(0x06, 0x06) AM_DEVWRITE_LEGACY("m72", m72_sound_irq_ack_w)
-	AM_RANGE(0x82, 0x82) AM_DEVWRITE_LEGACY("m72", m72_sample_w)
-	AM_RANGE(0x84, 0x84) AM_DEVREAD_LEGACY("m72", m72_sample_r)
+	AM_RANGE(0x06, 0x06) AM_DEVWRITE("m72", m72_audio_device, sound_irq_ack_w)
+	AM_RANGE(0x82, 0x82) AM_DEVWRITE("m72", m72_audio_device, sample_w)
+	AM_RANGE(0x84, 0x84) AM_DEVREAD("m72", m72_audio_device, sample_r)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( rtype2_sound_portmap, AS_IO, 8, m72_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x01) AM_DEVREADWRITE("ymsnd", ym2151_device, read, write)
 	AM_RANGE(0x80, 0x80) AM_READ(soundlatch_byte_r)
-	AM_RANGE(0x80, 0x81) AM_DEVWRITE_LEGACY("m72", rtype2_sample_addr_w)
-	AM_RANGE(0x82, 0x82) AM_DEVWRITE_LEGACY("m72", m72_sample_w)
-	AM_RANGE(0x83, 0x83) AM_DEVWRITE_LEGACY("m72", m72_sound_irq_ack_w)
-	AM_RANGE(0x84, 0x84) AM_DEVREAD_LEGACY("m72", m72_sample_r)
+	AM_RANGE(0x80, 0x81) AM_DEVWRITE("m72", m72_audio_device, rtype2_sample_addr_w)
+	AM_RANGE(0x82, 0x82) AM_DEVWRITE("m72", m72_audio_device, sample_w)
+	AM_RANGE(0x83, 0x83) AM_DEVWRITE("m72", m72_audio_device, sound_irq_ack_w)
+	AM_RANGE(0x84, 0x84) AM_DEVREAD("m72", m72_audio_device, sample_r)
 //  AM_RANGE(0x87, 0x87) AM_WRITENOP    /* ??? */
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( poundfor_sound_portmap, AS_IO, 8, m72_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x10, 0x13) AM_DEVWRITE_LEGACY("m72", poundfor_sample_addr_w)
+	AM_RANGE(0x10, 0x13) AM_DEVWRITE("m72", m72_audio_device, poundfor_sample_addr_w)
 	AM_RANGE(0x40, 0x41) AM_DEVREADWRITE("ymsnd", ym2151_device, read, write)
 	AM_RANGE(0x42, 0x42) AM_READ(soundlatch_byte_r)
-	AM_RANGE(0x42, 0x42) AM_DEVWRITE_LEGACY("m72", m72_sound_irq_ack_w)
+	AM_RANGE(0x42, 0x42) AM_DEVWRITE("m72", m72_audio_device, sound_irq_ack_w)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( mcu_io_map, AS_IO, 8, m72_state )
 	/* External access */
-	AM_RANGE(0x0000, 0x0000) AM_READWRITE(m72_mcu_sample_r, m72_mcu_low_w)
-	AM_RANGE(0x0001, 0x0001) AM_WRITE(m72_mcu_high_w)
-	AM_RANGE(0x0002, 0x0002) AM_READWRITE(m72_mcu_snd_r, m72_mcu_ack_w)
+	AM_RANGE(0x0000, 0x0000) AM_READWRITE(mcu_sample_r, mcu_low_w)
+	AM_RANGE(0x0001, 0x0001) AM_WRITE(mcu_high_w)
+	AM_RANGE(0x0002, 0x0002) AM_READWRITE(mcu_snd_r, mcu_ack_w)
 	/* shared at b0000 - b0fff on the main cpu */
-	AM_RANGE(0xc000, 0xcfff) AM_READWRITE(m72_mcu_data_r,m72_mcu_data_w )
+	AM_RANGE(0xc000, 0xcfff) AM_READWRITE(mcu_data_r,mcu_data_w )
 
 	/* Ports */
-	AM_RANGE(MCS51_PORT_P0, MCS51_PORT_P3) AM_READWRITE(m72_mcu_port_r, m72_mcu_port_w)
+	AM_RANGE(MCS51_PORT_P0, MCS51_PORT_P3) AM_READWRITE(mcu_port_r, mcu_port_w)
 ADDRESS_MAP_END
 
 #define COIN_MODE_1 \
@@ -1787,6 +1750,21 @@ static GFXDECODE_START( majtitle )
 GFXDECODE_END
 
 
+static MACHINE_CONFIG_FRAGMENT( m72_audio_chips )
+	/* sound hardware */
+	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
+
+	MCFG_SOUND_ADD("m72", M72, 0);
+
+	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
+	MCFG_YM2151_IRQ_HANDLER(DEVWRITELINE("m72", m72_audio_device, ym2151_irq_handler))
+	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
+	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
+
+	MCFG_DAC_ADD("dac")
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
+MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( m72_base, m72_state )
 
@@ -1799,290 +1777,99 @@ static MACHINE_CONFIG_START( m72_base, m72_state )
 	MCFG_CPU_PROGRAM_MAP(sound_ram_map)
 	MCFG_CPU_IO_MAP(sound_portmap)
 
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
-	MCFG_MACHINE_RESET_OVERRIDE(m72_state,m72)
 
 	/* video hardware */
-	MCFG_GFXDECODE(m72)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", m72)
+	MCFG_PALETTE_ADD("palette", 512)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
+	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(m72_state,m72)
 
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
+	MCFG_FRAGMENT_ADD(m72_audio_chips)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( m72, m72_base )
-	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_MODIFY("soundcpu")
 	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, fake_nmi, 128*55)   /* clocked by V1? (Vigilante) */
 							/* IRQs are generated by main Z80 and YM2151 */
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( m72_8751, m72_base )
 
-	MCFG_CPU_ADD("mcu",I8751, MASTER_CLOCK/4)
+	MCFG_CPU_ADD("mcu",I8751, XTAL_8MHz) /* Uses its own XTAL */
 	MCFG_CPU_IO_MAP(mcu_io_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", m72_state,  m72_mcu_int)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", m72_state,  mcu_int)
 
 MACHINE_CONFIG_END
 
 
-static MACHINE_CONFIG_START( rtype, m72_state )
-
-	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu",V30,MASTER_CLOCK/2/2)    /* 16 MHz external freq (8MHz internal) */
+static MACHINE_CONFIG_DERIVED( rtype, m72_base )
+	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(rtype_map)
-	MCFG_CPU_IO_MAP(m72_portmap)
 
-	MCFG_CPU_ADD("soundcpu",Z80, SOUND_CLOCK)
-	MCFG_CPU_PROGRAM_MAP(sound_ram_map)
+	MCFG_CPU_MODIFY("soundcpu")
 	MCFG_CPU_IO_MAP(rtype_sound_portmap)
+
+	MCFG_DEVICE_REMOVE("dac")
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( xmultiplm72, m72_8751 )
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_PROGRAM_MAP(xmultiplm72_map)
+
+	MCFG_CPU_MODIFY("soundcpu")
+	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
 								/* IRQs are generated by main Z80 and YM2151 */
 
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
-	MCFG_MACHINE_RESET_OVERRIDE(m72_state,m72)
 
-	/* video hardware */
-	MCFG_GFXDECODE(m72)
-	MCFG_PALETTE_LENGTH(512)
-
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
-
-	MCFG_VIDEO_START_OVERRIDE(m72_state,m72)
-
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
+	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_START( xmultipl, m72_state )
+
+static MACHINE_CONFIG_DERIVED( dbreedm72, m72_base )
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_PROGRAM_MAP(dbreedm72_map)
+
+	MCFG_CPU_MODIFY("soundcpu")
+	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
+								/* IRQs are generated by main Z80 and YM2151 */
+
+	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
+MACHINE_CONFIG_END
+
+
+static MACHINE_CONFIG_DERIVED( dkgenm72, m72 ) // dervices from 'm72' because we use 'fake nmi' on the soundcpu
+
+	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
+MACHINE_CONFIG_END
+
+
+// not m72
+static MACHINE_CONFIG_DERIVED( xmultipl, m72 )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu",V30,MASTER_CLOCK/2/2)    /* 16 MHz external freq (8MHz internal) */
+	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(xmultipl_map)
 	MCFG_CPU_IO_MAP(hharry_portmap)
 
-	MCFG_CPU_ADD("soundcpu",Z80, SOUND_CLOCK)
+	MCFG_CPU_MODIFY("soundcpu")
 	MCFG_CPU_PROGRAM_MAP(sound_rom_map)
 	MCFG_CPU_IO_MAP(rtype2_sound_portmap)
 	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
 								/* IRQs are generated by main Z80 and YM2151 */
 
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
+
 	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
-
-	/* video hardware */
-	MCFG_GFXDECODE(m72)
-	MCFG_PALETTE_LENGTH(512)
-
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
 
 	MCFG_VIDEO_START_OVERRIDE(m72_state,xmultipl)
-
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_START( xmultiplm72, m72_state )
 
-	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu",V30,MASTER_CLOCK/2/2)    /* 16 MHz external freq (8MHz internal) */
-	MCFG_CPU_PROGRAM_MAP(xmultiplm72_map)
-	MCFG_CPU_IO_MAP(m72_portmap)
-
-	MCFG_CPU_ADD("soundcpu",Z80, SOUND_CLOCK)
-	MCFG_CPU_PROGRAM_MAP(sound_ram_map)
-	MCFG_CPU_IO_MAP(sound_portmap)
-	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
-								/* IRQs are generated by main Z80 and YM2151 */
-
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
-	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
-
-	/* video hardware */
-	MCFG_GFXDECODE(m72)
-	MCFG_PALETTE_LENGTH(512)
-
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
-
-	MCFG_VIDEO_START_OVERRIDE(m72_state,m72)
-
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
-MACHINE_CONFIG_END
-
-static MACHINE_CONFIG_START( dbreed, m72_state )
-
-	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu",V30,MASTER_CLOCK/2/2)    /* 16 MHz external freq (8MHz internal) */
-	MCFG_CPU_PROGRAM_MAP(dbreed_map)
-	MCFG_CPU_IO_MAP(hharry_portmap)
-
-	MCFG_CPU_ADD("soundcpu",Z80, SOUND_CLOCK)
-	MCFG_CPU_PROGRAM_MAP(sound_rom_map)
-	MCFG_CPU_IO_MAP(rtype2_sound_portmap)
-	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
-								/* IRQs are generated by main Z80 and YM2151 */
-
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
-	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
-
-	/* video hardware */
-	MCFG_GFXDECODE(rtype2)
-	MCFG_PALETTE_LENGTH(512)
-
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
-
-	MCFG_VIDEO_START_OVERRIDE(m72_state,hharry)
-
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
-MACHINE_CONFIG_END
-
-static MACHINE_CONFIG_START( dbreedm72, m72_state )
-
-	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", V30,MASTER_CLOCK/2/2)   /* 16 MHz external freq (8MHz internal) */
-	MCFG_CPU_PROGRAM_MAP(dbreedm72_map)
-	MCFG_CPU_IO_MAP(m72_portmap)
-
-	MCFG_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
-	MCFG_CPU_PROGRAM_MAP(sound_ram_map)
-	MCFG_CPU_IO_MAP(sound_portmap)
-	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
-								/* IRQs are generated by main Z80 and YM2151 */
-
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
-	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
-
-	/* video hardware */
-	MCFG_GFXDECODE(m72)
-	MCFG_PALETTE_LENGTH(512)
-
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
-
-	MCFG_VIDEO_START_OVERRIDE(m72_state,m72)
-
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
-MACHINE_CONFIG_END
-
-static MACHINE_CONFIG_START( rtype2, m72_state )
-
-	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", V30,MASTER_CLOCK/2/2)   /* 16 MHz external freq (8MHz internal) */
-	MCFG_CPU_PROGRAM_MAP(rtype2_map)
-	MCFG_CPU_IO_MAP(rtype2_portmap)
-
-	MCFG_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
-	MCFG_CPU_PROGRAM_MAP(sound_rom_map)
-	MCFG_CPU_IO_MAP(rtype2_sound_portmap)
-	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
-								/* IRQs are generated by main Z80 and YM2151 */
-
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
-	MCFG_MACHINE_RESET_OVERRIDE(m72_state,m72)
-
-	/* video hardware */
-	MCFG_GFXDECODE(rtype2)
-	MCFG_PALETTE_LENGTH(512)
-
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
-
-	MCFG_VIDEO_START_OVERRIDE(m72_state,rtype2)
-
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
-MACHINE_CONFIG_END
-
+// not m72, different video system (more sprites)
 static MACHINE_CONFIG_START( majtitle, m72_state )
 
 	/* basic machine hardware */
@@ -2096,34 +1883,80 @@ static MACHINE_CONFIG_START( majtitle, m72_state )
 	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
 								/* IRQs are generated by main Z80 and YM2151 */
 
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
-	MCFG_MACHINE_RESET_OVERRIDE(m72_state,m72)
-
 	/* video hardware */
-	MCFG_GFXDECODE(majtitle)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", majtitle)
+	MCFG_PALETTE_ADD("palette", 512)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
 	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_majtitle)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(m72_state,majtitle)
 
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
+	MCFG_FRAGMENT_ADD(m72_audio_chips)
 MACHINE_CONFIG_END
 
+// not m72, different video system (less tiles regions?)
+static MACHINE_CONFIG_START( rtype2, m72_state )
+
+	/* basic machine hardware */
+	MCFG_CPU_ADD("maincpu", V30,MASTER_CLOCK/2/2)   /* 16 MHz external freq (8MHz internal) */
+	MCFG_CPU_PROGRAM_MAP(rtype2_map)
+	MCFG_CPU_IO_MAP(rtype2_portmap)
+
+	MCFG_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
+	MCFG_CPU_PROGRAM_MAP(sound_rom_map)
+	MCFG_CPU_IO_MAP(rtype2_sound_portmap)
+	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
+								/* IRQs are generated by main Z80 and YM2151 */
+
+	/* video hardware */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rtype2)
+	MCFG_PALETTE_ADD("palette", 512)
+
+	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
+	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_VIDEO_START_OVERRIDE(m72_state,rtype2)
+
+	MCFG_FRAGMENT_ADD(m72_audio_chips)
+MACHINE_CONFIG_END
+
+// not m72, different video system (less tiles regions?)
+static MACHINE_CONFIG_START( dbreed, m72_state )
+
+	/* basic machine hardware */
+	MCFG_CPU_ADD("maincpu",V30,MASTER_CLOCK/2/2)    /* 16 MHz external freq (8MHz internal) */
+	MCFG_CPU_PROGRAM_MAP(dbreed_map)
+	MCFG_CPU_IO_MAP(hharry_portmap)
+
+	MCFG_CPU_ADD("soundcpu",Z80, SOUND_CLOCK)
+	MCFG_CPU_PROGRAM_MAP(sound_rom_map)
+	MCFG_CPU_IO_MAP(rtype2_sound_portmap)
+	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
+								/* IRQs are generated by main Z80 and YM2151 */
+
+
+	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
+
+	/* video hardware */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rtype2)
+	MCFG_PALETTE_ADD("palette", 512)
+
+	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
+	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_VIDEO_START_OVERRIDE(m72_state,hharry)
+
+	MCFG_FRAGMENT_ADD(m72_audio_chips)
+MACHINE_CONFIG_END
+
+// not m72, different video system (less tiles regions?)
 static MACHINE_CONFIG_START( hharry, m72_state )
 
 	/* basic machine hardware */
@@ -2137,34 +1970,25 @@ static MACHINE_CONFIG_START( hharry, m72_state )
 	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
 								/* IRQs are generated by main Z80 and YM2151 */
 
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
+
 	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
 
 	/* video hardware */
-	MCFG_GFXDECODE(rtype2)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rtype2)
+	MCFG_PALETTE_ADD("palette", 512)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
+	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(m72_state,hharry)
 
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
+	MCFG_FRAGMENT_ADD(m72_audio_chips)
 
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
 MACHINE_CONFIG_END
 
+// not m72, different video system (less tiles regions?)
 static MACHINE_CONFIG_START( hharryu, m72_state )
 
 	/* basic machine hardware */
@@ -2178,75 +2002,25 @@ static MACHINE_CONFIG_START( hharryu, m72_state )
 	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, nmi_line_pulse, 128*55) /* clocked by V1? (Vigilante) */
 								/* IRQs are generated by main Z80 and YM2151 */
 
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
+
 	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
 
 	/* video hardware */
-	MCFG_GFXDECODE(rtype2)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rtype2)
+	MCFG_PALETTE_ADD("palette", 512)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
+	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(m72_state,hharryu)
 
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
+	MCFG_FRAGMENT_ADD(m72_audio_chips)
 
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_START( dkgenm72, m72_state )
-
-	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu",V30,MASTER_CLOCK/2/2)    /* 16 MHz external freq (8MHz internal) */
-	MCFG_CPU_PROGRAM_MAP(m72_map)
-	MCFG_CPU_IO_MAP(m72_portmap)
-
-	MCFG_CPU_ADD("soundcpu",Z80, SOUND_CLOCK)
-	MCFG_CPU_PROGRAM_MAP(sound_ram_map)
-	MCFG_CPU_IO_MAP(sound_portmap)
-	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, fake_nmi, 128*55)   /* clocked by V1? (Vigilante) */
-								/* IRQs are generated by main Z80 and YM2151 */
-
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
-	MCFG_MACHINE_RESET_OVERRIDE(m72_state,xmultipl)
-
-	/* video hardware */
-	MCFG_GFXDECODE(m72)
-	MCFG_PALETTE_LENGTH(512)
-
-	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
-
-	MCFG_VIDEO_START_OVERRIDE(m72_state,m72)
-
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
-MACHINE_CONFIG_END
-
+// not m72, different video system (less tiles regions?)
 static MACHINE_CONFIG_START( poundfor, m72_state )
 
 	/* basic machine hardware */
@@ -2260,34 +2034,21 @@ static MACHINE_CONFIG_START( poundfor, m72_state )
 	MCFG_CPU_PERIODIC_INT_DRIVER(m72_state, fake_nmi, 128*55)   /* clocked by V1? (Vigilante) */
 								/* IRQs are generated by main Z80 and YM2151 */
 
-	MCFG_MACHINE_START_OVERRIDE(m72_state,m72)
-	MCFG_MACHINE_RESET_OVERRIDE(m72_state,m72)
-
 	/* video hardware */
-	MCFG_GFXDECODE(rtype2)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rtype2)
+	MCFG_PALETTE_ADD("palette", 512)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
+	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(m72_state,poundfor)
 
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
+	MCFG_FRAGMENT_ADD(m72_audio_chips)
 MACHINE_CONFIG_END
 
+// not m72, different video system (less tiles regions?)
 static MACHINE_CONFIG_START( cosmccop, m72_state )
 
 	/* basic machine hardware */
@@ -2305,35 +2066,22 @@ static MACHINE_CONFIG_START( cosmccop, m72_state )
 	MCFG_MACHINE_RESET_OVERRIDE(m72_state,kengo)
 
 	/* video hardware */
-	MCFG_GFXDECODE(rtype2)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rtype2)
+	MCFG_PALETTE_ADD("palette", 512)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)
-	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update_m72)
+	MCFG_SCREEN_UPDATE_DRIVER(m72_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(m72_state,poundfor)
 
-	/* sound hardware */
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
-	MCFG_SOUND_ADD("m72", M72, 0);
-
-	MCFG_YM2151_ADD("ymsnd", SOUND_CLOCK)
-	MCFG_YM2151_IRQ_HANDLER(WRITELINE(driver_device, member_wrapper_line<m72_ym2151_irq_handler>))
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
-
-	MCFG_DAC_ADD("dac")
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.40)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.40)
+	MCFG_FRAGMENT_ADD(m72_audio_chips)
 MACHINE_CONFIG_END
-
-static const nec_config kengo_config ={ gunforce_decryption_table, };
 
 static MACHINE_CONFIG_DERIVED( kengo, cosmccop )
 	MCFG_CPU_MODIFY("maincpu")
-	MCFG_CPU_CONFIG(kengo_config)
+	MCFG_V25_CONFIG(gunforce_decryption_table)
 MACHINE_CONFIG_END
 
 
@@ -2545,7 +2293,7 @@ ROM_START( bchopper )
 	ROM_LOAD16_BYTE( "c-l3-b.rom",   0x60000, 0x10000, CRC(11562221) SHA1(a2f136a487fb6f30350e8d1e26c0729eb0686c7d) )
 	ROM_RELOAD(                      0xe0000, 0x10000 )
 
-	ROM_REGION( 0x10000, "cpu2", 0 )
+	ROM_REGION( 0x10000, "mcu", 0 )
 	ROM_LOAD( "bchopper_i8751.mcu",  0x00000, 0x10000, NO_DUMP ) // read protected
 
 	ROM_REGION( 0x080000, "gfx1", 0 )
@@ -2585,8 +2333,8 @@ ROM_START( mrheli )
 	ROM_LOAD16_BYTE( "mh-c-l3.bin",  0x60000, 0x10000, CRC(c0982536) SHA1(45399f8d0577c6e2a277a69303954ce5d2de7c07) )
 	ROM_RELOAD(                      0xe0000, 0x10000 )
 
-	ROM_REGION( 0x10000, "cpu2", 0 )
-	ROM_LOAD( "mrheli_i8751.mcu",  0x00000, 0x10000, NO_DUMP ) // read protected
+	ROM_REGION( 0x10000, "mcu", 0 )
+	ROM_LOAD( "mh-c-pr.bin",  0x00000, 0x1000, CRC(897dc4ee) SHA1(05a24bf76e8fa9ca96ba9376cbf44d299df04138) )
 
 	ROM_REGION( 0x080000, "gfx1", 0 )
 	ROM_LOAD( "mh-c-00.bin",  0x00000, 0x20000, CRC(dec4e121) SHA1(92169b523f1600e994e016dc1959a52958e1d89d) )  /* sprites */
@@ -2610,80 +2358,217 @@ ROM_START( mrheli )
 	ROM_LOAD( "c-v0-b.rom",   0x00000, 0x10000, CRC(d0c27e58) SHA1(fec76217cc0c04c723989c3ec127a2bd33d64c60) )
 ROM_END
 
+/*
+
+Ninja Spirit
+Irem, 1988
+
+This game runs on Irem M72 hardware.
+
+
+Top Board
+---------
+
+M72-C
+|-------------------------------|
+| 8MHz  J3 NIN_C-L3.6A   J4  J5 |
+|     J1   NIN_C-L2.6B NIN-V0.7A|
+|8751 J2   NIN_C-L1.6C   J12    |
+|          NIN_C-L0.6D   J6     |
+|                     NIN-R30.7D|
+|      NIN_C-3F.3F              |
+|            4364     NIN-R20.7F|
+|            4364 J8          J9|
+|                   J10         |
+| LM358     NIN_C-H0.H6         |
+|           NIN_C-H1.J6         |
+|----|   MB8431     J11         |
+     | CN3                  CN4 |
+     |   MB8421       NIN-R10.7J|
+     |     NIN_C-H2.6L NIN-R00.7M
+     |     NIN_C-H3.6M   J7     |
+     |--------------------------|
+Notes:
+      NIN_C-3F.3F - Ti TBP16L8 PAL
+      All other NIN_C* - 27C512 EPROM
+      NIN-R* - 28-pin 1Mb maskROM
+      J1   - Jumper set to A
+      J2   - Jumper set to A
+      J3   - Jumper set to A
+      J4   - Jumper set to A
+      J5   - Jumper set to B
+      J6   - Jumper set to A
+      J7   - Jumper set to A
+      J8   - Open
+      J9   - Jumper set to A
+      J10  - Jumper set to A
+      J11  - Jumper set to B
+      J12  - Jumper set to A
+      8751 - MCU with label 'NIN C-PR' at location 1C. Clock input 8MHz
+      4364 - 8kb x8-bit SRAM
+      MB8431 - Fujitsu 2k x 8-bit CMOS Dual-Port SRAM
+      MB8421 - Fujitsu 2k x 8-bit CMOS Dual-Port SRAM
+      LM358  - Low power dual operational amplifier IC
+
+
+Middle Board
+------------
+
+M72-A-C
+|-----------------------------------------------------------|
+|M51516L     YM2151                                         |
+|VOL         Y3014B                3.579545KHz             |--|
+|                                               43256      |  |
+|         CN3                                              |  |
+|           M72_A-3D.3D  M72_A-4D.4D   D780     43256      |  |
+|                                                          |  |
+|                                                          |  |
+|J   DSW1(8)                                               |  |
+|A                 2016                                    |  |
+|M   DSW2(8)                               D71011   D71088 |--|
+|M                 2016                                     |
+|A                                       V30     D71059    |--|
+|                  2018   KNA70H016(12)                    |  |
+|                                          M72_A-8L.8L     |  |
+|                  2018                         M72_A-9L.9L|  |
+|                              2018                        |  |
+|         KNA71H010(14)        2018           KNA70H015(11)|  |
+|                              2018                        |  |
+|         CN4                  2018         32MHz          |  |
+|         KNA71H009(13)                                    |--|
+|KNA71H010(15)                    KNA65005(17)  KNA91H014   |
+|-----------------------------------------------------------|
+Notes:
+      KNA*     - NANAO custom chips
+      M72*.*L  - Bipolar PROMs type TBP24S10 (==82S129)
+      M72*.*D  - Ti TBP16L8 PALs
+      2016     - 2kb x8-bit SRAM
+      2018     - 2kb x8-bit SRAM
+      43256    - 32kb x8-bit SRAM
+      CN3/CN4  - Joining connectors for top board
+
+
+Bottom Board
+------------
+
+M72-B-D
+|-----------------------------------------------------------|
+|                                                           |
+|            NIN_B-A2.4B                                   |--|
+|                                                          |  |
+| KNA6034201             J2                                |  |
+|            NIN_B-A0.4C J3                                |  |
+|                                                          |  |
+|                                                          |  |
+|            NIN_B-A1.4D  4364                             |  |
+|                                                          |  |
+|            NIN_B-A3.4E  4364                             |--|
+|                                                           |
+|            B3.4F        4364                             |--|
+|                                                          |  |
+|            B2.4H        4364                             |  |
+|                                                          |  |
+| KNA6034201 B0.4J                                         |  |
+|                                                          |  |
+|                        J4                                |  |
+|            B1.4K       J5                                |  |
+| KNA91H014                                                |--|
+|                                                           |
+|-----------------------------------------------------------|
+Notes:
+      KNA* - NANAO custom chips
+      NIN* - 27C512 EPROMs
+      B*   - 512kb mask ROMs (no labels, just B and a number)
+      4364 - 8kb x8-bit SRAM
+      J*   - 3-pin jumpers. All set to the B position
+*/
+
 ROM_START( nspirit )
 	ROM_REGION( 0x100000, "maincpu", 0 )
-	ROM_LOAD16_BYTE( "nin-c-h0.rom", 0x00001, 0x10000, CRC(035692fa) SHA1(d5ab54488344bf405063737ed55d68ff1e64b55f) )
-	ROM_LOAD16_BYTE( "nin-c-l0.rom", 0x00000, 0x10000, CRC(9a405898) SHA1(b28d71c1a6410720a37e6b6518b3cc66d4c32972) )
-	ROM_LOAD16_BYTE( "nin-c-h1.rom", 0x20001, 0x10000, CRC(cbc10586) SHA1(9b1935ea9ebb21fe42ee3a57d6c10f1e8516f23c) )
-	ROM_LOAD16_BYTE( "nin-c-l1.rom", 0x20000, 0x10000, CRC(b75c9a4d) SHA1(03c28896cbe0c9f778c259d59d2e69796902daa8) )
-	ROM_LOAD16_BYTE( "nin-c-h2.rom", 0x40001, 0x10000, CRC(8ad818fa) SHA1(dd25e79b656b7fc6c31d1f8971fd0916295ccdb0) )
-	ROM_LOAD16_BYTE( "nin-c-l2.rom", 0x40000, 0x10000, CRC(c52ca78c) SHA1(2b40cce5a1f5c588b49634e7fd4bc28c9160fe43) )
-	ROM_LOAD16_BYTE( "nin-c-h3.rom", 0x60001, 0x10000, CRC(501104ef) SHA1(e44e060c072affd359e52bf6606b1dd565368d44) )
-	ROM_RELOAD(                      0xe0001, 0x10000 )
-	ROM_LOAD16_BYTE( "nin-c-l3.rom", 0x60000, 0x10000, CRC(fd7408b8) SHA1(3cbe72835a561c50265a047f0f5cd62db48378fd) )
-	ROM_RELOAD(                      0xe0000, 0x10000 )
+	ROM_LOAD16_BYTE( "nin_c-h0.6h", 0x00001, 0x10000, CRC(035692fa) SHA1(d5ab54488344bf405063737ed55d68ff1e64b55f) )
+	ROM_LOAD16_BYTE( "nin_c-l0.6d", 0x00000, 0x10000, CRC(9a405898) SHA1(b28d71c1a6410720a37e6b6518b3cc66d4c32972) )
+	ROM_LOAD16_BYTE( "nin_c-h1.6j", 0x20001, 0x10000, CRC(cbc10586) SHA1(9b1935ea9ebb21fe42ee3a57d6c10f1e8516f23c) )
+	ROM_LOAD16_BYTE( "nin_c-l1.6c", 0x20000, 0x10000, CRC(b75c9a4d) SHA1(03c28896cbe0c9f778c259d59d2e69796902daa8) )
+	ROM_LOAD16_BYTE( "nin_c-h2.6l", 0x40001, 0x10000, CRC(8ad818fa) SHA1(dd25e79b656b7fc6c31d1f8971fd0916295ccdb0) )
+	ROM_LOAD16_BYTE( "nin_c-l2.6b", 0x40000, 0x10000, CRC(c52ca78c) SHA1(2b40cce5a1f5c588b49634e7fd4bc28c9160fe43) )
+	ROM_LOAD16_BYTE( "nin_c-h3.6m", 0x60001, 0x10000, CRC(501104ef) SHA1(e44e060c072affd359e52bf6606b1dd565368d44) )
+	ROM_RELOAD(                     0xe0001, 0x10000 )
+	ROM_LOAD16_BYTE( "nin_c-l3.6a", 0x60000, 0x10000, CRC(fd7408b8) SHA1(3cbe72835a561c50265a047f0f5cd62db48378fd) )
+	ROM_RELOAD(                     0xe0000, 0x10000 )
 
 	ROM_REGION( 0x10000, "mcu", 0 )
-	ROM_LOAD( "nspirit_i8751.mcu",  0x00000, 0x01000, NO_DUMP ) // read protected
+	ROM_LOAD( "nin_c-pr.1c", 0x00000, 0x01000, NO_DUMP ) // sldh - read protected
 
 	ROM_REGION( 0x080000, "gfx1", 0 )
-	ROM_LOAD( "nin-r00.rom",  0x00000, 0x20000, CRC(5f61d30b) SHA1(7754697e43f6117fa604f50885b76014b1dc5760) )  /* sprites */
-	ROM_LOAD( "nin-r10.rom",  0x20000, 0x20000, CRC(0caad107) SHA1(c4eff00327313e05ac8f7c6dbee3a0de1c83fadd) )
-	ROM_LOAD( "nin-r20.rom",  0x40000, 0x20000, CRC(ef3617d3) SHA1(16c175cf45559aacdea6e4002dd8a87f16817cfb) )
-	ROM_LOAD( "nin-r30.rom",  0x60000, 0x20000, CRC(175d2a24) SHA1(d1887efd4d8e74c38c53dbbc541ca8d17f29eb59) )
+	ROM_LOAD( "nin-r00.7m",  0x00000, 0x20000, CRC(5f61d30b) SHA1(7754697e43f6117fa604f50885b76014b1dc5760) )  /* sprites */
+	ROM_LOAD( "nin-r10.7j",  0x20000, 0x20000, CRC(0caad107) SHA1(c4eff00327313e05ac8f7c6dbee3a0de1c83fadd) )
+	ROM_LOAD( "nin-r20.7f",  0x40000, 0x20000, CRC(ef3617d3) SHA1(16c175cf45559aacdea6e4002dd8a87f16817cfb) )
+	ROM_LOAD( "nin-r30.7d",  0x60000, 0x20000, CRC(175d2a24) SHA1(d1887efd4d8e74c38c53dbbc541ca8d17f29eb59) )
 
 	ROM_REGION( 0x040000, "gfx2", 0 )
-	ROM_LOAD( "nin-b-a0.rom", 0x00000, 0x10000, CRC(63f8f658) SHA1(82c02d0f7a2d95dfd8d300c46312d511524775ce) )  /* tiles #1 */
-	ROM_LOAD( "nin-b-a1.rom", 0x10000, 0x10000, CRC(75eb8306) SHA1(2abc359a0bb2863759a68ed60e730761b9751829) )
-	ROM_LOAD( "nin-b-a2.rom", 0x20000, 0x10000, CRC(df532172) SHA1(58b5a79a57e71405b3e1abd41d54cf6a4d12873a) )
-	ROM_LOAD( "nin-b-a3.rom", 0x30000, 0x10000, CRC(4dedd64c) SHA1(8a5c73a024d95e6fe3ab70daafcd5b235418ad36) )
+	ROM_LOAD( "nin_b-a0.4c", 0x00000, 0x10000, CRC(63f8f658) SHA1(82c02d0f7a2d95dfd8d300c46312d511524775ce) )  /* tiles #1 */
+	ROM_LOAD( "nin_b-a1.4d", 0x10000, 0x10000, CRC(75eb8306) SHA1(2abc359a0bb2863759a68ed60e730761b9751829) )
+	ROM_LOAD( "nin_b-a2.4b", 0x20000, 0x10000, CRC(df532172) SHA1(58b5a79a57e71405b3e1abd41d54cf6a4d12873a) )
+	ROM_LOAD( "nin_b-a3.4e", 0x30000, 0x10000, CRC(4dedd64c) SHA1(8a5c73a024d95e6fe3ab70daafcd5b235418ad36) )
 
 	ROM_REGION( 0x040000, "gfx3", 0 )
-	ROM_LOAD( "nin-b0.rom",   0x00000, 0x10000, CRC(1b0e08a6) SHA1(892686594970c264babbe8673c258929a5e480f6) )  /* tiles #2 */
-	ROM_LOAD( "nin-b1.rom",   0x10000, 0x10000, CRC(728727f0) SHA1(2f594c77a847ebee71c9da8a644f83ea2a1313d7) )
-	ROM_LOAD( "nin-b2.rom",   0x20000, 0x10000, CRC(f87efd75) SHA1(16474c7ab57b4fbb5cb50799ea6a2326c66706b5) )
-	ROM_LOAD( "nin-b3.rom",   0x30000, 0x10000, CRC(98856cb4) SHA1(aa4fbae972d2e827c75650a71ab4ef73a33cd018) )
+	ROM_LOAD( "b0.4j",       0x00000, 0x10000, CRC(1b0e08a6) SHA1(892686594970c264babbe8673c258929a5e480f6) )  /* tiles #2 */
+	ROM_LOAD( "b1.4k",       0x10000, 0x10000, CRC(728727f0) SHA1(2f594c77a847ebee71c9da8a644f83ea2a1313d7) )
+	ROM_LOAD( "b2.4h",       0x20000, 0x10000, CRC(f87efd75) SHA1(16474c7ab57b4fbb5cb50799ea6a2326c66706b5) )
+	ROM_LOAD( "b3.4f",       0x30000, 0x10000, CRC(98856cb4) SHA1(aa4fbae972d2e827c75650a71ab4ef73a33cd018) )
 
 	ROM_REGION( 0x10000, "samples", 0 ) /* samples */
-	ROM_LOAD( "nin-v0.rom",   0x00000, 0x10000, CRC(a32e8caf) SHA1(63d56ad3a63fb089056e4a170159120287594ea8) )
+	ROM_LOAD( "nin-v0.7a",   0x00000, 0x10000, CRC(a32e8caf) SHA1(63d56ad3a63fb089056e4a170159120287594ea8) )
+
+	ROM_REGION( 0x0200, "proms", 0 ) /* Located on M72-A-C CPU/Sound board */
+	ROM_LOAD( "m72_a-8l.8l", 0x0000, 0x0100, CRC(b460c438) SHA1(00e20cf754b6fd5138ee4d2f6ec28dff9e292fe6) ) /* TBP24S10 */
+	ROM_LOAD( "m72_a-9l.9l", 0x0100, 0x0100, CRC(a4f2c4bc) SHA1(f13b0a4b52dcc6704063b676f09d83dcba170133) ) /* TBP24S10 */
+
+	ROM_REGION( 0x0300, "plds", 0 )
+	/* Located on M72-ROM-C rom board */
+	ROM_LOAD( "nin_c-3f.3f", 0x0000, 0x0100, CRC(5402fc07) SHA1(fa4284710b31be62ab99b0e1d60844db9a8d843e) ) /* TBP16L8 */
+	/* Located on M72-A-C CPU/Sound board */
+	ROM_LOAD( "m72_a-3d.3d", 0x0100, 0x0100, CRC(de85dac3) SHA1(af83b0325f28fbb1bcc424c1b58ff0f4b49f6b67) ) /* TBP16L8 */
+	ROM_LOAD( "m72_a-4d.4d", 0x0200, 0x0100, CRC(59676de1) SHA1(fcf35f5463c14a4b06d58684c47ea9de5216d1da) ) /* TBP16L8 */
+
 ROM_END
 
 ROM_START( nspiritj )
 	ROM_REGION( 0x100000, "maincpu", 0 )
-	ROM_LOAD16_BYTE( "c-h0",         0x00001, 0x10000, CRC(8603fab2) SHA1(2c5bc97b6c9648156969b4a9f139081dca19fa24) )
-	ROM_LOAD16_BYTE( "c-l0",         0x00000, 0x10000, CRC(e520fa35) SHA1(05f7e5a1a5ada95809ffd941080fb2c2b54363b7) )
-	ROM_LOAD16_BYTE( "nin-c-h1.rom", 0x20001, 0x10000, CRC(cbc10586) SHA1(9b1935ea9ebb21fe42ee3a57d6c10f1e8516f23c) )
-	ROM_LOAD16_BYTE( "nin-c-l1.rom", 0x20000, 0x10000, CRC(b75c9a4d) SHA1(03c28896cbe0c9f778c259d59d2e69796902daa8) )
-	ROM_LOAD16_BYTE( "nin-c-h2.rom", 0x40001, 0x10000, CRC(8ad818fa) SHA1(dd25e79b656b7fc6c31d1f8971fd0916295ccdb0) )
-	ROM_LOAD16_BYTE( "nin-c-l2.rom", 0x40000, 0x10000, CRC(c52ca78c) SHA1(2b40cce5a1f5c588b49634e7fd4bc28c9160fe43) )
-	ROM_LOAD16_BYTE( "c-h3",         0x60001, 0x10000, CRC(95b63a61) SHA1(bd5ec35fffe6d4898e6712eb6add7c51077b58d2) )
-	ROM_RELOAD(                      0xe0001, 0x10000 )
-	ROM_LOAD16_BYTE( "c-l3",         0x60000, 0x10000, CRC(e754a87a) SHA1(9951d972ed13a0415c827beff122bc7ddb078447) )
-	ROM_RELOAD(                      0xe0000, 0x10000 )
+	ROM_LOAD16_BYTE( "c-h0",        0x00001, 0x10000, CRC(8603fab2) SHA1(2c5bc97b6c9648156969b4a9f139081dca19fa24) )
+	ROM_LOAD16_BYTE( "c-l0",        0x00000, 0x10000, CRC(e520fa35) SHA1(05f7e5a1a5ada95809ffd941080fb2c2b54363b7) )
+	ROM_LOAD16_BYTE( "nin_c-h1.6j", 0x20001, 0x10000, CRC(cbc10586) SHA1(9b1935ea9ebb21fe42ee3a57d6c10f1e8516f23c) )
+	ROM_LOAD16_BYTE( "nin_c-l1.6c", 0x20000, 0x10000, CRC(b75c9a4d) SHA1(03c28896cbe0c9f778c259d59d2e69796902daa8) )
+	ROM_LOAD16_BYTE( "nin_c-h2.6l", 0x40001, 0x10000, CRC(8ad818fa) SHA1(dd25e79b656b7fc6c31d1f8971fd0916295ccdb0) )
+	ROM_LOAD16_BYTE( "nin_c-l2.6b", 0x40000, 0x10000, CRC(c52ca78c) SHA1(2b40cce5a1f5c588b49634e7fd4bc28c9160fe43) )
+	ROM_LOAD16_BYTE( "c-h3",        0x60001, 0x10000, CRC(95b63a61) SHA1(bd5ec35fffe6d4898e6712eb6add7c51077b58d2) )
+	ROM_RELOAD(                     0xe0001, 0x10000 )
+	ROM_LOAD16_BYTE( "c-l3",        0x60000, 0x10000, CRC(e754a87a) SHA1(9951d972ed13a0415c827beff122bc7ddb078447) )
+	ROM_RELOAD(                     0xe0000, 0x10000 )
 
 	ROM_REGION( 0x10000, "mcu", 0 )
-	ROM_LOAD( "nin_c-pr.bin", 0x00000, 0x01000, CRC(802d440a) SHA1(45b844b831aa6d5d002e3960e17fb5a058b02a29) )  /* checksum correct for Japan version only (see test mode) */
+	ROM_LOAD( "nin_c-pr.1c", 0x00000, 0x01000, CRC(802d440a) SHA1(45b844b831aa6d5d002e3960e17fb5a058b02a29) )  /* checksum correct for Japan version only (see test mode) */
 
 	ROM_REGION( 0x080000, "gfx1", 0 )
-	ROM_LOAD( "nin-r00.rom",  0x00000, 0x20000, CRC(5f61d30b) SHA1(7754697e43f6117fa604f50885b76014b1dc5760) )  /* sprites */
-	ROM_LOAD( "nin-r10.rom",  0x20000, 0x20000, CRC(0caad107) SHA1(c4eff00327313e05ac8f7c6dbee3a0de1c83fadd) )
-	ROM_LOAD( "nin-r20.rom",  0x40000, 0x20000, CRC(ef3617d3) SHA1(16c175cf45559aacdea6e4002dd8a87f16817cfb) )
-	ROM_LOAD( "nin-r30.rom",  0x60000, 0x20000, CRC(175d2a24) SHA1(d1887efd4d8e74c38c53dbbc541ca8d17f29eb59) )
+	ROM_LOAD( "nin-r00.7m",  0x00000, 0x20000, CRC(5f61d30b) SHA1(7754697e43f6117fa604f50885b76014b1dc5760) )  /* sprites */
+	ROM_LOAD( "nin-r10.7j",  0x20000, 0x20000, CRC(0caad107) SHA1(c4eff00327313e05ac8f7c6dbee3a0de1c83fadd) )
+	ROM_LOAD( "nin-r20.7f",  0x40000, 0x20000, CRC(ef3617d3) SHA1(16c175cf45559aacdea6e4002dd8a87f16817cfb) )
+	ROM_LOAD( "nin-r30.7d",  0x60000, 0x20000, CRC(175d2a24) SHA1(d1887efd4d8e74c38c53dbbc541ca8d17f29eb59) )
 
 	ROM_REGION( 0x040000, "gfx2", 0 )
-	ROM_LOAD( "nin-b-a0.rom", 0x00000, 0x10000, CRC(63f8f658) SHA1(82c02d0f7a2d95dfd8d300c46312d511524775ce) )  /* tiles #1 */
-	ROM_LOAD( "nin-b-a1.rom", 0x10000, 0x10000, CRC(75eb8306) SHA1(2abc359a0bb2863759a68ed60e730761b9751829) )
-	ROM_LOAD( "nin-b-a2.rom", 0x20000, 0x10000, CRC(df532172) SHA1(58b5a79a57e71405b3e1abd41d54cf6a4d12873a) )
-	ROM_LOAD( "nin-b-a3.rom", 0x30000, 0x10000, CRC(4dedd64c) SHA1(8a5c73a024d95e6fe3ab70daafcd5b235418ad36) )
+	ROM_LOAD( "nin_b-a0.4c", 0x00000, 0x10000, CRC(63f8f658) SHA1(82c02d0f7a2d95dfd8d300c46312d511524775ce) )  /* tiles #1 */
+	ROM_LOAD( "nin_b-a1.4d", 0x10000, 0x10000, CRC(75eb8306) SHA1(2abc359a0bb2863759a68ed60e730761b9751829) )
+	ROM_LOAD( "nin_b-a2.4b", 0x20000, 0x10000, CRC(df532172) SHA1(58b5a79a57e71405b3e1abd41d54cf6a4d12873a) )
+	ROM_LOAD( "nin_b-a3.4e", 0x30000, 0x10000, CRC(4dedd64c) SHA1(8a5c73a024d95e6fe3ab70daafcd5b235418ad36) )
 
 	ROM_REGION( 0x040000, "gfx3", 0 )
-	ROM_LOAD( "nin-b0.rom",   0x00000, 0x10000, CRC(1b0e08a6) SHA1(892686594970c264babbe8673c258929a5e480f6) )  /* tiles #2 */
-	ROM_LOAD( "nin-b1.rom",   0x10000, 0x10000, CRC(728727f0) SHA1(2f594c77a847ebee71c9da8a644f83ea2a1313d7) )
-	ROM_LOAD( "nin-b2.rom",   0x20000, 0x10000, CRC(f87efd75) SHA1(16474c7ab57b4fbb5cb50799ea6a2326c66706b5) )
-	ROM_LOAD( "nin-b3.rom",   0x30000, 0x10000, CRC(98856cb4) SHA1(aa4fbae972d2e827c75650a71ab4ef73a33cd018) )
+	ROM_LOAD( "b0.4j",       0x00000, 0x10000, CRC(1b0e08a6) SHA1(892686594970c264babbe8673c258929a5e480f6) )  /* tiles #2 */
+	ROM_LOAD( "b1.4k",       0x10000, 0x10000, CRC(728727f0) SHA1(2f594c77a847ebee71c9da8a644f83ea2a1313d7) )
+	ROM_LOAD( "b2.4h",       0x20000, 0x10000, CRC(f87efd75) SHA1(16474c7ab57b4fbb5cb50799ea6a2326c66706b5) )
+	ROM_LOAD( "b3.4f",       0x30000, 0x10000, CRC(98856cb4) SHA1(aa4fbae972d2e827c75650a71ab4ef73a33cd018) )
 
 	ROM_REGION( 0x10000, "samples", 0 ) /* samples */
-	ROM_LOAD( "nin-v0.rom",   0x00000, 0x10000, CRC(a32e8caf) SHA1(63d56ad3a63fb089056e4a170159120287594ea8) )
+	ROM_LOAD( "nin-v0.7a",   0x00000, 0x10000, CRC(a32e8caf) SHA1(63d56ad3a63fb089056e4a170159120287594ea8) )
 ROM_END
 
 ROM_START( imgfight )
@@ -2765,7 +2650,7 @@ ROM_START( loht )
 	ROM_LOAD16_BYTE( "tom_c-l3-",    0x40000, 0x20000, CRC(2f049b03) SHA1(21047cb10912b1fc23795673af3ea7de249328b7) )
 	ROM_RELOAD(                      0xc0000, 0x20000 )
 
-	ROM_REGION( 0x10000, "cpu2", 0 )
+	ROM_REGION( 0x10000, "mcu", 0 )
 	ROM_LOAD( "loht_i8751.mcu",  0x00000, 0x10000, NO_DUMP ) // read protected
 
 	ROM_REGION( 0x080000, "gfx1", 0 )
@@ -3026,7 +2911,7 @@ ROM_START( xmultiplm72 )
 	ROM_LOAD16_BYTE( "cl0.l0",       0x40000, 0x10000, CRC(06a9e213) SHA1(9831c110814642703d6e71d49848d854095b7d3a) )
 	ROM_RELOAD(                      0xe0000, 0x10000 )
 
-	ROM_REGION( 0x10000, "cpu2", 0 )
+	ROM_REGION( 0x10000, "mcu", 0 )
 	ROM_LOAD( "xmultipl_i8751h.bin",  0x00000, 0x01000, CRC(c8ceb3cd) SHA1(e5d20a3a9d7f0919604543c97643a03434d80130) )
 
 	ROM_REGION( 0x100000, "gfx1", 0 )
@@ -3092,7 +2977,7 @@ ROM_START( dbreedm72 )
 	ROM_LOAD16_BYTE( "db_c-l0.rom",  0x60000, 0x10000, CRC(ed0f5e06) SHA1(9030840b15e83c18d59c884ed08c93c05fa70c5b) )
 	ROM_RELOAD(                      0xe0000, 0x10000 )
 
-	ROM_REGION( 0x10000, "cpu2", 0 )
+	ROM_REGION( 0x10000, "mcu", 0 )
 	ROM_LOAD( "dbreedm72_i8751.mcu", 0x00000, 0x10000, NO_DUMP ) // read protected
 
 	ROM_REGION( 0x080000, "gfx1", 0 )
@@ -3374,7 +3259,7 @@ ROM_START( dkgensanm72 )
 	ROM_LOAD16_BYTE( "ge72-l3.bin",  0x60000, 0x10000, CRC(23d303a5) SHA1(b62010f34d71afb590deae458493454f9af38f7c) )
 	ROM_RELOAD(                      0xe0000, 0x10000 )
 
-	ROM_REGION( 0x10000, "cpu2", 0 )
+	ROM_REGION( 0x10000, "mcu", 0 )
 	ROM_LOAD( "dkgenm72_i8751.mcu",  0x00000, 0x10000, NO_DUMP ) // read protected
 
 	ROM_REGION( 0x080000, "gfx1", 0 )
@@ -3492,7 +3377,7 @@ ROM_START( airduel )
 	ROM_LOAD16_BYTE( "ad-c-l3.bin",  0x40000, 0x20000, CRC(9dd343f7) SHA1(9f499936b6d3807aa5b5c18e9811c73c9a2c99f9) )
 	ROM_RELOAD(                      0xc0000, 0x20000 )
 
-	ROM_REGION( 0x10000, "cpu2", 0 )
+	ROM_REGION( 0x10000, "mcu", 0 )
 	ROM_LOAD( "airduel_i8751.mcu",  0x00000, 0x10000, NO_DUMP ) // read protected
 
 	ROM_REGION( 0x080000, "gfx1", 0 )
@@ -3552,6 +3437,9 @@ ROM_START( gallop )
 	ROM_LOAD16_BYTE( "cc-c-l3.bin",  0x40000, 0x20000, CRC(acd3278e) SHA1(83d7ddfbdb4bc9548a179b728351a21b3b0ac134) )
 	ROM_RELOAD(                      0xc0000, 0x20000 )
 
+	ROM_REGION( 0x10000, "mcu", 0 )
+	ROM_LOAD( "gallop_i8751.mcu",  0x00000, 0x10000, NO_DUMP ) // read protected (only used for sample triggering, not supplying code / warning screens)
+
 	ROM_REGION( 0x080000, "gfx1", 0 )
 	ROM_LOAD( "cc-c-00.bin",  0x00000, 0x20000, CRC(9d99deaa) SHA1(acf16bea0f482306107d2a305c568406b6c21e9a) )  /* sprites */
 	ROM_LOAD( "cc-c-10.bin",  0x20000, 0x20000, CRC(7eb083ed) SHA1(31fa7d532fd46e861c3d19d5b08661653f685a49) )
@@ -3605,38 +3493,51 @@ ROM_END
 // the program roms failing their tests.  This is why we still have simulation code for many games
 // despite having Japanese version MCU roms for several of them.  See notes next to the sets
 
-GAME( 1987, rtype,       0,        rtype,       rtype, driver_device,    0,           ROT0,   "Irem", "R-Type (World)", GAME_NO_COCKTAIL )
-GAME( 1987, rtypej,      rtype,    rtype,       rtype, driver_device,    0,           ROT0,   "Irem", "R-Type (Japan)", GAME_NO_COCKTAIL )
-GAME( 1987, rtypejp,     rtype,    rtype,       rtypep, driver_device,   0,           ROT0,   "Irem", "R-Type (Japan prototype)", GAME_NO_COCKTAIL )
-GAME( 1987, rtypeu,      rtype,    rtype,       rtype, driver_device,    0,           ROT0,   "Irem (Nintendo of America license)", "R-Type (US)", GAME_NO_COCKTAIL )
-GAME( 1987, rtypeb,      rtype,    rtype,       rtype, driver_device,    0,           ROT0,   "bootleg", "R-Type (World bootleg)", GAME_NO_COCKTAIL )
-GAME( 1987, bchopper,    0,        m72,         bchopper, m72_state, bchopper,    ROT0,   "Irem", "Battle Chopper", GAME_NO_COCKTAIL )
-GAME( 1987, mrheli,      bchopper, m72,         bchopper, m72_state, mrheli,      ROT0,   "Irem", "Mr. HELI no Daibouken", GAME_NO_COCKTAIL )
-GAME( 1988, nspirit,     0,        m72,         nspirit, m72_state,  nspirit,     ROT0,   "Irem", "Ninja Spirit", GAME_NO_COCKTAIL )                 // doesn't wait / check for japan warning string.. fails rom check if used with japanese mcu rom (World version?)
-GAME( 1988, nspiritj,    nspirit,  m72_8751,    nspirit, m72_state,  m72_8751,    ROT0,   "Irem", "Saigo no Nindou (Japan)", GAME_NO_COCKTAIL )      // waits for japan warning screen, works with our mcu dump, corrupt warning screen due to priority / mixing errors (Japan Version)
-GAME( 1988, imgfight,    0,        m72,         imgfight, m72_state, imgfight,    ROT270, "Irem", "Image Fight (World, revision A)", 0 )             // doesn't wait / check for japan warning string.. fails rom check if used with japanese mcu rom (World version?)
-GAME( 1988, imgfightj,   imgfight, m72_8751,    imgfight, m72_state, m72_8751,    ROT270, "Irem", "Image Fight (Japan)", 0 )                         // waits for japan warning screen, works with our mcu dump, can't actually see warning screen due to priority / mixing errors, check tilemap viewer (Japan Version)
-GAME( 1989, loht,        0,        m72,         loht, m72_state,     loht,        ROT0,   "Irem", "Legend of Hero Tonma", GAME_NO_COCKTAIL )         // fails rom check if used with Japan MCU rom (World version?)
-GAME( 1989, lohtj,       loht,     m72_8751,    loht, m72_state,     m72_8751,    ROT0,   "Irem", "Legend of Hero Tonma (Japan)", GAME_NO_COCKTAIL ) // waits for japan warning screen, works with our mcu dump (Japan Version)
-GAME( 1989, lohtb2,      loht,     m72_8751,    loht, m72_state,     m72_8751,    ROT0,   "bootleg", "Legend of Hero Tonma (Japan, bootleg with i8751)", GAME_NO_COCKTAIL ) // works like above, mcu code is the same as the real code, probably just an alt revision on a bootleg board
-GAME( 1989, lohtb,       loht,     m72,         loht, driver_device,     0,           ROT0,   "bootleg", "Legend of Hero Tonma (unprotected bootleg)", GAME_NOT_WORKING| GAME_NO_COCKTAIL )
-GAME( 1989, xmultipl,    0,        xmultipl,    xmultipl, driver_device, 0,           ROT0,   "Irem", "X Multiply (World, M81)", GAME_NO_COCKTAIL )
-GAME( 1989, xmultiplm72, xmultipl, xmultiplm72, xmultipl, m72_state, xmultiplm72, ROT0,   "Irem", "X Multiply (Japan, M72)", GAME_NO_COCKTAIL )
-GAME( 1989, dbreed,      0,        dbreed,      dbreed, driver_device,   0,           ROT0,   "Irem", "Dragon Breed (M81 PCB version)", GAME_NO_COCKTAIL )
-GAME( 1989, dbreedm72,   dbreed,   dbreedm72,   dbreed, m72_state,   dbreedm72,   ROT0,   "Irem", "Dragon Breed (M72 PCB version)", GAME_NO_COCKTAIL )
-GAME( 1989, rtype2,      0,        rtype2,      rtype2, driver_device,   0,           ROT0,   "Irem", "R-Type II", GAME_NO_COCKTAIL )
-GAME( 1989, rtype2j,     rtype2,   rtype2,      rtype2, driver_device,   0,           ROT0,   "Irem", "R-Type II (Japan)", GAME_NO_COCKTAIL )
-GAME( 1989, rtype2jc,    rtype2,   rtype2,      rtype2, driver_device,   0,           ROT0,   "Irem", "R-Type II (Japan, revision C)", GAME_NO_COCKTAIL )
-GAME( 1990, majtitle,    0,        majtitle,    rtype2, driver_device,   0,           ROT0,   "Irem", "Major Title (World)", GAME_NO_COCKTAIL )
-GAME( 1990, majtitlej,   majtitle, majtitle,    rtype2, driver_device,   0,           ROT0,   "Irem", "Major Title (Japan)", GAME_NO_COCKTAIL )
-GAME( 1990, hharry,      0,        hharry,      hharry, driver_device,   0,           ROT0,   "Irem", "Hammerin' Harry (World)", GAME_NO_COCKTAIL )
-GAME( 1990, hharryu,     hharry,   hharryu,     hharry, driver_device,   0,           ROT0,   "Irem America", "Hammerin' Harry (US)", GAME_NO_COCKTAIL )
-GAME( 1990, dkgensan,    hharry,   hharryu,     hharry, driver_device,   0,           ROT0,   "Irem", "Daiku no Gensan (Japan, M82)", GAME_NO_COCKTAIL )
-GAME( 1990, dkgensanm72, hharry,   dkgenm72,    hharry, m72_state,   dkgenm72,    ROT0,   "Irem", "Daiku no Gensan (Japan, M72)", GAME_NO_COCKTAIL )
-GAME( 1990, poundfor,    0,        poundfor,    poundfor, driver_device, 0,           ROT270, "Irem", "Pound for Pound (World)", GAME_NO_COCKTAIL )
-GAME( 1990, poundforj,   poundfor, poundfor,    poundfor, driver_device, 0,           ROT270, "Irem", "Pound for Pound (Japan)", GAME_NO_COCKTAIL )
-GAME( 1990, poundforu,   poundfor, poundfor,    poundfor, driver_device, 0,           ROT270, "Irem America", "Pound for Pound (US)", GAME_NO_COCKTAIL )
-GAME( 1990, airduel,     0,        m72,         airduel, m72_state,  airduel,     ROT270, "Irem", "Air Duel (Japan)", 0 )
-GAME( 1991, cosmccop,    0,        cosmccop,    gallop, driver_device,   0,           ROT0,   "Irem", "Cosmic Cop (World)", GAME_NO_COCKTAIL )
-GAME( 1991, gallop,      cosmccop, m72,         gallop, m72_state,   gallop,      ROT0,   "Irem", "Gallop - Armed Police Unit (Japan)", GAME_NO_COCKTAIL )
-GAME( 1991, kengo,       0,        kengo,       kengo, driver_device,    0,           ROT0,   "Irem", "Ken-Go", GAME_NO_COCKTAIL )
+GAME( 1987, rtype,       0,        rtype,       rtype,    driver_device, 0,           ROT0,   "Irem", "R-Type (World)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1987, rtypej,      rtype,    rtype,       rtype,    driver_device, 0,           ROT0,   "Irem", "R-Type (Japan)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1987, rtypejp,     rtype,    rtype,       rtypep,   driver_device, 0,           ROT0,   "Irem", "R-Type (Japan prototype)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1987, rtypeu,      rtype,    rtype,       rtype,    driver_device, 0,           ROT0,   "Irem (Nintendo of America license)", "R-Type (US)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1987, rtypeb,      rtype,    rtype,       rtype,    driver_device, 0,           ROT0,   "bootleg", "R-Type (World bootleg)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1987, bchopper,    0,        m72,         bchopper, m72_state,     bchopper,    ROT0,   "Irem", "Battle Chopper", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1987, mrheli,      bchopper, m72_8751,    bchopper, m72_state,     m72_8751,    ROT0,   "Irem", "Mr. HELI no Daibouken (Japan)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1988, nspirit,     0,        m72,         nspirit,  m72_state,     nspirit,     ROT0,   "Irem", "Ninja Spirit", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )                 // doesn't wait / check for japan warning string.. fails rom check if used with japanese mcu rom (World version?)
+GAME( 1988, nspiritj,    nspirit,  m72_8751,    nspirit,  m72_state,     m72_8751,    ROT0,   "Irem", "Saigo no Nindou (Japan)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )      // waits for japan warning screen, works with our mcu dump, corrupt warning screen due to priority / mixing errors (Japan Version)
+
+GAME( 1988, imgfight,    0,        m72,         imgfight, m72_state,     imgfight,    ROT270, "Irem", "Image Fight (World, revision A)", GAME_SUPPORTS_SAVE )             // doesn't wait / check for japan warning string.. fails rom check if used with japanese mcu rom (World version?)
+GAME( 1988, imgfightj,   imgfight, m72_8751,    imgfight, m72_state,     m72_8751,    ROT270, "Irem", "Image Fight (Japan)", GAME_SUPPORTS_SAVE )                         // waits for japan warning screen, works with our mcu dump, can't actually see warning screen due to priority / mixing errors, check tilemap viewer (Japan Version)
+
+GAME( 1989, loht,        0,        m72,         loht,     m72_state,     loht,        ROT0,   "Irem", "Legend of Hero Tonma", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )         // fails rom check if used with Japan MCU rom (World version?)
+GAME( 1989, lohtj,       loht,     m72_8751,    loht,     m72_state,     m72_8751,    ROT0,   "Irem", "Legend of Hero Tonma (Japan)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE ) // waits for japan warning screen, works with our mcu dump (Japan Version)
+GAME( 1989, lohtb2,      loht,     m72_8751,    loht,     m72_state,     m72_8751,    ROT0,   "bootleg", "Legend of Hero Tonma (Japan, bootleg with i8751)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE ) // works like above, mcu code is the same as the real code, probably just an alt revision on a bootleg board
+GAME( 1989, lohtb,       loht,     m72,         loht,     driver_device, 0,           ROT0,   "bootleg", "Legend of Hero Tonma (unprotected bootleg)", GAME_NOT_WORKING| GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1989, xmultipl,    0,        xmultipl,    xmultipl, driver_device, 0,           ROT0,   "Irem", "X Multiply (World, M81)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1989, xmultiplm72, xmultipl, xmultiplm72, xmultipl, m72_state,     m72_8751,    ROT0,   "Irem", "X Multiply (Japan, M72)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1989, dbreed,      0,        dbreed,      dbreed,   driver_device, 0,           ROT0,   "Irem", "Dragon Breed (M81 PCB version)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1989, dbreedm72,   dbreed,   dbreedm72,   dbreed,   m72_state,     dbreedm72,   ROT0,   "Irem", "Dragon Breed (M72 PCB version)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1989, rtype2,      0,        rtype2,      rtype2,   driver_device, 0,           ROT0,   "Irem", "R-Type II", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1989, rtype2j,     rtype2,   rtype2,      rtype2,   driver_device, 0,           ROT0,   "Irem", "R-Type II (Japan)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1989, rtype2jc,    rtype2,   rtype2,      rtype2,   driver_device, 0,           ROT0,   "Irem", "R-Type II (Japan, revision C)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1990, majtitle,    0,        majtitle,    rtype2,   driver_device, 0,           ROT0,   "Irem", "Major Title (World)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1990, majtitlej,   majtitle, majtitle,    rtype2,   driver_device, 0,           ROT0,   "Irem", "Major Title (Japan)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1990, hharry,      0,        hharry,      hharry,   driver_device, 0,           ROT0,   "Irem", "Hammerin' Harry (World)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1990, hharryu,     hharry,   hharryu,     hharry,   driver_device, 0,           ROT0,   "Irem America", "Hammerin' Harry (US)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1990, dkgensan,    hharry,   hharryu,     hharry,   driver_device, 0,           ROT0,   "Irem", "Daiku no Gensan (Japan, M82)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1990, dkgensanm72, hharry,   dkgenm72,    hharry,   m72_state,     dkgenm72,    ROT0,   "Irem", "Daiku no Gensan (Japan, M72)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1990, poundfor,    0,        poundfor,    poundfor, driver_device, 0,           ROT270, "Irem", "Pound for Pound (World)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1990, poundforj,   poundfor, poundfor,    poundfor, driver_device, 0,           ROT270, "Irem", "Pound for Pound (Japan)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1990, poundforu,   poundfor, poundfor,    poundfor, driver_device, 0,           ROT270, "Irem America", "Pound for Pound (US)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1990, airduel,     0,        m72,         airduel,  m72_state,     airduel,     ROT270, "Irem", "Air Duel (Japan)", GAME_SUPPORTS_SAVE )
+
+GAME( 1991, cosmccop,    0,        cosmccop,    gallop,   driver_device, 0,           ROT0,   "Irem", "Cosmic Cop (World)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1991, gallop,      cosmccop, m72,         gallop,   m72_state,     gallop,      ROT0,   "Irem", "Gallop - Armed Police Unit (Japan)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+
+GAME( 1991, kengo,       0,        kengo,       kengo,    driver_device, 0,           ROT0,   "Irem", "Ken-Go", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )

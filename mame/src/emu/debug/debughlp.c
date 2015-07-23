@@ -1,11 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*********************************************************************
 
     debughlp.c
 
     Debugger help engine.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 *********************************************************************/
 
@@ -237,8 +236,8 @@ static const help_item static_help_list[] =
 		"\n"
 		"  cheatinit [<address>,<length>[,<cpu>]] -- initialize the cheat search to the selected memory area\n"
 		"  cheatrange <address>,<length> -- add to the cheat search the selected memory area\n"
-		"  cheatnext <condition>[,<comparisonvalue>] -- continue cheat search comparing with the the last value\n"
-		"  cheatnextf <condition>[,<comparisonvalue>] -- continue cheat search comparing with the the first value\n"
+		"  cheatnext <condition>[,<comparisonvalue>] -- continue cheat search comparing with the last value\n"
+		"  cheatnextf <condition>[,<comparisonvalue>] -- continue cheat search comparing with the first value\n"
 		"  cheatlist [<filename>] -- show the list of cheat search matches or save them to <filename>\n"
 		"  cheatundo -- undo the last cheat search (state only)\n"
 	},
@@ -1213,8 +1212,7 @@ static const help_item static_help_list[] =
 		"\n"
 		"  memdump [<filename>]\n"
 		"\n"
-		"Dumps the current memory map to <filename>. If <filename> is omitted, then dumps\n"
-		"to memdump.log"
+		"Dumps the current memory map to <filename>. If <filename> is omitted, then dumps to memdump.log"
 		"\n"
 		"Examples:\n"
 		"\n"
@@ -1481,7 +1479,7 @@ const char *debug_get_help(const char *tag)
 		tagcopy[i] = tolower((UINT8)tag[i]);
 
 	/* find a match */
-	for (i = 0; i < sizeof(static_help_list) / sizeof(static_help_list[0]); i++)
+	for (i = 0; i < ARRAY_LENGTH(static_help_list); i++)
 		if (!strncmp(static_help_list[i].tag, tagcopy, taglen))
 		{
 			foundcount++;
@@ -1503,7 +1501,7 @@ const char *debug_get_help(const char *tag)
 
 	/* otherwise, indicate ambiguous help */
 	msglen = sprintf(ambig_message, "Ambiguous help request, did you mean:\n");
-	for (i = 0; i < sizeof(static_help_list) / sizeof(static_help_list[0]); i++)
+	for (i = 0; i < ARRAY_LENGTH(static_help_list); i++)
 		if (!strncmp(static_help_list[i].tag, tagcopy, taglen))
 			msglen += sprintf(&ambig_message[msglen], "  help %s?\n", static_help_list[i].tag);
 	return ambig_message;

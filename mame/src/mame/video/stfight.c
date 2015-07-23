@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mark McDougall
 /***************************************************************************
 
   video.c
@@ -30,56 +32,40 @@
 
  */
 
-void stfight_state::palette_init()
+PALETTE_INIT_MEMBER(stfight_state, stfight)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
-
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
 
 	/* text uses colors 0xc0-0xcf */
 	for (i = 0; i < 0x40; i++)
 	{
 		UINT8 ctabentry = (color_prom[i] & 0x0f) | 0xc0;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 
 	/* fg uses colors 0x40-0x7f */
 	for (i = 0x40; i < 0x140; i++)
 	{
 		UINT8 ctabentry = (color_prom[i + 0x1c0] & 0x0f) | ((color_prom[i + 0x0c0] & 0x03) << 4) | 0x40;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 
 	/* bg uses colors 0-0x3f */
 	for (i = 0x140; i < 0x240; i++)
 	{
 		UINT8 ctabentry = (color_prom[i + 0x2c0] & 0x0f) | ((color_prom[i + 0x1c0] & 0x03) << 4);
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 
 	/* bg uses colors 0x80-0xbf */
 	for (i = 0x240; i < 0x340; i++)
 	{
 		UINT8 ctabentry = (color_prom[i + 0x3c0] & 0x0f) | ((color_prom[i + 0x2c0] & 0x03) << 4) | 0x80;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 }
 
-
-void stfight_state::set_pens()
-{
-	int i;
-
-	for (i = 0; i < 0x100; i++)
-	{
-		UINT16 data = m_generic_paletteram_8[i] | (m_generic_paletteram2_8[i] << 8);
-		rgb_t color = MAKE_RGB(pal4bit(data >> 4), pal4bit(data >> 0), pal4bit(data >> 8));
-
-		colortable_palette_set_color(machine().colortable, i, color);
-	}
-}
 
 
 /***************************************************************************
@@ -102,8 +88,7 @@ TILE_GET_INFO_MEMBER(stfight_state::get_fg_tile_info)
 	attr = fgMap[0x8000+tile_index];
 	tile_base = ((attr & 0x80) << 2) | ((attr & 0x20) << 3);
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			tile_base + fgMap[tile_index],
 			attr & 0x07,
 			0);
@@ -126,8 +111,7 @@ TILE_GET_INFO_MEMBER(stfight_state::get_bg_tile_info)
 	tile_bank = (attr & 0x20) >> 5;
 	tile_base = (attr & 0x80) << 1;
 
-	SET_TILE_INFO_MEMBER(
-			2+tile_bank,
+	SET_TILE_INFO_MEMBER(2+tile_bank,
 			tile_base + bgMap[tile_index],
 			attr & 0x07,
 			0);
@@ -140,11 +124,24 @@ TILE_GET_INFO_MEMBER(stfight_state::get_tx_tile_info)
 
 	tileinfo.group = color;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			m_text_char_ram[tile_index] + ((attr & 0x80) << 1),
 			attr & 0x0f,
 			TILE_FLIPYX((attr & 0x60) >> 5));
+}
+
+TILE_GET_INFO_MEMBER(stfight_state::get_cshooter_tx_tile_info)
+{
+	UINT8 tile = m_tx_vram[tile_index*2];
+	UINT8 attr = m_tx_vram[tile_index*2+1];
+	int color = attr & 0x0f;
+
+	tileinfo.group = color;
+
+	SET_TILE_INFO_MEMBER(0,
+			(tile << 1) | ((attr & 0x20) >> 5),
+			attr & 0x0f,
+			/*TILE_FLIPYX((attr & 0x60) >> 5)*/0);
 }
 
 
@@ -154,14 +151,24 @@ TILE_GET_INFO_MEMBER(stfight_state::get_tx_tile_info)
 
 ***************************************************************************/
 
-void stfight_state::video_start()
+VIDEO_START_MEMBER(stfight_state,stfight)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(stfight_state::get_bg_tile_info),this),tilemap_mapper_delegate(FUNC(stfight_state::bg_scan),this),16,16,128,256);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(stfight_state::get_fg_tile_info),this),tilemap_mapper_delegate(FUNC(stfight_state::fg_scan),this),16,16,128,256);
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(stfight_state::get_tx_tile_info),this),TILEMAP_SCAN_ROWS, 8,8,32,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(stfight_state::get_bg_tile_info),this),tilemap_mapper_delegate(FUNC(stfight_state::bg_scan),this),16,16,128,256);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(stfight_state::get_fg_tile_info),this),tilemap_mapper_delegate(FUNC(stfight_state::fg_scan),this),16,16,128,256);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(stfight_state::get_tx_tile_info),this),TILEMAP_SCAN_ROWS, 8,8,32,32);
 
 	m_fg_tilemap->set_transparent_pen(0x0f);
-	colortable_configure_tilemap_groups(machine().colortable, m_tx_tilemap, machine().gfx[0], 0xcf);
+	m_tx_tilemap->configure_groups(*m_gfxdecode->gfx(0), 0xcf);
+}
+
+VIDEO_START_MEMBER(stfight_state,cshooter)
+{
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(stfight_state::get_bg_tile_info),this),tilemap_mapper_delegate(FUNC(stfight_state::bg_scan),this),16,16,128,256);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(stfight_state::get_fg_tile_info),this),tilemap_mapper_delegate(FUNC(stfight_state::fg_scan),this),16,16,128,256);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(stfight_state::get_cshooter_tx_tile_info),this),TILEMAP_SCAN_ROWS, 8,8,32,32);
+
+	m_fg_tilemap->set_transparent_pen(0x0f);
+	m_tx_tilemap->configure_groups(*m_gfxdecode->gfx(0), 0xcf);
 }
 
 
@@ -183,6 +190,13 @@ WRITE8_MEMBER(stfight_state::stfight_text_attr_w)
 	m_text_attr_ram[offset] = data;
 	m_tx_tilemap->mark_tile_dirty(offset);
 }
+
+WRITE8_MEMBER(stfight_state::cshooter_text_w)
+{
+	m_tx_vram[offset] = data;
+	m_tx_tilemap->mark_tile_dirty(offset/2);
+}
+
 
 WRITE8_MEMBER(stfight_state::stfight_sprite_bank_w)
 {
@@ -239,7 +253,7 @@ WRITE8_MEMBER(stfight_state::stfight_vh_latch_w)
 
 ***************************************************************************/
 
-void stfight_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
+void stfight_state::draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int offs,sx,sy;
 
@@ -274,12 +288,12 @@ void stfight_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect
 
 			code = m_sprite_base + m_sprite_ram[offs];
 
-			pdrawgfx_transpen(bitmap,cliprect,machine().gfx[4],
+			m_gfxdecode->gfx(4)->prio_transpen(bitmap,cliprect,
 						code,
 						color,
 						flipx,flip_screen(),
 						sx,sy,
-						machine().priority_bitmap,
+						screen.priority(),
 						pri ? 0x02 : 0,0x0f);
 		}
 	}
@@ -288,18 +302,58 @@ void stfight_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect
 
 UINT32 stfight_state::screen_update_stfight(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	set_pens();
-
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	bitmap.fill(0, cliprect);   /* in case m_bg_tilemap is disabled */
-	m_bg_tilemap->draw(bitmap, cliprect, 0,0);
-	m_fg_tilemap->draw(bitmap, cliprect, 0,1);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0,1);
 
 	/* Draw sprites (may be obscured by foreground layer) */
 	if (m_vh_latch_ram[0x07] & 0x40)
-		draw_sprites(bitmap,cliprect);
+		draw_sprites(screen,bitmap,cliprect);
 
-	m_tx_tilemap->draw(bitmap, cliprect, 0,0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0,0);
+	return 0;
+}
+
+void stfight_state::cshooter_draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+{
+	for (int i = m_sprite_ram.bytes() - 4; i >= 0 ; i -= 4)
+	{
+		if (m_sprite_ram[i+1]&0x80)
+			continue;
+
+		int attr = m_sprite_ram[i+1];
+		int flipx = attr & 0x10;
+		int color = attr & 0x0f;
+		int pri = (attr & 0x20) >> 5;
+
+		/* BCD debug code, to be removed in the end */
+		UINT8 tile_low = (m_sprite_ram[i]&0x0f);
+		UINT8 tile_high = ((m_sprite_ram[i]&0xf0)>>4);
+
+		tile_low += (tile_low > 0x9) ? 0x37 : 0x30;
+		tile_high += (tile_high > 0x9) ? 0x37 : 0x30;
+
+		m_gfxdecode->gfx(0)->prio_transpen(bitmap,cliprect, tile_high << 1, color, flipx, 0, m_sprite_ram[i+3],m_sprite_ram[i+2],screen.priority(),pri ? 0x02 : 0,0x00);
+		m_gfxdecode->gfx(0)->prio_transpen(bitmap,cliprect, tile_high << 1, color, flipx, 0, m_sprite_ram[i+3]+8,m_sprite_ram[i+2],screen.priority(),pri ? 0x02 : 0,0x00);
+		m_gfxdecode->gfx(0)->prio_transpen(bitmap,cliprect, tile_low << 1, color, flipx, 0, m_sprite_ram[i+3]+8,m_sprite_ram[i+2]+8,screen.priority(),pri ? 0x02 : 0,0x00);
+		m_gfxdecode->gfx(0)->prio_transpen(bitmap,cliprect, tile_low << 1, color, flipx, 0, m_sprite_ram[i+3],m_sprite_ram[i+2]+8,screen.priority(),pri ? 0x02 : 0,0x00);
+	}
+}
+
+UINT32 stfight_state::screen_update_cshooter(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+{
+	screen.priority().fill(0, cliprect);
+
+	bitmap.fill(0, cliprect);   /* in case m_bg_tilemap is disabled */
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0,1);
+
+	/* Draw sprites (may be obscured by foreground layer) */
+//  if (m_vh_latch_ram[0x07] & 0x40)
+		cshooter_draw_sprites(screen,bitmap,cliprect);
+
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	return 0;
 }

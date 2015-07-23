@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /*****************************************************************************
  *
  * includes/ac1.h
@@ -16,7 +18,9 @@ public:
 	ac1_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_cassette(*this, "cassette"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	required_device<cassette_image_device> m_cassette;
 	DECLARE_DRIVER_INIT(ac1);
@@ -29,11 +33,9 @@ public:
 	DECLARE_WRITE8_MEMBER(ac1_port_a_w);
 	DECLARE_WRITE8_MEMBER(ac1_port_b_w);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
-
-
-/*----------- defined in machine/ac1.c -----------*/
-extern const z80pio_interface ac1_z80pio_intf;
 
 /*----------- defined in video/ac1.c -----------*/
 extern const gfx_layout ac1_charlayout;

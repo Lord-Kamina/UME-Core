@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Sega Zaxxon hardware
@@ -10,15 +12,27 @@ class zaxxon_state : public driver_device
 public:
 	zaxxon_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_samples(*this, "samples"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
+		m_dials(*this, "DIAL"),
 		m_videoram(*this, "videoram"),
 		m_spriteram(*this, "spriteram"),
 		m_colorram(*this, "colorram"),
-		m_maincpu(*this, "maincpu"),
-		m_samples(*this, "samples") { }
+		m_decrypted_opcodes(*this, "decrypted_opcodes") { }
+
+	required_device<cpu_device> m_maincpu;
+	optional_device<samples_device> m_samples;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
+	optional_ioport_array<2> m_dials;
 
 	required_shared_ptr<UINT8> m_videoram;
 	optional_shared_ptr<UINT8> m_spriteram;
 	optional_shared_ptr<UINT8> m_colorram;
+	optional_shared_ptr<UINT8> m_decrypted_opcodes;
 
 	UINT8 m_int_enabled;
 	UINT8 m_coin_status[3];
@@ -68,7 +82,7 @@ public:
 	TILE_GET_INFO_MEMBER(congo_get_fg_tile_info);
 	virtual void machine_start();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(zaxxon);
 	DECLARE_VIDEO_START(razmataz);
 	DECLARE_VIDEO_START(congo);
 	UINT32 screen_update_zaxxon(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
@@ -87,8 +101,6 @@ public:
 	inline int find_minimum_x(UINT8 value, int flip);
 	void draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, UINT16 flipxmask, UINT16 flipymask);
 	void zaxxonj_decode(const char *cputag);
-	required_device<cpu_device> m_maincpu;
-	optional_device<samples_device> m_samples;
 };
 
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
   video.c
@@ -36,9 +38,6 @@ PALETTE_INIT_MEMBER(fastfred_state,fastfred)
 			4, resistances, gweights, 470, 0,
 			4, resistances, bweights, 470, 0);
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
-
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x100; i++)
 	{
@@ -66,12 +65,12 @@ PALETTE_INIT_MEMBER(fastfred_state,fastfred)
 		bit3 = (color_prom[i + 0x200] >> 3) & 0x01;
 		b = combine_4_weights(bweights, bit0, bit1, bit2, bit3);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* characters and sprites use the same palette */
 	for (i = 0; i < 0x100; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_pen_indirect(i, i);
 }
 
 /***************************************************************************
@@ -100,7 +99,7 @@ TILE_GET_INFO_MEMBER(fastfred_state::get_tile_info)
 
 VIDEO_START_MEMBER(fastfred_state,fastfred)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(fastfred_state::get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,32,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(fastfred_state::get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,32,32);
 
 	m_bg_tilemap->set_transparent_pen(0);
 	m_bg_tilemap->set_scroll_cols(32);
@@ -277,7 +276,7 @@ void fastfred_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 			flipy = !flipy;
 		}
 
-		drawgfx_transpen(bitmap,flip_screen_x() ? spritevisibleareaflipx : spritevisiblearea,machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,flip_screen_x() ? spritevisibleareaflipx : spritevisiblearea,
 				code,
 				m_colorbank | (m_spriteram[offs + 2] & 0x07),
 				flipx,flipy,
@@ -289,7 +288,7 @@ void fastfred_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 UINT32 fastfred_state::screen_update_fastfred(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	bitmap.fill(*m_background_color, cliprect);
-	m_bg_tilemap->draw(bitmap, cliprect, 0,0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	draw_sprites(bitmap, cliprect);
 
 	return 0;
@@ -334,9 +333,9 @@ WRITE8_MEMBER(fastfred_state::imago_charbank_w )
 
 VIDEO_START_MEMBER(fastfred_state,imago)
 {
-	m_web_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(fastfred_state::imago_get_tile_info_web),this),TILEMAP_SCAN_ROWS,     8,8,32,32);
-	m_bg_tilemap   = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(fastfred_state::imago_get_tile_info_bg),this), TILEMAP_SCAN_ROWS,8,8,32,32);
-	m_fg_tilemap   = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(fastfred_state::imago_get_tile_info_fg),this), TILEMAP_SCAN_ROWS,8,8,32,32);
+	m_web_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(fastfred_state::imago_get_tile_info_web),this),TILEMAP_SCAN_ROWS,     8,8,32,32);
+	m_bg_tilemap   = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(fastfred_state::imago_get_tile_info_bg),this), TILEMAP_SCAN_ROWS,8,8,32,32);
+	m_fg_tilemap   = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(fastfred_state::imago_get_tile_info_fg),this), TILEMAP_SCAN_ROWS,8,8,32,32);
 
 	m_bg_tilemap->set_transparent_pen(0);
 	m_fg_tilemap->set_transparent_pen(0);
@@ -346,17 +345,35 @@ VIDEO_START_MEMBER(fastfred_state,imago)
 	m_stars_on = 1;
 
 	/* web colors */
-	palette_set_color(machine(),256+64+0,MAKE_RGB(0x50,0x00,0x00));
-	palette_set_color(machine(),256+64+1,MAKE_RGB(0x00,0x00,0x00));
+	m_palette->set_pen_color(256+64+0,rgb_t(0x50,0x00,0x00));
+	m_palette->set_pen_color(256+64+1,rgb_t(0x00,0x00,0x00));
+
+	save_item(NAME(m_imago_sprites));
+	save_item(NAME(m_imago_sprites_address));
+	save_item(NAME(m_imago_sprites_bank));
+
+	// galaxold starfield related save states. Something's still missing here.
+	save_item(NAME(m_stars_on));
+	save_item(NAME(m_stars_blink_state));
+	save_item(NAME(m_timer_adjusted));
+	save_item(NAME(m_stars_colors_start));
+	save_item(NAME(m_stars_scrollpos));
+
+	for (int i = 0; i < STAR_COUNT; i++)
+	{
+		save_item(NAME(m_stars[i].x), i);
+		save_item(NAME(m_stars[i].y), i);
+		save_item(NAME(m_stars[i].color), i);
+	}
 }
 
 UINT32 fastfred_state::screen_update_imago(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_web_tilemap->draw(bitmap, cliprect, 0,0);
+	m_web_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	galaxold_draw_stars(bitmap, cliprect);
-	m_bg_tilemap->draw(bitmap, cliprect, 0,0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	draw_sprites(bitmap, cliprect);
-	m_fg_tilemap->draw(bitmap, cliprect, 0,0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0,0);
 
 	return 0;
 }

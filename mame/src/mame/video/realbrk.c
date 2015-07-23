@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                       -= Billiard Academy Real Break =-
@@ -72,8 +74,7 @@ TILE_GET_INFO_MEMBER(realbrk_state::get_tile_info_0)
 {
 	UINT16 attr = m_vram_0[tile_index * 2 + 0];
 	UINT16 code = m_vram_0[tile_index * 2 + 1];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			code,
 			attr & 0x7f,
 			TILE_FLIPYX( attr >> 14 ));
@@ -83,20 +84,19 @@ TILE_GET_INFO_MEMBER(realbrk_state::get_tile_info_1)
 {
 	UINT16 attr = m_vram_1[tile_index * 2 + 0];
 	UINT16 code = m_vram_1[tile_index * 2 + 1];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			code,
 			attr & 0x7f,
 			TILE_FLIPYX( attr >> 14 ));
 }
 
-WRITE16_MEMBER(realbrk_state::realbrk_vram_0_w)
+WRITE16_MEMBER(realbrk_state::vram_0_w)
 {
 	COMBINE_DATA(&m_vram_0[offset]);
 	m_tilemap_0->mark_tile_dirty(offset/2);
 }
 
-WRITE16_MEMBER(realbrk_state::realbrk_vram_1_w)
+WRITE16_MEMBER(realbrk_state::vram_1_w)
 {
 	COMBINE_DATA(&m_vram_1[offset]);
 	m_tilemap_1->mark_tile_dirty(offset/2);
@@ -119,14 +119,13 @@ WRITE16_MEMBER(realbrk_state::realbrk_vram_1_w)
 TILE_GET_INFO_MEMBER(realbrk_state::get_tile_info_2)
 {
 	UINT16 code = m_vram_2[tile_index];
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code & 0x0fff,
 			((code & 0xf000) >> 12) | ((m_vregs[0xa/2] & 0x7f) << 4),
 			0);
 }
 
-WRITE16_MEMBER(realbrk_state::realbrk_vram_2_w)
+WRITE16_MEMBER(realbrk_state::vram_2_w)
 {
 	COMBINE_DATA(&m_vram_2[offset]);
 	m_tilemap_2->mark_tile_dirty(offset);
@@ -145,11 +144,11 @@ WRITE16_MEMBER(realbrk_state::realbrk_vram_2_w)
 void realbrk_state::video_start()
 {
 	/* Backgrounds */
-	m_tilemap_0 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(realbrk_state::get_tile_info_0),this), TILEMAP_SCAN_ROWS, 16, 16, 0x40, 0x20);
-	m_tilemap_1 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(realbrk_state::get_tile_info_1),this), TILEMAP_SCAN_ROWS, 16, 16, 0x40, 0x20);
+	m_tilemap_0 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(realbrk_state::get_tile_info_0),this), TILEMAP_SCAN_ROWS, 16, 16, 0x40, 0x20);
+	m_tilemap_1 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(realbrk_state::get_tile_info_1),this), TILEMAP_SCAN_ROWS, 16, 16, 0x40, 0x20);
 
 	/* Text */
-	m_tilemap_2 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(realbrk_state::get_tile_info_2),this), TILEMAP_SCAN_ROWS,  8,  8, 0x40, 0x20);
+	m_tilemap_2 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(realbrk_state::get_tile_info_2),this), TILEMAP_SCAN_ROWS,  8,  8, 0x40, 0x20);
 
 	m_tilemap_0->set_transparent_pen(0);
 	m_tilemap_1->set_transparent_pen(0);
@@ -157,6 +156,8 @@ void realbrk_state::video_start()
 
 	m_tmpbitmap0 = auto_bitmap_ind16_alloc(machine(),32,32);
 	m_tmpbitmap1 = auto_bitmap_ind16_alloc(machine(),32,32);
+
+	save_item(NAME(m_disable_video));
 }
 
 /***************************************************************************
@@ -170,7 +171,7 @@ void realbrk_state::video_start()
     of a sprite to be drawn. 0x300 items of the list seem to be used.
 
     Each sprite is made of several 16x16 tiles (from 1 to 32x32) and
-    can be zoomed / shrinked in size.
+    can be zoomed / shrunk in size.
 
     There are two set of tiles: with 256 or 16 colors.
 
@@ -206,11 +207,10 @@ void realbrk_state::video_start()
 
 void realbrk_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 {
-	UINT16 *spriteram16 = m_spriteram;
 	int offs;
 
-	int max_x = machine().primary_screen->width();
-	int max_y = machine().primary_screen->height();
+	int max_x = m_screen->width();
+	int max_y = m_screen->height();
 
 	rectangle spritetile_clip(0, 31, 0, 31);
 
@@ -223,9 +223,9 @@ void realbrk_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 
 		UINT16 *s;
 
-		if (spriteram16[offs] & 0x8000) continue;
+		if (m_spriteram[offs] & 0x8000) continue;
 
-		s       =       &spriteram16[(spriteram16[offs] & 0x3ff) * 16/2];
+		s       =       &m_spriteram[(m_spriteram[offs] & 0x3ff) * 16/2];
 
 		sy      =       s[ 0 ];
 		sx      =       s[ 1 ];
@@ -288,7 +288,7 @@ void realbrk_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 				{
 					m_tmpbitmap0->fill(0, spritetile_clip );
 					m_tmpbitmap1->fill(0, spritetile_clip );
-					drawgfxzoom_transpen(   *m_tmpbitmap0,spritetile_clip,machine().gfx[gfx],
+					m_gfxdecode->gfx(gfx)->zoom_transpen(*m_tmpbitmap0,spritetile_clip,
 									code++,
 									color,
 									flipx, flipy,
@@ -350,7 +350,7 @@ void realbrk_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 						break;
 
 					default:
-						drawgfxzoom_transpen(   bitmap,cliprect,machine().gfx[gfx],
+						m_gfxdecode->gfx(gfx)->zoom_transpen(bitmap,cliprect,
 										code++,
 										color,
 										flipx, flipy,
@@ -368,11 +368,10 @@ void realbrk_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 /* layer : 0== bghigh<spr    1== bglow<spr<bghigh     2==spr<bglow    3==boarder */
 void realbrk_state::dai2kaku_draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect, int layer)
 {
-	UINT16 *spriteram16 = m_spriteram;
 	int offs;
 
-	int max_x = machine().primary_screen->width();
-	int max_y = machine().primary_screen->height();
+	int max_x = m_screen->width();
+	int max_y = m_screen->height();
 
 	for ( offs = 0x3000/2; offs < 0x3600/2; offs += 2/2 )
 	{
@@ -383,9 +382,9 @@ void realbrk_state::dai2kaku_draw_sprites(bitmap_ind16 &bitmap,const rectangle &
 
 		UINT16 *s;
 
-		if (spriteram16[offs] & 0x8000) continue;
+		if (m_spriteram[offs] & 0x8000) continue;
 
-		s       =       &spriteram16[(spriteram16[offs] & 0x3ff) * 16/2];
+		s       =       &m_spriteram[(m_spriteram[offs] & 0x3ff) * 16/2];
 
 		sy      =       s[ 0 ];
 		sx      =       s[ 1 ];
@@ -431,7 +430,7 @@ void realbrk_state::dai2kaku_draw_sprites(bitmap_ind16 &bitmap,const rectangle &
 				int scalex = (sx + (x + 1) * xdim) / 0x10000 - currx;
 				int scaley = (sy + (y + 1) * ydim) / 0x10000 - curry;
 
-				drawgfxzoom_transpen(   bitmap,cliprect,machine().gfx[gfx],
+				m_gfxdecode->gfx(gfx)->zoom_transpen(bitmap,cliprect,
 								code++,
 								color,
 								flipx, flipy,
@@ -470,7 +469,7 @@ void realbrk_state::dai2kaku_draw_sprites(bitmap_ind16 &bitmap,const rectangle &
 
 ***************************************************************************/
 
-WRITE16_MEMBER(realbrk_state::realbrk_vregs_w)
+WRITE16_MEMBER(realbrk_state::vregs_w)
 {
 	UINT16 old_data = m_vregs[offset];
 	UINT16 new_data = COMBINE_DATA(&m_vregs[offset]);
@@ -481,7 +480,7 @@ WRITE16_MEMBER(realbrk_state::realbrk_vregs_w)
 	}
 }
 
-UINT32 realbrk_state::screen_update_realbrk(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 realbrk_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int layers_ctrl = -1;
 
@@ -505,18 +504,18 @@ if ( machine().input().code_pressed(KEYCODE_Z) )
 
 	if (m_disable_video)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		return 0;
 	}
 	else
 		bitmap.fill(m_vregs[0xc/2] & 0x7fff, cliprect);
 
-	if (layers_ctrl & 2)    m_tilemap_1->draw(bitmap, cliprect, 0,0);
-	if (layers_ctrl & 1)    m_tilemap_0->draw(bitmap, cliprect, 0,0);
+	if (layers_ctrl & 2)    m_tilemap_1->draw(screen, bitmap, cliprect, 0,0);
+	if (layers_ctrl & 1)    m_tilemap_0->draw(screen, bitmap, cliprect, 0,0);
 
 	if (layers_ctrl & 8)    draw_sprites(bitmap,cliprect);
 
-	if (layers_ctrl & 4)    m_tilemap_2->draw(bitmap, cliprect, 0,0);
+	if (layers_ctrl & 4)    m_tilemap_2->draw(screen, bitmap, cliprect, 0,0);
 
 //  popmessage("%04x",m_vregs[0x8/2]);
 	return 0;
@@ -575,7 +574,7 @@ if ( machine().input().code_pressed(KEYCODE_Z) )
 
 	if (m_disable_video)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		return 0;
 	}
 	else
@@ -588,9 +587,9 @@ if ( machine().input().code_pressed(KEYCODE_Z) )
 
 	// bglow
 	if( m_vregs[8/2] & (0x8000)){
-		if (layers_ctrl & 1)    m_tilemap_0->draw(bitmap, cliprect, 0,0);
+		if (layers_ctrl & 1)    m_tilemap_0->draw(screen, bitmap, cliprect, 0,0);
 	} else {
-		if (layers_ctrl & 2)    m_tilemap_1->draw(bitmap, cliprect, 0,0);
+		if (layers_ctrl & 2)    m_tilemap_1->draw(screen, bitmap, cliprect, 0,0);
 	}
 
 	// spr 1
@@ -598,16 +597,16 @@ if ( machine().input().code_pressed(KEYCODE_Z) )
 
 	// bghigh
 	if( m_vregs[8/2] & (0x8000)){
-		if (layers_ctrl & 2)    m_tilemap_1->draw(bitmap, cliprect, 0,0);
+		if (layers_ctrl & 2)    m_tilemap_1->draw(screen, bitmap, cliprect, 0,0);
 	} else {
-		if (layers_ctrl & 1)    m_tilemap_0->draw(bitmap, cliprect, 0,0);
+		if (layers_ctrl & 1)    m_tilemap_0->draw(screen, bitmap, cliprect, 0,0);
 	}
 
 	// spr 2
 	if (layers_ctrl & 8)    dai2kaku_draw_sprites(bitmap,cliprect,0);
 
 	// fix
-	if (layers_ctrl & 4)    m_tilemap_2->draw(bitmap, cliprect, 0,0);
+	if (layers_ctrl & 4)    m_tilemap_2->draw(screen, bitmap, cliprect, 0,0);
 
 //  usrintf_showmessage("%04x",m_vregs[0x8/2]);
 	return 0;

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese, hap
 /***************************************************************************
 
     30 Test (Remake) (c) 1997 Namco
@@ -232,13 +234,6 @@ void namco_30test_state::machine_reset()
 {
 }
 
-static const hc11_config namco_30test_config =
-{
-	0,     //has extended internal I/O
-	768,   //internal RAM size
-	0x00   //registers are at 0-0x100
-};
-
 
 static MACHINE_CONFIG_START( 30test, namco_30test_state )
 
@@ -246,7 +241,7 @@ static MACHINE_CONFIG_START( 30test, namco_30test_state )
 	MCFG_CPU_ADD("maincpu", MC68HC11,MAIN_CLOCK/4)
 	MCFG_CPU_PROGRAM_MAP(namco_30test_map)
 	MCFG_CPU_IO_MAP(namco_30test_io)
-	MCFG_CPU_CONFIG(namco_30test_config)
+	MCFG_MC68HC11_CONFIG( 0, 768, 0x00 )
 
 
 	/* no video! */

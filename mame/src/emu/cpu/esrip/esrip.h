@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /***************************************************************************
 
     esrip.h
@@ -9,6 +11,7 @@
 #ifndef _ESRIP_H
 #define _ESRIP_H
 
+#include "emu.h"
 
 /***************************************************************************
     COMPILE-TIME DEFINITIONS
@@ -19,13 +22,26 @@
     GLOBAL CONSTANTS
 ***************************************************************************/
 
-
 /***************************************************************************
     INTERFACE CONFIGURATION MACROS
 ***************************************************************************/
+#define ESRIP_DRAW(name) int name(int l, int r, int fig, int attr, int addr, int col, int x_scale, int bank)
 
-#define MCFG_CPU_ESRIP_CONFIG(_config) \
-	esrip_device::static_set_config(*device, _config);
+#define MCFG_ESRIP_FDT_R_CALLBACK(_read) \
+	devcb = &esrip_device::static_set_fdt_r_callback(*device, DEVCB_##_read);
+
+#define MCFG_ESRIP_FDT_W_CALLBACK(_write) \
+	devcb = &esrip_device::static_set_fdt_w_callback(*device, DEVCB_##_write);
+
+#define MCFG_ESRIP_STATUS_IN_CALLBACK(_read) \
+	devcb = &esrip_device::static_set_status_in_callback(*device, DEVCB_##_read);
+
+#define MCFG_ESRIP_DRAW_CALLBACK_OWNER(_class, _method) \
+	esrip_device::static_set_draw_callback(*device, esrip_draw_delegate(&_class::_method, #_class "::" #_method, downcast<_class *>(owner)));
+
+#define MCFG_ESRIP_LBRM_PROM(_tag) \
+	esrip_device::static_lbrm_prom(*device, _tag);
+
 
 /***************************************************************************
     REGISTER ENUMERATION
@@ -81,26 +97,14 @@ enum
 	ESRIP_ADRL,
 	ESRIP_ADRR,
 	ESRIP_COLR,
-	ESRIP_IADDR,
+	ESRIP_IADDR
 };
 
 
 //**************************************************************************
 //  TYPE DEFINITIONS
 //**************************************************************************
-
-class esrip_device;
-
-// ======================> esrip_config
-
-struct esrip_config
-{
-	read16_device_func  fdt_r;
-	write16_device_func fdt_w;
-	UINT8 (*status_in)(running_machine &machine);
-	int (*draw)(running_machine &machine, int l, int r, int fig, int attr, int addr, int col, int x_scale, int bank);
-	const char* lbrm_prom;
-};
+typedef device_delegate<int (int l, int r, int fig, int attr, int addr, int col, int x_scale, int bank)> esrip_draw_delegate;
 
 // device type definition
 extern const device_type ESRIP;
@@ -108,15 +112,18 @@ extern const device_type ESRIP;
 // ======================> esrip_device
 
 // Used by core CPU interface
-class esrip_device : public cpu_device,
-						public esrip_config
+class esrip_device : public cpu_device
 {
 public:
 	// construction/destruction
 	esrip_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
 	// inline configuration helpers
-	static void static_set_config(device_t &device, const esrip_config &config);
+	template<class _Object> static devcb_base &static_set_fdt_r_callback(device_t &device, _Object object) { return downcast<esrip_device &>(device).m_fdt_r.set_callback(object); }
+	template<class _Object> static devcb_base &static_set_fdt_w_callback(device_t &device, _Object object) { return downcast<esrip_device &>(device).m_fdt_w.set_callback(object); }
+	template<class _Object> static devcb_base &static_set_status_in_callback(device_t &device, _Object object) { return downcast<esrip_device &>(device).m_status_in.set_callback(object); }
+	static void static_set_draw_callback(device_t &device, esrip_draw_delegate func) { downcast<esrip_device &>(device).m_draw = func; }
+	static void static_lbrm_prom(device_t &device, const char *name) { downcast<esrip_device &>(device).m_lbrm_prom = name; }
 
 	// public interfaces
 	UINT8 get_rip_status();
@@ -145,7 +152,7 @@ protected:
 	virtual offs_t disasm_disassemble(char *buffer, offs_t pc, const UINT8 *oprom, const UINT8 *opram, UINT32 options);
 
 	// device_state_interface overrides
-	virtual void state_string_export(const device_state_entry &entry, astring &string);
+	virtual void state_string_export(const device_state_entry &entry, std::string &str);
 
 	// address spaces
 	const address_space_config m_program_config;
@@ -195,7 +202,7 @@ protected:
 
 	UINT8   m_optable[65536];
 
-	UINT16  *m_ipt_ram;
+	std::vector<UINT16> m_ipt_ram;
 	UINT8   *m_lbrm;
 
 	address_space *m_program;
@@ -203,10 +210,11 @@ protected:
 
 	int     m_icount;
 
-	read16_device_func  m_fdt_r;
-	write16_device_func m_fdt_w;
-	UINT8 (*m_status_in)(running_machine &machine);
-	int (*m_draw)(running_machine &machine, int l, int r, int fig, int attr, int addr, int col, int x_scale, int bank);
+	devcb_read16  m_fdt_r;
+	devcb_write16 m_fdt_w;
+	devcb_read8 m_status_in;
+	esrip_draw_delegate m_draw;
+	const char *m_lbrm_prom;
 
 	typedef void (esrip_device::*ophandler)(UINT16 inst);
 

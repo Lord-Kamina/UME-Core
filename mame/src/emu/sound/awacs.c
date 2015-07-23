@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /***************************************************************************
 
     awacs.c
@@ -23,7 +25,7 @@ const device_type AWACS = &device_creator<awacs_device>;
 //-------------------------------------------------
 
 awacs_device::awacs_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, AWACS, "AWACS", tag, owner, clock),
+	: device_t(mconfig, AWACS, "AWACS", tag, owner, clock, "awacs", __FILE__),
 		device_sound_interface(mconfig, *this)
 {
 }
@@ -35,7 +37,7 @@ awacs_device::awacs_device(const machine_config &mconfig, const char *tag, devic
 void awacs_device::device_start()
 {
 	// create the stream
-	m_stream = machine().sound().stream_alloc(*this, 0, 2, 22050, this);
+	m_stream = machine().sound().stream_alloc(*this, 0, 2, 22050);
 
 	memset(m_regs, 0, sizeof(m_regs));
 

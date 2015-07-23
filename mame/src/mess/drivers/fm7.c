@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Barry Rodewald
 /***********************************************************************************************
 
     Fujitsu Micro 7 (FM-7)
@@ -31,7 +33,7 @@
      - Keyboard repeat is not implemented
      - Optional Kanji ROM use is not implemented
      - Other optional hardware is not implemented (RS232, Z80 card...)
-     - FM-77AV and later aren't working (extra features not yet implemented)
+     - FM-77AV20 and later aren't working (extra features not yet implemented)
 
 ************************************************************************************************/
 
@@ -46,10 +48,8 @@
 
 #include "imagedev/cassette.h"
 #include "formats/fm7_cas.h"
-#include "machine/wd17xx.h"
 #include "imagedev/flopdrv.h"
-#include "machine/ctronics.h"
-
+#include "bus/centronics/dsjoy.h"
 #include "includes/fm7.h"
 
 /* key scancode conversion table
@@ -314,9 +314,10 @@ READ8_MEMBER(fm7_state::vector_r)
 {
 	UINT8* RAM = memregion("maincpu")->base();
 	UINT8* ROM = memregion("init")->base();
+	UINT32 init_size = memregion("init")->bytes();
 
 	if(m_init_rom_en)
-		return ROM[0x1ff0+offset];
+		return ROM[(init_size-0x10)+offset];
 	else
 	{
 		if(m_type == SYS_FM7)
@@ -366,18 +367,19 @@ READ8_MEMBER(fm7_state::fm7_fd04_r)
  */
 READ8_MEMBER(fm7_state::fm7_rom_en_r)
 {
-	UINT8* RAM = memregion("maincpu")->base();
-
-	m_basic_rom_en = 1;
-	if(m_type == SYS_FM7)
+	if(!space.debugger_access())
 	{
-		space.install_read_bank(0x8000,0xfbff,"bank1");
-		space.nop_write(0x8000,0xfbff);
-		membank("bank1")->set_base(RAM+0x38000);
+		UINT8* RAM = memregion("maincpu")->base();
+
+		m_basic_rom_en = 1;
+		if(m_type == SYS_FM7)
+		{
+			membank("bank1")->set_base(RAM+0x38000);
+		}
+		else
+			fm7_mmr_refresh(space);
+		logerror("BASIC ROM enabled\n");
 	}
-	else
-		fm7_mmr_refresh(space);
-	logerror("BASIC ROM enabled\n");
 	return 0x00;
 }
 
@@ -388,7 +390,6 @@ WRITE8_MEMBER(fm7_state::fm7_rom_en_w)
 	m_basic_rom_en = 0;
 	if(m_type == SYS_FM7)
 	{
-		space.install_readwrite_bank(0x8000,0xfbff,"bank1");
 		membank("bank1")->set_base(RAM+0x8000);
 	}
 	else
@@ -432,19 +433,18 @@ WRITE_LINE_MEMBER(fm7_state::fm7_fdc_drq_w)
 
 READ8_MEMBER(fm7_state::fm7_fdc_r)
 {
-	device_t* dev = machine().device("fdc");
 	UINT8 ret = 0;
 
 	switch(offset)
 	{
 		case 0:
-			return wd17xx_status_r(dev,space, offset);
+			return m_fdc->status_r(space, offset);
 		case 1:
-			return wd17xx_track_r(dev,space, offset);
+			return m_fdc->track_r(space, offset);
 		case 2:
-			return wd17xx_sector_r(dev,space, offset);
+			return m_fdc->sector_r(space, offset);
 		case 3:
-			return wd17xx_data_r(dev,space, offset);
+			return m_fdc->data_r(space, offset);
 		case 4:
 			return m_fdc_side | 0xfe;
 		case 5:
@@ -466,24 +466,24 @@ READ8_MEMBER(fm7_state::fm7_fdc_r)
 
 WRITE8_MEMBER(fm7_state::fm7_fdc_w)
 {
-	device_t* dev = machine().device("fdc");
 	switch(offset)
 	{
 		case 0:
-			wd17xx_command_w(dev,space, offset,data);
+			m_fdc->cmd_w(space, offset,data);
 			break;
 		case 1:
-			wd17xx_track_w(dev,space, offset,data);
+			m_fdc->track_w(space, offset,data);
 			break;
 		case 2:
-			wd17xx_sector_w(dev,space, offset,data);
+			m_fdc->sector_w(space, offset,data);
 			break;
 		case 3:
-			wd17xx_data_w(dev,space, offset,data);
+			m_fdc->data_w(space, offset,data);
 			break;
 		case 4:
 			m_fdc_side = data & 0x01;
-			wd17xx_set_side(dev,data & 0x01);
+			if (m_floppy)
+				m_floppy->ss_w(data & 0x01);
 			logerror("FDC: wrote %02x to 0x%04x (side)\n",data,offset+0xfd18);
 			break;
 		case 5:
@@ -494,9 +494,17 @@ WRITE8_MEMBER(fm7_state::fm7_fdc_w)
 			}
 			else
 			{
-				wd17xx_set_drive(dev,data & 0x03);
-				floppy_mon_w(floppy_get_device(machine(), data & 0x03), !BIT(data, 7));
-				floppy_drive_set_ready_state(floppy_get_device(machine(), data & 0x03), data & 0x80,0);
+				switch (data & 0x01)
+				{
+				case 0: m_floppy = m_floppy0->get_device(); break;
+				case 1: m_floppy = m_floppy1->get_device(); break;
+				}
+
+				m_fdc->set_floppy(m_floppy);
+
+				if (m_floppy)
+					m_floppy->mon_w(!BIT(data, 7));
+
 				logerror("FDC: wrote %02x to 0x%04x (drive)\n",data,offset+0xfd18);
 			}
 			break;
@@ -743,6 +751,26 @@ WRITE8_MEMBER(fm7_state::fm77av_key_encoder_w)
 	}
 }
 
+WRITE_LINE_MEMBER(fm7_state::write_centronics_busy)
+{
+	m_centronics_busy = state;
+}
+
+WRITE_LINE_MEMBER(fm7_state::write_centronics_fault)
+{
+	m_centronics_fault = state;
+}
+
+WRITE_LINE_MEMBER(fm7_state::write_centronics_ack)
+{
+	m_centronics_ack = state;
+}
+
+WRITE_LINE_MEMBER(fm7_state::write_centronics_perror)
+{
+	m_centronics_perror = state;
+}
+
 READ8_MEMBER(fm7_state::fm7_cassette_printer_r)
 {
 	// bit 7: cassette input
@@ -752,54 +780,25 @@ READ8_MEMBER(fm7_state::fm7_cassette_printer_r)
 	// bit 2: printer acknowledge
 	// bit 1: printer error
 	// bit 0: printer busy
-	UINT8 ret = 0x00;
-	double data = m_cassette->input();
-	centronics_device* centronics = machine().device<centronics_device>("lpt");
-	UINT8 pdata;
-	int x;
+	UINT8 ret = 0;
 
-	if(data > 0.03)
+	if(m_cassette->input() > 0.03)
 		ret |= 0x80;
 
 	if(m_cassette->get_state() & CASSETTE_MOTOR_DISABLED)
 		ret |= 0x80;  // cassette input is high when not in use.
 
 	ret |= 0x70;
+	ret |= m_centronics_perror << 3;
+	ret |= m_centronics_ack << 2;
+	ret |= m_centronics_fault << 1;
+	ret |= m_centronics_busy;
 
-	if(ioport("config")->read() & 0x01)
-	{
-		ret |= 0x0f;
-		pdata = centronics->read(space, 0);
-		for(x=0;x<6;x++)
-		{
-			if(~pdata & (1<<x))
-				if(ioport("lptjoy")->read() & (1 << x))
-					ret &= ~0x08;
-		}
-	}
-	else
-	{
-		device_image_interface *image = dynamic_cast<device_image_interface *>(machine().device("lpt:printer:printer"));
-		if(image->exists())
-		{
-			if(centronics->pe_r())
-				ret |= 0x08;
-			if(centronics->ack_r())
-				ret |= 0x04;
-			if(centronics->fault_r())
-				ret |= 0x02;
-			if(centronics->busy_r())
-				ret |= 0x01;
-		}
-		else
-			ret |= 0x0f;
-	}
 	return ret;
 }
 
 WRITE8_MEMBER(fm7_state::fm7_cassette_printer_w)
 {
-	centronics_device* centronics = machine().device<centronics_device>("lpt");
 	switch(offset)
 	{
 		case 0:
@@ -811,12 +810,14 @@ WRITE8_MEMBER(fm7_state::fm7_cassette_printer_w)
 				m_cassette->output((data & 0x01) ? +1.0 : -1.0);
 			if((data & 0x02) != (m_cp_prev & 0x02))
 				m_cassette->change_state((data & 0x02) ? CASSETTE_MOTOR_ENABLED : CASSETTE_MOTOR_DISABLED,CASSETTE_MASK_MOTOR);
-			centronics->strobe_w(!(data & 0x40));
+
+			m_centronics->write_strobe(!BIT(data,6));
+			m_centronics->write_select_in(!BIT(data,7));
 			m_cp_prev = data;
 			break;
 		case 1:
 		// Printer data
-			centronics->write(space,0,data);
+			m_cent_data_out->write(space, 0, data);
 			break;
 	}
 }
@@ -829,7 +830,7 @@ READ8_MEMBER(fm7_state::fm77av_boot_mode_r)
 {
 	UINT8 ret = 0xff;
 
-	if(ioport("DSW")->read() & 0x02)
+	if(m_dsw->read() & 0x02)
 		ret &= ~0x01;
 
 	return ret;
@@ -894,7 +895,7 @@ void fm7_state::fm7_update_psg()
 				break;
 			case 0x09:
 				// Joystick port read
-				m_psg_data = ioport("joy1")->read();
+				m_psg_data = m_joy1->read();
 				break;
 		}
 	}
@@ -963,12 +964,12 @@ READ8_MEMBER(fm7_state::fm7_fmirq_r)
 
 READ8_MEMBER(fm7_state::fm77av_joy_1_r)
 {
-	return ioport("joy1")->read();
+	return m_joy1->read();
 }
 
 READ8_MEMBER(fm7_state::fm77av_joy_2_r)
 {
-	return ioport("joy2")->read();
+	return m_joy2->read();
 }
 
 READ8_MEMBER(fm7_state::fm7_unknown_r)
@@ -1007,105 +1008,109 @@ READ8_MEMBER(fm7_state::fm7_mmr_r)
 
 void fm7_state::fm7_update_bank(address_space & space, int bank, UINT8 physical)
 {
-	fm7_state *state = space.machine().driver_data<fm7_state>();
-	UINT8* RAM = memregion("maincpu")->base();
-	UINT16 size = 0xfff;
-	char bank_name[10];
+	address_map_bank_device* avbank[16] = { m_avbank1, m_avbank2, m_avbank3, m_avbank4, m_avbank5, m_avbank6, m_avbank7
+			, m_avbank8, m_avbank9, m_avbank10, m_avbank11, m_avbank12, m_avbank13, m_avbank14, m_avbank15, m_avbank16 };
 
-	if(bank == 15)
-		size = 0xbff;
+	avbank[bank]->set_bank(physical);
+/*  UINT8* RAM = memregion("maincpu")->base();
+    UINT16 size = 0xfff;
+    char bank_name[10];
 
-	sprintf(bank_name,"bank%d",bank+1);
+    if(bank == 15)
+        size = 0xbff;
 
-	if(physical >= 0x10 && physical <= 0x1b)
-	{
-		switch(physical)
-		{
-			case 0x10:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram0_r),state),write8_delegate(FUNC(fm7_state::fm7_vram0_w),state));
-				break;
-			case 0x11:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram1_r),state),write8_delegate(FUNC(fm7_state::fm7_vram1_w),state));
-				break;
-			case 0x12:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram2_r),state),write8_delegate(FUNC(fm7_state::fm7_vram2_w),state));
-				break;
-			case 0x13:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram3_r),state),write8_delegate(FUNC(fm7_state::fm7_vram3_w),state));
-				break;
-			case 0x14:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram4_r),state),write8_delegate(FUNC(fm7_state::fm7_vram4_w),state));
-				break;
-			case 0x15:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram5_r),state),write8_delegate(FUNC(fm7_state::fm7_vram5_w),state));
-				break;
-			case 0x16:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram6_r),state),write8_delegate(FUNC(fm7_state::fm7_vram6_w),state));
-				break;
-			case 0x17:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram7_r),state),write8_delegate(FUNC(fm7_state::fm7_vram7_w),state));
-				break;
-			case 0x18:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram8_r),state),write8_delegate(FUNC(fm7_state::fm7_vram8_w),state));
-				break;
-			case 0x19:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram9_r),state),write8_delegate(FUNC(fm7_state::fm7_vram9_w),state));
-				break;
-			case 0x1a:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vramA_r),state),write8_delegate(FUNC(fm7_state::fm7_vramA_w),state));
-				break;
-			case 0x1b:
-				space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vramB_r),state),write8_delegate(FUNC(fm7_state::fm7_vramB_w),state));
-				break;
-		}
+    sprintf(bank_name,"bank%d",bank+1);
+
+    if(physical >= 0x10 && physical <= 0x1b)
+    {
+        switch(physical)
+        {
+            case 0x10:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram0_r),this),write8_delegate(FUNC(fm7_state::fm7_vram0_w),this));
+                break;
+            case 0x11:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram1_r),this),write8_delegate(FUNC(fm7_state::fm7_vram1_w),this));
+                break;
+            case 0x12:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram2_r),this),write8_delegate(FUNC(fm7_state::fm7_vram2_w),this));
+                break;
+            case 0x13:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram3_r),this),write8_delegate(FUNC(fm7_state::fm7_vram3_w),this));
+                break;
+            case 0x14:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram4_r),this),write8_delegate(FUNC(fm7_state::fm7_vram4_w),this));
+                break;
+            case 0x15:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram5_r),this),write8_delegate(FUNC(fm7_state::fm7_vram5_w),this));
+                break;
+            case 0x16:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram6_r),this),write8_delegate(FUNC(fm7_state::fm7_vram6_w),this));
+                break;
+            case 0x17:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram7_r),this),write8_delegate(FUNC(fm7_state::fm7_vram7_w),this));
+                break;
+            case 0x18:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram8_r),this),write8_delegate(FUNC(fm7_state::fm7_vram8_w),this));
+                break;
+            case 0x19:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vram9_r),this),write8_delegate(FUNC(fm7_state::fm7_vram9_w),this));
+                break;
+            case 0x1a:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vramA_r),this),write8_delegate(FUNC(fm7_state::fm7_vramA_w),this));
+                break;
+            case 0x1b:
+                space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_vramB_r),this),write8_delegate(FUNC(fm7_state::fm7_vramB_w),this));
+                break;
+        }
 //      membank(bank+1)->set_base(RAM+(physical<<12)-0x10000);
-		return;
-	}
-	if(physical == 0x1c)
-	{
-		space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_console_ram_banked_r),state),write8_delegate(FUNC(fm7_state::fm7_console_ram_banked_w),state));
-		return;
-	}
-	if(physical == 0x1d)
-	{
-		space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_sub_ram_ports_banked_r),state),write8_delegate(FUNC(fm7_state::fm7_sub_ram_ports_banked_w),state));
-		return;
-	}
-	if(physical == 0x35)
-	{
-		if(m_init_rom_en && (m_type == SYS_FM11 || m_type == SYS_FM16))
-		{
-			RAM = memregion("init")->base();
-			space.install_read_bank(bank*0x1000,(bank*0x1000)+size,bank_name);
-			space.nop_write(bank*0x1000,(bank*0x1000)+size);
-			membank(bank_name)->set_base(RAM+(physical<<12)-0x35000);
-			return;
-		}
-	}
-	if(physical == 0x36 || physical == 0x37)
-	{
-		if(m_init_rom_en && (m_type != SYS_FM11 && m_type != SYS_FM16))
-		{
-			RAM = memregion("init")->base();
-			space.install_read_bank(bank*0x1000,(bank*0x1000)+size,bank_name);
-			space.nop_write(bank*0x1000,(bank*0x1000)+size);
-			membank(bank_name)->set_base(RAM+(physical<<12)-0x36000);
-			return;
-		}
-	}
-	if(physical > 0x37 && physical <= 0x3f)
-	{
-		if(m_basic_rom_en && (m_type != SYS_FM11 && m_type != SYS_FM16))
-		{
-			RAM = memregion("fbasic")->base();
-			space.install_read_bank(bank*0x1000,(bank*0x1000)+size,bank_name);
-			space.nop_write(bank*0x1000,(bank*0x1000)+size);
-			membank(bank_name)->set_base(RAM+(physical<<12)-0x38000);
-			return;
-		}
-	}
-	space.install_readwrite_bank(bank*0x1000,(bank*0x1000)+size,bank_name);
-	membank(bank_name)->set_base(RAM+(physical<<12));
+        return;
+    }
+    if(physical == 0x1c)
+    {
+        space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_console_ram_banked_r),this),write8_delegate(FUNC(fm7_state::fm7_console_ram_banked_w),this));
+        return;
+    }
+    if(physical == 0x1d)
+    {
+        space.install_readwrite_handler(bank*0x1000,(bank*0x1000)+size,read8_delegate(FUNC(fm7_state::fm7_sub_ram_ports_banked_r),this),write8_delegate(FUNC(fm7_state::fm7_sub_ram_ports_banked_w),this));
+        return;
+    }
+    if(physical == 0x35)
+    {
+        if(m_init_rom_en && (m_type == SYS_FM11 || m_type == SYS_FM16))
+        {
+            RAM = memregion("init")->base();
+            space.install_read_bank(bank*0x1000,(bank*0x1000)+size,bank_name);
+            space.nop_write(bank*0x1000,(bank*0x1000)+size);
+            membank(bank_name)->set_base(RAM+(physical<<12)-0x35000);
+            return;
+        }
+    }
+    if(physical == 0x36 || physical == 0x37)
+    {
+        if(m_init_rom_en && (m_type != SYS_FM11 && m_type != SYS_FM16))
+        {
+            RAM = memregion("init")->base();
+            space.install_read_bank(bank*0x1000,(bank*0x1000)+size,bank_name);
+            space.nop_write(bank*0x1000,(bank*0x1000)+size);
+            membank(bank_name)->set_base(RAM+(physical<<12)-0x36000);
+            return;
+        }
+    }
+    if(physical > 0x37 && physical <= 0x3f)
+    {
+        if(m_basic_rom_en && (m_type != SYS_FM11 && m_type != SYS_FM16))
+        {
+            RAM = memregion("fbasic")->base();
+            space.install_read_bank(bank*0x1000,(bank*0x1000)+size,bank_name);
+            space.nop_write(bank*0x1000,(bank*0x1000)+size);
+            membank(bank_name)->set_base(RAM+(physical<<12)-0x38000);
+            return;
+        }
+    }
+    space.install_readwrite_bank(bank*0x1000,(bank*0x1000)+size,bank_name);
+    membank(bank_name)->set_base(RAM+(physical<<12));
+    */
 }
 
 void fm7_state::fm7_mmr_refresh(address_space& space)
@@ -1137,6 +1142,29 @@ void fm7_state::fm7_mmr_refresh(address_space& space)
 			space.install_readwrite_bank(0x7c00,0x7fff,"bank24");
 			membank("bank24")->set_base(RAM+window_addr);
 		}
+	}
+	else
+	{
+		space.install_readwrite_handler(0x7000,0x7fff,read8_delegate(FUNC(address_map_bank_device::read8),(address_map_bank_device*)m_avbank8),write8_delegate(FUNC(address_map_bank_device::write8),(address_map_bank_device*)m_avbank8));
+	}
+	if(m_init_rom_en)
+	{
+		UINT8* ROM = memregion("init")->base();
+		membank("init_bank_r")->set_base(ROM);
+	}
+	else
+	{
+		membank("init_bank_r")->set_base(RAM+0x36000);
+	}
+	if(m_basic_rom_en)
+	{
+		UINT8* ROM = memregion("fbasic")->base();
+		if(ROM != NULL)
+			membank("fbasic_bank_r")->set_base(ROM);
+	}
+	else
+	{
+		membank("fbasic_bank_r")->set_base(RAM+0x38000);
 	}
 }
 
@@ -1183,7 +1211,7 @@ WRITE8_MEMBER(fm7_state::fm7_mmr_w)
  */
 READ8_MEMBER(fm7_state::fm7_kanji_r)
 {
-	UINT8* KROM = memregion("kanji1")->base();
+	UINT8* KROM = m_kanji->base();
 	UINT32 addr = m_kanji_address << 1;
 
 	switch(offset)
@@ -1260,16 +1288,16 @@ void fm7_state::key_press(UINT16 scancode)
 
 void fm7_state::fm7_keyboard_poll_scan()
 {
-	static const char *const portnames[3] = { "key1","key2","key3" };
+	ioport_port* portnames[3] = { m_key1, m_key2, m_key3 };
 	int bit = 0;
 	int x,y;
 	UINT32 keys;
-	UINT32 modifiers = ioport("key_modifiers")->read();
+	UINT32 modifiers = m_keymod->read();
 	static const UINT16 modscancodes[6] = { 0x52, 0x53, 0x54, 0x55, 0x56, 0x5a };
 
 	for(x=0;x<3;x++)
 	{
-		keys = ioport(portnames[x])->read();
+		keys = portnames[x]->read();
 
 		for(y=0;y<32;y++)  // loop through each bit in the port
 		{
@@ -1305,14 +1333,14 @@ void fm7_state::fm7_keyboard_poll_scan()
 
 TIMER_CALLBACK_MEMBER(fm7_state::fm7_keyboard_poll)
 {
-	static const char *const portnames[3] = { "key1","key2","key3" };
+	ioport_port* portnames[3] = { m_key1, m_key2, m_key3 };
 	int x,y;
 	int bit = 0;
 	int mod = 0;
 	UINT32 keys;
-	UINT32 modifiers = ioport("key_modifiers")->read();
+	UINT32 modifiers = m_keymod->read();
 
-	if(ioport("key3")->read() & 0x40000)
+	if(m_key3->read() & 0x40000)
 	{
 		m_break_flag = 1;
 		m_maincpu->set_input_line(M6809_FIRQ_LINE,ASSERT_LINE);
@@ -1341,7 +1369,7 @@ TIMER_CALLBACK_MEMBER(fm7_state::fm7_keyboard_poll)
 
 	for(x=0;x<3;x++)
 	{
-		keys = ioport(portnames[x])->read();
+		keys = portnames[x]->read();
 
 		for(y=0;y<32;y++)  // loop through each bit in the port
 		{
@@ -1398,7 +1426,7 @@ WRITE_LINE_MEMBER(fm7_state::fm77av_fmirq)
 // The FM-7 has only 64kB RAM, so we'll worry about banking when we do the later models
 static ADDRESS_MAP_START( fm7_mem, AS_PROGRAM, 8, fm7_state )
 	AM_RANGE(0x0000,0x7fff) AM_RAM
-	AM_RANGE(0x8000,0xfbff) AM_ROMBANK("bank1") // also F-BASIC ROM, when enabled
+	AM_RANGE(0x8000,0xfbff) AM_READ_BANK("bank1") AM_WRITE_BANK("bank2") // also F-BASIC ROM, when enabled
 	AM_RANGE(0xfc00,0xfc7f) AM_RAM
 	AM_RANGE(0xfc80,0xfcff) AM_READWRITE(fm7_main_shared_r,fm7_main_shared_w)
 	// I/O space (FD00-FDFF)
@@ -1426,7 +1454,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( fm8_mem, AS_PROGRAM, 8, fm7_state )
 	AM_RANGE(0x0000,0x7fff) AM_RAM
-	AM_RANGE(0x8000,0xfbff) AM_ROMBANK("bank1") // also F-BASIC ROM, when enabled
+	AM_RANGE(0x8000,0xfbff) AM_READ_BANK("bank1") AM_WRITE_BANK("bank2") // also F-BASIC ROM, when enabled
 	AM_RANGE(0xfc00,0xfc7f) AM_RAM
 	AM_RANGE(0xfc80,0xfcff) AM_READWRITE(fm7_main_shared_r,fm7_main_shared_w)
 	// I/O space (FD00-FDFF)
@@ -1479,22 +1507,22 @@ static ADDRESS_MAP_START( fm7_sub_mem, AS_PROGRAM, 8, fm7_state )
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( fm11_mem, AS_PROGRAM, 8, fm7_state )
-	AM_RANGE(0x0000,0x0fff) AM_RAMBANK("bank1")
-	AM_RANGE(0x1000,0x1fff) AM_RAMBANK("bank2")
-	AM_RANGE(0x2000,0x2fff) AM_RAMBANK("bank3")
-	AM_RANGE(0x3000,0x3fff) AM_RAMBANK("bank4")
-	AM_RANGE(0x4000,0x4fff) AM_RAMBANK("bank5")
-	AM_RANGE(0x5000,0x5fff) AM_RAMBANK("bank6")
-	AM_RANGE(0x6000,0x6fff) AM_RAMBANK("bank7")
-	AM_RANGE(0x7000,0x7fff) AM_RAMBANK("bank8")
-	AM_RANGE(0x8000,0x8fff) AM_RAMBANK("bank9")
-	AM_RANGE(0x9000,0x9fff) AM_RAMBANK("bank10")
-	AM_RANGE(0xa000,0xafff) AM_RAMBANK("bank11")
-	AM_RANGE(0xb000,0xbfff) AM_RAMBANK("bank12")
-	AM_RANGE(0xc000,0xcfff) AM_RAMBANK("bank13")
-	AM_RANGE(0xd000,0xdfff) AM_RAMBANK("bank14")
-	AM_RANGE(0xe000,0xefff) AM_RAMBANK("bank15")
-	AM_RANGE(0xf000,0xfbff) AM_RAMBANK("bank16")
+	AM_RANGE(0x0000,0x0fff) AM_DEVREADWRITE("av_bank1", address_map_bank_device, read8, write8)
+	AM_RANGE(0x1000,0x1fff) AM_DEVREADWRITE("av_bank2", address_map_bank_device, read8, write8)
+	AM_RANGE(0x2000,0x2fff) AM_DEVREADWRITE("av_bank3", address_map_bank_device, read8, write8)
+	AM_RANGE(0x3000,0x3fff) AM_DEVREADWRITE("av_bank4", address_map_bank_device, read8, write8)
+	AM_RANGE(0x4000,0x4fff) AM_DEVREADWRITE("av_bank5", address_map_bank_device, read8, write8)
+	AM_RANGE(0x5000,0x5fff) AM_DEVREADWRITE("av_bank6", address_map_bank_device, read8, write8)
+	AM_RANGE(0x6000,0x6fff) AM_DEVREADWRITE("av_bank7", address_map_bank_device, read8, write8)
+	AM_RANGE(0x7000,0x7fff) AM_DEVREADWRITE("av_bank8", address_map_bank_device, read8, write8)
+	AM_RANGE(0x8000,0x8fff) AM_DEVREADWRITE("av_bank9", address_map_bank_device, read8, write8)
+	AM_RANGE(0x9000,0x9fff) AM_DEVREADWRITE("av_bank10", address_map_bank_device, read8, write8)
+	AM_RANGE(0xa000,0xafff) AM_DEVREADWRITE("av_bank11", address_map_bank_device, read8, write8)
+	AM_RANGE(0xb000,0xbfff) AM_DEVREADWRITE("av_bank12", address_map_bank_device, read8, write8)
+	AM_RANGE(0xc000,0xcfff) AM_DEVREADWRITE("av_bank13", address_map_bank_device, read8, write8)
+	AM_RANGE(0xd000,0xdfff) AM_DEVREADWRITE("av_bank14", address_map_bank_device, read8, write8)
+	AM_RANGE(0xe000,0xefff) AM_DEVREADWRITE("av_bank15", address_map_bank_device, read8, write8)
+	AM_RANGE(0xf000,0xfbff) AM_DEVREADWRITE("av_bank16", address_map_bank_device, read8, write8)
 	AM_RANGE(0xfc00,0xfc7f) AM_RAM
 	AM_RANGE(0xfc80,0xfcff) AM_READWRITE(fm7_main_shared_r,fm7_main_shared_w)
 	// I/O space (FD00-FDFF)
@@ -1592,22 +1620,22 @@ static ADDRESS_MAP_START( fm16_sub_mem, AS_PROGRAM, 8, fm7_state )
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( fm77av_mem, AS_PROGRAM, 8, fm7_state )
-	AM_RANGE(0x0000,0x0fff) AM_RAMBANK("bank1")
-	AM_RANGE(0x1000,0x1fff) AM_RAMBANK("bank2")
-	AM_RANGE(0x2000,0x2fff) AM_RAMBANK("bank3")
-	AM_RANGE(0x3000,0x3fff) AM_RAMBANK("bank4")
-	AM_RANGE(0x4000,0x4fff) AM_RAMBANK("bank5")
-	AM_RANGE(0x5000,0x5fff) AM_RAMBANK("bank6")
-	AM_RANGE(0x6000,0x6fff) AM_RAMBANK("bank7")
-	AM_RANGE(0x7000,0x7fff) AM_RAMBANK("bank8")
-	AM_RANGE(0x8000,0x8fff) AM_RAMBANK("bank9")
-	AM_RANGE(0x9000,0x9fff) AM_RAMBANK("bank10")
-	AM_RANGE(0xa000,0xafff) AM_RAMBANK("bank11")
-	AM_RANGE(0xb000,0xbfff) AM_RAMBANK("bank12")
-	AM_RANGE(0xc000,0xcfff) AM_RAMBANK("bank13")
-	AM_RANGE(0xd000,0xdfff) AM_RAMBANK("bank14")
-	AM_RANGE(0xe000,0xefff) AM_RAMBANK("bank15")
-	AM_RANGE(0xf000,0xfbff) AM_RAMBANK("bank16")
+	AM_RANGE(0x0000,0x0fff) AM_DEVREADWRITE("av_bank1", address_map_bank_device, read8, write8)
+	AM_RANGE(0x1000,0x1fff) AM_DEVREADWRITE("av_bank2", address_map_bank_device, read8, write8)
+	AM_RANGE(0x2000,0x2fff) AM_DEVREADWRITE("av_bank3", address_map_bank_device, read8, write8)
+	AM_RANGE(0x3000,0x3fff) AM_DEVREADWRITE("av_bank4", address_map_bank_device, read8, write8)
+	AM_RANGE(0x4000,0x4fff) AM_DEVREADWRITE("av_bank5", address_map_bank_device, read8, write8)
+	AM_RANGE(0x5000,0x5fff) AM_DEVREADWRITE("av_bank6", address_map_bank_device, read8, write8)
+	AM_RANGE(0x6000,0x6fff) AM_DEVREADWRITE("av_bank7", address_map_bank_device, read8, write8)
+	AM_RANGE(0x7000,0x7fff) AM_DEVREADWRITE("av_bank8", address_map_bank_device, read8, write8)
+	AM_RANGE(0x8000,0x8fff) AM_DEVREADWRITE("av_bank9", address_map_bank_device, read8, write8)
+	AM_RANGE(0x9000,0x9fff) AM_DEVREADWRITE("av_bank10", address_map_bank_device, read8, write8)
+	AM_RANGE(0xa000,0xafff) AM_DEVREADWRITE("av_bank11", address_map_bank_device, read8, write8)
+	AM_RANGE(0xb000,0xbfff) AM_DEVREADWRITE("av_bank12", address_map_bank_device, read8, write8)
+	AM_RANGE(0xc000,0xcfff) AM_DEVREADWRITE("av_bank13", address_map_bank_device, read8, write8)
+	AM_RANGE(0xd000,0xdfff) AM_DEVREADWRITE("av_bank14", address_map_bank_device, read8, write8)
+	AM_RANGE(0xe000,0xefff) AM_DEVREADWRITE("av_bank15", address_map_bank_device, read8, write8)
+	AM_RANGE(0xf000,0xfbff) AM_DEVREADWRITE("av_bank16", address_map_bank_device, read8, write8)
 	AM_RANGE(0xfc00,0xfc7f) AM_RAM
 	AM_RANGE(0xfc80,0xfcff) AM_READWRITE(fm7_main_shared_r,fm7_main_shared_w)
 	// I/O space (FD00-FDFF)
@@ -1668,64 +1696,100 @@ static ADDRESS_MAP_START( fm77av_sub_mem, AS_PROGRAM, 8, fm7_state )
 	AM_RANGE(0xe000,0xffff) AM_ROMBANK("bank21")
 ADDRESS_MAP_END
 
+static ADDRESS_MAP_START( fm7_banked_mem, AS_PROGRAM, 8, fm7_state)
+	// Extended RAM
+	AM_RANGE(0x00000,0x0ffff) AM_RAM AM_REGION("maincpu",0x00000)
+
+	// Sub CPU space
+	AM_RANGE(0x10000,0x1bfff) AM_READWRITE(fm7_vram_r,fm7_vram_w) // VRAM
+	AM_RANGE(0x1c000,0x1cfff) AM_RAM AM_REGION("maincpu",0x1c000) // Console RAM
+	AM_RANGE(0x1d000,0x1d37f) AM_RAM AM_REGION("maincpu",0x1d000) // Work RAM
+	AM_RANGE(0x1d380,0x1d3ff) AM_RAM AM_SHARE("shared_ram")
+	// I/O space (D400-D4FF)
+	AM_RANGE(0x1d400,0x1d401) AM_READ(fm7_sub_keyboard_r)
+	AM_RANGE(0x1d402,0x1d402) AM_READ(fm7_cancel_ack)
+	AM_RANGE(0x1d403,0x1d403) AM_READ(fm7_sub_beeper_r)
+	AM_RANGE(0x1d404,0x1d404) AM_READ(fm7_attn_irq_r)
+	AM_RANGE(0x1d408,0x1d408) AM_READWRITE(fm7_crt_r,fm7_crt_w)
+	AM_RANGE(0x1d409,0x1d409) AM_READWRITE(fm7_vram_access_r,fm7_vram_access_w)
+	AM_RANGE(0x1d40a,0x1d40a) AM_READWRITE(fm7_sub_busyflag_r,fm7_sub_busyflag_w)
+	AM_RANGE(0x1d40e,0x1d40f) AM_WRITE(fm7_vram_offset_w)
+	AM_RANGE(0x1d410,0x1d42b) AM_READWRITE(fm77av_alu_r, fm77av_alu_w)
+	AM_RANGE(0x1d430,0x1d430) AM_READWRITE(fm77av_video_flags_r,fm77av_video_flags_w)
+	AM_RANGE(0x1d431,0x1d432) AM_READWRITE(fm77av_key_encoder_r,fm77av_key_encoder_w)
+	AM_RANGE(0x1d500,0x1d7ff) AM_RAM AM_REGION("maincpu",0x1d500) // Work RAM
+	AM_RANGE(0x1d800,0x1dfff) AM_ROMBANK("bank20")
+	AM_RANGE(0x1e000,0x1ffff) AM_ROMBANK("bank21")
+
+	// more RAM?
+	AM_RANGE(0x20000,0x2ffff) AM_RAM AM_REGION("maincpu",0x20000)
+
+	// Main CPU space
+	AM_RANGE(0x30000,0x35fff) AM_RAM AM_REGION("maincpu",0x30000)
+	AM_RANGE(0x36000,0x37fff) AM_READ_BANK("init_bank_r") AM_WRITE_BANK("init_bank_w")
+	AM_RANGE(0x38000,0x3fbff) AM_READ_BANK("fbasic_bank_r") AM_WRITE_BANK("fbasic_bank_w")
+	AM_RANGE(0x3fc00,0x3ffff) AM_RAM AM_REGION("maincpu",0x3fc00)
+
+ADDRESS_MAP_END
+
 /* Input ports */
 INPUT_PORTS_START( fm7_keyboard )
 	PORT_START("key1")
 	PORT_BIT(0x00000001,IP_ACTIVE_HIGH,IPT_UNUSED)
 	PORT_BIT(0x00000002,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("ESC") PORT_CODE(KEYCODE_TILDE) PORT_CHAR(27)
-	PORT_BIT(0x00000004,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("1") PORT_CODE(KEYCODE_1) PORT_CHAR('1')
-	PORT_BIT(0x00000008,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("2") PORT_CODE(KEYCODE_2) PORT_CHAR('2')
-	PORT_BIT(0x00000010,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("3") PORT_CODE(KEYCODE_3) PORT_CHAR('3')
-	PORT_BIT(0x00000020,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("4") PORT_CODE(KEYCODE_4) PORT_CHAR('4')
-	PORT_BIT(0x00000040,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("5") PORT_CODE(KEYCODE_5) PORT_CHAR('5')
-	PORT_BIT(0x00000080,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("6") PORT_CODE(KEYCODE_6) PORT_CHAR('6')
-	PORT_BIT(0x00000100,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("7") PORT_CODE(KEYCODE_7) PORT_CHAR('7')
-	PORT_BIT(0x00000200,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("8") PORT_CODE(KEYCODE_8) PORT_CHAR('8')
-	PORT_BIT(0x00000400,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("9") PORT_CODE(KEYCODE_9) PORT_CHAR('9')
+	PORT_BIT(0x00000004,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("1") PORT_CODE(KEYCODE_1) PORT_CHAR('1') PORT_CHAR('!')
+	PORT_BIT(0x00000008,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("2") PORT_CODE(KEYCODE_2) PORT_CHAR('2') PORT_CHAR('\"')
+	PORT_BIT(0x00000010,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("3") PORT_CODE(KEYCODE_3) PORT_CHAR('3') PORT_CHAR('#')
+	PORT_BIT(0x00000020,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("4") PORT_CODE(KEYCODE_4) PORT_CHAR('4') PORT_CHAR('$')
+	PORT_BIT(0x00000040,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("5") PORT_CODE(KEYCODE_5) PORT_CHAR('5') PORT_CHAR('%')
+	PORT_BIT(0x00000080,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("6") PORT_CODE(KEYCODE_6) PORT_CHAR('6') PORT_CHAR('&')
+	PORT_BIT(0x00000100,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("7") PORT_CODE(KEYCODE_7) PORT_CHAR('7') PORT_CHAR('\'')
+	PORT_BIT(0x00000200,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("8") PORT_CODE(KEYCODE_8) PORT_CHAR('8') PORT_CHAR('(')
+	PORT_BIT(0x00000400,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("9") PORT_CODE(KEYCODE_9) PORT_CHAR('9') PORT_CHAR(')')
 	PORT_BIT(0x00000800,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("0") PORT_CODE(KEYCODE_0) PORT_CHAR('0')
-	PORT_BIT(0x00001000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("-") PORT_CODE(KEYCODE_MINUS) PORT_CHAR('-')
+	PORT_BIT(0x00001000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("-") PORT_CODE(KEYCODE_MINUS) PORT_CHAR('-')  PORT_CHAR('=')
 	PORT_BIT(0x00002000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("^") PORT_CODE(KEYCODE_EQUALS) PORT_CHAR('^')
 	PORT_BIT(0x00004000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("\xEF\xBF\xA5")
 	PORT_BIT(0x00008000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Backspace") PORT_CODE(KEYCODE_BACKSPACE) PORT_CHAR(8)
 	PORT_BIT(0x00010000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Tab") PORT_CODE(KEYCODE_TAB) PORT_CHAR(9)
-	PORT_BIT(0x00020000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Q") PORT_CODE(KEYCODE_Q) PORT_CHAR('Q')
-	PORT_BIT(0x00040000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("W") PORT_CODE(KEYCODE_W) PORT_CHAR('W')
-	PORT_BIT(0x00080000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("E") PORT_CODE(KEYCODE_E) PORT_CHAR('E')
-	PORT_BIT(0x00100000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("R") PORT_CODE(KEYCODE_R) PORT_CHAR('R')
-	PORT_BIT(0x00200000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("T") PORT_CODE(KEYCODE_T) PORT_CHAR('T')
-	PORT_BIT(0x00400000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Y") PORT_CODE(KEYCODE_Y) PORT_CHAR('Y')
-	PORT_BIT(0x00800000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("U") PORT_CODE(KEYCODE_U) PORT_CHAR('U')
-	PORT_BIT(0x01000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("I") PORT_CODE(KEYCODE_I) PORT_CHAR('I')
-	PORT_BIT(0x02000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("O") PORT_CODE(KEYCODE_O) PORT_CHAR('O')
-	PORT_BIT(0x04000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("P") PORT_CODE(KEYCODE_P) PORT_CHAR('P')
-	PORT_BIT(0x08000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("@") PORT_CODE(KEYCODE_OPENBRACE) PORT_CHAR('@')
-	PORT_BIT(0x10000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("[") PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR('[')
-	PORT_BIT(0x20000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("RETURN") PORT_CODE(KEYCODE_ENTER) PORT_CHAR(27)
-	PORT_BIT(0x40000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("A") PORT_CODE(KEYCODE_A) PORT_CHAR('A')
-	PORT_BIT(0x80000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("S") PORT_CODE(KEYCODE_S) PORT_CHAR('S')
+	PORT_BIT(0x00020000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Q") PORT_CODE(KEYCODE_Q) PORT_CHAR('q') PORT_CHAR('Q')
+	PORT_BIT(0x00040000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("W") PORT_CODE(KEYCODE_W) PORT_CHAR('w') PORT_CHAR('W')
+	PORT_BIT(0x00080000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("E") PORT_CODE(KEYCODE_E) PORT_CHAR('e') PORT_CHAR('E')
+	PORT_BIT(0x00100000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("R") PORT_CODE(KEYCODE_R) PORT_CHAR('r') PORT_CHAR('R')
+	PORT_BIT(0x00200000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("T") PORT_CODE(KEYCODE_T) PORT_CHAR('t') PORT_CHAR('T')
+	PORT_BIT(0x00400000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Y") PORT_CODE(KEYCODE_Y) PORT_CHAR('y') PORT_CHAR('Y')
+	PORT_BIT(0x00800000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("U") PORT_CODE(KEYCODE_U) PORT_CHAR('u') PORT_CHAR('U')
+	PORT_BIT(0x01000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("I") PORT_CODE(KEYCODE_I) PORT_CHAR('i') PORT_CHAR('I')
+	PORT_BIT(0x02000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("O") PORT_CODE(KEYCODE_O) PORT_CHAR('o') PORT_CHAR('O')
+	PORT_BIT(0x04000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("P") PORT_CODE(KEYCODE_P) PORT_CHAR('p') PORT_CHAR('P')
+	PORT_BIT(0x08000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("@") PORT_CODE(KEYCODE_OPENBRACE) PORT_CHAR('@') PORT_CHAR('`')
+	PORT_BIT(0x10000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("[") PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR('[') PORT_CHAR('{')
+	PORT_BIT(0x20000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("RETURN") PORT_CODE(KEYCODE_ENTER) PORT_CHAR(13)
+	PORT_BIT(0x40000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("A") PORT_CODE(KEYCODE_A) PORT_CHAR('a') PORT_CHAR('A')
+	PORT_BIT(0x80000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("S") PORT_CODE(KEYCODE_S) PORT_CHAR('s') PORT_CHAR('S')
 
 	PORT_START("key2")
-	PORT_BIT(0x00000001,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("D") PORT_CODE(KEYCODE_D) PORT_CHAR('D')
-	PORT_BIT(0x00000002,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("F") PORT_CODE(KEYCODE_F) PORT_CHAR('F')
-	PORT_BIT(0x00000004,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("G") PORT_CODE(KEYCODE_G) PORT_CHAR('G')
-	PORT_BIT(0x00000008,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("H") PORT_CODE(KEYCODE_H) PORT_CHAR('H')
-	PORT_BIT(0x00000010,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("J") PORT_CODE(KEYCODE_J) PORT_CHAR('J')
-	PORT_BIT(0x00000020,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("K") PORT_CODE(KEYCODE_K) PORT_CHAR('K')
-	PORT_BIT(0x00000040,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("L") PORT_CODE(KEYCODE_L) PORT_CHAR('L')
-	PORT_BIT(0x00000080,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(";") PORT_CODE(KEYCODE_COLON) PORT_CHAR(';')
-	PORT_BIT(0x00000100,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(":") PORT_CODE(KEYCODE_QUOTE) PORT_CHAR(':')
-	PORT_BIT(0x00000200,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("]") PORT_CODE(KEYCODE_BACKSLASH) PORT_CHAR(']')
-	PORT_BIT(0x00000400,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Z") PORT_CODE(KEYCODE_Z) PORT_CHAR('Z')
-	PORT_BIT(0x00000800,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("X") PORT_CODE(KEYCODE_X) PORT_CHAR('X')
-	PORT_BIT(0x00001000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("C") PORT_CODE(KEYCODE_C) PORT_CHAR('C')
-	PORT_BIT(0x00002000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("V") PORT_CODE(KEYCODE_V) PORT_CHAR('V')
-	PORT_BIT(0x00004000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("B") PORT_CODE(KEYCODE_B) PORT_CHAR('B')
-	PORT_BIT(0x00008000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("N") PORT_CODE(KEYCODE_N) PORT_CHAR('N')
-	PORT_BIT(0x00010000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("M") PORT_CODE(KEYCODE_M) PORT_CHAR('M')
-	PORT_BIT(0x00020000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(",") PORT_CODE(KEYCODE_COMMA) PORT_CHAR(',')
-	PORT_BIT(0x00040000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(".") PORT_CODE(KEYCODE_STOP) PORT_CHAR('.')
-	PORT_BIT(0x00080000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("/") PORT_CODE(KEYCODE_SLASH) PORT_CHAR('/')
-	PORT_BIT(0x00100000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("_")
+	PORT_BIT(0x00000001,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("D") PORT_CODE(KEYCODE_D) PORT_CHAR('d') PORT_CHAR('D')
+	PORT_BIT(0x00000002,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("F") PORT_CODE(KEYCODE_F) PORT_CHAR('f') PORT_CHAR('F')
+	PORT_BIT(0x00000004,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("G") PORT_CODE(KEYCODE_G) PORT_CHAR('g') PORT_CHAR('G')
+	PORT_BIT(0x00000008,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("H") PORT_CODE(KEYCODE_H) PORT_CHAR('h') PORT_CHAR('H')
+	PORT_BIT(0x00000010,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("J") PORT_CODE(KEYCODE_J) PORT_CHAR('j') PORT_CHAR('J')
+	PORT_BIT(0x00000020,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("K") PORT_CODE(KEYCODE_K) PORT_CHAR('k') PORT_CHAR('K')
+	PORT_BIT(0x00000040,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("L") PORT_CODE(KEYCODE_L) PORT_CHAR('l') PORT_CHAR('L')
+	PORT_BIT(0x00000080,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(";") PORT_CODE(KEYCODE_COLON) PORT_CHAR(';') PORT_CHAR('+')
+	PORT_BIT(0x00000100,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(":") PORT_CODE(KEYCODE_QUOTE) PORT_CHAR(':') PORT_CHAR('*')
+	PORT_BIT(0x00000200,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("]") PORT_CODE(KEYCODE_BACKSLASH) PORT_CHAR(']') PORT_CHAR('}')
+	PORT_BIT(0x00000400,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Z") PORT_CODE(KEYCODE_Z) PORT_CHAR('z') PORT_CHAR('Z')
+	PORT_BIT(0x00000800,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("X") PORT_CODE(KEYCODE_X) PORT_CHAR('x') PORT_CHAR('X')
+	PORT_BIT(0x00001000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("C") PORT_CODE(KEYCODE_C) PORT_CHAR('c') PORT_CHAR('C')
+	PORT_BIT(0x00002000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("V") PORT_CODE(KEYCODE_V) PORT_CHAR('v') PORT_CHAR('V')
+	PORT_BIT(0x00004000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("B") PORT_CODE(KEYCODE_B) PORT_CHAR('b') PORT_CHAR('B')
+	PORT_BIT(0x00008000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("N") PORT_CODE(KEYCODE_N) PORT_CHAR('n') PORT_CHAR('N')
+	PORT_BIT(0x00010000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("M") PORT_CODE(KEYCODE_M) PORT_CHAR('m') PORT_CHAR('M')
+	PORT_BIT(0x00020000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(",") PORT_CODE(KEYCODE_COMMA) PORT_CHAR(',') PORT_CHAR('<')
+	PORT_BIT(0x00040000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME(".") PORT_CODE(KEYCODE_STOP) PORT_CHAR('.') PORT_CHAR('>')
+	PORT_BIT(0x00080000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("/") PORT_CODE(KEYCODE_SLASH) PORT_CHAR('/') PORT_CHAR('?')
+	PORT_BIT(0x00100000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("_")  PORT_CHAR('_')
 	PORT_BIT(0x00200000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Space") PORT_CODE(KEYCODE_SPACE) PORT_CHAR(' ')
 	PORT_BIT(0x00400000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Tenkey *") PORT_CODE(KEYCODE_ASTERISK)
 	PORT_BIT(0x00800000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Tenkey /") PORT_CODE(KEYCODE_SLASH_PAD)
@@ -1770,20 +1834,12 @@ INPUT_PORTS_START( fm7_keyboard )
 	PORT_BIT(0x10000000,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("PF10") PORT_CODE(KEYCODE_F10)
 
 	PORT_START("key_modifiers")
-	PORT_BIT(0x00000001,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Ctrl") PORT_CODE(KEYCODE_LCONTROL)
-	PORT_BIT(0x00000002,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Left Shift") PORT_CODE(KEYCODE_LSHIFT)
+	PORT_BIT(0x00000001,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Ctrl") PORT_CODE(KEYCODE_LCONTROL) PORT_CHAR(UCHAR_SHIFT_2)
+	PORT_BIT(0x00000002,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Left Shift") PORT_CODE(KEYCODE_LSHIFT) PORT_CHAR(UCHAR_SHIFT_1)
 	PORT_BIT(0x00000004,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Right Shift") PORT_CODE(KEYCODE_RSHIFT)
-	PORT_BIT(0x00000008,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("CAP") PORT_CODE(KEYCODE_CAPSLOCK) PORT_TOGGLE
+	PORT_BIT(0x00000008,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("CAP") PORT_CODE(KEYCODE_CAPSLOCK) PORT_CHAR(UCHAR_MAMEKEY(CAPSLOCK)) PORT_TOGGLE
 	PORT_BIT(0x00000010,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("GRAPH") PORT_CODE(KEYCODE_RALT)
 	PORT_BIT(0x00000020,IP_ACTIVE_HIGH,IPT_KEYBOARD) PORT_NAME("Kana") PORT_CODE(KEYCODE_RCONTROL) PORT_TOGGLE
-
-	PORT_START("lptjoy")
-	PORT_BIT(0x01,IP_ACTIVE_HIGH,IPT_JOYSTICK_RIGHT) PORT_NAME("LPT Joystick Right") PORT_8WAY PORT_PLAYER(1)
-	PORT_BIT(0x02,IP_ACTIVE_HIGH,IPT_JOYSTICK_LEFT) PORT_NAME("LPT Joystick Left") PORT_8WAY PORT_PLAYER(1)
-	PORT_BIT(0x04,IP_ACTIVE_HIGH,IPT_JOYSTICK_UP) PORT_NAME("LPT Joystick Up") PORT_8WAY PORT_PLAYER(1)
-	PORT_BIT(0x08,IP_ACTIVE_HIGH,IPT_JOYSTICK_DOWN) PORT_NAME("LPT Joystick Down") PORT_8WAY PORT_PLAYER(1)
-	PORT_BIT(0x10,IP_ACTIVE_HIGH,IPT_BUTTON2) PORT_NAME("LPT Joystick Button 2") PORT_PLAYER(1)
-	PORT_BIT(0x20,IP_ACTIVE_HIGH,IPT_BUTTON1) PORT_NAME("LPT Joystick Button 1") PORT_PLAYER(1)
 
 	PORT_START("joy1")
 	PORT_BIT(0x01,IP_ACTIVE_LOW,IPT_JOYSTICK_UP) PORT_NAME("1P Joystick Up") PORT_8WAY PORT_PLAYER(1)
@@ -1822,11 +1878,6 @@ static INPUT_PORTS_START( fm7 )
 	PORT_DIPNAME(0x08,0x00,"FM-8 Compatibility mode") PORT_DIPLOCATION("SWA:4")
 	PORT_DIPSETTING(0x00,DEF_STR( Off ))
 	PORT_DIPSETTING(0x08,DEF_STR( On ))
-
-	PORT_START("config")
-	PORT_CONFNAME(0x01,0x00,"Printer port device")
-	PORT_CONFSETTING(0x00,"Printer")
-	PORT_CONFSETTING(0x01,"Dempa Shinbunsha Joystick")
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( fm8 )
@@ -1836,11 +1887,6 @@ static INPUT_PORTS_START( fm8 )
 	PORT_DIPNAME(0x02,0x02,"Boot mode") PORT_DIPLOCATION("SWA:2")
 	PORT_DIPSETTING(0x00,"DOS")
 	PORT_DIPSETTING(0x02,"BASIC")
-
-	PORT_START("config")
-	PORT_CONFNAME(0x01,0x00,"Printer port device")
-	PORT_CONFSETTING(0x00,"Printer")
-	PORT_CONFSETTING(0x01,"Dempa Shinbunsha Joystick")
 INPUT_PORTS_END
 
 DRIVER_INIT_MEMBER(fm7_state,fm7)
@@ -1851,8 +1897,6 @@ DRIVER_INIT_MEMBER(fm7_state,fm7)
 	m_subtimer = timer_alloc(TIMER_FM7_SUBTIMER_IRQ);
 	m_keyboard_timer = timer_alloc(TIMER_FM7_KEYBOARD_POLL);
 	m_fm77av_vsync_timer = timer_alloc(TIMER_FM77AV_VSYNC);
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(fm7_state::fm7_irq_ack),this));
-	m_sub->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(fm7_state::fm7_sub_irq_ack),this));
 }
 
 MACHINE_START_MEMBER(fm7_state,fm7)
@@ -1921,16 +1965,15 @@ void fm7_state::machine_reset()
 	m_subtimer->adjust(attotime::from_msec(20),0,attotime::from_msec(20));
 	m_keyboard_timer->adjust(attotime::zero,0,attotime::from_msec(10));
 	if(m_type == SYS_FM77AV || m_type == SYS_FM77AV40EX || m_type == SYS_FM11)
-		m_fm77av_vsync_timer->adjust(machine().primary_screen->time_until_vblank_end());
+		m_fm77av_vsync_timer->adjust(machine().first_screen()->time_until_vblank_end());
 
 	m_irq_mask = 0x00;
 	m_irq_flags = 0x00;
 	m_video.attn_irq = 0;
 	m_video.sub_busy = 0x80;  // busy at reset
+	m_basic_rom_en = 1;  // enabled at reset, if in BASIC mode
 	if(m_type == SYS_FM11 || m_type == SYS_FM16)
 		m_basic_rom_en = 0;  // all FM11/16 systems have no BASIC ROM except for the FM-11 ST
-	else
-		m_basic_rom_en = 1;  // enabled at reset
 	if(m_type == SYS_FM77AV || m_type == SYS_FM77AV40EX)
 	{
 		m_init_rom_en = 1;
@@ -1946,7 +1989,16 @@ void fm7_state::machine_reset()
 	else
 		m_init_rom_en = 0;
 	if(m_type == SYS_FM7)
-		membank("bank1")->set_base(RAM+0x38000);
+	{
+		if(!(m_dsw->read() & 0x02))
+		{
+			m_basic_rom_en = 0;  // disabled for DOS mode
+			membank("bank1")->set_base(RAM+0x08000);
+		}
+		else
+			membank("bank1")->set_base(RAM+0x38000);
+		membank("bank2")->set_base(RAM+0x08000);
+	}
 	m_key_delay = 700;  // 700ms on FM-7
 	m_key_repeat = 70;  // 70ms on FM-7
 	m_break_flag = 0;
@@ -1964,7 +2016,7 @@ void fm7_state::machine_reset()
 	// set boot mode (FM-7 only, AV and later has boot RAM instead)
 	if(m_type == SYS_FM7)
 	{
-		if(!(ioport("DSW")->read() & 0x02))
+		if(!(m_dsw->read() & 0x02))
 		{  // DOS mode
 			membank("bank17")->set_base(memregion("dos")->base());
 		}
@@ -1976,6 +2028,8 @@ void fm7_state::machine_reset()
 	if(m_type == SYS_FM77AV || m_type == SYS_FM77AV40EX || m_type == SYS_FM11)
 	{
 		fm7_mmr_refresh(m_maincpu->space(AS_PROGRAM));
+		membank("fbasic_bank_w")->set_base(RAM+0x38000);
+		membank("init_bank_w")->set_base(RAM+0x36000);
 	}
 	if(m_type == SYS_FM11)
 	{
@@ -1986,69 +2040,34 @@ void fm7_state::machine_reset()
 	memset(m_video_ram, 0, sizeof(UINT8) * 0x18000);
 }
 
-static const wd17xx_interface fm7_mb8877a_interface =
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(fm7_state,fm7_fdc_intrq_w),
-	DEVCB_DRIVER_LINE_MEMBER(fm7_state,fm7_fdc_drq_w),
-	{FLOPPY_0, FLOPPY_1, FLOPPY_2, FLOPPY_3}
-};
 
-static const ay8910_interface fm7_psg_intf =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL, /* portA read */
-	DEVCB_NULL, /* portB read */
-	DEVCB_NULL,                 /* portA write */
-	DEVCB_NULL                  /* portB write */
-};
+static SLOT_INTERFACE_START( fm7_floppies )
+	SLOT_INTERFACE("qd", FLOPPY_525_QD)
+SLOT_INTERFACE_END
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(fm7_state,fm77av_joy_1_r),
-	DEVCB_DRIVER_MEMBER(fm7_state,fm77av_joy_2_r),
-	DEVCB_NULL,                 /* portA write */
-	DEVCB_NULL                  /* portB write */
-};
 
-static const cassette_interface fm7_cassette_interface =
-{
-	fm7_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	"fm7_cass",
-	NULL
-};
+#define MCFG_ADDRESS_BANK(tag) \
+MCFG_DEVICE_ADD(tag, ADDRESS_MAP_BANK, 0) \
+MCFG_DEVICE_PROGRAM_MAP(fm7_banked_mem) \
+MCFG_ADDRESS_MAP_BANK_ENDIANNESS(ENDIANNESS_LITTLE) \
+MCFG_ADDRESS_MAP_BANK_DATABUS_WIDTH(8) \
+MCFG_ADDRESS_MAP_BANK_STRIDE(0x1000)
 
-static const floppy_interface fm7_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_DSHD,
-	LEGACY_FLOPPY_OPTIONS_NAME(default),
-	"floppy_5_25",
-	NULL
-};
 
 static MACHINE_CONFIG_START( fm7, fm7_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M6809, XTAL_2MHz)
 	MCFG_CPU_PROGRAM_MAP(fm7_mem)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(fm7_state,fm7_irq_ack)
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_CPU_ADD("sub", M6809, XTAL_2MHz)
 	MCFG_CPU_PROGRAM_MAP(fm7_sub_mem)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(fm7_state,fm7_sub_irq_ack)
 	MCFG_QUANTUM_PERFECT_CPU("sub")
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("psg", AY8910, XTAL_4_9152MHz / 4)
-	MCFG_SOUND_CONFIG(fm7_psg_intf)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS,"mono", 1.00)
 	MCFG_SOUND_ADD("beeper", BEEP, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS,"mono", 0.50)
@@ -2059,36 +2078,52 @@ static MACHINE_CONFIG_START( fm7, fm7_state )
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
-
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
 	MCFG_SCREEN_SIZE(640, 200)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 200-1)
 	MCFG_SCREEN_UPDATE_DRIVER(fm7_state, screen_update_fm7)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_PALETTE_ADD("palette", 8)
+	MCFG_PALETTE_INIT_OWNER(fm7_state, fm7)
 
-
-	MCFG_CASSETTE_ADD("cassette", fm7_cassette_interface)
-
-	MCFG_MB8877_ADD("fdc",fm7_mb8877a_interface)
-
-	MCFG_CENTRONICS_PRINTER_ADD("lpt",standard_centronics)
-
-	MCFG_LEGACY_FLOPPY_2_DRIVES_ADD(fm7_floppy_interface)
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(fm7_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("fm7_cass")
 
 	MCFG_SOFTWARE_LIST_ADD("cass_list","fm7_cass")
+
+	MCFG_MB8877_ADD("fdc", XTAL_8MHz / 8)
+	MCFG_WD_FDC_INTRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_intrq_w))
+	MCFG_WD_FDC_DRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_drq_w))
+
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
+
 	MCFG_SOFTWARE_LIST_ADD("flop_list","fm7_disk")
+
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_SLOT_OPTION_ADD( "dsjoy", DEMPA_SHINBUNSHA_JOYSTICK )
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(fm7_state, write_centronics_busy))
+	MCFG_CENTRONICS_FAULT_HANDLER(WRITELINE(fm7_state, write_centronics_fault))
+	MCFG_CENTRONICS_ACK_HANDLER(WRITELINE(fm7_state, write_centronics_ack))
+	MCFG_CENTRONICS_PERROR_HANDLER(WRITELINE(fm7_state, write_centronics_perror))
+
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", "centronics")
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( fm8, fm7_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M6809, 1200000)  // 1.2MHz 68A09
 	MCFG_CPU_PROGRAM_MAP(fm8_mem)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(fm7_state,fm7_irq_ack)
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_CPU_ADD("sub", M6809, XTAL_1MHz)
 	MCFG_CPU_PROGRAM_MAP(fm7_sub_mem)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(fm7_state,fm7_sub_irq_ack)
 	MCFG_QUANTUM_PERFECT_CPU("sub")
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -2101,40 +2136,54 @@ static MACHINE_CONFIG_START( fm8, fm7_state )
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
-
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
 	MCFG_SCREEN_SIZE(640, 200)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 200-1)
 	MCFG_SCREEN_UPDATE_DRIVER(fm7_state, screen_update_fm7)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_PALETTE_ADD("palette", 8)
+	MCFG_PALETTE_INIT_OWNER(fm7_state, fm7)
 
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(fm7_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("fm7_cass")
 
-	MCFG_CASSETTE_ADD("cassette", fm7_cassette_interface)
+	MCFG_MB8877_ADD("fdc", XTAL_8MHz / 8)
+	MCFG_WD_FDC_INTRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_intrq_w))
+	MCFG_WD_FDC_DRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_drq_w))
 
-	MCFG_MB8877_ADD("fdc",fm7_mb8877a_interface)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
 
-	MCFG_CENTRONICS_PRINTER_ADD("lpt",standard_centronics)
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(fm7_state, write_centronics_busy))
+	MCFG_CENTRONICS_FAULT_HANDLER(WRITELINE(fm7_state, write_centronics_fault))
+	MCFG_CENTRONICS_ACK_HANDLER(WRITELINE(fm7_state, write_centronics_ack))
+	MCFG_CENTRONICS_PERROR_HANDLER(WRITELINE(fm7_state, write_centronics_perror))
 
-	MCFG_LEGACY_FLOPPY_2_DRIVES_ADD(fm7_floppy_interface)
-
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", "centronics")
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( fm77av, fm7_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M6809, XTAL_2MHz)  // actually MB68B09E, but the 6809E core runs too slowly
 	MCFG_CPU_PROGRAM_MAP(fm77av_mem)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(fm7_state,fm7_irq_ack)
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_CPU_ADD("sub", M6809, XTAL_2MHz)
 	MCFG_CPU_PROGRAM_MAP(fm77av_sub_mem)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(fm7_state,fm7_sub_irq_ack)
 	MCFG_QUANTUM_PERFECT_CPU("sub")
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("ym", YM2203, XTAL_4_9152MHz / 4)
 	MCFG_YM2203_IRQ_HANDLER(WRITELINE(fm7_state, fm77av_fmirq))
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(fm7_state, fm77av_joy_1_r))
+	MCFG_AY8910_PORT_B_READ_CB(READ8(fm7_state, fm77av_joy_2_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS,"mono",1.0)
 	MCFG_SOUND_ADD("beeper", BEEP, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS,"mono",0.50)
@@ -2143,6 +2192,23 @@ static MACHINE_CONFIG_START( fm77av, fm7_state )
 
 	MCFG_MACHINE_START_OVERRIDE(fm7_state,fm77av)
 
+	MCFG_ADDRESS_BANK("av_bank1")
+	MCFG_ADDRESS_BANK("av_bank2")
+	MCFG_ADDRESS_BANK("av_bank3")
+	MCFG_ADDRESS_BANK("av_bank4")
+	MCFG_ADDRESS_BANK("av_bank5")
+	MCFG_ADDRESS_BANK("av_bank6")
+	MCFG_ADDRESS_BANK("av_bank7")
+	MCFG_ADDRESS_BANK("av_bank8")
+	MCFG_ADDRESS_BANK("av_bank9")
+	MCFG_ADDRESS_BANK("av_bank10")
+	MCFG_ADDRESS_BANK("av_bank11")
+	MCFG_ADDRESS_BANK("av_bank12")
+	MCFG_ADDRESS_BANK("av_bank13")
+	MCFG_ADDRESS_BANK("av_bank14")
+	MCFG_ADDRESS_BANK("av_bank15")
+	MCFG_ADDRESS_BANK("av_bank16")
+
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -2150,31 +2216,47 @@ static MACHINE_CONFIG_START( fm77av, fm7_state )
 	MCFG_SCREEN_SIZE(640, 200)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 200-1)
 	MCFG_SCREEN_UPDATE_DRIVER(fm7_state, screen_update_fm7)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(8 + 4096)
+	MCFG_PALETTE_ADD("palette", 8 + 4096)
+	MCFG_PALETTE_INIT_OWNER(fm7_state, fm7)
 
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(fm7_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("fm7_cass")
 
-	MCFG_CASSETTE_ADD("cassette", fm7_cassette_interface)
+	MCFG_SOFTWARE_LIST_COMPATIBLE_ADD("cass_list", "fm7_cass")
 
-	MCFG_MB8877_ADD("fdc",fm7_mb8877a_interface)
+	MCFG_MB8877_ADD("fdc", XTAL_8MHz / 8)
+	MCFG_WD_FDC_INTRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_intrq_w))
+	MCFG_WD_FDC_DRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_drq_w))
 
-	MCFG_CENTRONICS_PRINTER_ADD("lpt",standard_centronics)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
 
-	MCFG_LEGACY_FLOPPY_2_DRIVES_ADD(fm7_floppy_interface)
+	MCFG_SOFTWARE_LIST_ADD("av_flop_list", "fm77av")
+	MCFG_SOFTWARE_LIST_COMPATIBLE_ADD("flop_list", "fm7_disk")
 
-	MCFG_SOFTWARE_LIST_ADD("av_flop_list","fm77av")
-	MCFG_SOFTWARE_LIST_COMPATIBLE_ADD("cass_list","fm7_cass")
-	MCFG_SOFTWARE_LIST_COMPATIBLE_ADD("flop_list","fm7_disk")
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(fm7_state, write_centronics_busy))
+	MCFG_CENTRONICS_FAULT_HANDLER(WRITELINE(fm7_state, write_centronics_fault))
+	MCFG_CENTRONICS_ACK_HANDLER(WRITELINE(fm7_state, write_centronics_ack))
+	MCFG_CENTRONICS_PERROR_HANDLER(WRITELINE(fm7_state, write_centronics_perror))
+
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", "centronics")
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( fm11, fm7_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M6809, XTAL_2MHz)  // 2MHz 68B09E
 	MCFG_CPU_PROGRAM_MAP(fm11_mem)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(fm7_state,fm7_irq_ack)
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_CPU_ADD("sub", M6809, XTAL_2MHz)  // 2MHz 68B09
 	MCFG_CPU_PROGRAM_MAP(fm11_sub_mem)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(fm7_state,fm7_sub_irq_ack)
 	MCFG_QUANTUM_PERFECT_CPU("sub")
 
 	MCFG_CPU_ADD("x86", I8088, XTAL_8MHz)  // 8MHz i8088
@@ -2189,26 +2271,54 @@ static MACHINE_CONFIG_START( fm11, fm7_state )
 
 	MCFG_MACHINE_START_OVERRIDE(fm7_state,fm11)
 
+	MCFG_ADDRESS_BANK("av_bank1")
+	MCFG_ADDRESS_BANK("av_bank2")
+	MCFG_ADDRESS_BANK("av_bank3")
+	MCFG_ADDRESS_BANK("av_bank4")
+	MCFG_ADDRESS_BANK("av_bank5")
+	MCFG_ADDRESS_BANK("av_bank6")
+	MCFG_ADDRESS_BANK("av_bank7")
+	MCFG_ADDRESS_BANK("av_bank8")
+	MCFG_ADDRESS_BANK("av_bank9")
+	MCFG_ADDRESS_BANK("av_bank10")
+	MCFG_ADDRESS_BANK("av_bank11")
+	MCFG_ADDRESS_BANK("av_bank12")
+	MCFG_ADDRESS_BANK("av_bank13")
+	MCFG_ADDRESS_BANK("av_bank14")
+	MCFG_ADDRESS_BANK("av_bank15")
+	MCFG_ADDRESS_BANK("av_bank16")
+
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
-
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
 	MCFG_SCREEN_SIZE(640, 200)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 200-1)
 	MCFG_SCREEN_UPDATE_DRIVER(fm7_state, screen_update_fm7)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_PALETTE_ADD("palette", 8)
+	MCFG_PALETTE_INIT_OWNER(fm7_state, fm7)
 
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(fm7_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("fm7_cass")
 
-	MCFG_CASSETTE_ADD("cassette", fm7_cassette_interface)
+	MCFG_MB8877_ADD("fdc", XTAL_8MHz / 8)
+	MCFG_WD_FDC_INTRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_intrq_w))
+	MCFG_WD_FDC_DRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_drq_w))
 
-	MCFG_MB8877_ADD("fdc",fm7_mb8877a_interface)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
 
-	MCFG_CENTRONICS_PRINTER_ADD("lpt",standard_centronics)
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(fm7_state, write_centronics_busy))
+	MCFG_CENTRONICS_FAULT_HANDLER(WRITELINE(fm7_state, write_centronics_fault))
+	MCFG_CENTRONICS_ACK_HANDLER(WRITELINE(fm7_state, write_centronics_ack))
+	MCFG_CENTRONICS_PERROR_HANDLER(WRITELINE(fm7_state, write_centronics_perror))
 
-	MCFG_LEGACY_FLOPPY_2_DRIVES_ADD(fm7_floppy_interface)
-
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", "centronics")
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( fm16beta, fm7_state )
@@ -2219,6 +2329,7 @@ static MACHINE_CONFIG_START( fm16beta, fm7_state )
 	MCFG_QUANTUM_PERFECT_CPU("maincpu")
 
 	MCFG_CPU_ADD("sub", M6809, XTAL_2MHz)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(fm7_state,fm7_sub_irq_ack)
 	MCFG_CPU_PROGRAM_MAP(fm16_sub_mem)
 	MCFG_QUANTUM_PERFECT_CPU("sub")
 
@@ -2232,24 +2343,35 @@ static MACHINE_CONFIG_START( fm16beta, fm7_state )
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
-
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
 	MCFG_SCREEN_SIZE(640, 200)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 200-1)
 	MCFG_SCREEN_UPDATE_DRIVER(fm7_state, screen_update_fm7)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_PALETTE_ADD("palette", 8)
+	MCFG_PALETTE_INIT_OWNER(fm7_state, fm7)
 
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(fm7_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("fm7_cass")
 
-	MCFG_CASSETTE_ADD("cassette", fm7_cassette_interface)
+	MCFG_MB8877_ADD("fdc", XTAL_8MHz / 8)
+	MCFG_WD_FDC_INTRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_intrq_w))
+	MCFG_WD_FDC_DRQ_CALLBACK(WRITELINE(fm7_state, fm7_fdc_drq_w))
 
-	MCFG_MB8877_ADD("fdc",fm7_mb8877a_interface)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", fm7_floppies, "qd", floppy_image_device::default_floppy_formats)
 
-	MCFG_CENTRONICS_PRINTER_ADD("lpt",standard_centronics)
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(fm7_state, write_centronics_busy))
+	MCFG_CENTRONICS_FAULT_HANDLER(WRITELINE(fm7_state, write_centronics_fault))
+	MCFG_CENTRONICS_ACK_HANDLER(WRITELINE(fm7_state, write_centronics_ack))
+	MCFG_CENTRONICS_PERROR_HANDLER(WRITELINE(fm7_state, write_centronics_perror))
 
-	MCFG_LEGACY_FLOPPY_2_DRIVES_ADD(fm7_floppy_interface)
-
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", "centronics")
 MACHINE_CONFIG_END
 
 /* ROM definition */

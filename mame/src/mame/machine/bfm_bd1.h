@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 #pragma once
 #ifndef BFM_BD1_H
 #define BFM_BD1_H
@@ -13,9 +15,7 @@
 class bfm_bd1_t : public device_t
 {
 public:
-	typedef delegate<void (bool state)> line_cb;
 	bfm_bd1_t(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-
 
 	// inline configuration helpers
 	static void static_set_value(device_t &device, int val);
@@ -25,9 +25,12 @@ public:
 	UINT8   m_port_val;
 	void blank(int data);
 
-	void shift_data(int data);
+	void shift_clock(int state);
 	void setdata(int segdata, int data);
 	UINT16 set_display(UINT16 segin);
+	DECLARE_WRITE_LINE_MEMBER( sclk );
+	DECLARE_WRITE_LINE_MEMBER( data );
+	DECLARE_WRITE_LINE_MEMBER( por );
 
 protected:
 	static const UINT8 AT_NORMAL  = 0x00;
@@ -46,6 +49,9 @@ protected:
 	int m_display_mode;
 	int m_flash_rate;
 	int m_flash_control;
+	int m_sclk;
+	int m_data;
+
 	UINT8 m_cursor;
 	UINT16 m_chars[16];
 	UINT16 m_outputs[16];

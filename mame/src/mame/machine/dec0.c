@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /*******************************************************************************
 
 Data East machine functions - Bryan McPhail, mish@tendril.co.uk
@@ -13,6 +15,13 @@ Data East machine functions - Bryan McPhail, mish@tendril.co.uk
 
 
 /******************************************************************************/
+
+void dec0_state::machine_start()
+{
+	save_item(NAME(m_i8751_return));
+	save_item(NAME(m_i8751_command));
+	save_item(NAME(m_i8751_ports));
+}
 
 READ16_MEMBER(dec0_state::dec0_controls_r)
 {
@@ -106,25 +115,15 @@ WRITE8_MEMBER(dec0_state::hippodrm_prot_w)
 //logerror("6280 PC %06x - Wrote %06x to %04x\n",cpu_getpc(),data,offset+0x1d0000);
 }
 
-READ8_MEMBER(dec0_state::hippodrm_shared_r)
-{
-	return m_share[offset];
-}
-
-WRITE8_MEMBER(dec0_state::hippodrm_shared_w)
-{
-	m_share[offset]=data;
-}
-
 READ16_MEMBER(dec0_state::hippodrm_68000_share_r)
 {
 	if (offset==0) space.device().execute().yield(); /* A wee helper */
-	return m_share[offset]&0xff;
+	return m_hippodrm_shared_ram[offset]&0xff;
 }
 
 WRITE16_MEMBER(dec0_state::hippodrm_68000_share_w)
 {
-	m_share[offset]=data&0xff;
+	m_hippodrm_shared_ram[offset]=data&0xff;
 }
 
 /******************************************************************************/
@@ -304,9 +303,9 @@ void dec0_state::dec0_i8751_write(int data)
 	m_i8751_command=data;
 
 	/* Writes to this address cause an IRQ to the i8751 microcontroller */
-	if (m_GAME == 1) m_mcu->set_input_line(MCS51_INT1_LINE, ASSERT_LINE);
-	if (m_GAME == 2) baddudes_i8751_write(data);
-	if (m_GAME == 3) birdtry_i8751_write(data);
+	if (m_game == 1) m_mcu->set_input_line(MCS51_INT1_LINE, ASSERT_LINE);
+	if (m_game == 2) baddudes_i8751_write(data);
+	if (m_game == 3) birdtry_i8751_write(data);
 
 	//logerror("%s: warning - write %02x to i8751\n",machine().describe_context(),data);
 }
@@ -357,7 +356,7 @@ void dec0_state::h6280_decrypt(const char *cputag)
 DRIVER_INIT_MEMBER(dec0_state,hippodrm)
 {
 	UINT8 *RAM = memregion("sub")->base();
-	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x180000, 0x180fff, read16_delegate(FUNC(dec0_state::hippodrm_68000_share_r),this), write16_delegate(FUNC(dec0_state::hippodrm_68000_share_w),this));
+	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x180000, 0x18003f, read16_delegate(FUNC(dec0_state::hippodrm_68000_share_r),this), write16_delegate(FUNC(dec0_state::hippodrm_68000_share_w),this));
 	m_maincpu->space(AS_PROGRAM).install_write_handler(0xffc800, 0xffcfff, write16_delegate(FUNC(dec0_state::sprite_mirror_w),this));
 
 	h6280_decrypt("sub");
@@ -367,17 +366,21 @@ DRIVER_INIT_MEMBER(dec0_state,hippodrm)
 	RAM[0x1af] = 0x60; /* RTS prot area */
 	RAM[0x1db] = 0x60; /* RTS prot area */
 	RAM[0x21a] = 0x60; /* RTS prot area */
+
+	save_item(NAME(m_hippodrm_msb));
+	save_item(NAME(m_hippodrm_lsb));
 }
 
 DRIVER_INIT_MEMBER(dec0_state,slyspy)
 {
 	UINT8 *RAM = memregion("audiocpu")->base();
-
 	h6280_decrypt("audiocpu");
 
 	/* Slyspy sound cpu has some protection */
 	RAM[0xf2d] = 0xea;
 	RAM[0xf2e] = 0xea;
+
+	save_item(NAME(m_slyspy_state));
 }
 
 DRIVER_INIT_MEMBER(dec0_state,robocop)
@@ -387,15 +390,15 @@ DRIVER_INIT_MEMBER(dec0_state,robocop)
 
 DRIVER_INIT_MEMBER(dec0_state,baddudes)
 {
-	m_GAME = 2;
+	m_game = 2;
 }
 
 DRIVER_INIT_MEMBER(dec0_state,hbarrel)
 {
-	m_GAME = 1;
+	m_game = 1;
 }
 
 DRIVER_INIT_MEMBER(dec0_state,birdtry)
 {
-	m_GAME=3;
+	m_game=3;
 }

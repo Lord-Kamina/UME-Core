@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 #pragma once
 #ifndef BFM_BDA_H
 #define BFM_BDA_H
@@ -13,9 +15,7 @@
 class bfm_bda_t : public device_t
 {
 public:
-	typedef delegate<void (bool state)> line_cb;
 	bfm_bda_t(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-
 
 	// inline configuration helpers
 	static void static_set_value(device_t &device, int val);

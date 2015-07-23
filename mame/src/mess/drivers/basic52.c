@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /***************************************************************************
 
         MCS BASIC 52 and MCS BASIC 31 board
@@ -35,19 +37,22 @@ to discover the special features of this Basic.
 #include "machine/i8255.h"
 #include "machine/terminal.h"
 
+#define TERMINAL_TAG "terminal"
 
 class basic52_state : public driver_device
 {
 public:
 	basic52_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-	m_maincpu(*this, "maincpu"),
-	m_terminal(*this, TERMINAL_TAG) { }
+		m_maincpu(*this, "maincpu"),
+		m_terminal(*this, TERMINAL_TAG)
+	{
+	}
 
 	DECLARE_WRITE8_MEMBER(kbd_put);
 	DECLARE_READ8_MEMBER(unk_r);
 	UINT8 m_term_data;
-	required_device<cpu_device> m_maincpu;
+	required_device<mcs51_cpu_device> m_maincpu;
 	required_device<generic_terminal_device> m_terminal;
 	virtual void machine_reset();
 	DECLARE_WRITE8_MEMBER(to_term);
@@ -96,8 +101,8 @@ READ8_MEMBER( basic52_state::unk_r)
 
 void basic52_state::machine_reset()
 {
-	i8051_set_serial_tx_callback(m_maincpu, write8_delegate(FUNC(basic52_state::to_term),this));
-	i8051_set_serial_rx_callback(m_maincpu, read8_delegate(FUNC(basic52_state::from_term),this));
+	m_maincpu->i8051_set_serial_tx_callback(write8_delegate(FUNC(basic52_state::to_term),this));
+	m_maincpu->i8051_set_serial_rx_callback(read8_delegate(FUNC(basic52_state::from_term),this));
 }
 
 WRITE8_MEMBER( basic52_state::kbd_put )
@@ -107,21 +112,6 @@ WRITE8_MEMBER( basic52_state::kbd_put )
 	m_term_data = data;
 }
 
-static GENERIC_TERMINAL_INTERFACE( terminal_intf )
-{
-	DEVCB_DRIVER_MEMBER(basic52_state, kbd_put)
-};
-
-static I8255_INTERFACE( ppi8255_intf )
-{
-	DEVCB_NULL,                 /* Port A read */
-	DEVCB_NULL,                 /* Port A write */
-	DEVCB_NULL,                 /* Port B read */
-	DEVCB_NULL,                 /* Port B write */
-	DEVCB_NULL,                 /* Port C read */
-	DEVCB_NULL                  /* Port C write */
-};
-
 static MACHINE_CONFIG_START( basic31, basic52_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", I8031, XTAL_11_0592MHz)
@@ -130,9 +120,10 @@ static MACHINE_CONFIG_START( basic31, basic52_state )
 
 
 	/* video hardware */
-	MCFG_GENERIC_TERMINAL_ADD(TERMINAL_TAG, terminal_intf)
+	MCFG_DEVICE_ADD(TERMINAL_TAG, GENERIC_TERMINAL, 0)
+	MCFG_GENERIC_TERMINAL_KEYBOARD_CB(WRITE8(basic52_state, kbd_put))
 
-	MCFG_I8255_ADD("ppi8255", ppi8255_intf )
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( basic52, basic31 )

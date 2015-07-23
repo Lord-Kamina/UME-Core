@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Juergen Buchmueller, Frank Palazzolo, Sean Riddle
 #include "emu.h"
 #include "audio/channelf.h"
 
@@ -7,7 +9,7 @@
 const device_type CHANNELF_SOUND = &device_creator<channelf_sound_device>;
 
 channelf_sound_device::channelf_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, CHANNELF_SOUND, "Channel F Sound", tag, owner, clock),
+	: device_t(mconfig, CHANNELF_SOUND, "Channel F Sound", tag, owner, clock, "channelf_sound", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_channel(NULL),
 		m_sound_mode(0),

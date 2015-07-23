@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*
  Ace System 1 Hardware
  Fruit Machines
@@ -9,7 +11,7 @@ total rom size 0x8000
 ram at 0x8000-0x87ff
 lots of reads from 0xe000 at the start
 
-JPM style Reel MCU?
+JPM style Reel MCU? Certainly reel data seems to be muxed together in aweird way
 
  Hardware overview
   - Z80
@@ -27,6 +29,7 @@ JPM style Reel MCU?
 #include "cpu/z80/z80.h"
 #include "sound/ay8910.h"
 #include "machine/i8255.h"
+#include "machine/steppers.h"
 #include "video/awpvid.h"
 #include "aces1.lh"
 
@@ -36,11 +39,31 @@ class aces1_state : public driver_device
 public:
 	aces1_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_maincpu(*this, "maincpu")
+			m_maincpu(*this, "maincpu"),
+			m_reel0(*this, "reel0"),
+			m_reel1(*this, "reel1"),
+			m_reel2(*this, "reel2"),
+			m_reel3(*this, "reel3"),
+			m_io1_port(*this, "IO1"),
+			m_io2_port(*this, "IO2"),
+			m_io3_port(*this, "IO3"),
+			m_io4_port(*this, "IO4"),
+			m_io5_port(*this, "IO5"),
+			m_io6_port(*this, "IO6"),
+			m_io7_port(*this, "IO7"),
+			m_io8_port(*this, "IO8")
 	{ }
 	int m_input_strobe;
 	int m_lamp_strobe;
 	int m_led_strobe;
+	int m_reel_clock[4];
+	int m_reel_phase[4];
+	int m_reel_count[4];
+	int m_optic_pattern;
+	DECLARE_WRITE_LINE_MEMBER(reel0_optic_cb) { if (state) m_optic_pattern |= 0x01; else m_optic_pattern &= ~0x01; }
+	DECLARE_WRITE_LINE_MEMBER(reel1_optic_cb) { if (state) m_optic_pattern |= 0x02; else m_optic_pattern &= ~0x02; }
+	DECLARE_WRITE_LINE_MEMBER(reel2_optic_cb) { if (state) m_optic_pattern |= 0x04; else m_optic_pattern &= ~0x04; }
+	DECLARE_WRITE_LINE_MEMBER(reel3_optic_cb) { if (state) m_optic_pattern |= 0x08; else m_optic_pattern &= ~0x08; }
 
 	DECLARE_READ8_MEMBER( aces1_unk_r )
 	{
@@ -78,7 +101,7 @@ public:
 	emu_timer *m_aces1_nmi_timer;
 
 
-	DECLARE_WRITE8_MEMBER(ppi8255_ic24_intf_write_a)
+	DECLARE_WRITE8_MEMBER(ic24_write_a)
 	{
 		if (m_led_strobe != m_input_strobe)
 		{
@@ -87,7 +110,7 @@ public:
 		}
 	}
 
-	DECLARE_WRITE8_MEMBER(ppi8255_ic24_intf_write_b)
+	DECLARE_WRITE8_MEMBER(ic24_write_b)
 	{
 	//cheating a bit here, need persistence
 	int i;
@@ -105,43 +128,105 @@ public:
 		}
 	}
 
-	DECLARE_WRITE8_MEMBER(ppi8255_ic24_intf_write_c)
+	DECLARE_WRITE8_MEMBER(ic24_write_c)
 	{
 		m_input_strobe = (data & 0x0f);
 	}
 
-	DECLARE_WRITE8_MEMBER(ppi8255_ic25_intf_write_a)
+	DECLARE_WRITE8_MEMBER(ic25_write_a)
 	{
 	//  printf("extender lamps %02x\n", data);
 	}
 
-	DECLARE_WRITE8_MEMBER(ppi8255_ic25_intf_write_b)
+	DECLARE_WRITE8_MEMBER(ic25_write_b)
 	{
 	//  printf("meters, extender select %02x\n", data);
 	}
 
-	DECLARE_WRITE8_MEMBER(ppi8255_ic25_intf_write_c)
+	DECLARE_WRITE8_MEMBER(ic25_write_c)
 	{
-	//  printf("reels, extender strobe %02x\n", data);
+		//There needs to be some way of connecting these values to stepper coils, or doing the MCU properly
+		// We should be able to see an enable clock, a sense and a full/half step selector, we don't have the half step visible it seems.
+
+		//3 1 16 14
+		int phases[] = {0x05,0x01,0x09,0x08,0x0a,0x02,0x06,0x04,};
+		for (int reel=0; reel <4; reel++)
+		{
+			int clock = (data & (1<<reel));
+			if (m_reel_clock[reel] != clock)
+			{
+				if (clock != 0)
+				{
+					int sense = ((data & (4 + (1<<reel))) ? -2:2);
+					m_reel_phase[reel] = ((m_reel_phase[reel] + sense + 8) % 8);
+					switch (reel)
+					{
+					case 0: m_reel0->update(phases[m_reel_phase[reel]]); break;
+					case 1: m_reel1->update(phases[m_reel_phase[reel]]); break;
+					case 2: m_reel2->update(phases[m_reel_phase[reel]]); break;
+					case 3: m_reel3->update(phases[m_reel_phase[reel]]); break;
+					}
+					m_reel_clock[reel] = clock;
+					if ( m_reel_phase[reel] % 4 ==0)
+					{
+						m_reel_count[reel]=1;
+					}
+					else
+					{
+						m_reel_count[reel]=0;
+					}
+					logerror("Reel %x Enable %x Sense %i Phase %x Data  %x\n",reel, clock, sense, m_reel_phase[reel],phases[m_reel_phase[reel]]  );
+				}
+				else
+				{
+					logerror("Reel %x Enable %x \n",reel, clock  );
+				}
+			}
+//          logerror("Reel %x Enable %x Sense %i \n",reel, (data & (1<<reel)), (data & (4 + (1<<reel))) ? 1:-1  );
+		}
+
+
+//    printf("reels, extender strobe %02x\n", data);
 	}
 
-	DECLARE_READ8_MEMBER( ppi8255_ic37_intf_read_a )
+	DECLARE_READ8_MEMBER( ic37_read_a )
 	{
-		return 0xff;
+		//Should be coins and doors
+		return ioport("COINS")->read();
 	}
 
-	DECLARE_READ8_MEMBER( ppi8255_ic37_intf_read_b )
+	DECLARE_READ8_MEMBER( ic37_read_b )
 	{
-		return 0xff;
+		ioport_port * portnames[] = { m_io1_port, m_io2_port, m_io3_port, m_io4_port, m_io5_port, m_io6_port, m_io7_port, m_io8_port,m_io1_port, m_io2_port, m_io3_port, m_io4_port, m_io5_port, m_io6_port, m_io7_port, m_io8_port };
+
+		return (portnames[m_input_strobe])->read();
 	}
 
-	DECLARE_READ8_MEMBER( ppi8255_ic37_intf_read_c )
+	DECLARE_READ8_MEMBER( ic37_read_c )
 	{
-		return 0xff;
+		int action =0;
+		for (int reel = 0; reel < 4; reel++)
+		{
+			if (m_reel_count[reel]) action |= 1<<reel;
+		}
+
+		return ((m_optic_pattern << 4) | action);
 	}
 
 	// devices
 	required_device<cpu_device> m_maincpu;
+	required_device<stepper_device> m_reel0;
+	required_device<stepper_device> m_reel1;
+	required_device<stepper_device> m_reel2;
+	required_device<stepper_device> m_reel3;
+	required_ioport m_io1_port;
+	required_ioport m_io2_port;
+	required_ioport m_io3_port;
+	required_ioport m_io4_port;
+	required_ioport m_io5_port;
+	required_ioport m_io6_port;
+	required_ioport m_io7_port;
+	required_ioport m_io8_port;
 
 	DECLARE_DRIVER_INIT(aces1);
 	virtual void machine_start();
@@ -170,6 +255,11 @@ TIMER_CALLBACK_MEMBER(aces1_state::m_aces1_nmi_timer_callback)
 
 void aces1_state::machine_start()
 {
+	for (int reel=0; reel <4; reel++)
+	{
+		m_reel_clock[reel] =0;
+		m_reel_phase[reel] =0;
+	}
 	m_aces1_irq_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(aces1_state::m_aces1_irq_timer_callback),this), 0);
 	m_aces1_nmi_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(aces1_state::m_aces1_nmi_timer_callback),this), 0);
 }
@@ -184,9 +274,9 @@ static ADDRESS_MAP_START( aces1_map, AS_PROGRAM, 8, aces1_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
 	AM_RANGE(0x8000, 0x8fff) AM_RAM
 	AM_RANGE(0xadf0, 0xadf3) AM_DEVREADWRITE("aysnd", ay8910_device, data_r, address_data_w) //  Dips, Sound
-	AM_RANGE(0xafb0, 0xafb3) AM_DEVREADWRITE("ppi8255_ic24", i8255_device, read, write) // IC24 - lamps, 7segs
-	AM_RANGE(0xafd0, 0xafd3) AM_DEVREADWRITE("ppi8255_ic25", i8255_device, read, write) // IC25 - lamps, meters, reel comms (writes)
-	AM_RANGE(0xafe0, 0xafe3) AM_DEVREADWRITE("ppi8255_ic37", i8255_device, read, write)//  IC37 - doors, coins, reel optics (reads)
+	AM_RANGE(0xafb0, 0xafb3) AM_DEVREADWRITE("ic24", i8255_device, read, write) // IC24 - lamps, 7segs
+	AM_RANGE(0xafd0, 0xafd3) AM_DEVREADWRITE("ic25", i8255_device, read, write) // IC25 - lamps, meters, reel comms (writes)
+	AM_RANGE(0xafe0, 0xafe3) AM_DEVREADWRITE("ic37", i8255_device, read, write)//  IC37 - doors, coins, reel optics (reads)
 	AM_RANGE(0xc000, 0xc000) AM_READ(aces1_unk_r) // illegal or reset irq?
 	AM_RANGE(0xe000, 0xe000) AM_READWRITE(aces1_nmi_counter_reset_r, aces1_nmi_counter_reset_w)
 ADDRESS_MAP_END
@@ -198,6 +288,96 @@ ADDRESS_MAP_END
 
 
 static INPUT_PORTS_START( aces1 )
+	PORT_START("COINS")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_COIN1 ) PORT_NAME("10p")
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_COIN2 ) PORT_NAME("20p")
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_COIN3 ) PORT_NAME("50p")
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_COIN4 ) PORT_NAME("100p")
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+
+	PORT_START("IO1")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+
+	PORT_START("IO2")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+
+	PORT_START("IO3")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+
+	PORT_START("IO4")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+
+	PORT_START("IO5")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+
+	PORT_START("IO6")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+
+	PORT_START("IO7")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+
+	PORT_START("IO8")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+
 	PORT_START("DSWA")
 	PORT_DIPNAME( 0x01, 0x01, "DSWA" )
 	PORT_DIPSETTING(    0x01, DEF_STR( Off ) )
@@ -252,75 +432,51 @@ static INPUT_PORTS_START( aces1 )
 INPUT_PORTS_END
 
 
-
-
-// 0xafb0 IC24 - lamps, 7segs
-static I8255A_INTERFACE( ppi8255_ic24_intf )
-{
-	DEVCB_NULL,                         /* Port A read */
-	DEVCB_DRIVER_MEMBER(aces1_state,ppi8255_ic24_intf_write_a),                         /* Port A write */ // 7segs
-	DEVCB_NULL,                         /* Port B read */
-	DEVCB_DRIVER_MEMBER(aces1_state,ppi8255_ic24_intf_write_b),                         /* Port B write */ // lamps
-	DEVCB_NULL,                         /* Port C read */
-	DEVCB_DRIVER_MEMBER(aces1_state,ppi8255_ic24_intf_write_c)                          /* Port C write */ // strobe
-};
-
-// 0xafd0 IC25 - lamps, meters, reel comms (writes)
-static I8255A_INTERFACE( ppi8255_ic25_intf )
-{
-	DEVCB_NULL,                         /* Port A read */
-	DEVCB_DRIVER_MEMBER(aces1_state,ppi8255_ic25_intf_write_a),                         /* Port A write */ // extra lamps
-	DEVCB_NULL,                         /* Port B read */
-	DEVCB_DRIVER_MEMBER(aces1_state,ppi8255_ic25_intf_write_b),                         /* Port B write */ // meters, extra lamp select
-	DEVCB_NULL,                         /* Port C read */
-	DEVCB_DRIVER_MEMBER(aces1_state,ppi8255_ic25_intf_write_c)                          /* Port C write */ // reel write, extra lamp strobe
-};
-
-// 0xafe0 IC37 - doors, coins, reel optics (reads)
-static I8255A_INTERFACE( ppi8255_ic37_intf )
-{
-	DEVCB_DRIVER_MEMBER(aces1_state,ppi8255_ic37_intf_read_a),                          /* Port A read */ // doors + coins
-	DEVCB_NULL,                         /* Port A write */
-	DEVCB_DRIVER_MEMBER(aces1_state,ppi8255_ic37_intf_read_b),                          /* Port B read */ // switches
-	DEVCB_NULL,                         /* Port B write */
-	DEVCB_DRIVER_MEMBER(aces1_state,ppi8255_ic37_intf_read_c),                          /* Port C read */ // reel optics
-	DEVCB_NULL                          /* Port C write */
-};
-
-// 0xadf0 - Dips, Sound
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSWA"),
-	DEVCB_INPUT_PORT("DSWB"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
 static MACHINE_CONFIG_START( aces1, aces1_state )
 
 	MCFG_CPU_ADD("maincpu", Z80, 4000000) /* ?? Mhz */
 	MCFG_CPU_PROGRAM_MAP(aces1_map)
 	MCFG_CPU_IO_MAP(aces1_portmap)
 
-	MCFG_I8255A_ADD( "ppi8255_ic24", ppi8255_ic24_intf )
-	MCFG_I8255A_ADD( "ppi8255_ic25", ppi8255_ic25_intf )
-	MCFG_I8255A_ADD( "ppi8255_ic37", ppi8255_ic37_intf )
+	// 0xafb0 IC24 - lamps, 7segs
+	MCFG_DEVICE_ADD("ic24", I8255A, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(aces1_state, ic24_write_a))  // 7segs
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(aces1_state, ic24_write_b))  // lamps
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(aces1_state, ic24_write_c))  // strobe
+
+	// 0xafd0 IC25 - lamps, meters, reel comms (writes)
+	MCFG_DEVICE_ADD("ic25", I8255A, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(aces1_state, ic25_write_a))  // extra lamps
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(aces1_state, ic25_write_b))  // meters, extra lamp select
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(aces1_state, ic25_write_c))  // reel write, extra lamp strobe
+
+	// 0xafe0 IC37 - doors, coins, reel optics (reads)
+	MCFG_DEVICE_ADD("ic37", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(aces1_state, ic37_read_a)) // extra lamps
+	MCFG_I8255_IN_PORTB_CB(READ8(aces1_state, ic37_read_b)) // meters, extra lamp select
+	MCFG_I8255_IN_PORTC_CB(READ8(aces1_state, ic37_read_c)) // reel write, extra lamp strobe
 
 	MCFG_DEFAULT_LAYOUT(layout_aces1)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
+	// 0xadf0 - Dips, Sound
 	MCFG_SOUND_ADD("aysnd", AY8910, 1500000) /* ?? MHz */
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSWA"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSWB"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 
+	/* steppers */
+	MCFG_STARPOINT_48STEP_ADD("reel0")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(aces1_state, reel0_optic_cb))
+	MCFG_STARPOINT_48STEP_ADD("reel1")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(aces1_state, reel1_optic_cb))
+	MCFG_STARPOINT_48STEP_ADD("reel2")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(aces1_state, reel2_optic_cb))
+	MCFG_STARPOINT_48STEP_ADD("reel3")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(aces1_state, reel3_optic_cb))
 MACHINE_CONFIG_END
-
-
 
 
 ROM_START( ac1clbmn )
@@ -354,7 +510,6 @@ ROM_START( ac1pstrt )
 	ROM_LOAD( "pst.bin", 0x0000, 0x8000, CRC(8e2ee921) SHA1(100de5ab0420d6c0196d90da4412a7d2c24a0912) )
 ROM_END
 
-
 ROM_START( ac1primt )
 	ROM_REGION( 0x8000, "maincpu", 0 ) // same thing but in smaller roms? should they all really be like this?
 	ROM_LOAD( "403ptp21.bin", 0x0000, 0x2000, CRC(5437973c) SHA1(cd42fe09a75ea8bf8efd25c1ca7b12c4db029f31) )
@@ -371,13 +526,10 @@ ROM_START( ac1taklv )
 	ROM_LOAD( "430tlp14.bin", 0x6000, 0x2000, CRC(09008e12) SHA1(f3f6dd3bafdcf7187148fed914d7c43caf53d48a) )
 ROM_END
 
-/*
-
 ROM_START( ac1cshtw ) // Cash Towers, same ROM as above, original machine apparently plays the same, reskinned machine?
-    ROM_REGION( 0x8000, "maincpu", 0 )
-    ROM_LOAD( "ctp1.bin", 0x0000, 0x8000, CRC(2fabb08f) SHA1(b737930e428f9258ab22394229c2b5039edf8f97) )
+	ROM_REGION( 0x8000, "maincpu", 0 )
+	ROM_LOAD( "ctp1.bin", 0x0000, 0x8000, CRC(2fabb08f) SHA1(b737930e428f9258ab22394229c2b5039edf8f97) )
 ROM_END
-*/
 
 
 ROM_START( ac1bbclb )
@@ -694,7 +846,7 @@ GAME( 199?, ac1pster        ,0          ,aces1  ,aces1  , aces1_state,aces1 ,ROT
 GAME( 199?, ac1pstrt        ,0          ,aces1  ,aces1  , aces1_state,aces1 ,ROT0   ,"Pcp", "Pound Stretcher (Pcp) (ACESYS1)",GAME_IS_SKELETON_MECHANICAL )
 GAME( 199?, ac1primt        ,0          ,aces1  ,aces1  , aces1_state,aces1 ,ROT0   ,"Ace", "Primetime (Ace) (ACESYS1) (set 1)",GAME_IS_SKELETON_MECHANICAL )
 GAME( 199?, ac1taklv        ,0          ,aces1  ,aces1  , aces1_state,aces1 ,ROT0   ,"Ace", "Take It Or Leave It (Ace) (ACESYS1) (set 1)",GAME_IS_SKELETON_MECHANICAL )
-//GAME( 199?, ac1cshtw      ,0          ,aces1  ,aces1  , aces1_state,aces1  ,ROT0   ,"Ace", "Cash Towers (Ace) (ACESYS1)",GAME_IS_SKELETON_MECHANICAL ) // same ROM as above, original machine apparently plays the same, reskinned machine?
+GAME( 199?, ac1cshtw        ,0          ,aces1  ,aces1  , aces1_state,aces1 ,ROT0   ,"Ace", "Cash Towers (Ace) (ACESYS1)",GAME_IS_SKELETON_MECHANICAL ) // same ROM as above, combined, original machine apparently plays the same, reskinned machine?
 GAME( 199?, ac1bbclb        ,0          ,aces1  ,aces1  , aces1_state,aces1 ,ROT0   ,"Ace", "Big Break Club (Ace) (ACESYS1) (set 1)",GAME_IS_SKELETON_MECHANICAL )
 GAME( 199?, ac1bbclba       ,ac1bbclb   ,aces1  ,aces1  , aces1_state,aces1 ,ROT0   ,"Ace", "Big Break Club (Ace) (ACESYS1) (set 2)",GAME_IS_SKELETON_MECHANICAL )
 GAME( 199?, ac1clbsv        ,0          ,aces1  ,aces1  , aces1_state,aces1 ,ROT0   ,"Ace", "Club Sovereign (Ace) (ACESYS1)",GAME_IS_SKELETON_MECHANICAL )

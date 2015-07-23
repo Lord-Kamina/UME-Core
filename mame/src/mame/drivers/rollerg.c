@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Rollergames (GX999) (c) 1991 Konami
@@ -12,15 +14,10 @@
 
 #include "emu.h"
 #include "cpu/z80/z80.h"
-#include "video/konicdev.h"
-#include "machine/k053252.h"
 #include "cpu/m6809/konami.h" /* for the callback and the firq irq definition */
 #include "sound/3812intf.h"
 #include "sound/k053260.h"
 #include "includes/rollerg.h"
-
-/* prototypes */
-static KONAMI_SETLINES_CALLBACK( rollerg_banking );
 
 WRITE8_MEMBER(rollerg_state::rollerg_0010_w)
 {
@@ -34,7 +31,7 @@ WRITE8_MEMBER(rollerg_state::rollerg_0010_w)
 	m_readzoomroms = data & 0x04;
 
 	/* bit 5 enables 051316 wraparound */
-	k051316_wraparound_enable(m_k051316, data & 0x20);
+	m_k051316->wraparound_enable(data & 0x20);
 
 	/* other bits unknown */
 }
@@ -42,16 +39,9 @@ WRITE8_MEMBER(rollerg_state::rollerg_0010_w)
 READ8_MEMBER(rollerg_state::rollerg_k051316_r)
 {
 	if (m_readzoomroms)
-		return k051316_rom_r(m_k051316, space, offset);
+		return m_k051316->rom_r(space, offset);
 	else
-		return k051316_r(m_k051316, space, offset);
-}
-
-READ8_MEMBER(rollerg_state::rollerg_sound_r)
-{
-	/* If the sound CPU is running, read the status, otherwise
-	   just make it pass the test */
-	return m_k053260->k053260_r(space, 2 + offset);
+		return m_k051316->read(space, offset);
 }
 
 WRITE8_MEMBER(rollerg_state::soundirq_w)
@@ -85,7 +75,7 @@ READ8_MEMBER(rollerg_state::pip_r)
 static ADDRESS_MAP_START( rollerg_map, AS_PROGRAM, 8, rollerg_state )
 	AM_RANGE(0x0010, 0x0010) AM_WRITE(rollerg_0010_w)
 	AM_RANGE(0x0020, 0x0020) AM_READWRITE(watchdog_reset_r,watchdog_reset_w)
-	AM_RANGE(0x0030, 0x0031) AM_READ(rollerg_sound_r) AM_DEVWRITE("k053260", k053260_device, k053260_w)  /* K053260 */
+	AM_RANGE(0x0030, 0x0031) AM_DEVREADWRITE("k053260", k053260_device, main_read, main_write)
 	AM_RANGE(0x0040, 0x0040) AM_WRITE(soundirq_w)
 	AM_RANGE(0x0050, 0x0050) AM_READ_PORT("P1")
 	AM_RANGE(0x0051, 0x0051) AM_READ_PORT("P2")
@@ -93,12 +83,12 @@ static ADDRESS_MAP_START( rollerg_map, AS_PROGRAM, 8, rollerg_state )
 	AM_RANGE(0x0053, 0x0053) AM_READ_PORT("DSW1")
 	AM_RANGE(0x0060, 0x0060) AM_READ_PORT("DSW2")
 	AM_RANGE(0x0061, 0x0061) AM_READ(pip_r)             /* ????? */
-	AM_RANGE(0x0100, 0x010f) AM_DEVREADWRITE_LEGACY("k053252",k053252_r,k053252_w)      /* 053252? */
-	AM_RANGE(0x0200, 0x020f) AM_DEVWRITE_LEGACY("k051316", k051316_ctrl_w)
-	AM_RANGE(0x0300, 0x030f) AM_DEVREADWRITE_LEGACY("k053244", k053244_r, k053244_w)
-	AM_RANGE(0x0800, 0x0fff) AM_READ(rollerg_k051316_r) AM_DEVWRITE_LEGACY("k051316", k051316_w)
-	AM_RANGE(0x1000, 0x17ff) AM_DEVREADWRITE_LEGACY("k053244", k053245_r, k053245_w)
-	AM_RANGE(0x1800, 0x1fff) AM_RAM_WRITE(paletteram_xBBBBBGGGGGRRRRR_byte_be_w) AM_SHARE("paletteram")
+	AM_RANGE(0x0100, 0x010f) AM_DEVREADWRITE("k053252", k053252_device, read, write)      /* 053252? */
+	AM_RANGE(0x0200, 0x020f) AM_DEVWRITE("k051316", k051316_device, ctrl_w)
+	AM_RANGE(0x0300, 0x030f) AM_DEVREADWRITE("k053244", k05324x_device, k053244_r, k053244_w)
+	AM_RANGE(0x0800, 0x0fff) AM_READ(rollerg_k051316_r) AM_DEVWRITE("k051316", k051316_device, write)
+	AM_RANGE(0x1000, 0x17ff) AM_DEVREADWRITE("k053244", k05324x_device, k053245_r, k053245_w)
+	AM_RANGE(0x1800, 0x1fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x2000, 0x3aff) AM_RAM
 	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x8000, 0xffff) AM_ROM
@@ -107,7 +97,7 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( rollerg_sound_map, AS_PROGRAM, 8, rollerg_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
 	AM_RANGE(0x8000, 0x87ff) AM_RAM
-	AM_RANGE(0xa000, 0xa02f) AM_DEVREADWRITE("k053260", k053260_device, k053260_r, k053260_w)
+	AM_RANGE(0xa000, 0xa02f) AM_DEVREADWRITE("k053260", k053260_device, read, write)
 	AM_RANGE(0xc000, 0xc001) AM_DEVREADWRITE("ymsnd", ym3812_device, read, write)
 	AM_RANGE(0xfc00, 0xfc00) AM_WRITE(sound_arm_nmi_w)
 ADDRESS_MAP_END
@@ -219,37 +209,10 @@ INPUT_PORTS_END
 
 ***************************************************************************/
 
-static const k05324x_interface rollerg_k05324x_intf =
-{
-	"gfx1", 0,
-	NORMAL_PLANE_ORDER,
-	-3, -1,
-	KONAMI_ROM_DEINTERLEAVE_2,
-	rollerg_sprite_callback
-};
-
-static const k051316_interface rollerg_k051316_intf =
-{
-	"gfx2", 1,
-	4, FALSE, 0,
-	0, 22, 1,
-	rollerg_zoom_callback
-};
-
 WRITE_LINE_MEMBER(rollerg_state::rollerg_irq_ack_w)
 {
 	m_maincpu->set_input_line(0, CLEAR_LINE);
 }
-
-static const k053252_interface rollerg_k053252_intf =
-{
-	"screen",
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(rollerg_state,rollerg_irq_ack_w),
-	DEVCB_NULL,
-	14*8, 2*8
-};
 
 void rollerg_state::machine_start()
 {
@@ -264,38 +227,52 @@ void rollerg_state::machine_start()
 
 void rollerg_state::machine_reset()
 {
-	konami_configure_set_lines(m_maincpu, rollerg_banking);
-
 	m_readzoomroms = 0;
 }
+
+WRITE8_MEMBER( rollerg_state::banking_callback )
+{
+	membank("bank1")->set_entry(data & 0x07);
+}
+
 
 static MACHINE_CONFIG_START( rollerg, rollerg_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", KONAMI, 3000000)        /* ? */
 	MCFG_CPU_PROGRAM_MAP(rollerg_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", rollerg_state,  irq0_line_assert)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", rollerg_state, irq0_line_assert)
+	MCFG_KONAMICPU_LINE_CB(WRITE8(rollerg_state, banking_callback))
 
 	MCFG_CPU_ADD("audiocpu", Z80, 3579545)
-	MCFG_CPU_PROGRAM_MAP(rollerg_sound_map)
-								/* NMIs are generated by the 053260 */
+	MCFG_CPU_PROGRAM_MAP(rollerg_sound_map) /* NMIs are generated by the 053260 */
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_HAS_SHADOWS)
-
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(14*8, (64-14)*8-1, 2*8, 30*8-1 )
 	MCFG_SCREEN_UPDATE_DRIVER(rollerg_state, screen_update_rollerg)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(1024)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_ENABLE_SHADOWS()
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
 
+	MCFG_DEVICE_ADD("k053244", K053244, 0)
+	MCFG_GFX_PALETTE("palette")
+	MCFG_K05324X_OFFSETS(-3, -1)
+	MCFG_K05324X_CB(rollerg_state, sprite_callback)
 
-	MCFG_K053244_ADD("k053244", rollerg_k05324x_intf)
-	MCFG_K051316_ADD("k051316", rollerg_k051316_intf)
-	MCFG_K053252_ADD("k053252", 3000000*2, rollerg_k053252_intf)
+	MCFG_DEVICE_ADD("k051316", K051316, 0)
+	MCFG_GFX_PALETTE("palette")
+	MCFG_K051316_OFFSETS(22, 1)
+	MCFG_K051316_CB(rollerg_state, zoom_callback)
+
+	MCFG_DEVICE_ADD("k053252", K053252, 3000000*2)
+	MCFG_K053252_INT1_ACK_CB(WRITELINE(rollerg_state,rollerg_irq_ack_w))
+	MCFG_K053252_OFFSETS(14*8, 2*8)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -323,11 +300,11 @@ ROM_START( rollerg )
 	ROM_REGION( 0x10000, "audiocpu", 0 ) /* 64k for the sound CPU */
 	ROM_LOAD( "999m01.e11", 0x0000, 0x8000, CRC(1fcfb22f) SHA1(ef058a7de6ba7cf310b91975345113acc6078f8a) )
 
-	ROM_REGION( 0x200000, "gfx1", 0 ) /* graphics ( don't dispose as the program can read them, 0 ) */
-	ROM_LOAD( "999h06.k2",  0x000000, 0x100000, CRC(eda05130) SHA1(b52073a4a4651035d5f1e112601ceb2d004b2143) ) /* sprites */
-	ROM_LOAD( "999h05.k8",  0x100000, 0x100000, CRC(5f321c7d) SHA1(d60a3480891b83ac109f2fecfe2b958bac310c15) )
+	ROM_REGION( 0x200000, "k053244", 0 )
+	ROM_LOAD32_WORD( "999h06.k2", 0x000000, 0x100000, CRC(eda05130) SHA1(b52073a4a4651035d5f1e112601ceb2d004b2143) ) /* sprites */
+	ROM_LOAD32_WORD( "999h05.k8", 0x000002, 0x100000, CRC(5f321c7d) SHA1(d60a3480891b83ac109f2fecfe2b958bac310c15) )
 
-	ROM_REGION( 0x080000, "gfx2", 0 ) /* graphics ( don't dispose as the program can read them, 0 ) */
+	ROM_REGION( 0x080000, "k051316", 0 )
 	ROM_LOAD( "999h03.d23", 0x000000, 0x040000, CRC(ea1edbd2) SHA1(a17d19f873384287e1e47222d46274e7408b40d4) ) /* zoom */
 	ROM_LOAD( "999h04.f23", 0x040000, 0x040000, CRC(c1a35355) SHA1(615606d30500a8f2be19171893e985b085fff2fc) )
 
@@ -343,11 +320,11 @@ ROM_START( rollergj )
 	ROM_REGION( 0x10000, "audiocpu", 0 ) /* 64k for the sound CPU */
 	ROM_LOAD( "999m01.e11", 0x0000, 0x8000, CRC(1fcfb22f) SHA1(ef058a7de6ba7cf310b91975345113acc6078f8a) )
 
-	ROM_REGION( 0x200000, "gfx1", 0 ) /* graphics ( don't dispose as the program can read them, 0 ) */
-	ROM_LOAD( "999h06.k2",  0x000000, 0x100000, CRC(eda05130) SHA1(b52073a4a4651035d5f1e112601ceb2d004b2143) ) /* sprites */
-	ROM_LOAD( "999h05.k8",  0x100000, 0x100000, CRC(5f321c7d) SHA1(d60a3480891b83ac109f2fecfe2b958bac310c15) )
+	ROM_REGION( 0x200000, "k053244", 0 )
+	ROM_LOAD32_WORD( "999h06.k2", 0x000000, 0x100000, CRC(eda05130) SHA1(b52073a4a4651035d5f1e112601ceb2d004b2143) ) /* sprites */
+	ROM_LOAD32_WORD( "999h05.k8", 0x000002, 0x100000, CRC(5f321c7d) SHA1(d60a3480891b83ac109f2fecfe2b958bac310c15) )
 
-	ROM_REGION( 0x080000, "gfx2", 0 ) /* graphics ( don't dispose as the program can read them, 0 ) */
+	ROM_REGION( 0x080000, "k051316", 0 )
 	ROM_LOAD( "999h03.d23", 0x000000, 0x040000, CRC(ea1edbd2) SHA1(a17d19f873384287e1e47222d46274e7408b40d4) ) /* zoom */
 	ROM_LOAD( "999h04.f23", 0x040000, 0x040000, CRC(c1a35355) SHA1(615606d30500a8f2be19171893e985b085fff2fc) )
 
@@ -362,12 +339,6 @@ ROM_END
   Game driver(s)
 
 ***************************************************************************/
-
-static KONAMI_SETLINES_CALLBACK( rollerg_banking )
-{
-	device->machine().root_device().membank("bank1")->set_entry(lines & 0x07);
-}
-
 
 GAME( 1991, rollerg,  0,       rollerg, rollerg, driver_device, 0, ROT0, "Konami", "Rollergames (US)", GAME_SUPPORTS_SAVE )
 GAME( 1991, rollergj, rollerg, rollerg, rollerg, driver_device, 0, ROT0, "Konami", "Rollergames (Japan)", GAME_SUPPORTS_SAVE )

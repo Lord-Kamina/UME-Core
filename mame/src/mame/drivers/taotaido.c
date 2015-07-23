@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /***************************************************************************
 
   Tao Taido             (c) 1993 Video System
@@ -73,6 +75,14 @@ zooming might be wrong
 #define TAOTAIDO_SHOW_ALL_INPUTS    0
 
 
+void taotaido_state::machine_start()
+{
+	membank("soundbank")->configure_entries(0, 4, memregion("audiocpu")->base(), 0x8000);
+
+	save_item(NAME(m_pending_command));
+}
+
+
 READ16_MEMBER(taotaido_state::pending_command_r)
 {
 	/* Only bit 0 is tested */
@@ -90,11 +100,11 @@ WRITE16_MEMBER(taotaido_state::sound_command_w)
 }
 static ADDRESS_MAP_START( main_map, AS_PROGRAM, 16, taotaido_state )
 	AM_RANGE(0x000000, 0x0fffff) AM_ROM
-	AM_RANGE(0x800000, 0x803fff) AM_RAM_WRITE(taotaido_bgvideoram_w) AM_SHARE("bgram")  // bg ram?
+	AM_RANGE(0x800000, 0x803fff) AM_RAM_WRITE(bgvideoram_w) AM_SHARE("bgram")  // bg ram?
 	AM_RANGE(0xa00000, 0xa01fff) AM_RAM AM_SHARE("spriteram")       // sprite ram
 	AM_RANGE(0xc00000, 0xc0ffff) AM_RAM AM_SHARE("spriteram2")      // sprite tile lookup ram
 	AM_RANGE(0xfe0000, 0xfeffff) AM_RAM                                     // main ram
-	AM_RANGE(0xffc000, 0xffcfff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")    // palette ram
+	AM_RANGE(0xffc000, 0xffcfff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    // palette ram
 	AM_RANGE(0xffe000, 0xffe3ff) AM_RAM AM_SHARE("scrollram")       // rowscroll / rowselect / scroll ram
 	AM_RANGE(0xffff80, 0xffff81) AM_READ_PORT("P1")
 	AM_RANGE(0xffff82, 0xffff83) AM_READ_PORT("P2")
@@ -106,10 +116,10 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 16, taotaido_state )
 	AM_RANGE(0xffff8e, 0xffff8f) AM_READ_PORT("JP")
 	AM_RANGE(0xffffa0, 0xffffa1) AM_READ_PORT("P3")                     // used only by taotaida
 	AM_RANGE(0xffffa2, 0xffffa3) AM_READ_PORT("P4")                     // used only by taotaida
-	AM_RANGE(0xffff00, 0xffff0f) AM_WRITE(taotaido_tileregs_w)
+	AM_RANGE(0xffff00, 0xffff0f) AM_WRITE(tileregs_w)
 	AM_RANGE(0xffff10, 0xffff11) AM_WRITENOP                        // unknown
 	AM_RANGE(0xffff20, 0xffff21) AM_WRITENOP                        // unknown - flip screen related
-	AM_RANGE(0xffff40, 0xffff47) AM_WRITE(taotaido_sprite_character_bank_select_w)
+	AM_RANGE(0xffff40, 0xffff47) AM_WRITE(sprite_character_bank_select_w)
 	AM_RANGE(0xffffc0, 0xffffc1) AM_WRITE(sound_command_w)              // seems right
 	AM_RANGE(0xffffe0, 0xffffe1) AM_READ(pending_command_r) // guess - seems to be needed for all the sounds to work
 ADDRESS_MAP_END
@@ -122,23 +132,21 @@ WRITE8_MEMBER(taotaido_state::pending_command_clear_w)
 	m_pending_command = 0;
 }
 
-WRITE8_MEMBER(taotaido_state::taotaido_sh_bankswitch_w)
+WRITE8_MEMBER(taotaido_state::sh_bankswitch_w)
 {
-	UINT8 *rom = memregion("audiocpu")->base() + 0x10000;
-
-	membank("bank1")->set_base(rom + (data & 0x03) * 0x8000);
+	membank("soundbank")->set_entry(data & 0x03);
 }
 
 static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, taotaido_state )
 	AM_RANGE(0x0000, 0x77ff) AM_ROM
 	AM_RANGE(0x7800, 0x7fff) AM_RAM
-	AM_RANGE(0x8000, 0xffff) AM_ROMBANK("bank1")
+	AM_RANGE(0x8000, 0xffff) AM_ROMBANK("soundbank")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( sound_port_map, AS_IO, 8, taotaido_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x03) AM_DEVREADWRITE("ymsnd", ym2610_device, read, write)
-	AM_RANGE(0x04, 0x04) AM_WRITE(taotaido_sh_bankswitch_w)
+	AM_RANGE(0x04, 0x04) AM_WRITE(sh_bankswitch_w)
 	AM_RANGE(0x08, 0x08) AM_WRITE(pending_command_clear_w)
 	AM_RANGE(0x0c, 0x0c) AM_READ(soundlatch_byte_r)
 ADDRESS_MAP_END
@@ -279,7 +287,22 @@ static INPUT_PORTS_START( taotaido )
 	/* 0x09 to 0x0f : DEF_STR( Japan ) */
 INPUT_PORTS_END
 
-static INPUT_PORTS_START( taotaida )
+static INPUT_PORTS_START( taotaido3 )
+	PORT_INCLUDE(taotaido)
+
+	PORT_MODIFY("P1")
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(1)
+
+	PORT_MODIFY("P2")
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(2)
+
+	PORT_MODIFY("DSW3")
+	PORT_DIPNAME( 0x04, 0x04, "Number of Buttons" )
+	PORT_DIPSETTING(    0x00, "2" )
+	PORT_DIPSETTING(    0x04, "3" )
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( taotaido6 )
 	PORT_INCLUDE(taotaido)
 
 	PORT_MODIFY("P1")
@@ -299,10 +322,24 @@ static INPUT_PORTS_START( taotaida )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(2)
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(2)
 	PORT_BIT( 0xf8, IP_ACTIVE_LOW, IPT_UNKNOWN )
+
+	PORT_MODIFY("DSW3")
+	PORT_DIPNAME( 0x08, 0x08, "Debug Info 1" )
+	PORT_DIPSETTING(    0x08, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x10, 0x10, "Debug Info 2" )
+	PORT_DIPSETTING(    0x10, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x20, 0x20, "Debug Info 3" )
+	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x40, 0x40, "Debug Info 4" )
+	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 INPUT_PORTS_END
 
 
-static const gfx_layout taotaido_layout =
+static const gfx_layout layout =
 {
 	16,16,
 	RGN_FRAC(1,1),
@@ -316,14 +353,9 @@ static const gfx_layout taotaido_layout =
 };
 
 static GFXDECODE_START( taotaido )
-	GFXDECODE_ENTRY( "gfx1", 0, taotaido_layout,  0x000, 256  ) /* sprites */
-	GFXDECODE_ENTRY( "gfx2", 0, taotaido_layout,  0x300, 256  ) /* bg tiles */
+	GFXDECODE_ENTRY( "gfx1", 0, layout,  0x000, 256  ) /* sprites */
+	GFXDECODE_ENTRY( "gfx2", 0, layout,  0x300, 256  ) /* bg tiles */
 GFXDECODE_END
-
-WRITE_LINE_MEMBER(taotaido_state::irqhandler)
-{
-	m_audiocpu->set_input_line(0, state ? ASSERT_LINE : CLEAR_LINE);
-}
 
 
 
@@ -337,27 +369,31 @@ static MACHINE_CONFIG_START( taotaido, taotaido_state )
 	MCFG_CPU_IO_MAP(sound_port_map)
 								/* IRQs are triggered by the YM2610 */
 
-	MCFG_GFXDECODE(taotaido)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", taotaido)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(40*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 0*8, 28*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(taotaido_state, screen_update_taotaido)
-	MCFG_SCREEN_VBLANK_DRIVER(taotaido_state, screen_eof_taotaido)
+	MCFG_SCREEN_UPDATE_DRIVER(taotaido_state, screen_update)
+	MCFG_SCREEN_VBLANK_DRIVER(taotaido_state, screen_eof)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x800)
+	MCFG_PALETTE_ADD("palette", 0x800)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	MCFG_DEVICE_ADD("vsystem_spr", VSYSTEM_SPR, 0)
-	MCFG_VSYSTEM_SPR_SET_TILE_INDIRECT( taotaido_state, taotaido_tile_callback )
+	MCFG_VSYSTEM_SPR_SET_TILE_INDIRECT( taotaido_state, tile_callback )
 	MCFG_VSYSTEM_SPR_SET_GFXREGION(0)
+	MCFG_VSYSTEM_SPR_GFXDECODE("gfxdecode")
+	MCFG_VSYSTEM_SPR_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_ADD("ymsnd", YM2610, 8000000)
-	MCFG_YM2610_IRQ_HANDLER(WRITELINE(taotaido_state, irqhandler))
+	MCFG_YM2610_IRQ_HANDLER(INPUTLINE("audiocpu", 0))
 	MCFG_SOUND_ROUTE(0, "lspeaker",  0.25)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 0.25)
 	MCFG_SOUND_ROUTE(1, "lspeaker",  1.0)
@@ -370,9 +406,8 @@ ROM_START( taotaido )
 	ROM_LOAD16_WORD_SWAP( "1-u90.bin", 0x00000, 0x80000, CRC(a3ee30da) SHA1(920a83ce9192bf785bffdc041e280f1a420de4c9) )
 	ROM_LOAD16_WORD_SWAP( "2-u91.bin", 0x80000, 0x80000, CRC(30b7e4fb) SHA1(15e1f6d252c736fdee33b691a0a1a45f0307bffb) )
 
-	ROM_REGION( 0x30000, "audiocpu", 0 ) /* z80 Code */
+	ROM_REGION( 0x20000, "audiocpu", 0 ) /* z80 Code */
 	ROM_LOAD( "3-u113.bin", 0x000000, 0x20000, CRC(a167c4e4) SHA1(d32184e7040935cd440d4d82c66491b710ec87a8) )
-	ROM_RELOAD ( 0x10000, 0x20000 )
 
 	ROM_REGION( 0x100000, "ymsnd.deltat", 0 ) /* sound samples */
 	ROM_LOAD( "u104.bin",     0x000000, 0x100000, CRC(e89387a9) SHA1(1deeee056af367d1a5aa0722dd3d6c68a82d0489) )
@@ -394,9 +429,8 @@ ROM_START( taotaidoa )
 	ROM_LOAD16_WORD_SWAP( "tt0-u90.bin", 0x00000, 0x80000, CRC(69d4cca7) SHA1(f1aba74fef8fe4271d19763f428fc0e2674d08b3) )
 	ROM_LOAD16_WORD_SWAP( "tt1-u91.bin", 0x80000, 0x80000, CRC(41025469) SHA1(fa3a424ca3ecb513f418e436e4191ff76f6a0de1) )
 
-	ROM_REGION( 0x30000, "audiocpu", 0 ) /* z80 Code */
+	ROM_REGION( 0x20000, "audiocpu", 0 ) /* z80 Code */
 	ROM_LOAD( "3-u113.bin", 0x000000, 0x20000, CRC(a167c4e4) SHA1(d32184e7040935cd440d4d82c66491b710ec87a8) )
-	ROM_RELOAD ( 0x10000, 0x20000 )
 
 	ROM_REGION( 0x100000, "ymsnd.deltat", 0 ) /* sound samples */
 	ROM_LOAD( "u104.bin",     0x000000, 0x100000, CRC(e89387a9) SHA1(1deeee056af367d1a5aa0722dd3d6c68a82d0489) )
@@ -413,5 +447,29 @@ ROM_START( taotaidoa )
 	ROM_LOAD( "u15.bin", 0x000000, 0x200000, CRC(e95823e9) SHA1(362583944ad4fdde4f9e29928cf34376c7ad931f) )
 ROM_END
 
-GAME( 1993, taotaido, 0,        taotaido, taotaido, driver_device, 0, ROT0, "Video System Co.", "Tao Taido (set 1)", GAME_NO_COCKTAIL )
-GAME( 1993, taotaidoa,taotaido, taotaido, taotaida, driver_device, 0, ROT0, "Video System Co.", "Tao Taido (set 2)", GAME_NO_COCKTAIL )
+ROM_START( taotaido3 )
+	ROM_REGION( 0x100000, "maincpu", 0 ) /* 68000 Code */
+	ROM_LOAD16_WORD_SWAP( "1.u90", 0x00000, 0x80000, CRC(27c5c626) SHA1(f2aea45a15db24c914aa889be21cd8994d138a59) )
+	ROM_LOAD16_WORD_SWAP( "2.u91", 0x80000, 0x80000, CRC(71a4e538) SHA1(608c2d77aa8c1c4bb39a419bdfdf73a2fd587403) )
+
+	ROM_REGION( 0x20000, "audiocpu", 0 ) /* z80 Code */
+	ROM_LOAD( "3-u113.bin", 0x000000, 0x20000, CRC(a167c4e4) SHA1(d32184e7040935cd440d4d82c66491b710ec87a8) )
+
+	ROM_REGION( 0x100000, "ymsnd.deltat", 0 ) /* sound samples */
+	ROM_LOAD( "u104.bin",     0x000000, 0x100000, CRC(e89387a9) SHA1(1deeee056af367d1a5aa0722dd3d6c68a82d0489) )
+
+	ROM_REGION( 0x200000, "ymsnd", 0 ) /* sound samples */
+	ROM_LOAD( "u127.bin",     0x00000, 0x200000, CRC(0cf0cb23) SHA1(a87e7159db2fa0d50446cbf45ec9fbf585b8f396) )
+
+	ROM_REGION( 0x600000, "gfx1", 0 ) /* Sprites */
+	ROM_LOAD( "u86.bin", 0x000000, 0x200000, CRC(908e251e) SHA1(5a135787f3263bfb195f8fd1e814c580d840531f) )
+	ROM_LOAD( "u87.bin", 0x200000, 0x200000, CRC(c4290ba6) SHA1(4132ffad4668f1dd3f708f009e18435e7dd60120) )
+	ROM_LOAD( "u88.bin", 0x400000, 0x200000, CRC(407d9aeb) SHA1(d532c7b80f6c192dba86542fb6eb3ef24fbbbdb9) )
+
+	ROM_REGION( 0x200000, "gfx2", 0 ) /* BG Tiles */
+	ROM_LOAD( "u15.bin", 0x000000, 0x200000, CRC(e95823e9) SHA1(362583944ad4fdde4f9e29928cf34376c7ad931f) )
+ROM_END
+
+GAME( 1993, taotaido, 0,        taotaido, taotaido, driver_device, 0, ROT0, "Video System Co.", "Tao Taido (2 button version)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1993, taotaidoa,taotaido, taotaido, taotaido6,driver_device, 0, ROT0, "Video System Co.", "Tao Taido (6 button version)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE  ) // maybe a prototype? has various debug features
+GAME( 1993, taotaido3,taotaido, taotaido, taotaido3,driver_device, 0, ROT0, "Video System Co.", "Tao Taido (2/3 button version)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE  )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Balfour, Aaron Giles
 /***************************************************************************
 
     Atari Cloud 9 (prototype) hardware
@@ -116,7 +118,7 @@ inline void cloud9_state::schedule_next_irq(int curscanline)
 	curscanline = (curscanline + 64) & 255;
 
 	/* next one at the start of this scanline */
-	m_irq_timer->adjust(machine().primary_screen->time_until_pos(curscanline), curscanline);
+	m_irq_timer->adjust(m_screen->time_until_pos(curscanline), curscanline);
 }
 
 
@@ -130,7 +132,7 @@ TIMER_CALLBACK_MEMBER(cloud9_state::clock_irq)
 	}
 
 	/* force an update now */
-	machine().primary_screen->update_partial(machine().primary_screen->vpos());
+	m_screen->update_partial(m_screen->vpos());
 
 	/* find the next edge */
 	schedule_next_irq(param);
@@ -139,7 +141,7 @@ TIMER_CALLBACK_MEMBER(cloud9_state::clock_irq)
 
 CUSTOM_INPUT_MEMBER(cloud9_state::get_vblank)
 {
-	int scanline = machine().primary_screen->vpos();
+	int scanline = m_screen->vpos();
 	return (~m_syncprom[scanline & 0xff] >> 1) & 1;
 }
 
@@ -175,7 +177,7 @@ void cloud9_state::machine_start()
 
 	/* reconfigure the visible area to match */
 	visarea.set(0, 255, m_vblank_end + 1, m_vblank_start);
-	machine().primary_screen->configure(320, 256, visarea, HZ_TO_ATTOSECONDS(PIXEL_CLOCK) * VTOTAL * HTOTAL);
+	m_screen->configure(320, 256, visarea, HZ_TO_ATTOSECONDS(PIXEL_CLOCK) * VTOTAL * HTOTAL);
 
 	/* create a timer for IRQs and set up the first callback */
 	m_irq_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(cloud9_state::clock_irq),this));
@@ -393,21 +395,6 @@ static GFXDECODE_START( cloud9 )
 GFXDECODE_END
 
 
-
-/*************************************
- *
- *  Sound interfaces
- *
- *************************************/
-
-static const pokey_interface pokey_config =
-{
-	{ DEVCB_NULL },
-	DEVCB_INPUT_PORT("DSW"),
-};
-
-
-
 /*************************************
  *
  *  Machine driver
@@ -425,8 +412,8 @@ static MACHINE_CONFIG_START( cloud9, cloud9_state )
 	MCFG_X2212_ADD_AUTOSAVE("nvram")
 
 	/* video hardware */
-	MCFG_GFXDECODE(cloud9)
-	MCFG_PALETTE_LENGTH(64)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", cloud9)
+	MCFG_PALETTE_ADD("palette", 64)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE((float)PIXEL_CLOCK / (float)VTOTAL / (float)HTOTAL)
@@ -434,16 +421,16 @@ static MACHINE_CONFIG_START( cloud9, cloud9_state )
 	MCFG_SCREEN_VBLANK_TIME(0)          /* VBLANK is handled manually */
 	MCFG_SCREEN_VISIBLE_AREA(0, 255, 0, 231)
 	MCFG_SCREEN_UPDATE_DRIVER(cloud9_state, screen_update_cloud9)
-
+	MCFG_SCREEN_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_POKEY_ADD("pokey1", MASTER_CLOCK/8)
+	MCFG_SOUND_ADD("pokey1", POKEY, MASTER_CLOCK/8)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
-	MCFG_POKEY_ADD("pokey2", MASTER_CLOCK/8)
-	MCFG_POKEY_CONFIG(pokey_config)
+	MCFG_SOUND_ADD("pokey2", POKEY, MASTER_CLOCK/8)
+	MCFG_POKEY_ALLPOT_R_CB(IOPORT("DSW"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 

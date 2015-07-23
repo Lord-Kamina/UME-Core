@@ -1,11 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles,Nicola Salmoria
 /***************************************************************************
 
     romcmp.c
 
     ROM comparison utility program.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 ***************************************************************************/
 
@@ -17,7 +16,7 @@
 #include <stdlib.h>
 
 
-#define MAX_FILES 100
+#define MAX_FILES 1000
 
 #ifndef MAX_FILENAME_LEN
 #define MAX_FILENAME_LEN 255
@@ -444,9 +443,9 @@ static void freefile(fileinfo *file)
 static void printname(const fileinfo *file1,const fileinfo *file2,float score,int mode1,int mode2)
 {
 	printf("%-12s %s %-12s %s ",file1 ? file1->name : "",modenames[mode1],file2 ? file2->name : "",modenames[mode2]);
-	if (score == 0.0) printf("NO MATCH\n");
-	else if (score == 1.0) printf("IDENTICAL\n");
-	else printf("%3.6f%%\n",score*100);
+	if (score == 0.0f) printf("NO MATCH\n");
+	else if (score == 1.0f) printf("IDENTICAL\n");
+	else printf("%3.6f%%\n",(double) (score*100));
 }
 
 
@@ -471,9 +470,9 @@ static int load_files(int i, int *found, const char *path)
 			{
 				UINT64 size = d->size;
 				while (size && (size & 1) == 0) size >>= 1;
-				if (size & ~1)
-					printf("%-23s %-23s ignored (not a ROM)\n",i ? "" : d_name,i ? d_name : "");
-				else
+				//if (size & ~1)
+				//  printf("%-23s %-23s ignored (not a ROM)\n",i ? "" : d_name,i ? d_name : "");
+				//else
 				{
 					strcpy(files[i][found[i]].name,d_name);
 					files[i][found[i]].size = d->size;
@@ -513,7 +512,7 @@ static int load_files(int i, int *found, const char *path)
 
 			size = zipent->uncompressed_length;
 			while (size && (size & 1) == 0) size >>= 1;
-			if (zipent->uncompressed_length == 0 || (size & ~1))
+			if (zipent->uncompressed_length == 0) // || (size & ~1))
 				printf("%-23s %-23s ignored (not a ROM)\n",
 					i ? "" : zipent->filename, i ? zipent->filename : "");
 			else
@@ -614,7 +613,7 @@ int CLIB_DECL main(int argc,char *argv[])
 					{
 						for (mode2 = 0;mode2 < total_modes;mode2++)
 						{
-							if (filecompare(&files[0][i],&files[0][j],mode1,mode2) == 1.0)
+							if (filecompare(&files[0][i],&files[0][j],mode1,mode2) == 1.0f)
 								printname(&files[0][i],&files[0][j],1.0,mode1,mode2);
 						}
 					}
@@ -659,7 +658,7 @@ int CLIB_DECL main(int argc,char *argv[])
 							for (j = 0;j < found[1];j++)
 							{
 								if (matchscore[i][j][mode1][mode2] > bestscore
-									|| (matchscore[i][j][mode1][mode2] == 1.0 && mode2 == 0 && bestmode2 > 0))
+									|| (matchscore[i][j][mode1][mode2] == 1.0f && mode2 == 0 && bestmode2 > 0))
 								{
 									bestscore = matchscore[i][j][mode1][mode2];
 									besti = i;

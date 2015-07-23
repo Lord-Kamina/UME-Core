@@ -1,7 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 /*
  * PlayStation GPU emulator
  *
- * Copyright 2003-2013 smf
+ * Copyright 2003-2014 smf
  *
  */
 
@@ -13,7 +15,7 @@
 #include "emu.h"
 
 #define MCFG_PSX_GPU_VBLANK_HANDLER(_devcb) \
-	devcb = &psxgpu_device::set_vblank_handler(*device, DEVCB2_##_devcb);
+	devcb = &psxgpu_device::set_vblank_handler(*device, DEVCB_##_devcb);
 
 #define MCFG_PSXGPU_ADD( cputag, tag, type, _vramSize, clock ) \
 	MCFG_DEVICE_MODIFY( cputag ) \
@@ -187,11 +189,11 @@ class psxgpu_device : public device_t
 {
 public:
 	// construction/destruction
-	psxgpu_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	psxgpu_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 	virtual machine_config_constructor device_mconfig_additions() const;
 
 	// static configuration helpers
-	template<class _Object> static devcb2_base &set_vblank_handler(device_t &device, _Object object) { return downcast<psxgpu_device &>(device).m_vblank_handler.set_callback(object); }
+	template<class _Object> static devcb_base &set_vblank_handler(device_t &device, _Object object) { return downcast<psxgpu_device &>(device).m_vblank_handler.set_callback(object); }
 
 	UINT32 update_screen(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	DECLARE_WRITE32_MEMBER( write );
@@ -201,11 +203,13 @@ public:
 	void lightgun_set( int, int );
 	int vramSize;
 	void vblank(screen_device &screen, bool vblank_state);
+	DECLARE_PALETTE_INIT( psx );
 
 protected:
 	virtual void device_start();
 	virtual void device_reset();
 
+private:
 	void updatevisiblearea();
 	void decode_tpage( UINT32 tpage );
 	void FlatPolygon( int n_points );
@@ -227,15 +231,6 @@ protected:
 	void gpu_reset();
 	void gpu_read( UINT32 *p_ram, INT32 n_size );
 	void gpu_write( UINT32 *p_ram, INT32 n_size );
-
-#if defined( MAME_DEBUG )
-	void DebugMeshInit( void );
-	void DebugMesh( int n_coordx, int n_coordy );
-	void DebugMeshEnd( void );
-	void DebugCheckKeys( void );
-	int DebugMeshDisplay( bitmap_ind16 &bitmap, const rectangle &cliprect );
-	int DebugTextureDisplay( bitmap_ind16 &bitmap );
-#endif
 
 	INT32 m_n_tx;
 	INT32 m_n_ty;
@@ -276,8 +271,6 @@ protected:
 
 	PACKET m_packet;
 
-	psx_gpu_debug m_debug;
-
 	UINT16 *p_p_vram[ 1024 ];
 
 	UINT16 p_n_redshade[ MAX_LEVEL * MAX_SHADE ];
@@ -308,7 +301,19 @@ protected:
 	UINT16 p_n_r1[ 0x10000 ];
 	UINT16 p_n_b1g1[ 0x10000 ];
 
-	devcb2_write_line m_vblank_handler;
+	devcb_write_line m_vblank_handler;
+
+#if defined(DEBUG_VIEWER) && DEBUG_VIEWER
+	required_device<screen_device> m_screen;
+	void DebugMeshInit( void );
+	void DebugMesh( int n_coordx, int n_coordy );
+	void DebugMeshEnd( void );
+	void DebugCheckKeys( void );
+	int DebugMeshDisplay( bitmap_ind16 &bitmap, const rectangle &cliprect );
+	int DebugTextureDisplay( bitmap_ind16 &bitmap );
+
+	psx_gpu_debug m_debug;
+#endif
 };
 
 class cxd8514q_device : public psxgpu_device

@@ -1,15 +1,14 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, ???
 #include "emu.h"
 #include "includes/scotrsht.h"
 
 
 /* Similar as Iron Horse */
-void scotrsht_state::palette_init()
+PALETTE_INIT_MEMBER(scotrsht_state, scotrsht)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
-
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
 
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x100; i++)
@@ -18,7 +17,7 @@ void scotrsht_state::palette_init()
 		int g = pal4bit(color_prom[i + 0x100]);
 		int b = pal4bit(color_prom[i + 0x200]);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* color_prom now points to the beginning of the lookup table */
@@ -32,24 +31,24 @@ void scotrsht_state::palette_init()
 		for (j = 0; j < 8; j++)
 		{
 			UINT8 ctabentry = ((~i & 0x100) >> 1) | (j << 4) | (color_prom[i] & 0x0f);
-			colortable_entry_set_value(machine().colortable, ((i & 0x100) << 3) | (j << 8) | (i & 0xff), ctabentry);
+			palette.set_pen_indirect(((i & 0x100) << 3) | (j << 8) | (i & 0xff), ctabentry);
 		}
 	}
 }
 
-WRITE8_MEMBER(scotrsht_state::scotrsht_videoram_w)
+WRITE8_MEMBER(scotrsht_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(scotrsht_state::scotrsht_colorram_w)
+WRITE8_MEMBER(scotrsht_state::colorram_w)
 {
 	m_colorram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(scotrsht_state::scotrsht_charbank_w)
+WRITE8_MEMBER(scotrsht_state::charbank_w)
 {
 	if (m_charbank != (data & 0x01))
 	{
@@ -60,7 +59,7 @@ WRITE8_MEMBER(scotrsht_state::scotrsht_charbank_w)
 	/* other bits unknown */
 }
 
-WRITE8_MEMBER(scotrsht_state::scotrsht_palettebank_w)
+WRITE8_MEMBER(scotrsht_state::palettebank_w)
 {
 	if (m_palette_bank != ((data & 0x70) >> 4))
 	{
@@ -75,7 +74,7 @@ WRITE8_MEMBER(scotrsht_state::scotrsht_palettebank_w)
 }
 
 
-TILE_GET_INFO_MEMBER(scotrsht_state::scotrsht_get_bg_tile_info)
+TILE_GET_INFO_MEMBER(scotrsht_state::get_bg_tile_info)
 {
 	int attr = m_colorram[tile_index];
 	int code = m_videoram[tile_index] + (m_charbank << 9) + ((attr & 0x40) << 2);
@@ -93,18 +92,15 @@ TILE_GET_INFO_MEMBER(scotrsht_state::scotrsht_get_bg_tile_info)
 /* Same as Jailbreak + palette bank */
 void scotrsht_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	UINT8 *spriteram = m_spriteram;
-	int i;
-
-	for (i = 0; i < m_spriteram.bytes(); i += 4)
+	for (int i = 0; i < m_spriteram.bytes(); i += 4)
 	{
-		int attr = spriteram[i + 1];    // attributes = ?tyxcccc
-		int code = spriteram[i] + ((attr & 0x40) << 2);
+		int attr = m_spriteram[i + 1];    // attributes = ?tyxcccc
+		int code = m_spriteram[i] + ((attr & 0x40) << 2);
 		int color = (attr & 0x0f) + m_palette_bank * 16;
 		int flipx = attr & 0x10;
 		int flipy = attr & 0x20;
-		int sx = spriteram[i + 2] - ((attr & 0x80) << 1);
-		int sy = spriteram[i + 3];
+		int sx = m_spriteram[i + 2] - ((attr & 0x80) << 1);
+		int sy = m_spriteram[i + 3];
 
 		if (flip_screen())
 		{
@@ -114,27 +110,29 @@ void scotrsht_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 			flipy = !flipy;
 		}
 
-		drawgfx_transmask(bitmap, cliprect, machine().gfx[1], code, color, flipx, flipy,
+		m_gfxdecode->gfx(1)->transmask(bitmap,cliprect, code, color, flipx, flipy,
 			sx, sy,
-			colortable_get_transpen_mask(machine().colortable, machine().gfx[1], color, m_palette_bank * 16));
+			m_palette->transpen_mask(*m_gfxdecode->gfx(1), color, m_palette_bank * 16));
 	}
 }
 
 void scotrsht_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(scotrsht_state::scotrsht_get_bg_tile_info),this), TILEMAP_SCAN_ROWS,  8, 8, 64, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(scotrsht_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,  8, 8, 64, 32);
 
 	m_bg_tilemap->set_scroll_cols(64);
+
+	save_item(NAME(m_irq_enable));
+	save_item(NAME(m_charbank));
+	save_item(NAME(m_palette_bank));
 }
 
-UINT32 scotrsht_state::screen_update_scotrsht(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 scotrsht_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	int col;
-
-	for (col = 0; col < 32; col++)
+	for (int col = 0; col < 32; col++)
 		m_bg_tilemap->set_scrolly(col, m_scroll[col]);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }

@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Juergen Buchmueller
 /***************************************************************************
  *  Microtan 65
  *
@@ -40,7 +42,7 @@ TILE_GET_INFO_MEMBER(microtan_state::get_bg_tile_info)
 
 void microtan_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(microtan_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(microtan_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
 		8, 16, 32, 16);
 
 	m_chunky_buffer = auto_alloc_array(machine(), UINT8, 0x200);
@@ -50,6 +52,6 @@ void microtan_state::video_start()
 
 UINT32 microtan_state::screen_update_microtan(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

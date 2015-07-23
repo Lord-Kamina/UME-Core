@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
     coco_vhd.c
@@ -70,7 +72,7 @@ const device_type COCO_VHD = &device_creator<coco_vhd_image_device>;
 //-------------------------------------------------
 
 coco_vhd_image_device::coco_vhd_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, COCO_VHD, "Virtual Hard Disk", tag, owner, clock),
+	: device_t(mconfig, COCO_VHD, "Virtual Hard Disk", tag, owner, clock, "coco_vhd_image", __FILE__),
 		device_image_interface(mconfig, *this)
 {
 }

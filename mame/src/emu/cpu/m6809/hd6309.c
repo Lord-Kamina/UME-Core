@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods,Tim Lindner
 /*********************************************************************
 
     hd6309.c
@@ -126,7 +128,7 @@ const device_type HD6309 = &device_creator<hd6309_device>;
 //-------------------------------------------------
 
 hd6309_device::hd6309_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-		: m6809_base_device(mconfig, "HD6309", tag, owner, clock, HD6309, 4)
+		: m6809_base_device(mconfig, "HD6309", tag, owner, clock, HD6309, 4, "hd6309", __FILE__)
 {
 }
 
@@ -143,7 +145,7 @@ void hd6309_device::device_start()
 	state_add(HD6309_E,         "E",            m_w.b.h).mask(0xff);
 	state_add(HD6309_F,         "F",            m_w.b.l).mask(0xff);
 	state_add(HD6309_W,         "W",            m_w.w).mask(0xffff);
-	state_add(HD6309_V,         "V",            m_w.w).mask(0xffff);
+	state_add(HD6309_V,         "V",            m_v.w).mask(0xffff);
 	state_add(HD6309_MD,        "MD",           m_md).mask(0xff);
 
 	// initialize variables
@@ -173,6 +175,101 @@ void hd6309_device::device_reset()
 	m_md = 0x00;
 }
 
+
+//-------------------------------------------------
+//  device_pre_save - device-specific pre-save
+//-------------------------------------------------
+
+void hd6309_device::device_pre_save()
+{
+	if      (m_reg8 == &m_d.b.h)    m_reg = HD6309_A;
+	else if (m_reg8 == &m_d.b.l)    m_reg = HD6309_B;
+	else if (m_reg8 == &m_w.b.h)    m_reg = HD6309_E;
+	else if (m_reg8 == &m_w.b.l)    m_reg = HD6309_F;
+	else if (m_reg8 == &m_cc)       m_reg = HD6309_CC;
+	else if (m_reg8 == &m_dp)       m_reg = HD6309_DP;
+	else if (m_reg8 == &m_md)       m_reg = HD6309_MD;
+	else if (m_reg8 == &m_temp.b.l) m_reg = HD6309_ZERO_BYTE;
+
+	else if (m_reg16 == &m_d)       m_reg = HD6309_D;
+	else if (m_reg16 == &m_x)       m_reg = HD6309_X;
+	else if (m_reg16 == &m_y)       m_reg = HD6309_Y;
+	else if (m_reg16 == &m_u)       m_reg = HD6309_U;
+	else if (m_reg16 == &m_s)       m_reg = HD6309_S;
+	else if (m_reg16 == &m_pc)      m_reg = HD6309_PC;
+	else if (m_reg16 == &m_w)       m_reg = HD6309_W;
+	else if (m_reg16 == &m_v)       m_reg = HD6309_V;
+	else if (m_reg16 == &m_temp)    m_reg = HD6309_ZERO_WORD;
+	else
+		m_reg = 0;
+}
+
+
+//-------------------------------------------------
+//  device_post_load - device-specific post-load
+//-------------------------------------------------
+
+void hd6309_device::device_post_load()
+{
+	m_reg8 = NULL;
+	m_reg16 = NULL;
+
+	switch(m_reg)
+	{
+		case HD6309_A:
+			set_regop8(m_d.b.h);
+			break;
+		case HD6309_B:
+			set_regop8(m_d.b.l);
+			break;
+		case HD6309_E:
+			set_regop8(m_w.b.h);
+			break;
+		case HD6309_F:
+			set_regop8(m_w.b.l);
+			break;
+		case HD6309_CC:
+			set_regop8(m_cc);
+			break;
+		case HD6309_DP:
+			set_regop8(m_dp);
+			break;
+		case HD6309_MD:
+			set_regop8(m_md);
+			break;
+		case HD6309_ZERO_BYTE:
+			set_regop8(m_temp.b.l);
+			break;
+
+		case HD6309_D:
+			set_regop16(m_d);
+			break;
+		case HD6309_X:
+			set_regop16(m_x);
+			break;
+		case HD6309_Y:
+			set_regop16(m_y);
+			break;
+		case HD6309_U:
+			set_regop16(m_u);
+			break;
+		case HD6309_S:
+			set_regop16(m_s);
+			break;
+		case HD6309_PC:
+			set_regop16(m_pc);
+			break;
+		case HD6309_W:
+			set_regop16(m_w);
+			break;
+		case HD6309_V:
+			set_regop16(m_v);
+			break;
+		case HD6309_ZERO_WORD:
+			set_regop16(m_temp);
+			break;
+	}
+}
 
 
 //-------------------------------------------------
@@ -216,7 +313,7 @@ offs_t hd6309_device::disasm_disassemble(char *buffer, offs_t pc, const UINT8 *o
 //  read_operand
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE UINT8 hd6309_device::read_operand()
+inline UINT8 hd6309_device::read_operand()
 {
 	switch(m_addressing_mode)
 	{
@@ -226,7 +323,7 @@ ATTR_FORCE_INLINE UINT8 hd6309_device::read_operand()
 		case ADDRESSING_MODE_REGISTER_B:    return m_d.b.l;
 		case ADDRESSING_MODE_REGISTER_E:    return m_w.b.h;
 		case ADDRESSING_MODE_REGISTER_F:    return m_w.b.l;
-		default:                            fatalerror("Unexpected");   return 0x00;
+		default:                            fatalerror("Unexpected");
 	}
 }
 
@@ -235,7 +332,7 @@ ATTR_FORCE_INLINE UINT8 hd6309_device::read_operand()
 //  read_operand
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE UINT8 hd6309_device::read_operand(int ordinal)
+inline UINT8 hd6309_device::read_operand(int ordinal)
 {
 	switch(m_addressing_mode)
 	{
@@ -250,7 +347,7 @@ ATTR_FORCE_INLINE UINT8 hd6309_device::read_operand(int ordinal)
 		case ADDRESSING_MODE_REGISTER_V:    return (ordinal & 1) ? m_v.b.l : m_v.b.h;
 		case ADDRESSING_MODE_REGISTER_PC:   return (ordinal & 1) ? m_pc.b.l : m_pc.b.h;
 		case ADDRESSING_MODE_ZERO:          return 0x00;
-		default:                            fatalerror("Unexpected");   return 0x00;
+		default:                            fatalerror("Unexpected");
 	}
 }
 
@@ -259,7 +356,7 @@ ATTR_FORCE_INLINE UINT8 hd6309_device::read_operand(int ordinal)
 //  write_operand
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void hd6309_device::write_operand(UINT8 data)
+inline void hd6309_device::write_operand(UINT8 data)
 {
 	switch(m_addressing_mode)
 	{
@@ -269,7 +366,7 @@ ATTR_FORCE_INLINE void hd6309_device::write_operand(UINT8 data)
 		case ADDRESSING_MODE_REGISTER_E:    m_w.b.h = data;                 break;
 		case ADDRESSING_MODE_REGISTER_F:    m_w.b.l = data;                 break;
 		case ADDRESSING_MODE_ZERO:                                          break;
-		default:                            fatalerror("Unexpected");       break;
+		default:                            fatalerror("Unexpected");
 	}
 }
 
@@ -278,7 +375,7 @@ ATTR_FORCE_INLINE void hd6309_device::write_operand(UINT8 data)
 //  write_operand
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void hd6309_device::write_operand(int ordinal, UINT8 data)
+inline void hd6309_device::write_operand(int ordinal, UINT8 data)
 {
 	switch(m_addressing_mode)
 	{
@@ -292,7 +389,7 @@ ATTR_FORCE_INLINE void hd6309_device::write_operand(int ordinal, UINT8 data)
 		case ADDRESSING_MODE_REGISTER_V:    *((ordinal & 1) ? &m_v.b.l : &m_v.b.h) = data;      break;
 		case ADDRESSING_MODE_REGISTER_PC:   *((ordinal & 1) ? &m_pc.b.l : &m_pc.b.h) = data;    break;
 		case ADDRESSING_MODE_ZERO:                                                              break;
-		default:                            fatalerror("Unexpected");                           break;
+		default:                            fatalerror("Unexpected");
 	}
 }
 
@@ -301,7 +398,7 @@ ATTR_FORCE_INLINE void hd6309_device::write_operand(int ordinal, UINT8 data)
 //  bittest_register
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE UINT8 &hd6309_device::bittest_register()
+inline UINT8 &hd6309_device::bittest_register()
 {
 	switch(m_temp_im & 0xC0)
 	{
@@ -317,7 +414,7 @@ ATTR_FORCE_INLINE UINT8 &hd6309_device::bittest_register()
 //  bittest_source
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE bool hd6309_device::bittest_source()
+inline bool hd6309_device::bittest_source()
 {
 	return (m_temp.b.l & (1 << ((m_temp_im >> 3) & 0x07))) ? true : false;
 }
@@ -327,7 +424,7 @@ ATTR_FORCE_INLINE bool hd6309_device::bittest_source()
 //  bittest_dest
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE bool hd6309_device::bittest_dest()
+inline bool hd6309_device::bittest_dest()
 {
 	return (bittest_register() & (1 << ((m_temp_im >> 0) & 0x07))) ? true : false;
 }
@@ -337,7 +434,7 @@ ATTR_FORCE_INLINE bool hd6309_device::bittest_dest()
 //  bittest_set
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void hd6309_device::bittest_set(bool result)
+inline void hd6309_device::bittest_set(bool result)
 {
 	if (result)
 		bittest_register() |= (1 << ((m_temp_im >> 0) & 0x07));
@@ -351,7 +448,7 @@ ATTR_FORCE_INLINE void hd6309_device::bittest_set(bool result)
 //  read_exgtfr_register
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE m6809_base_device::exgtfr_register hd6309_device::read_exgtfr_register(UINT8 reg)
+inline m6809_base_device::exgtfr_register hd6309_device::read_exgtfr_register(UINT8 reg)
 {
 	UINT16 value = 0;
 
@@ -375,7 +472,6 @@ ATTR_FORCE_INLINE m6809_base_device::exgtfr_register hd6309_device::read_exgtfr_
 		case 15: value = ((UINT16) m_w.b.l) << 8 | m_w.b.l; break;  // F
 		default:
 			fatalerror("Should not reach here");
-			break;
 	}
 
 	exgtfr_register result;
@@ -390,7 +486,7 @@ ATTR_FORCE_INLINE m6809_base_device::exgtfr_register hd6309_device::read_exgtfr_
 //  write_exgtfr_register
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void hd6309_device::write_exgtfr_register(UINT8 reg, m6809_base_device::exgtfr_register value)
+inline void hd6309_device::write_exgtfr_register(UINT8 reg, m6809_base_device::exgtfr_register value)
 {
 	switch(reg & 0x0F)
 	{
@@ -412,7 +508,6 @@ ATTR_FORCE_INLINE void hd6309_device::write_exgtfr_register(UINT8 reg, m6809_bas
 		case 15: m_w.b.l = (UINT8) (value.word_value >> 0); break;  // F
 		default:
 			fatalerror("Should not reach here");
-			break;
 	}
 }
 
@@ -422,7 +517,7 @@ ATTR_FORCE_INLINE void hd6309_device::write_exgtfr_register(UINT8 reg, m6809_bas
 //  tfr_read
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE bool hd6309_device::tfr_read(UINT8 opcode, UINT8 arg, UINT8 &data)
+inline bool hd6309_device::tfr_read(UINT8 opcode, UINT8 arg, UINT8 &data)
 {
 	PAIR16 *reg;
 
@@ -455,7 +550,7 @@ ATTR_FORCE_INLINE bool hd6309_device::tfr_read(UINT8 opcode, UINT8 arg, UINT8 &d
 //  tfr_write
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE bool hd6309_device::tfr_write(UINT8 opcode, UINT8 arg, UINT8 data)
+inline bool hd6309_device::tfr_write(UINT8 opcode, UINT8 arg, UINT8 data)
 {
 	PAIR16 *reg;
 
@@ -519,7 +614,6 @@ void hd6309_device::register_register_op()
 		case 15: if (promote) set_regop16(m_w);     else set_regop8(m_w.b.l);       break;  // F
 		default:
 			fatalerror("Should not reach here");
-			break;
 	}
 
 	// set source
@@ -543,7 +637,6 @@ void hd6309_device::register_register_op()
 		case 15: m_addressing_mode = promote ? ADDRESSING_MODE_REGISTER_W : ADDRESSING_MODE_REGISTER_F; break;  // F
 		default:
 			fatalerror("Should not reach here");
-			break;
 	}
 
 	// eat a single CPU cycle
@@ -631,7 +724,6 @@ bool hd6309_device::divq()
 			else if (old_q == 0 )
 				m_cc |= CC_Z;
 
-			m_temp.w = abs(m_temp.w);
 			put_q(old_q);
 		}
 	}
@@ -697,9 +789,9 @@ bool hd6309_device::divd()
 //  execute_one - try to execute a single instruction
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void hd6309_device::execute_one()
+inline void hd6309_device::execute_one()
 {
-	switch((UINT32)pop_state())
+	switch(pop_state())
 	{
 #include "cpu/m6809/hd6309.inc"
 	}

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Stephh
 /* Xyonix *********************************************************************
 
 driver by David Haywood and Stephh
@@ -11,7 +13,8 @@ prom, the 2x 256k roms, and the 1x 6264 ram.
 Dip SW is 1 x 8-position
 
 on the PCB is an empty socket. written next to the socket is 68705P3. "oh no" you
-say..... well, its unpopulated, so maybe it was never used?
+say..... well, its unpopulated, so maybe it was never used? (another PCB was
+found with the 68705 populated)
 
 
 TODO:
@@ -25,7 +28,15 @@ TODO:
 #include "includes/xyonix.h"
 
 
-WRITE8_MEMBER(xyonix_state::xyonix_irqack_w)
+void xyonix_state::machine_start()
+{
+	save_item(NAME(m_e0_data));
+	save_item(NAME(m_credits));
+	save_item(NAME(m_coins));
+	save_item(NAME(m_prev_coin));
+}
+
+WRITE8_MEMBER(xyonix_state::irqack_w)
 {
 	m_maincpu->set_input_line(0, CLEAR_LINE);
 }
@@ -71,7 +82,7 @@ void xyonix_state::handle_coins(int coin)
 }
 
 
-READ8_MEMBER(xyonix_state::xyonix_io_r)
+READ8_MEMBER(xyonix_state::io_r)
 {
 	int regPC = space.device().safe_pc();
 
@@ -122,7 +133,7 @@ READ8_MEMBER(xyonix_state::xyonix_io_r)
 	return 0xff;
 }
 
-WRITE8_MEMBER(xyonix_state::xyonix_io_w)
+WRITE8_MEMBER(xyonix_state::io_w)
 {
 	//logerror ("xyonix_port_e0_w %02x - PC = %04x\n", data, space.device().safe_pc());
 	m_e0_data = data;
@@ -133,7 +144,7 @@ WRITE8_MEMBER(xyonix_state::xyonix_io_w)
 static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, xyonix_state )
 	AM_RANGE(0x0000, 0xbfff) AM_ROM
 	AM_RANGE(0xc000, 0xdfff) AM_RAM
-	AM_RANGE(0xe000, 0xffff) AM_RAM_WRITE(xyonix_vidram_w) AM_SHARE("vidram")
+	AM_RANGE(0xe000, 0xffff) AM_RAM_WRITE(vidram_w) AM_SHARE("vidram")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( port_map, AS_IO, 8, xyonix_state )
@@ -141,9 +152,9 @@ static ADDRESS_MAP_START( port_map, AS_IO, 8, xyonix_state )
 	AM_RANGE(0x20, 0x20) AM_READNOP AM_DEVWRITE("sn1", sn76496_device, write)   /* SN76496 ready signal */
 	AM_RANGE(0x21, 0x21) AM_READNOP AM_DEVWRITE("sn2", sn76496_device, write)
 	AM_RANGE(0x40, 0x40) AM_WRITENOP        /* NMI ack? */
-	AM_RANGE(0x50, 0x50) AM_WRITE(xyonix_irqack_w)
+	AM_RANGE(0x50, 0x50) AM_WRITE(irqack_w)
 	AM_RANGE(0x60, 0x61) AM_WRITENOP        /* mc6845 */
-	AM_RANGE(0xe0, 0xe0) AM_READWRITE(xyonix_io_r, xyonix_io_w)
+	AM_RANGE(0xe0, 0xe0) AM_READWRITE(io_r, io_w)
 ADDRESS_MAP_END
 
 /* Inputs Ports **************************************************************/
@@ -209,22 +220,6 @@ static GFXDECODE_START( xyonix )
 GFXDECODE_END
 
 
-/*************************************
- *
- *  Sound interface
- *
- *************************************/
-
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
-
 /* MACHINE driver *************************************************************/
 
 static MACHINE_CONFIG_START( xyonix, xyonix_state )
@@ -242,22 +237,21 @@ static MACHINE_CONFIG_START( xyonix, xyonix_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(80*4, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 80*4-1, 0, 28*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(xyonix_state, screen_update_xyonix)
+	MCFG_SCREEN_UPDATE_DRIVER(xyonix_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(xyonix)
-	MCFG_PALETTE_LENGTH(256)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", xyonix)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(xyonix_state, xyonix)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("sn1", SN76496, 16000000/4)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("sn2", SN76496, 16000000/4)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 MACHINE_CONFIG_END
 
 /* ROM Loading ***************************************************************/
@@ -266,6 +260,9 @@ ROM_START( xyonix )
 	ROM_REGION( 0x10000, "maincpu", 0 )
 	ROM_LOAD( "xyonix3.bin", 0x00000, 0x10000, CRC(1960a74e) SHA1(5fd7bc31ca2f5f1e114d3d0ccf6554ebd712cbd3) )
 
+	ROM_REGION( 0x10000, "mcu", 0 )
+	ROM_LOAD( "mc68705p3s.e7", 0x00000, 0x780, BAD_DUMP CRC(f60cdd86) SHA1(e18cc598153b3e108942328ee9c5b9f83b034c41) ) // FIXED BITS (xxxxxx0x)
+	
 	ROM_REGION( 0x10000, "gfx1", 0 )
 	ROM_LOAD( "xyonix1.bin", 0x00000, 0x08000, CRC(3dfa9596) SHA1(52cdbbe18f83cea7248c29588ea3a18c4bb7984f) )
 	ROM_LOAD( "xyonix2.bin", 0x08000, 0x08000, CRC(db87343e) SHA1(62bc30cd65b2f8976cd73a0b349a9ccdb3faaad2) )
@@ -276,4 +273,5 @@ ROM_END
 
 /* GAME drivers **************************************************************/
 
-GAME( 1989, xyonix, 0, xyonix, xyonix, driver_device, 0, ROT0, "Philko", "Xyonix", 0 )
+GAME( 1989, xyonix, 0, xyonix, xyonix, driver_device, 0, ROT0, "Philko", "Xyonix", GAME_SUPPORTS_SAVE )
+	

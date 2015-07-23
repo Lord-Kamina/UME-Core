@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /*********************************************************************
 
     midiout.c
@@ -7,6 +9,7 @@
 *********************************************************************/
 
 #include "emu.h"
+#include "osdepend.h"
 #include "midiout.h"
 
 /***************************************************************************
@@ -20,7 +23,7 @@ const device_type MIDIOUT = &device_creator<midiout_device>;
 -------------------------------------------------*/
 
 midiout_device::midiout_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MIDIOUT, "MIDI Out image device", tag, owner, clock),
+	: device_t(mconfig, MIDIOUT, "MIDI Out image device", tag, owner, clock, "midiout", __FILE__),
 	device_image_interface(mconfig, *this),
 		device_serial_interface(mconfig, *this)
 {
@@ -38,9 +41,14 @@ void midiout_device::device_start()
 void midiout_device::device_reset()
 {
 	// we don't Tx, we Rx at 31250 8-N-1
+	set_data_frame(1, 8, PARITY_NONE, STOP_BITS_1);
 	set_rcv_rate(31250);
 	set_tra_rate(0);
-	set_data_frame(8, 1, SERIAL_PARITY_NONE);
+}
+
+void midiout_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+{
+	device_serial_interface::device_timer(timer, id, param, ptr);
 }
 
 /*-------------------------------------------------
@@ -58,10 +66,12 @@ void midiout_device::device_config_complete(void)
 
 bool midiout_device::call_load(void)
 {
-	m_midi = osd_open_midi_output(filename());
+	m_midi = machine().osd().create_midi_device();
 
-	if (m_midi == NULL)
+	if (!m_midi->open_output(filename()))
 	{
+		global_free(m_midi);
+		m_midi = NULL;
 		return IMAGE_INIT_FAIL;
 	}
 
@@ -76,7 +86,9 @@ void midiout_device::call_unload(void)
 {
 	if (m_midi)
 	{
-		osd_close_midi_channel(m_midi);
+		m_midi->close();
+		global_free(m_midi);
+		m_midi = NULL;
 	}
 }
 
@@ -87,10 +99,6 @@ void midiout_device::rcv_complete()    // Rx completed receiving byte
 
 	if (m_midi)
 	{
-		osd_write_midi_channel(m_midi, data);
+		m_midi->write(data);
 	}
-}
-
-void midiout_device::input_callback(UINT8 state)
-{
 }

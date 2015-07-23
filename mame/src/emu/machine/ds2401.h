@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 /*
  * DS2401
  *
@@ -59,7 +61,7 @@ protected:
 	attotime t_samp, t_rdv, t_rstl, t_pdh, t_pdl;
 
 private:
-	inline void ATTR_PRINTF(3,4) verboselog(int n_level, const char *s_fmt, ...);
+	inline void verboselog(int n_level, const char *s_fmt, ...) ATTR_PRINTF(3,4);
 };
 
 

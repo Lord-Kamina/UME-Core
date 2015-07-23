@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 /*
  * DS2401
  *
@@ -11,7 +13,7 @@
 
 #define VERBOSE_LEVEL 0
 
-inline void ATTR_PRINTF(3,4) ds2401_device::verboselog(int n_level, const char *s_fmt, ...)
+inline void ds2401_device::verboselog(int n_level, const char *s_fmt, ...)
 {
 	if(VERBOSE_LEVEL >= n_level)
 	{
@@ -28,7 +30,7 @@ inline void ATTR_PRINTF(3,4) ds2401_device::verboselog(int n_level, const char *
 const device_type DS2401 = &device_creator<ds2401_device>;
 
 ds2401_device::ds2401_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, DS2401, "DS2401", tag, owner, clock)
+	: device_t(mconfig, DS2401, "DS2401", tag, owner, clock, "ds2401", __FILE__)
 {
 }
 
@@ -39,6 +41,9 @@ void ds2401_device::device_start()
 	t_rstl = attotime::from_usec(480);
 	t_pdh  = attotime::from_usec( 30);
 	t_pdl  = attotime::from_usec(120);
+
+	m_rx = true;
+	m_tx = true;
 
 	save_item(NAME(m_state));
 	save_item(NAME(m_bit));

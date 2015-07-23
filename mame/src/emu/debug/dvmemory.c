@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*********************************************************************
 
     dvmemory.c
 
     Memory debugger view.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -88,11 +59,11 @@ debug_view_memory_source::debug_view_memory_source(const char *name, memory_regi
 	: debug_view_source(name),
 		m_space(NULL),
 		m_memintf(NULL),
-		m_base(region),
+		m_base(region.base()),
 		m_length(region.bytes()),
-		m_offsetxor(NATIVE_ENDIAN_VALUE_LE_BE(region.width() - 1, 0)),
+		m_offsetxor(ENDIAN_VALUE_NE_NNE(region.endianness(), 0, region.bytewidth() - 1)),
 		m_endianness(region.endianness()),
-		m_prefsize(MIN(region.width(), 8))
+		m_prefsize(MIN(region.bytewidth(), 8))
 {
 }
 
@@ -130,6 +101,13 @@ debug_view_memory::debug_view_memory(running_machine &machine, debug_view_osd_up
 		m_bytes_per_row(16),
 		m_byte_offset(0)
 {
+	// hack: define some sane init values
+	// that don't hurt the initial computation of top_left
+	// in set_cursor_pos()
+	m_section[0].m_pos = 0;
+	m_section[0].m_width = 1 + 8 + 1;
+	m_section[1].m_pos = m_section[0].m_pos + m_section[0].m_width;
+
 	// fail if no available sources
 	enumerate_sources();
 	if (m_source_list.count() == 0)
@@ -149,7 +127,7 @@ void debug_view_memory::enumerate_sources()
 {
 	// start with an empty list
 	m_source_list.reset();
-	astring name;
+	std::string name;
 
 	// first add all the devices' address spaces
 	memory_interface_iterator iter(machine().root_device());
@@ -159,15 +137,15 @@ void debug_view_memory::enumerate_sources()
 				if (memintf->has_space(spacenum))
 				{
 					address_space &space = memintf->space(spacenum);
-					name.printf("%s '%s' %s space memory", memintf->device().name(), memintf->device().tag(), space.name());
-					m_source_list.append(*auto_alloc(machine(), debug_view_memory_source(name, space)));
+					strprintf(name,"%s '%s' %s space memory", memintf->device().name(), memintf->device().tag(), space.name());
+					m_source_list.append(*global_alloc(debug_view_memory_source(name.c_str(), space)));
 				}
 
 	// then add all the memory regions
 	for (memory_region *region = machine().memory().first_region(); region != NULL; region = region->next())
 	{
-		name.printf("Region '%s'", region->name());
-		m_source_list.append(*auto_alloc(machine(), debug_view_memory_source(name, *region)));
+		strprintf(name, "Region '%s'", region->name());
+		m_source_list.append(*global_alloc(debug_view_memory_source(name.c_str(), *region)));
 	}
 
 	// finally add all global array symbols
@@ -184,13 +162,13 @@ void debug_view_memory::enumerate_sources()
 		// also, don't trim the front of the name, it's important to know which VIA6522 we're looking at, e.g.
 		if (strncmp(itemname, "timer/", 6))
 		{
-			name.cpy(itemname);
-			m_source_list.append(*auto_alloc(machine(), debug_view_memory_source(name, base, valsize, valcount)));
+			name.assign(itemname);
+			m_source_list.append(*global_alloc(debug_view_memory_source(name.c_str(), base, valsize, valcount)));
 		}
 	}
 
 	// reset the source to a known good entry
-	set_source(*m_source_list.head());
+	set_source(*m_source_list.first());
 }
 
 
@@ -239,7 +217,7 @@ void debug_view_memory::view_update()
 	// loop over visible rows
 	for (UINT32 row = 0; row < m_visible.y; row++)
 	{
-		debug_view_char *destmin = m_viewdata + row * m_visible.x;
+		debug_view_char *destmin = &m_viewdata[row * m_visible.x];
 		debug_view_char *destmax = destmin + m_visible.x;
 		debug_view_char *destrow = destmin - m_topleft.x;
 		UINT32 effrow = m_topleft.y + row;
@@ -267,7 +245,7 @@ void debug_view_memory::view_update()
 			char addrtext[20];
 
 			// generate the address
-			sprintf(addrtext, m_addrformat, address);
+			sprintf(addrtext, m_addrformat.c_str(), address);
 			dest = destrow + m_section[0].m_pos + 1;
 			for (int ch = 0; addrtext[ch] != 0 && ch < m_section[0].m_width - 1; ch++, dest++)
 				if (dest >= destmin && dest < destmax)
@@ -473,14 +451,14 @@ void debug_view_memory::recompute()
 	else
 	{
 		m_maxaddr = source.m_length - 1;
-		addrchars = m_addrformat.printf("%X", m_maxaddr);
+		addrchars = strprintf(m_addrformat, "%X", m_maxaddr);
 	}
 
 	// generate an 8-byte aligned format for the address
 	if (!m_reverse_view)
-		m_addrformat.printf("%*s%%0%dX", 8 - addrchars, "", addrchars);
+		strprintf(m_addrformat, "%*s%%0%dX", 8 - addrchars, "", addrchars);
 	else
-		m_addrformat.printf("%%0%dX%*s", addrchars, 8 - addrchars, "");
+		strprintf(m_addrformat, "%%0%dX%*s", addrchars, 8 - addrchars, "");
 
 	// if we are viewing a space with a minimum chunk size, clamp the bytes per chunk
 	if (source.m_space != NULL && source.m_space->byte_to_address(1) > 1)
@@ -520,7 +498,7 @@ void debug_view_memory::recompute()
 	}
 
 	// derive total sizes from that
-	m_total.y = ((UINT64)m_maxaddr - (UINT64)m_byte_offset + (UINT64)m_bytes_per_row - 1) / m_bytes_per_row;
+	m_total.y = ((UINT64)m_maxaddr - (UINT64)m_byte_offset + (UINT64)m_bytes_per_row /*- 1*/) / m_bytes_per_row;
 
 	// reset the current cursor position
 	set_cursor_pos(pos);
@@ -771,6 +749,8 @@ void debug_view_memory::set_bytes_per_chunk(UINT8 chunkbytes)
 
 	m_bytes_per_chunk = chunkbytes;
 	m_chunks_per_row = m_bytes_per_row / chunkbytes;
+	if (m_chunks_per_row < 1)
+		m_chunks_per_row = 1;
 	m_recompute = m_update_pending = true;
 
 	pos.m_shift += 8 * ((pos.m_address % m_bytes_per_chunk) ^ ((source.m_endianness == ENDIANNESS_LITTLE) ? 0 : (m_bytes_per_chunk - 1)));

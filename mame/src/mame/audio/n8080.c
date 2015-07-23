@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli
 /***************************************************************************
 
   Nintendo 8080 sound emulation
@@ -5,258 +7,186 @@
 ***************************************************************************/
 
 #include "emu.h"
-#include "cpu/mcs48/mcs48.h"
-#include "sound/sn76477.h"
-#include "sound/dac.h"
 #include "includes/n8080.h"
 
 static const double ATTACK_RATE = 10e-6 * 500;
 static const double DECAY_RATE = 10e-6 * 16000;
 
-static const sn76477_interface sheriff_sn76477_interface =
+
+void n8080_state::spacefev_update_SN76477_status()
 {
-	RES_K(36)  ,  /* 04 */
-	RES_K(100) ,  /* 05 */
-	CAP_N(1)   ,  /* 06 */
-	RES_K(620) ,  /* 07 */
-	CAP_U(1)   ,  /* 08 */
-	RES_K(20)  ,  /* 10 */
-	RES_K(150) ,  /* 11 */
-	RES_K(47)  ,  /* 12 */
-	0          ,  /* 16 */
-	CAP_N(1)   ,  /* 17 */
-	RES_M(1.5) ,  /* 18 */
-	0          ,  /* 19 */
-	RES_M(1.5) ,  /* 20 */
-	CAP_N(47)  ,  /* 21 */
-	CAP_N(47)  ,  /* 23 */
-	RES_K(560) ,  /* 24 */
-	0,            /* 22 vco */
-	0,            /* 26 mixer A */
-	0,            /* 25 mixer B */
-	0,            /* 27 mixer C */
-	1,            /* 1  envelope 1 */
-	0,            /* 28 envelope 2 */
-	1             /* 9  enable */
-};
-
-
-static const sn76477_interface spacefev_sn76477_interface =
-{
-	RES_K(36)  ,  /* 04 */
-	RES_K(150) ,  /* 05 */
-	CAP_N(1)   ,  /* 06 */
-	RES_M(1)   ,  /* 07 */
-	CAP_U(1)   ,  /* 08 */
-	RES_K(20)  ,  /* 10 */
-	RES_K(150) ,  /* 11 */
-	RES_K(47)  ,  /* 12 */
-	0          ,  /* 16 */
-	CAP_N(1)   ,  /* 17 */
-	RES_M(1.5) ,  /* 18 */
-	0          ,  /* 19 */
-	RES_M(1)   ,  /* 20 */
-	CAP_N(47)  ,  /* 21 */
-	CAP_N(47)  ,  /* 23 */
-	RES_K(820) ,  /* 24 */
-	0,            /* 22 vco */
-	0,            /* 26 mixer A */
-	0,            /* 25 mixer B */
-	0,            /* 27 mixer C */
-	1,            /* 1  envelope 1 */
-	0,            /* 28 envelope 2 */
-	1             /* 9  enable */
-};
-
-
-static void spacefev_update_SN76477_status( device_t *sn )
-{
-	n8080_state *state = sn->machine().driver_data<n8080_state>();
 	double dblR0 = RES_M(1.0);
 	double dblR1 = RES_M(1.5);
 
-	if (!state->m_mono_flop[0])
+	if (!m_mono_flop[0])
 	{
 		dblR0 = 1 / (1 / RES_K(150) + 1 / dblR0); /* ? */
 	}
-	if (!state->m_mono_flop[1])
+	if (!m_mono_flop[1])
 	{
 		dblR1 = 1 / (1 / RES_K(620) + 1 / dblR1); /* ? */
 	}
 
-	sn76477_decay_res_w(sn, dblR0);
+	m_sn->decay_res_w(dblR0);
 
-	sn76477_vco_res_w(sn, dblR1);
+	m_sn->vco_res_w(dblR1);
 
-	sn76477_enable_w(sn,
-		!state->m_mono_flop[0] &&
-		!state->m_mono_flop[1] &&
-		!state->m_mono_flop[2]);
+	m_sn->enable_w(
+		!m_mono_flop[0] &&
+		!m_mono_flop[1] &&
+		!m_mono_flop[2]);
 
-	sn76477_vco_w(sn, state->m_mono_flop[1]);
+	m_sn->vco_w(m_mono_flop[1]);
 
-	sn76477_mixer_b_w(sn, state->m_mono_flop[0]);
+	m_sn->mixer_b_w(m_mono_flop[0]);
 }
 
 
-static void sheriff_update_SN76477_status( device_t *sn )
+void n8080_state::sheriff_update_SN76477_status()
 {
-	n8080_state *state = sn->machine().driver_data<n8080_state>();
-	if (state->m_mono_flop[1])
+	if (m_mono_flop[1])
 	{
-		sn76477_vco_voltage_w(sn, 5);
+		m_sn->vco_voltage_w(5);
 	}
 	else
 	{
-		sn76477_vco_voltage_w(sn, 0);
+		m_sn->vco_voltage_w(0);
 	}
 
-	sn76477_enable_w(sn,
-		!state->m_mono_flop[0] &&
-		!state->m_mono_flop[1]);
+	m_sn->enable_w(
+		!m_mono_flop[0] &&
+		!m_mono_flop[1]);
 
-	sn76477_vco_w(sn, state->m_mono_flop[0]);
+	m_sn->vco_w(m_mono_flop[0]);
 
-	sn76477_mixer_b_w(sn, !state->m_mono_flop[0]);
+	m_sn->mixer_b_w(!m_mono_flop[0]);
 }
 
 
-static void update_SN76477_status( device_t *device )
+void n8080_state::update_SN76477_status()
 {
-	n8080_state *state = device->machine().driver_data<n8080_state>();
-	if (state->m_n8080_hardware == 1)
+	if (m_n8080_hardware == 1)
 	{
-		spacefev_update_SN76477_status(device);
+		spacefev_update_SN76477_status();
 	}
-	if (state->m_n8080_hardware == 2)
+	if (m_n8080_hardware == 2)
 	{
-		sheriff_update_SN76477_status(device);
+		sheriff_update_SN76477_status();
 	}
 }
 
 
-static void start_mono_flop( device_t *sn, int n, attotime expire )
+void n8080_state::start_mono_flop( int n, const attotime &expire )
 {
-	n8080_state *state = sn->machine().driver_data<n8080_state>();
-	state->m_mono_flop[n] = 1;
+	m_mono_flop[n] = 1;
 
-	update_SN76477_status(sn);
+	update_SN76477_status();
 
-	state->m_sound_timer[n]->adjust(expire, n);
+	m_sound_timer[n]->adjust(expire, n);
 }
 
 
-static void stop_mono_flop( device_t *sn, int n )
+void n8080_state::stop_mono_flop( int n )
 {
-	n8080_state *state = sn->machine().driver_data<n8080_state>();
-	state->m_mono_flop[n] = 0;
+	m_mono_flop[n] = 0;
 
-	update_SN76477_status(sn);
+	update_SN76477_status();
 
-	state->m_sound_timer[n]->adjust(attotime::never, n);
+	m_sound_timer[n]->adjust(attotime::never, n);
 }
 
 
-static TIMER_CALLBACK( stop_mono_flop_callback )
+TIMER_CALLBACK_MEMBER( n8080_state::stop_mono_flop_callback )
 {
-	stop_mono_flop(machine.device("snsnd"), param);
+	stop_mono_flop(param);
 }
 
 
-static void spacefev_sound_pins_changed( running_machine &machine )
+void n8080_state::spacefev_sound_pins_changed()
 {
-	device_t *sn = machine.device("snsnd");
-	n8080_state *state = machine.driver_data<n8080_state>();
-	UINT16 changes = ~state->m_curr_sound_pins & state->m_prev_sound_pins;
+	UINT16 changes = ~m_curr_sound_pins & m_prev_sound_pins;
 
 	if (changes & (1 << 0x3))
 	{
-		stop_mono_flop(sn, 1);
+		stop_mono_flop(1);
 	}
 	if (changes & ((1 << 0x3) | (1 << 0x6)))
 	{
-		stop_mono_flop(sn, 2);
+		stop_mono_flop(2);
 	}
 	if (changes & (1 << 0x3))
 	{
-		start_mono_flop(sn, 0, attotime::from_usec(550 * 36 * 100));
+		start_mono_flop(0, attotime::from_usec(550 * 36 * 100));
 	}
 	if (changes & (1 << 0x6))
 	{
-		start_mono_flop(sn, 1, attotime::from_usec(550 * 22 * 33));
+		start_mono_flop(1, attotime::from_usec(550 * 22 * 33));
 	}
 	if (changes & (1 << 0x4))
 	{
-		start_mono_flop(sn, 2, attotime::from_usec(550 * 22 * 33));
+		start_mono_flop(2, attotime::from_usec(550 * 22 * 33));
 	}
 	if (changes & ((1 << 0x2) | (1 << 0x3) | (1 << 0x5)))
 	{
-		generic_pulse_irq_line(machine.device("audiocpu"), 0, 2);
+		generic_pulse_irq_line(m_audiocpu, 0, 2);
 	}
 }
 
 
-static void sheriff_sound_pins_changed( running_machine &machine )
+void n8080_state::sheriff_sound_pins_changed()
 {
-	device_t *sn = machine.device("snsnd");
-	n8080_state *state = machine.driver_data<n8080_state>();
-	UINT16 changes = ~state->m_curr_sound_pins & state->m_prev_sound_pins;
+	UINT16 changes = ~m_curr_sound_pins & m_prev_sound_pins;
 
 	if (changes & (1 << 0x6))
 	{
-		stop_mono_flop(sn, 1);
+		stop_mono_flop(1);
 	}
 	if (changes & (1 << 0x6))
 	{
-		start_mono_flop(sn, 0, attotime::from_usec(550 * 33 * 33));
+		start_mono_flop(0, attotime::from_usec(550 * 33 * 33));
 	}
 	if (changes & (1 << 0x4))
 	{
-		start_mono_flop(sn, 1, attotime::from_usec(550 * 33 * 33));
+		start_mono_flop(1, attotime::from_usec(550 * 33 * 33));
 	}
 	if (changes & ((1 << 0x2) | (1 << 0x3) | (1 << 0x5)))
 	{
-		generic_pulse_irq_line(machine.device("audiocpu"), 0, 2);
+		generic_pulse_irq_line(m_audiocpu, 0, 2);
 	}
 }
 
 
-static void helifire_sound_pins_changed( running_machine &machine )
+void n8080_state::helifire_sound_pins_changed()
 {
-	n8080_state *state = machine.driver_data<n8080_state>();
-	UINT16 changes = ~state->m_curr_sound_pins & state->m_prev_sound_pins;
+	UINT16 changes = ~m_curr_sound_pins & m_prev_sound_pins;
 
-	/* ((state->m_curr_sound_pins >> 0xa) & 1) not emulated */
-	/* ((state->m_curr_sound_pins >> 0xb) & 1) not emulated */
-	/* ((state->m_curr_sound_pins >> 0xc) & 1) not emulated */
+	/* ((m_curr_sound_pins >> 0xa) & 1) not emulated */
+	/* ((m_curr_sound_pins >> 0xb) & 1) not emulated */
+	/* ((m_curr_sound_pins >> 0xc) & 1) not emulated */
 
 	if (changes & (1 << 6))
 	{
-		generic_pulse_irq_line(machine.device("audiocpu"), 0, 2);
+		generic_pulse_irq_line(m_audiocpu, 0, 2);
 	}
 }
 
 
-static void sound_pins_changed( running_machine &machine )
+void n8080_state::sound_pins_changed()
 {
-	n8080_state *state = machine.driver_data<n8080_state>();
+	if (m_n8080_hardware == 1)
+		spacefev_sound_pins_changed();
+	if (m_n8080_hardware == 2)
+		sheriff_sound_pins_changed();
+	if (m_n8080_hardware == 3)
+		helifire_sound_pins_changed();
 
-	if (state->m_n8080_hardware == 1)
-		spacefev_sound_pins_changed(machine);
-	if (state->m_n8080_hardware == 2)
-		sheriff_sound_pins_changed(machine);
-	if (state->m_n8080_hardware == 3)
-		helifire_sound_pins_changed(machine);
-
-	state->m_prev_sound_pins = state->m_curr_sound_pins;
+	m_prev_sound_pins = m_curr_sound_pins;
 }
 
 
-static void delayed_sound_1( running_machine &machine, int data )
+void n8080_state::delayed_sound_1( int data )
 {
-	n8080_state *state = machine.driver_data<n8080_state>();
-
-	state->m_curr_sound_pins &= ~(
+	m_curr_sound_pins &= ~(
 		(1 << 0x7) |
 		(1 << 0x5) |
 		(1 << 0x6) |
@@ -264,40 +194,38 @@ static void delayed_sound_1( running_machine &machine, int data )
 		(1 << 0x4) |
 		(1 << 0x1));
 
-	if (~data & 0x01) state->m_curr_sound_pins |= 1 << 0x7;
-	if (~data & 0x02) state->m_curr_sound_pins |= 1 << 0x5; /* pulse */
-	if (~data & 0x04) state->m_curr_sound_pins |= 1 << 0x6; /* pulse */
-	if (~data & 0x08) state->m_curr_sound_pins |= 1 << 0x3; /* pulse (except in Helifire) */
-	if (~data & 0x10) state->m_curr_sound_pins |= 1 << 0x4; /* pulse (except in Helifire) */
-	if (~data & 0x20) state->m_curr_sound_pins |= 1 << 0x1;
+	if (~data & 0x01) m_curr_sound_pins |= 1 << 0x7;
+	if (~data & 0x02) m_curr_sound_pins |= 1 << 0x5; /* pulse */
+	if (~data & 0x04) m_curr_sound_pins |= 1 << 0x6; /* pulse */
+	if (~data & 0x08) m_curr_sound_pins |= 1 << 0x3; /* pulse (except in Helifire) */
+	if (~data & 0x10) m_curr_sound_pins |= 1 << 0x4; /* pulse (except in Helifire) */
+	if (~data & 0x20) m_curr_sound_pins |= 1 << 0x1;
 
-	if (state->m_n8080_hardware == 1)
+	if (m_n8080_hardware == 1)
 	{
-		if (data & ~state->m_prev_snd_data & 0x10)
+		if (data & ~m_prev_snd_data & 0x10)
 		{
-			state->spacefev_start_red_cannon();
+			spacefev_start_red_cannon();
 		}
 
-		state->m_spacefev_red_screen = data & 0x08;
+		m_spacefev_red_screen = data & 0x08;
 	}
 
-	sound_pins_changed(machine);
+	sound_pins_changed();
 
-	state->m_prev_snd_data = data;
+	m_prev_snd_data = data;
 }
 
 
-static TIMER_CALLBACK( delayed_sound_1_callback )
+TIMER_CALLBACK_MEMBER( n8080_state::delayed_sound_1_callback )
 {
-	delayed_sound_1(machine, param);
+	delayed_sound_1(param);
 }
 
 
-static void delayed_sound_2( running_machine &machine, int data )
+void n8080_state::delayed_sound_2( int data )
 {
-	n8080_state *state = machine.driver_data<n8080_state>();
-
-	state->m_curr_sound_pins &= ~(
+	m_curr_sound_pins &= ~(
 		(1 << 0x8) |
 		(1 << 0x9) |
 		(1 << 0xa) |
@@ -305,36 +233,36 @@ static void delayed_sound_2( running_machine &machine, int data )
 		(1 << 0x2) |
 		(1 << 0xc));
 
-	if (~data & 0x01) state->m_curr_sound_pins |= 1 << 0x8;
-	if (~data & 0x02) state->m_curr_sound_pins |= 1 << 0x9;
-	if (~data & 0x04) state->m_curr_sound_pins |= 1 << 0xa;
-	if (~data & 0x08) state->m_curr_sound_pins |= 1 << 0xb;
-	if (~data & 0x10) state->m_curr_sound_pins |= 1 << 0x2; /* pulse */
-	if (~data & 0x20) state->m_curr_sound_pins |= 1 << 0xc;
+	if (~data & 0x01) m_curr_sound_pins |= 1 << 0x8;
+	if (~data & 0x02) m_curr_sound_pins |= 1 << 0x9;
+	if (~data & 0x04) m_curr_sound_pins |= 1 << 0xa;
+	if (~data & 0x08) m_curr_sound_pins |= 1 << 0xb;
+	if (~data & 0x10) m_curr_sound_pins |= 1 << 0x2; /* pulse */
+	if (~data & 0x20) m_curr_sound_pins |= 1 << 0xc;
 
-	if (state->m_n8080_hardware == 1)
-		state->flip_screen_set_no_update(data & 0x20);
-	if (state->m_n8080_hardware == 3)
-		state->m_helifire_flash = data & 0x20;
+	if (m_n8080_hardware == 1)
+		flip_screen_set(data & 0x20);
+	if (m_n8080_hardware == 3)
+		m_helifire_flash = data & 0x20;
 
-	sound_pins_changed(machine);
+	sound_pins_changed();
 }
 
 
-static TIMER_CALLBACK( delayed_sound_2_callback )
+TIMER_CALLBACK_MEMBER( n8080_state::delayed_sound_2_callback )
 {
-	delayed_sound_2(machine, param);
+	delayed_sound_2(param);
 }
 
 
 WRITE8_MEMBER(n8080_state::n8080_sound_1_w)
 {
-	machine().scheduler().synchronize(FUNC(delayed_sound_1_callback), data); /* force CPUs to sync */
+	machine().scheduler().synchronize(timer_expired_delegate(FUNC(n8080_state::delayed_sound_1_callback), this), data); /* force CPUs to sync */
 }
 
 WRITE8_MEMBER(n8080_state::n8080_sound_2_w)
 {
-	machine().scheduler().synchronize(FUNC(delayed_sound_2_callback), data); /* force CPUs to sync */
+	machine().scheduler().synchronize(timer_expired_delegate(FUNC(n8080_state::delayed_sound_2_callback), this), data); /* force CPUs to sync */
 }
 
 
@@ -428,7 +356,6 @@ WRITE8_MEMBER(n8080_state::helifire_sound_ctrl_w)
 
 TIMER_DEVICE_CALLBACK_MEMBER(n8080_state::spacefev_vco_voltage_timer)
 {
-	device_t *sn = machine().device("snsnd");
 	double voltage = 0;
 
 	if (m_mono_flop[2])
@@ -436,7 +363,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(n8080_state::spacefev_vco_voltage_timer)
 		voltage = 5 * (1 - exp(- m_sound_timer[2]->elapsed().as_double() / 0.22));
 	}
 
-	sn76477_vco_voltage_w(sn, voltage);
+	m_sn->vco_voltage_w(voltage);
 }
 
 
@@ -455,11 +382,11 @@ TIMER_DEVICE_CALLBACK_MEMBER(n8080_state::helifire_dac_volume_timer)
 }
 
 
-MACHINE_START_MEMBER(n8080_state,spacefev_sound)
+SOUND_START_MEMBER(n8080_state,spacefev)
 {
-	m_sound_timer[0] = machine().scheduler().timer_alloc(FUNC(stop_mono_flop_callback));
-	m_sound_timer[1] = machine().scheduler().timer_alloc(FUNC(stop_mono_flop_callback));
-	m_sound_timer[2] = machine().scheduler().timer_alloc(FUNC(stop_mono_flop_callback));
+	m_sound_timer[0] = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(n8080_state::stop_mono_flop_callback), this));
+	m_sound_timer[1] = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(n8080_state::stop_mono_flop_callback), this));
+	m_sound_timer[2] = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(n8080_state::stop_mono_flop_callback), this));
 
 	save_item(NAME(m_prev_snd_data));
 	save_item(NAME(m_prev_sound_pins));
@@ -468,7 +395,7 @@ MACHINE_START_MEMBER(n8080_state,spacefev_sound)
 	save_item(NAME(m_mono_flop));
 }
 
-MACHINE_RESET_MEMBER(n8080_state,spacefev_sound)
+SOUND_RESET_MEMBER(n8080_state,spacefev)
 {
 	m_n8080_hardware = 1;
 
@@ -479,15 +406,15 @@ MACHINE_RESET_MEMBER(n8080_state,spacefev_sound)
 	m_prev_sound_pins = 0;
 	m_curr_sound_pins = 0;
 
-	delayed_sound_1(machine(), 0);
-	delayed_sound_2(machine(), 0);
+	delayed_sound_1(0);
+	delayed_sound_2(0);
 }
 
 
-MACHINE_START_MEMBER(n8080_state,sheriff_sound)
+SOUND_START_MEMBER(n8080_state,sheriff)
 {
-	m_sound_timer[0] = machine().scheduler().timer_alloc(FUNC(stop_mono_flop_callback));
-	m_sound_timer[1] = machine().scheduler().timer_alloc(FUNC(stop_mono_flop_callback));
+	m_sound_timer[0] = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(n8080_state::stop_mono_flop_callback), this));
+	m_sound_timer[1] = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(n8080_state::stop_mono_flop_callback), this));
 
 	save_item(NAME(m_prev_snd_data));
 	save_item(NAME(m_prev_sound_pins));
@@ -496,7 +423,7 @@ MACHINE_START_MEMBER(n8080_state,sheriff_sound)
 	save_item(NAME(m_mono_flop));
 }
 
-MACHINE_RESET_MEMBER(n8080_state,sheriff_sound)
+SOUND_RESET_MEMBER(n8080_state,sheriff)
 {
 	m_n8080_hardware = 2;
 
@@ -506,12 +433,12 @@ MACHINE_RESET_MEMBER(n8080_state,sheriff_sound)
 	m_prev_sound_pins = 0;
 	m_curr_sound_pins = 0;
 
-	delayed_sound_1(machine(), 0);
-	delayed_sound_2(machine(), 0);
+	delayed_sound_1(0);
+	delayed_sound_2(0);
 }
 
 
-MACHINE_START_MEMBER(n8080_state,helifire_sound)
+SOUND_START_MEMBER(n8080_state,helifire)
 {
 	save_item(NAME(m_prev_snd_data));
 	save_item(NAME(m_prev_sound_pins));
@@ -522,7 +449,7 @@ MACHINE_START_MEMBER(n8080_state,helifire_sound)
 	save_item(NAME(m_helifire_dac_phase));
 }
 
-MACHINE_RESET_MEMBER(n8080_state,helifire_sound)
+SOUND_RESET_MEMBER(n8080_state,helifire)
 {
 	m_n8080_hardware = 3;
 
@@ -533,8 +460,8 @@ MACHINE_RESET_MEMBER(n8080_state,helifire_sound)
 	m_prev_sound_pins = 0;
 	m_curr_sound_pins = 0;
 
-	delayed_sound_1(machine(), 0);
-	delayed_sound_2(machine(), 0);
+	delayed_sound_1(0);
+	delayed_sound_2(0);
 }
 
 
@@ -567,6 +494,9 @@ ADDRESS_MAP_END
 
 MACHINE_CONFIG_FRAGMENT( spacefev_sound )
 
+	MCFG_SOUND_START_OVERRIDE(n8080_state,spacefev)
+	MCFG_SOUND_RESET_OVERRIDE(n8080_state,spacefev)
+
 	/* basic machine hardware */
 	MCFG_CPU_ADD("audiocpu", I8035, 6000000)
 	MCFG_CPU_PROGRAM_MAP(n8080_sound_cpu_map)
@@ -581,12 +511,27 @@ MACHINE_CONFIG_FRAGMENT( spacefev_sound )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
 
 	MCFG_SOUND_ADD("snsnd", SN76477, 0)
-	MCFG_SOUND_CONFIG(spacefev_sn76477_interface)
+	MCFG_SN76477_NOISE_PARAMS(RES_K(36), RES_K(150), CAP_N(1)) // noise + filter
+	MCFG_SN76477_DECAY_RES(RES_M(1))                    // decay_res
+	MCFG_SN76477_ATTACK_PARAMS(CAP_U(1.0), RES_K(20))   // attack_decay_cap + attack_res
+	MCFG_SN76477_AMP_RES(RES_K(150))                    // amplitude_res
+	MCFG_SN76477_FEEDBACK_RES(RES_K(47))                // feedback_res
+	MCFG_SN76477_VCO_PARAMS(0, CAP_N(1), RES_M(1.5))    // VCO volt + cap + res
+	MCFG_SN76477_PITCH_VOLTAGE(0)                       // pitch_voltage
+	MCFG_SN76477_SLF_PARAMS(CAP_N(47), RES_M(1))        // slf caps + res
+	MCFG_SN76477_ONESHOT_PARAMS(CAP_N(47), RES_K(820))  // oneshot caps + res
+	MCFG_SN76477_VCO_MODE(0)                            // VCO mode
+	MCFG_SN76477_MIXER_PARAMS(0, 0, 0)                  // mixer A, B, C
+	MCFG_SN76477_ENVELOPE_PARAMS(1, 0)                  // envelope 1, 2
+	MCFG_SN76477_ENABLE(1)                              // enable
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.35)
 MACHINE_CONFIG_END
 
 
 MACHINE_CONFIG_FRAGMENT( sheriff_sound )
+
+	MCFG_SOUND_START_OVERRIDE(n8080_state,sheriff)
+	MCFG_SOUND_RESET_OVERRIDE(n8080_state,sheriff)
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("audiocpu", I8035, 6000000)
@@ -600,12 +545,27 @@ MACHINE_CONFIG_FRAGMENT( sheriff_sound )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
 
 	MCFG_SOUND_ADD("snsnd", SN76477, 0)
-	MCFG_SOUND_CONFIG(sheriff_sn76477_interface)
+	MCFG_SN76477_NOISE_PARAMS(RES_K(36), RES_K(100), CAP_N(1)) // noise + filter
+	MCFG_SN76477_DECAY_RES(RES_K(620))                  // decay_res
+	MCFG_SN76477_ATTACK_PARAMS(CAP_U(1.0), RES_K(20))   // attack_decay_cap + attack_res
+	MCFG_SN76477_AMP_RES(RES_K(150))                    // amplitude_res
+	MCFG_SN76477_FEEDBACK_RES(RES_K(47))                // feedback_res
+	MCFG_SN76477_VCO_PARAMS(0, CAP_N(1), RES_M(1.5))    // VCO volt + cap + res
+	MCFG_SN76477_PITCH_VOLTAGE(0)                       // pitch_voltage
+	MCFG_SN76477_SLF_PARAMS(CAP_N(47), RES_M(1.5))      // slf caps + res
+	MCFG_SN76477_ONESHOT_PARAMS(CAP_N(47), RES_K(560))  // oneshot caps + res
+	MCFG_SN76477_VCO_MODE(0)                            // VCO mode
+	MCFG_SN76477_MIXER_PARAMS(0, 0, 0)                  // mixer A, B, C
+	MCFG_SN76477_ENVELOPE_PARAMS(1, 0)                  // envelope 1, 2
+	MCFG_SN76477_ENABLE(1)                              // enable
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.35)
 MACHINE_CONFIG_END
 
 
 MACHINE_CONFIG_FRAGMENT( helifire_sound )
+
+	MCFG_SOUND_START_OVERRIDE(n8080_state,helifire)
+	MCFG_SOUND_RESET_OVERRIDE(n8080_state,helifire)
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("audiocpu", I8035, 6000000)

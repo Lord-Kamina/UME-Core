@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Andrew Gardner
 /*
 
     TODO:
@@ -43,9 +45,10 @@ public:
 
 	thayers_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_pr7820(*this, "laserdisc"),
-			m_ldv1000(*this, "ldv1000") ,
-		m_maincpu(*this, "maincpu") { }
+		m_pr7820(*this, "laserdisc"),
+		m_ldv1000(*this, "ldv1000"),
+		m_maincpu(*this, "maincpu"),
+		m_row(*this, "ROW") { }
 
 	optional_device<pioneer_pr7820_device> m_pr7820;
 	optional_device<pioneer_ldv1000_device> m_ldv1000;
@@ -74,8 +77,8 @@ public:
 	DECLARE_READ8_MEMBER(cop_g_r);
 	DECLARE_WRITE8_MEMBER(control_w);
 	DECLARE_WRITE8_MEMBER(cop_g_w);
-	DECLARE_READ8_MEMBER(cop_si_r);
-	DECLARE_WRITE8_MEMBER(cop_so_w);
+	DECLARE_READ_LINE_MEMBER(cop_si_r);
+	DECLARE_WRITE_LINE_MEMBER(cop_so_w);
 	DECLARE_WRITE8_MEMBER(control2_w);
 	DECLARE_READ8_MEMBER(dsw_b_r);
 	DECLARE_READ8_MEMBER(laserdsc_data_r);
@@ -91,6 +94,7 @@ public:
 	virtual void machine_reset();
 	void check_interrupt();
 	required_device<cpu_device> m_maincpu;
+	required_ioport_array<10> m_row;
 
 protected:
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
@@ -292,7 +296,7 @@ WRITE8_MEMBER(thayers_state::cop_g_w)
 
 /* Keyboard */
 
-READ8_MEMBER(thayers_state::cop_si_r)
+READ_LINE_MEMBER(thayers_state::cop_si_r)
 {
 	/* keyboard data */
 
@@ -318,27 +322,18 @@ READ8_MEMBER(thayers_state::cop_si_r)
 	case 6:
 	case 7:
 	case 8:
-		{
-			UINT8 data;
-			char port[4];
-
-			sprintf(port, "R%d", m_keylatch);
-
-			data = BIT(ioport(port)->read(), m_rx_bit - 5);
-
-			return data;
-		}
+		return BIT(m_row[m_keylatch]->read(), m_rx_bit - 5);
 
 	default:
 		return 0;
 	}
 }
 
-WRITE8_MEMBER(thayers_state::cop_so_w)
+WRITE_LINE_MEMBER(thayers_state::cop_so_w)
 {
 	/* keyboard clock */
 
-	if (data)
+	if (state)
 	{
 		m_rx_bit++;
 
@@ -486,11 +481,13 @@ WRITE8_MEMBER(thayers_state::den2_w)
 
 #define SSI263_CLOCK (XTAL_4MHz/2)
 
+#if 0
 static const char SSI263_PHONEMES[0x40][5] =
 {
 	"PA", "E", "E1", "Y", "YI", "AY", "IE", "I", "A", "AI", "EH", "EH1", "AE", "AE1", "AH", "AH1", "W", "O", "OU", "OO", "IU", "IU1", "U", "U1", "UH", "UH1", "UH2", "UH3", "ER", "R", "R1", "R2",
 	"L", "L1", "LF", "W", "B", "D", "KV", "P", "T", "K", "HV", "HVC", "HF", "HFC", "HN", "Z", "S", "J", "SCH", "V", "F", "THV", "TH", "M", "N", "NG", ":A", ":OH", ":U", ":UH", "E2", "LB"
 };
+#endif
 
 WRITE8_MEMBER(thayers_state::ssi263_register_w)
 {
@@ -627,14 +624,6 @@ static ADDRESS_MAP_START( thayers_io_map, AS_IO, 8, thayers_state )
 	AM_RANGE(0xf7, 0xf7) AM_WRITE(den2_w)
 ADDRESS_MAP_END
 
-static ADDRESS_MAP_START( thayers_cop_io_map, AS_IO, 8, thayers_state )
-	AM_RANGE(COP400_PORT_L, COP400_PORT_L) AM_READWRITE(cop_l_r, cop_l_w)
-	AM_RANGE(COP400_PORT_G, COP400_PORT_G) AM_READWRITE(cop_g_r, cop_g_w)
-	AM_RANGE(COP400_PORT_D, COP400_PORT_D) AM_WRITE(cop_d_w)
-	AM_RANGE(COP400_PORT_SK, COP400_PORT_SK) AM_WRITENOP
-	AM_RANGE(COP400_PORT_SIO, COP400_PORT_SIO) AM_READ(cop_si_r) AM_WRITE(cop_so_w)
-ADDRESS_MAP_END
-
 /* Input Ports */
 
 CUSTOM_INPUT_MEMBER(thayers_state::laserdisc_enter_r)
@@ -691,61 +680,61 @@ static INPUT_PORTS_START( thayers )
 	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER(DEVICE_SELF, thayers_state,laserdisc_enter_r, NULL)
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM_MEMBER(DEVICE_SELF, thayers_state,laserdisc_ready_r, NULL)
 
-	PORT_START("R0")
+	PORT_START("ROW.0")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "2" ) PORT_CODE( KEYCODE_F2 )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "1 - Clear" ) PORT_CODE( KEYCODE_BACKSPACE )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Q" ) PORT_CODE( KEYCODE_Q )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( DEF_STR( Yes ) ) PORT_CODE( KEYCODE_0_PAD )
 
-	PORT_START("R1")
+	PORT_START("ROW.1")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Z - Spell of Release" ) PORT_CODE( KEYCODE_Z )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "A" ) PORT_CODE( KEYCODE_A )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "W - Amulet" ) PORT_CODE( KEYCODE_W )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Items" ) PORT_CODE( KEYCODE_1_PAD )
 
-	PORT_START("R2")
+	PORT_START("ROW.2")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "X - Scepter" ) PORT_CODE( KEYCODE_X )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "S - Dagger" ) PORT_CODE( KEYCODE_S )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "E - Black Mace" ) PORT_CODE( KEYCODE_E )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Drop Item" ) PORT_CODE( KEYCODE_2_PAD )
 
-	PORT_START("R3")
+	PORT_START("ROW.3")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "C - Spell of Seeing" ) PORT_CODE( KEYCODE_C )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "D - Great Circlet" ) PORT_CODE( KEYCODE_D )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "R - Blood Sword" ) PORT_CODE( KEYCODE_R )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Give Score" ) PORT_CODE( KEYCODE_3_PAD )
 
-	PORT_START("R4")
+	PORT_START("ROW.4")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "V - Shield" ) PORT_CODE( KEYCODE_V )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "F - Hunting Horn" ) PORT_CODE( KEYCODE_F )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "T - Chalice" ) PORT_CODE( KEYCODE_T )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Replay" ) PORT_CODE( KEYCODE_4_PAD )
 
-	PORT_START("R5")
+	PORT_START("ROW.5")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "B - Silver Wheat" ) PORT_CODE( KEYCODE_B )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "G - Long Bow" ) PORT_CODE( KEYCODE_G )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Y - Coins" ) PORT_CODE( KEYCODE_Y )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Combine Action" ) PORT_CODE( KEYCODE_6_PAD )
 
-	PORT_START("R6")
+	PORT_START("ROW.6")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "N - Staff" ) PORT_CODE( KEYCODE_N )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "H - Medallion" ) PORT_CODE( KEYCODE_H )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "U - Cold Fire" ) PORT_CODE( KEYCODE_U )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Save Game" ) PORT_CODE( KEYCODE_7_PAD )
 
-	PORT_START("R7")
+	PORT_START("ROW.7")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "M - Spell of Understanding" ) PORT_CODE( KEYCODE_M )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "J - Onyx Seal" ) PORT_CODE( KEYCODE_J )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "I - Crown" ) PORT_CODE( KEYCODE_I )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Update" ) PORT_CODE( KEYCODE_8_PAD )
 
-	PORT_START("R8")
+	PORT_START("ROW.8")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "3 - Enter" ) PORT_CODE( KEYCODE_ENTER )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "K - Orb of Quoid" ) PORT_CODE( KEYCODE_K )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "O - Crystal" ) PORT_CODE( KEYCODE_O )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "Hint" ) PORT_CODE( KEYCODE_9_PAD )
 
-	PORT_START("R9")
+	PORT_START("ROW.9")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "4 - Space" ) PORT_CODE( KEYCODE_SPACE )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "L" ) PORT_CODE( KEYCODE_L )
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME( "P" ) PORT_CODE( KEYCODE_P )
@@ -782,34 +771,31 @@ void thayers_state::machine_reset()
 //  laserdisc_set_type(m_laserdisc, newtype);
 }
 
-/* COP400 Interface */
-
-static COP400_INTERFACE( thayers_cop_intf )
-{
-	COP400_CKI_DIVISOR_4, // ???
-	COP400_CKO_OSCILLATOR_OUTPUT, // ???
-	COP400_MICROBUS_DISABLED
-};
-
 /* Machine Driver */
 
 static MACHINE_CONFIG_START( thayers, thayers_state )
+
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_4MHz)
 	MCFG_CPU_PROGRAM_MAP(thayers_map)
 	MCFG_CPU_IO_MAP(thayers_io_map)
 
 	MCFG_CPU_ADD("mcu", COP421, XTAL_4MHz/2) // COP421L-PCA/N
-	MCFG_CPU_IO_MAP(thayers_cop_io_map)
-	MCFG_CPU_CONFIG(thayers_cop_intf)
-
+	MCFG_COP400_CONFIG( COP400_CKI_DIVISOR_4, COP400_CKO_OSCILLATOR_OUTPUT, COP400_MICROBUS_DISABLED )
+	MCFG_COP400_READ_L_CB(READ8(thayers_state, cop_l_r))
+	MCFG_COP400_WRITE_L_CB(WRITE8(thayers_state, cop_l_w))
+	MCFG_COP400_READ_G_CB(READ8(thayers_state, cop_g_r))
+	MCFG_COP400_WRITE_G_CB(WRITE8(thayers_state, cop_g_w))
+	MCFG_COP400_WRITE_D_CB(WRITE8(thayers_state, cop_d_w))
+	MCFG_COP400_READ_SI_CB(READLINE(thayers_state, cop_si_r))
+	MCFG_COP400_WRITE_SO_CB(WRITELINE(thayers_state, cop_so_w))
 
 	MCFG_LASERDISC_PR7820_ADD("laserdisc")
 
 	/* video hardware */
 	MCFG_LASERDISC_SCREEN_ADD_NTSC("screen", "laserdisc")
 
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_PALETTE_ADD("palette", 256)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -837,7 +823,7 @@ ROM_END
 ROM_START( thayersa )
 	ROM_REGION( 0xe000, "maincpu", 0 )
 	ROM_LOAD( "tq_u33.bin", 0x0000, 0x8000, CRC(82df5d89) SHA1(58dfd62bf8c5a55d1eba397d2c284e99a4685a3f) )
-	ROM_LOAD( "tq_u1(__alt).bin",  0xc000, 0x2000, CRC(33817e25) SHA1(f9750da863dd57fe2f5b6e8fce9c6695dc5c9adc) )
+	ROM_LOAD( "tq_u1.bin",  0xc000, 0x2000, CRC(33817e25) SHA1(f9750da863dd57fe2f5b6e8fce9c6695dc5c9adc) ) // sldh
 
 	ROM_REGION( 0x400, "mcu", 0 )
 	ROM_LOAD( "tq_cop.bin", 0x000, 0x400, CRC(6748e6b3) SHA1(5d7d1ecb57c1501ef6a2d9691eecc9970586606b) )

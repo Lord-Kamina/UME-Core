@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     Atari Escape hardware
@@ -5,14 +7,25 @@
 *************************************************************************/
 
 #include "machine/atarigen.h"
+#include "audio/atarijsa.h"
+#include "video/atarimo.h"
 
 class eprom_state : public atarigen_state
 {
 public:
 	eprom_state(const machine_config &mconfig, device_type type, const char *tag)
 		: atarigen_state(mconfig, type, tag),
-			m_extra(*this, "extra") { }
+			m_playfield_tilemap(*this, "playfield"),
+			m_alpha_tilemap(*this, "alpha"),
+			m_mob(*this, "mob"),
+			m_jsa(*this, "jsa"),
+			m_extra(*this, "extra"),
+			m_palette(*this, "palette") { }
 
+	required_device<tilemap_device> m_playfield_tilemap;
+	required_device<tilemap_device> m_alpha_tilemap;
+	required_device<atari_motion_objects_device> m_mob;
+	required_device<atari_jsa_base_device> m_jsa;
 	int             m_screen_intensity;
 	int             m_video_disable;
 	UINT16 *        m_sync_data;
@@ -38,7 +51,7 @@ public:
 	UINT32 screen_update_guts(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void update_palette();
 	optional_device<cpu_device> m_extra;
+	required_device<palette_device> m_palette;
+	static const atari_motion_objects_config s_mob_config;
+	static const atari_motion_objects_config s_guts_mob_config;
 };
-
-/*----------- defined in video/eprom.c -----------*/
-void eprom_scanline_update(screen_device &screen, int scanline);

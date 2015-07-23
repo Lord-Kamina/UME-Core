@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*********************************************************************
 
     debugcpu.h
 
     Debugger CPU/memory interface engine.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -43,7 +14,8 @@
 #define __DEBUGCPU_H__
 
 #include "express.h"
-#include "simple_set.h"
+
+#include <set>
 
 
 //**************************************************************************
@@ -67,6 +39,9 @@ typedef int (*debug_instruction_hook_func)(device_t &device, offs_t curpc);
 
 struct xml_data_node;
 
+
+// ======================> device_debug
+
 class device_debug
 {
 	typedef offs_t (*dasm_override_func)(device_t &device, char *buffer, offs_t pc, const UINT8 *oprom, const UINT8 *opram, int options);
@@ -79,26 +54,36 @@ public:
 
 	public:
 		// construction/destruction
-		breakpoint(symbol_table &symbols, int index, offs_t address, const char *condition = NULL, const char *action = NULL);
+		breakpoint(device_debug* debugInterface,
+					symbol_table &symbols,
+					int index,
+					offs_t address,
+					const char *condition = NULL,
+					const char *action = NULL);
 
 		// getters
+		const device_debug *debugInterface() const { return m_debugInterface; }
 		breakpoint *next() const { return m_next; }
 		int index() const { return m_index; }
 		bool enabled() const { return m_enabled; }
 		offs_t address() const { return m_address; }
 		const char *condition() const { return m_condition.original_string(); }
-		const char *action() const { return m_action; }
+		const char *action() const { return m_action.c_str(); }
+
+		// setters
+		void setEnabled(bool value) { m_enabled = value; }
 
 	private:
 		// internals
 		bool hit(offs_t pc);
 
-		breakpoint *        m_next;                     // next in the list
-		int                 m_index;                    // user reported index
-		UINT8               m_enabled;                  // enabled?
-		offs_t              m_address;                  // execution address
-		parsed_expression   m_condition;                // condition
-		astring             m_action;                   // action
+		const device_debug * m_debugInterface;           // the interface we were created from
+		breakpoint *         m_next;                     // next in the list
+		int                  m_index;                    // user reported index
+		UINT8                m_enabled;                  // enabled?
+		offs_t               m_address;                  // execution address
+		parsed_expression    m_condition;                // condition
+		std::string          m_action;                   // action
 	};
 
 	// watchpoint class
@@ -108,9 +93,18 @@ public:
 
 	public:
 		// construction/destruction
-		watchpoint(symbol_table &symbols, int index, address_space &space, int type, offs_t address, offs_t length, const char *condition = NULL, const char *action = NULL);
+		watchpoint(device_debug* debugInterface,
+					symbol_table &symbols,
+					int index,
+					address_space &space,
+					int type,
+					offs_t address,
+					offs_t length,
+					const char *condition = NULL,
+					const char *action = NULL);
 
 		// getters
+		const device_debug *debugInterface() const { return m_debugInterface; }
 		watchpoint *next() const { return m_next; }
 		address_space &space() const { return m_space; }
 		int index() const { return m_index; }
@@ -119,21 +113,25 @@ public:
 		offs_t address() const { return m_address; }
 		offs_t length() const { return m_length; }
 		const char *condition() const { return m_condition.original_string(); }
-		const char *action() const { return m_action; }
+		const char *action() const { return m_action.c_str(); }
+
+		// setters
+		void setEnabled(bool value) { m_enabled = value; }
 
 	private:
 		// internals
 		bool hit(int type, offs_t address, int size);
 
-		watchpoint *        m_next;                     // next in the list
-		address_space &     m_space;                    // address space
-		int                 m_index;                    // user reported index
-		bool                m_enabled;                  // enabled?
-		UINT8               m_type;                     // type (read/write)
-		offs_t              m_address;                  // start address
-		offs_t              m_length;                   // length of watch area
-		parsed_expression   m_condition;                // condition
-		astring             m_action;                   // action
+		const device_debug * m_debugInterface;           // the interface we were created from
+		watchpoint *         m_next;                     // next in the list
+		address_space &      m_space;                    // address space
+		int                  m_index;                    // user reported index
+		bool                 m_enabled;                  // enabled?
+		UINT8                m_type;                     // type (read/write)
+		offs_t               m_address;                  // start address
+		offs_t               m_length;                   // length of watch area
+		parsed_expression    m_condition;                // condition
+		std::string          m_action;                   // action
 	};
 
 	// registerpoint class
@@ -150,7 +148,7 @@ public:
 		int index() const { return m_index; }
 		bool enabled() const { return m_enabled; }
 		const char *condition() const { return m_condition.original_string(); }
-		const char *action() const { return m_action; }
+		const char *action() const { return m_action.c_str(); }
 
 	private:
 		// internals
@@ -160,7 +158,7 @@ public:
 		int                 m_index;                    // user reported index
 		UINT8               m_enabled;                  // enabled?
 		parsed_expression   m_condition;                // condition
-		astring             m_action;                   // action
+		std::string         m_action;                   // action
 	};
 
 public:
@@ -176,9 +174,11 @@ public:
 	int logaddrchars(address_spacenum spacenum = AS_0) const { return (m_memory != NULL && m_memory->has_space(spacenum)) ? m_memory->space(spacenum).logaddrchars() : 8; }
 	int min_opcode_bytes() const { return (m_disasm != NULL) ? m_disasm->max_opcode_bytes() : 1; }
 	int max_opcode_bytes() const { return (m_disasm != NULL) ? m_disasm->max_opcode_bytes() : 1; }
+	device_t& device() const { return m_device; }
+
 
 	// hooks used by the rest of the system
-	void start_hook(attotime endtime);
+	void start_hook(const attotime &endtime);
 	void stop_hook();
 	void interrupt_hook(int irqline);
 	void exception_hook(int exception);
@@ -209,7 +209,7 @@ public:
 	void go_exception(int exception);
 	void go_milliseconds(UINT64 milliseconds);
 	void go_next_device();
-	void halt_on_next_instruction(const char *fmt, ...);
+	void halt_on_next_instruction(const char *fmt, ...) ATTR_PRINTF(2,3);
 
 	// breakpoints
 	breakpoint *breakpoint_first() const { return m_bplist; }
@@ -236,7 +236,7 @@ public:
 	void registerpoint_enable_all(bool enable = true );
 
 	// hotspots
-	bool hotspot_tracking_enabled() const { return (m_hotspots != NULL); }
+	bool hotspot_tracking_enabled() const { return !m_hotspots.empty(); }
 	void hotspot_track(int numspots, int threshhold);
 
 	// comments
@@ -267,7 +267,7 @@ public:
 
 	// tracing
 	void trace(FILE *file, bool trace_over, const char *action);
-	void trace_printf(const char *fmt, ...);
+	void trace_printf(const char *fmt, ...) ATTR_PRINTF(2,3);
 	void trace_flush() { if (m_trace != NULL) m_trace->flush(); }
 
 	void reset_transient_flag() { m_flags &= ~DEBUG_FLAG_TRANSIENT; }
@@ -278,7 +278,7 @@ private:
 	// internal helpers
 	void compute_debug_flags();
 	void prepare_for_step_overout(offs_t pc);
-	UINT32 dasm_wrapped(astring &buffer, offs_t pc);
+	UINT32 dasm_wrapped(std::string &buffer, offs_t pc);
 
 	// breakpoint and watchpoint helpers
 	void breakpoint_update_flags();
@@ -351,7 +351,7 @@ private:
 
 		device_debug &      m_debug;                    // reference to our owner
 		FILE &              m_file;                     // tracing file for this CPU
-		astring             m_action;                   // action to perform during a trace
+		std::string         m_action;                   // action to perform during a trace
 		offs_t              m_history[TRACE_LOOPS];     // history of recent PCs
 		int                 m_loops;                    // number of instructions in a loop
 		int                 m_nextdex;                  // next index
@@ -370,8 +370,7 @@ private:
 		address_space *     m_space;                    // space where the access occurred
 		UINT32              m_count;                    // number of hits
 	};
-	hotspot_entry *         m_hotspots;                 // hotspot list
-	int                     m_hotspot_count;            // number of hotspots
+	std::vector<hotspot_entry> m_hotspots;            // hotspot list
 	int                     m_hotspot_threshhold;       // threshhold for the number of hits to print
 
 	// pc tracking
@@ -380,7 +379,7 @@ private:
 	public:
 		dasm_pc_tag(const offs_t& address, const UINT32& crc);
 
-		// required to be included in a simple_set
+		// required to be included in a set
 		bool operator < (const dasm_pc_tag& rhs) const
 		{
 			if (m_address == rhs.m_address)
@@ -391,7 +390,7 @@ private:
 		offs_t m_address;       // Stores [nothing] for a given address & crc32
 		UINT32 m_crc;
 	};
-	simple_set<dasm_pc_tag> m_track_pc_set;
+	std::set<dasm_pc_tag> m_track_pc_set;
 	bool m_track_pc;
 
 	// comments
@@ -400,11 +399,11 @@ private:
 	public:
 		dasm_comment(offs_t address, UINT32 crc, const char *text, rgb_t color);
 
-		astring  m_text;        // Stores comment text & color for a given address & crc32
+		std::string  m_text;        // Stores comment text & color for a given address & crc32
 		rgb_t    m_color;
 	};
-	simple_set<dasm_comment> m_comment_set;             // collection of comments
-	UINT32                   m_comment_change;          // change counter for comments
+	std::set<dasm_comment> m_comment_set;               // collection of comments
+	UINT32                 m_comment_change;            // change counter for comments
 
 	// memory tracking
 	class dasm_memory_access
@@ -415,21 +414,24 @@ private:
 							const UINT64& data,
 							const offs_t& pc);
 
-		// required to be included in a simple_set
+		// required to be included in a set
 		bool operator < (const dasm_memory_access& rhs) const
 		{
 			if ((m_address == rhs.m_address) && (m_address_space == rhs.m_address_space))
 				return m_data < rhs.m_data;
-			return (m_address < rhs.m_address) && (m_address_space == rhs.m_address_space);
+			else if (m_address_space == rhs.m_address_space)
+				return m_address < rhs.m_address;
+			else
+				return m_address_space < rhs.m_address_space;
 		}
 
 		// Stores the PC for a given address, memory region, and data value
 		address_spacenum m_address_space;
 		offs_t           m_address;
 		UINT64           m_data;
-		offs_t           m_pc;
+		mutable offs_t   m_pc;
 	};
-	simple_set<dasm_memory_access> m_track_mem_set;
+	std::set<dasm_memory_access> m_track_mem_set;
 	bool m_track_mem;
 
 	// internal flag values
@@ -516,16 +518,16 @@ bool debug_comment_load(running_machine &machine);
 /* return the physical address corresponding to the given logical address */
 int debug_cpu_translate(address_space &space, int intention, offs_t *address);
 
-/* return a byte from the the specified memory space */
+/* return a byte from the specified memory space */
 UINT8 debug_read_byte(address_space &space, offs_t address, int apply_translation);
 
-/* return a word from the the specified memory space */
+/* return a word from the specified memory space */
 UINT16 debug_read_word(address_space &space, offs_t address, int apply_translation);
 
-/* return a dword from the the specified memory space */
+/* return a dword from the specified memory space */
 UINT32 debug_read_dword(address_space &space, offs_t address, int apply_translation);
 
-/* return a qword from the the specified memory space */
+/* return a qword from the specified memory space */
 UINT64 debug_read_qword(address_space &space, offs_t address, int apply_translation);
 
 /* return 1,2,4 or 8 bytes from the specified memory space */
@@ -547,7 +549,7 @@ void debug_write_qword(address_space &space, offs_t address, UINT64 data, int ap
 void debug_write_memory(address_space &space, offs_t address, UINT64 data, int size, int apply_translation);
 
 /* read 1,2,4 or 8 bytes at the given offset from opcode space */
-UINT64 debug_read_opcode(address_space &space, offs_t offset, int size, int arg);
+UINT64 debug_read_opcode(address_space &space, offs_t offset, int size);
 
 
 #endif

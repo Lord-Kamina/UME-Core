@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                           -= Newer Seta Hardware =-
@@ -30,9 +32,10 @@ P0-123A                 1996    Wakakusamonogatari Mahjong Yonshimai    Maborosh
 P0-125A ; KE (Namco)    1996    Kosodate Quiz My Angel                  Namco
 P0-136A ; KL (Namco)    1997    Kosodate Quiz My Angel 2                Namco
 P-FG-02                 1997    Reel'N Quake                            <unknown>
+P-FG-03              <unknown>  Endless Riches                          E.N.Tiger
 P0-140B                 2000    Funcube                                 Namco
 P0-140B                 2000    Namco Stars                             Namco
-P0-142A                 1999    Puzzle De Bowling                       Nihon System / Moss
+P0-142A                 1999    Puzzle De Bowling                       MOSS / Nihon System
 P0-142A + extra parts   2000    Penguin Brothers                        Subsino
 B0-003A (or B0-003B)    2000    Deer Hunting USA                        Sammy
 B0-003A (or B0-003B)    2001    Turkey Hunting USA                      Sammy
@@ -40,9 +43,6 @@ B0-006B                 2001-2  Funcube 2 - 5                           Namco
 B0-010A                 2001    Wing Shooting Championship              Sammy
 B0-010A                 2002    Trophy Hunting - Bear & Moose           Sammy
 -------------------------------------------------------------------------------------------
-
-* Not dumped: Endless Riches by <unknown> 8-liner gambler on modified Reel'N Quake PCB that
-              uses an 8-liner harness instead of a JAMMA connector.
 
 TODO:
 
@@ -110,13 +110,13 @@ reelquak:
 #include "includes/seta2.h"
 #include "cpu/m68000/m68000.h"
 #include "machine/tmp68301.h"
-#include "cpu/h83002/h8.h"
+#include "cpu/h8/h83006.h"
 #include "sound/okim9810.h"
-#include "sound/x1_010.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "machine/nvram.h"
 #include "machine/ticket.h"
 #include "machine/mcf5206e.h"
+
 
 /***************************************************************************
 
@@ -126,7 +126,7 @@ reelquak:
 
 ***************************************************************************/
 
-WRITE16_MEMBER(seta2_state::seta2_sound_bank_w)
+WRITE16_MEMBER(seta2_state::sound_bank_w)
 {
 	if (ACCESSING_BITS_0_7)
 	{
@@ -168,13 +168,13 @@ static ADDRESS_MAP_START( grdians_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x700004, 0x700005) AM_READ_PORT("SYSTEM")             // Coins
 	AM_RANGE(0x70000c, 0x70000d) AM_READ(watchdog_reset16_r)        // Watchdog
 	AM_RANGE(0x800000, 0x800001) AM_WRITE(grdians_lockout_w)
-	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_word_r,seta_sound_word_w)   // Sound
+	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE("x1snd", x1_010_device, word_r, word_w)   // Sound
 	AM_RANGE(0xc00000, 0xc3ffff) AM_RAM AM_SHARE("spriteram")       // Sprites
-	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")    // Palette
+	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    // Palette
 	AM_RANGE(0xc50000, 0xc5ffff) AM_RAM                             // cleared
-	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")  // Video Registers
-	AM_RANGE(0xe00010, 0xe0001f) AM_WRITE(seta2_sound_bank_w)       // Samples Banks
-	AM_RANGE(0xfffc00, 0xffffff) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)  // TMP68301 Registers
+	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(vregs_w) AM_SHARE("vregs")  // Video Registers
+	AM_RANGE(0xe00010, 0xe0001f) AM_WRITE(sound_bank_w)       // Samples Banks
+	AM_RANGE(0xfffc00, 0xffffff) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)  // TMP68301 Registers
 ADDRESS_MAP_END
 
 /***************************************************************************
@@ -183,14 +183,14 @@ ADDRESS_MAP_END
 
 READ16_MEMBER(seta2_state::gundamex_eeprom_r)
 {
-	return ((m_eeprom->read_bit() & 1)) << 3;
+	return ((m_eeprom->do_read() & 1)) << 3;
 }
 
 WRITE16_MEMBER(seta2_state::gundamex_eeprom_w)
 {
-	m_eeprom->set_clock_line((data & 0x2) ? ASSERT_LINE : CLEAR_LINE);
-	m_eeprom->write_bit(data & 0x1);
-	m_eeprom->set_cs_line((data & 0x4) ? CLEAR_LINE : ASSERT_LINE);
+	m_eeprom->clk_write((data & 0x2) ? ASSERT_LINE : CLEAR_LINE);
+	m_eeprom->di_write(data & 0x1);
+	m_eeprom->cs_write((data & 0x4) ? ASSERT_LINE : CLEAR_LINE);
 }
 
 static ADDRESS_MAP_START( gundamex_map, AS_PROGRAM, 16, seta2_state )
@@ -206,20 +206,24 @@ static ADDRESS_MAP_START( gundamex_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x70000a, 0x70000b) AM_READ_PORT("IN1")                // P2
 	AM_RANGE(0x70000c, 0x70000d) AM_WRITE(watchdog_reset16_w)
 	AM_RANGE(0x800000, 0x800001) AM_WRITE(grdians_lockout_w)
-	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_word_r,seta_sound_word_w)   // Sound
+	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE("x1snd", x1_010_device, word_r, word_w)   // Sound
 	AM_RANGE(0xc00000, 0xc3ffff) AM_RAM AM_SHARE("spriteram")   // Sprites
-	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")    // Palette
+	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    // Palette
 	AM_RANGE(0xc50000, 0xc5ffff) AM_RAM                             // cleared
-	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")  // Video Registers
-	AM_RANGE(0xe00010, 0xe0001f) AM_WRITE(seta2_sound_bank_w)       // Samples Banks
-	AM_RANGE(0xfffd0a, 0xfffd0b) AM_READWRITE(gundamex_eeprom_r,gundamex_eeprom_w)  // parallel data register
-	AM_RANGE(0xfffc00, 0xffffff) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)  // TMP68301 Registers
+	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(vregs_w) AM_SHARE("vregs")  // Video Registers
+	AM_RANGE(0xe00010, 0xe0001f) AM_WRITE(sound_bank_w)       // Samples Banks
+	AM_RANGE(0xfffc00, 0xffffff) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)  // TMP68301 Registers
 ADDRESS_MAP_END
 
 
 /***************************************************************************
                       Wakakusamonogatari Mahjong Yonshimai
 ***************************************************************************/
+
+MACHINE_START_MEMBER(seta2_state, mj4simai)
+{
+	save_item(NAME(m_keyboard_row));
+}
 
 READ16_MEMBER(seta2_state::mj4simai_p1_r)
 {
@@ -264,12 +268,12 @@ static ADDRESS_MAP_START( mj4simai_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x600200, 0x600201) AM_WRITENOP                        // Leds? Coins?
 	AM_RANGE(0x600300, 0x600301) AM_READ_PORT("DSW1")               // DSW 1
 	AM_RANGE(0x600302, 0x600303) AM_READ_PORT("DSW2")               // DSW 2
-	AM_RANGE(0x600300, 0x60030f) AM_WRITE(seta2_sound_bank_w)       // Samples Banks
-	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_word_r,seta_sound_word_w)   // Sound
+	AM_RANGE(0x600300, 0x60030f) AM_WRITE(sound_bank_w)       // Samples Banks
+	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE("x1snd", x1_010_device, word_r, word_w)   // Sound
 	AM_RANGE(0xc00000, 0xc3ffff) AM_RAM AM_SHARE("spriteram")   // Sprites
-	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")    // Palette
-	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")  // Video Registers
-	AM_RANGE(0xfffc00, 0xffffff) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)  // TMP68301 Registers
+	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    // Palette
+	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(vregs_w) AM_SHARE("vregs")  // Video Registers
+	AM_RANGE(0xfffc00, 0xffffff) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)  // TMP68301 Registers
 ADDRESS_MAP_END
 
 
@@ -287,12 +291,12 @@ static ADDRESS_MAP_START( myangel_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x700200, 0x700201) AM_WRITENOP                        // Leds? Coins?
 	AM_RANGE(0x700300, 0x700301) AM_READ_PORT("DSW1")               // DSW 1
 	AM_RANGE(0x700302, 0x700303) AM_READ_PORT("DSW2")               // DSW 2
-	AM_RANGE(0x700310, 0x70031f) AM_WRITE(seta2_sound_bank_w)       // Samples Banks
-	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_word_r,seta_sound_word_w)   // Sound
+	AM_RANGE(0x700310, 0x70031f) AM_WRITE(sound_bank_w)       // Samples Banks
+	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE("x1snd", x1_010_device, word_r, word_w)   // Sound
 	AM_RANGE(0xc00000, 0xc3ffff) AM_RAM AM_SHARE("spriteram")       // Sprites
-	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")    // Palette
-	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")              // Video Registers
-	AM_RANGE(0xfffc00, 0xffffff) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)      // TMP68301 Registers
+	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    // Palette
+	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(vregs_w) AM_SHARE("vregs")              // Video Registers
+	AM_RANGE(0xfffc00, 0xffffff) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)      // TMP68301 Registers
 ADDRESS_MAP_END
 
 
@@ -310,12 +314,12 @@ static ADDRESS_MAP_START( myangel2_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x600200, 0x600201) AM_WRITENOP                        // Leds? Coins?
 	AM_RANGE(0x600300, 0x600301) AM_READ_PORT("DSW1")               // DSW 1
 	AM_RANGE(0x600302, 0x600303) AM_READ_PORT("DSW2")               // DSW 2
-	AM_RANGE(0x600300, 0x60030f) AM_WRITE(seta2_sound_bank_w)       // Samples Banks
-	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_word_r,seta_sound_word_w)   // Sound
+	AM_RANGE(0x600300, 0x60030f) AM_WRITE(sound_bank_w)       // Samples Banks
+	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE("x1snd", x1_010_device, word_r, word_w)   // Sound
 	AM_RANGE(0xd00000, 0xd3ffff) AM_RAM AM_SHARE("spriteram")       // Sprites
-	AM_RANGE(0xd40000, 0xd4ffff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")    // Palette
-	AM_RANGE(0xd60000, 0xd6003f) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")          // Video Registers
-	AM_RANGE(0xfffc00, 0xffffff) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)      // TMP68301 Registers
+	AM_RANGE(0xd40000, 0xd4ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    // Palette
+	AM_RANGE(0xd60000, 0xd6003f) AM_WRITE(vregs_w) AM_SHARE("vregs")          // Video Registers
+	AM_RANGE(0xfffc00, 0xffffff) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)      // TMP68301 Registers
 ADDRESS_MAP_END
 
 
@@ -350,17 +354,17 @@ static ADDRESS_MAP_START( pzlbowl_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x200000, 0x20ffff) AM_RAM                                 // RAM
 	AM_RANGE(0x400300, 0x400301) AM_READ_PORT("DSW1")                   // DSW 1
 	AM_RANGE(0x400302, 0x400303) AM_READ_PORT("DSW2")                   // DSW 2
-	AM_RANGE(0x400300, 0x40030f) AM_WRITE(seta2_sound_bank_w)           // Samples Banks
+	AM_RANGE(0x400300, 0x40030f) AM_WRITE(sound_bank_w)           // Samples Banks
 	AM_RANGE(0x500000, 0x500001) AM_READ_PORT("P1")                     // P1
 	AM_RANGE(0x500002, 0x500003) AM_READ_PORT("P2")                     // P2
 	AM_RANGE(0x500004, 0x500005) AM_READWRITE(pzlbowl_coins_r,pzlbowl_coin_counter_w)   // Coins + Protection?
 	AM_RANGE(0x500006, 0x500007) AM_READ(watchdog_reset16_r)            // Watchdog
 	AM_RANGE(0x700000, 0x700001) AM_READ(pzlbowl_protection_r)          // Protection
 	AM_RANGE(0x800000, 0x83ffff) AM_RAM AM_SHARE("spriteram")       // Sprites
-	AM_RANGE(0x840000, 0x84ffff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")    // Palette
-	AM_RANGE(0x860000, 0x86003f) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")              // Video Registers
-	AM_RANGE(0x900000, 0x903fff) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_word_r,seta_sound_word_w)   // Sound
-	AM_RANGE(0xfffc00, 0xffffff) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)      // TMP68301 Registers
+	AM_RANGE(0x840000, 0x84ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    // Palette
+	AM_RANGE(0x860000, 0x86003f) AM_WRITE(vregs_w) AM_SHARE("vregs")              // Video Registers
+	AM_RANGE(0x900000, 0x903fff) AM_DEVREADWRITE("x1snd", x1_010_device, word_r, word_w)   // Sound
+	AM_RANGE(0xfffc00, 0xffffff) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)      // TMP68301 Registers
 ADDRESS_MAP_END
 
 
@@ -375,7 +379,7 @@ static ADDRESS_MAP_START( penbros_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x300000, 0x30ffff) AM_RAM                             // RAM
 	AM_RANGE(0x500300, 0x500301) AM_READ_PORT("DSW1")               // DSW 1
 	AM_RANGE(0x500302, 0x500303) AM_READ_PORT("DSW2")               // DSW 2
-	AM_RANGE(0x500300, 0x50030f) AM_WRITE(seta2_sound_bank_w)       // Samples Banks
+	AM_RANGE(0x500300, 0x50030f) AM_WRITE(sound_bank_w)       // Samples Banks
 	AM_RANGE(0x600000, 0x600001) AM_READ_PORT("P1")                 // P1
 	AM_RANGE(0x600002, 0x600003) AM_READ_PORT("P2")                 // P2
 	AM_RANGE(0x600004, 0x600005) AM_READ_PORT("SYSTEM")             // Coins
@@ -383,10 +387,10 @@ static ADDRESS_MAP_START( penbros_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x600006, 0x600007) AM_READ(watchdog_reset16_r)        // Watchdog
 	//AM_RANGE(0x700000, 0x700001) AM_READ(pzlbowl_protection_r)      // Protection
 	AM_RANGE(0xb00000, 0xb3ffff) AM_RAM AM_SHARE("spriteram")       // Sprites
-	AM_RANGE(0xb40000, 0xb4ffff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")    // Palette
-	AM_RANGE(0xb60000, 0xb6003f) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")
-	AM_RANGE(0xa00000, 0xa03fff) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_word_r,seta_sound_word_w)   // Sound
-	AM_RANGE(0xfffc00, 0xffffff) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)      // TMP68301 Registers
+	AM_RANGE(0xb40000, 0xb4ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    // Palette
+	AM_RANGE(0xb60000, 0xb6003f) AM_WRITE(vregs_w) AM_SHARE("vregs")
+	AM_RANGE(0xa00000, 0xa03fff) AM_DEVREADWRITE("x1snd", x1_010_device, word_r, word_w)   // Sound
+	AM_RANGE(0xfffc00, 0xffffff) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)      // TMP68301 Registers
 ADDRESS_MAP_END
 
 
@@ -439,13 +443,12 @@ static ADDRESS_MAP_START( reelquak_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x400200, 0x400201) AM_WRITE(reelquak_coin_w)          // Coin Counters / IRQ Ack
 	AM_RANGE(0x400300, 0x400301) AM_READ_PORT("DSW1")               // DSW 1
 	AM_RANGE(0x400302, 0x400303) AM_READ_PORT("DSW2")               // DSW 2
-	AM_RANGE(0x400300, 0x40030f) AM_WRITE(seta2_sound_bank_w)       // Samples Banks
-	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_word_r,seta_sound_word_w)   // Sound
+	AM_RANGE(0x400300, 0x40030f) AM_WRITE(sound_bank_w)       // Samples Banks
+	AM_RANGE(0xb00000, 0xb03fff) AM_DEVREADWRITE("x1snd", x1_010_device, word_r, word_w)   // Sound
 	AM_RANGE(0xc00000, 0xc3ffff) AM_RAM AM_SHARE("spriteram")       // Sprites
-	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")    // Palette
-	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")              // Video Registers
-	AM_RANGE(0xfffd0a, 0xfffd0b) AM_WRITE(reelquak_leds_w )     // parallel data register (leds)
-	AM_RANGE(0xfffc00, 0xffffff) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)      // TMP68301 Registers
+	AM_RANGE(0xc40000, 0xc4ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    // Palette
+	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(vregs_w) AM_SHARE("vregs")              // Video Registers
+	AM_RANGE(0xfffc00, 0xffffff) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)      // TMP68301 Registers
 ADDRESS_MAP_END
 
 
@@ -458,8 +461,8 @@ static ADDRESS_MAP_START( namcostr_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE(0x000000, 0x07ffff) AM_ROM                             // ROM
 	AM_RANGE(0x200000, 0x20ffff) AM_RAM                             // RAM
 	AM_RANGE(0xc00000, 0xc3ffff) AM_RAM AM_SHARE("spriteram")       // Sprites
-	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")  // Video Registers
-	AM_RANGE(0xfffc00, 0xffffff) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)  // TMP68301 Registers
+	AM_RANGE(0xc60000, 0xc6003f) AM_WRITE(vregs_w) AM_SHARE("vregs")  // Video Registers
+	AM_RANGE(0xfffc00, 0xffffff) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)  // TMP68301 Registers
 ADDRESS_MAP_END
 
 
@@ -488,7 +491,7 @@ static ADDRESS_MAP_START( samshoot_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE( 0x400000, 0x400001 ) AM_READ_PORT("DSW1")             // DSW 1
 	AM_RANGE( 0x400002, 0x400003 ) AM_READ_PORT("BUTTONS")          // Buttons
 
-	AM_RANGE( 0x400300, 0x40030f ) AM_WRITE(seta2_sound_bank_w )    // Samples Banks
+	AM_RANGE( 0x400300, 0x40030f ) AM_WRITE(sound_bank_w )    // Samples Banks
 
 	AM_RANGE( 0x500000, 0x500001 ) AM_READ_PORT("GUN1")             // P1
 	AM_RANGE( 0x580000, 0x580001 ) AM_READ_PORT("GUN2")             // P2
@@ -499,19 +502,135 @@ static ADDRESS_MAP_START( samshoot_map, AS_PROGRAM, 16, seta2_state )
 	AM_RANGE( 0x700006, 0x700007 ) AM_READ(watchdog_reset16_r ) // Watchdog?
 
 	AM_RANGE( 0x800000, 0x83ffff ) AM_RAM AM_SHARE("spriteram") // Sprites
-	AM_RANGE( 0x840000, 0x84ffff ) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")  // Palette
-	AM_RANGE( 0x860000, 0x86003f ) AM_WRITE(seta2_vregs_w) AM_SHARE("vregs")    // Video Registers
+	AM_RANGE( 0x840000, 0x84ffff ) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")  // Palette
+	AM_RANGE( 0x860000, 0x86003f ) AM_WRITE(vregs_w) AM_SHARE("vregs")    // Video Registers
 
-	AM_RANGE( 0x900000, 0x903fff ) AM_DEVREADWRITE_LEGACY("x1snd", seta_sound_word_r, seta_sound_word_w )   // Sound
+	AM_RANGE( 0x900000, 0x903fff ) AM_DEVREADWRITE("x1snd", x1_010_device, word_r, word_w)   // Sound
 
-	AM_RANGE( 0xfffd0a, 0xfffd0b ) AM_READ_PORT("DSW2")             // parallel data register (DSW 2)
-	AM_RANGE( 0xfffc00, 0xffffff ) AM_READWRITE_LEGACY(tmp68301_regs_r, tmp68301_regs_w)    // TMP68301 Registers
+	AM_RANGE( 0xfffc00, 0xffffff ) AM_DEVREADWRITE("tmp68301", tmp68301_device, regs_r, regs_w)    // TMP68301 Registers
 ADDRESS_MAP_END
 
 
 /***************************************************************************
                                Funcube series
 ***************************************************************************/
+
+// Touchscreen
+
+#define MCFG_FUNCUBE_TOUCHSCREEN_ADD( _tag, _clock ) \
+	MCFG_DEVICE_ADD( _tag, FUNCUBE_TOUCHSCREEN, _clock )
+
+#define MCFG_FUNCUBE_TOUCHSCREEN_TX_CALLBACK(_devcb) \
+	devcb = &funcube_touchscreen_device::set_tx_cb(*device, DEVCB_##_devcb);
+
+class funcube_touchscreen_device : public device_t,
+									public device_serial_interface
+{
+public:
+	funcube_touchscreen_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+	virtual ioport_constructor device_input_ports() const;
+	template<class _Object> static devcb_base &set_tx_cb(device_t &device, _Object object) { return downcast<funcube_touchscreen_device &>(device).m_tx_cb.set_callback(object); }
+
+protected:
+	virtual void device_start();
+	virtual void device_reset();
+	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
+
+	virtual void tra_complete();
+	virtual void tra_callback();
+
+private:
+	devcb_write_line m_tx_cb;
+	required_ioport m_x;
+	required_ioport m_y;
+	required_ioport m_btn;
+
+	UINT8 m_button_state;
+	int m_serial_pos;
+	UINT8 m_serial[4];
+};
+
+const device_type FUNCUBE_TOUCHSCREEN = &device_creator<funcube_touchscreen_device>;
+
+static INPUT_PORTS_START( funcube_touchscreen )
+	PORT_START("touch_btn")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME( "Touch Screen" )
+
+	PORT_START("touch_x")
+	PORT_BIT( 0xff, 0x00, IPT_LIGHTGUN_X ) PORT_MINMAX(0,0x5c+1) PORT_CROSSHAIR(X, -(1.0 * 0x05d/0x5c), -1.0/0x5c, 0) PORT_SENSITIVITY(45) PORT_KEYDELTA(5) PORT_REVERSE
+
+	PORT_START("touch_y")
+	PORT_BIT( 0xff, 0x00, IPT_LIGHTGUN_Y ) PORT_MINMAX(0,0x46+1) PORT_CROSSHAIR(Y, -(0xf0-8.0)/0xf0*0x047/0x46, -1.0/0x46, 0) PORT_SENSITIVITY(45) PORT_KEYDELTA(5) PORT_REVERSE
+INPUT_PORTS_END
+
+funcube_touchscreen_device::funcube_touchscreen_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
+	device_t(mconfig, FUNCUBE_TOUCHSCREEN, "Funcube Touchscreen", tag, owner, clock, "funcube_touchscrene", __FILE__),
+	device_serial_interface(mconfig, *this),
+	m_tx_cb(*this),
+	m_x(*this, "touch_x"),
+	m_y(*this, "touch_y"),
+	m_btn(*this, "touch_btn")
+{
+}
+
+ioport_constructor funcube_touchscreen_device::device_input_ports() const
+{
+	return INPUT_PORTS_NAME(funcube_touchscreen);
+}
+
+void funcube_touchscreen_device::device_start()
+{
+	set_data_frame(1, 8, PARITY_NONE, STOP_BITS_1);
+	set_tra_rate(9600);
+	m_button_state = 0x00;
+	emu_timer *tm = timer_alloc(0);
+	tm->adjust(attotime::from_ticks(1, clock()), 0, attotime::from_ticks(1, clock()));
+	m_tx_cb.resolve_safe();
+
+	save_item(NAME(m_button_state));
+	save_item(NAME(m_serial_pos));
+	save_item(NAME(m_serial));
+	device_serial_interface::register_save_state(machine().save(), this);
+}
+
+void funcube_touchscreen_device::device_reset()
+{
+	m_serial_pos = 0;
+	memset(m_serial, 0, sizeof(m_serial));
+	m_tx_cb(1);
+}
+
+void funcube_touchscreen_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+{
+	if(id) {
+		device_serial_interface::device_timer(timer, id, param, ptr);
+		return;
+	}
+
+	UINT8 button_state = m_btn->read();
+	if(m_button_state != button_state) {
+		m_button_state = button_state;
+		m_serial[0] = button_state ? 0xfe : 0xfd;
+		m_serial[1] = m_x->read();
+		m_serial[2] = m_y->read();
+		m_serial[3] = 0xff;
+		m_serial_pos = 0;
+		transmit_register_setup(m_serial[m_serial_pos++]);
+	}
+}
+
+void funcube_touchscreen_device::tra_complete()
+{
+	if(m_serial_pos != 4)
+		transmit_register_setup(m_serial[m_serial_pos++]);
+}
+
+void funcube_touchscreen_device::tra_callback()
+{
+	m_tx_cb(transmit_register_get_data_bit());
+}
+
 
 // Bus conversion functions:
 
@@ -552,7 +671,7 @@ READ32_MEMBER(seta2_state::funcube_debug_r)
 	UINT32 ret = ioport("DEBUG")->read();
 
 	// This bits let you move the crosshair in the inputs / touch panel test with a joystick
-	if (!(machine().primary_screen->frame_number() % 3))
+	if (!(m_screen->frame_number() % 3))
 		ret |= 0x3f;
 
 	return ret;
@@ -586,8 +705,8 @@ static ADDRESS_MAP_START( funcube_map, AS_PROGRAM, 32, seta2_state )
 	AM_RANGE( 0x00500000, 0x00500003 ) AM_READWRITE(oki_read, oki_write)
 
 	AM_RANGE( 0x00800000, 0x0083ffff ) AM_READWRITE16(spriteram16_word_r,  spriteram16_word_w, 0xffffffff ) AM_SHARE("spriteram")
-	AM_RANGE( 0x00840000, 0x0084ffff ) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_dword_be_w) AM_SHARE("paletteram")  // Palette
-	AM_RANGE( 0x00860000, 0x0086003f ) AM_WRITE16(seta2_vregs_w, 0xffffffff ) AM_SHARE("vregs")
+	AM_RANGE( 0x00840000, 0x0084ffff ) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")  // Palette
+	AM_RANGE( 0x00860000, 0x0086003f ) AM_WRITE16(vregs_w, 0xffffffff ) AM_SHARE("vregs")
 
 	AM_RANGE( 0x00c00000, 0x00c002ff ) AM_READWRITE(funcube_nvram_dword_r, funcube_nvram_dword_w )
 
@@ -605,8 +724,8 @@ static ADDRESS_MAP_START( funcube2_map, AS_PROGRAM, 32, seta2_state )
 	AM_RANGE( 0x00600000, 0x00600003 ) AM_READWRITE(oki_read, oki_write)
 
 	AM_RANGE( 0x00800000, 0x0083ffff ) AM_READWRITE16(spriteram16_word_r,  spriteram16_word_w, 0xffffffff ) AM_SHARE("spriteram")
-	AM_RANGE( 0x00840000, 0x0084ffff ) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_dword_be_w) AM_SHARE("paletteram")
-	AM_RANGE( 0x00860000, 0x0086003f ) AM_WRITE16(seta2_vregs_w, 0xffffffff ) AM_SHARE("vregs")
+	AM_RANGE( 0x00840000, 0x0084ffff ) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
+	AM_RANGE( 0x00860000, 0x0086003f ) AM_WRITE16(vregs_w, 0xffffffff ) AM_SHARE("vregs")
 
 	AM_RANGE( 0x00c00000, 0x00c002ff ) AM_READWRITE(funcube_nvram_dword_r, funcube_nvram_dword_w )
 
@@ -628,13 +747,13 @@ ADDRESS_MAP_END
 
 #define FUNCUBE_SUB_CPU_CLOCK (XTAL_14_7456MHz)
 
-READ8_MEMBER(seta2_state::funcube_coins_r)
+READ16_MEMBER(seta2_state::funcube_coins_r)
 {
 	UINT8 ret = ioport("SWITCH")->read();
 	UINT8 coin_bit0 = 1;    // active low
 	UINT8 coin_bit1 = 1;
 
-	UINT8 hopper_bit = (m_funcube_hopper_motor && !(machine().primary_screen->frame_number()%20)) ? 1 : 0;
+	UINT8 hopper_bit = (m_funcube_hopper_motor && !(m_screen->frame_number()%20)) ? 1 : 0;
 
 	const UINT64 coin_total_cycles = FUNCUBE_SUB_CPU_CLOCK / (1000/20);
 
@@ -658,24 +777,6 @@ READ8_MEMBER(seta2_state::funcube_coins_r)
 	return (ret & ~7) | (hopper_bit << 2) | (coin_bit1 << 1) | coin_bit0;
 }
 
-READ8_MEMBER(seta2_state::funcube_serial_r)
-{
-	UINT8 ret = 0xff;
-
-	switch( m_funcube_serial_count )
-	{
-		case 4: ret = m_funcube_serial_fifo[0]; break;
-		case 3: ret = m_funcube_serial_fifo[1]; break;
-		case 2: ret = m_funcube_serial_fifo[2]; break;
-		case 1: ret = m_funcube_serial_fifo[3]; break;
-	}
-
-	if (m_funcube_serial_count)
-		m_funcube_serial_count--;
-
-	return ret;
-}
-
 void seta2_state::funcube_debug_outputs()
 {
 #ifdef MAME_DEBUG
@@ -683,7 +784,7 @@ void seta2_state::funcube_debug_outputs()
 #endif
 }
 
-WRITE8_MEMBER(seta2_state::funcube_leds_w)
+WRITE16_MEMBER(seta2_state::funcube_leds_w)
 {
 	*m_funcube_leds = data;
 
@@ -699,13 +800,13 @@ WRITE8_MEMBER(seta2_state::funcube_leds_w)
 	funcube_debug_outputs();
 }
 
-READ8_MEMBER(seta2_state::funcube_outputs_r)
+READ16_MEMBER(seta2_state::funcube_outputs_r)
 {
 	// Bits 1,2,3 read
 	return *m_funcube_outputs;
 }
 
-WRITE8_MEMBER(seta2_state::funcube_outputs_w)
+WRITE16_MEMBER(seta2_state::funcube_outputs_w)
 {
 	*m_funcube_outputs = data;
 
@@ -722,27 +823,24 @@ WRITE8_MEMBER(seta2_state::funcube_outputs_w)
 	funcube_debug_outputs();
 }
 
-READ8_MEMBER(seta2_state::funcube_battery_r)
+READ16_MEMBER(seta2_state::funcube_battery_r)
 {
 	return ioport("BATTERY")->read() ? 0x40 : 0x00;
 }
 
-static ADDRESS_MAP_START( funcube_sub_io, AS_IO, 8, seta2_state )
-	AM_RANGE( H8_PORT_7,   H8_PORT_7   )    AM_READ(funcube_coins_r )
-	AM_RANGE( H8_PORT_4,   H8_PORT_4   )    AM_READ(funcube_battery_r )
-	AM_RANGE( H8_PORT_A,   H8_PORT_A   )    AM_READWRITE(funcube_outputs_r, funcube_outputs_w ) AM_SHARE("funcube_outputs")
-	AM_RANGE( H8_PORT_B,   H8_PORT_B   )    AM_WRITE(funcube_leds_w )                           AM_SHARE("funcube_leds")
-//  AM_RANGE( H8_SERIAL_0, H8_SERIAL_0 )    // cabinets linking (jpunit)
-	AM_RANGE( H8_SERIAL_1, H8_SERIAL_1 )    AM_READ(funcube_serial_r )
+// cabinet linking on sci0
+static ADDRESS_MAP_START( funcube_sub_io, AS_IO, 16, seta2_state )
+	AM_RANGE( h8_device::PORT_7,   h8_device::PORT_7   )    AM_READ(funcube_coins_r )
+	AM_RANGE( h8_device::PORT_4,   h8_device::PORT_4   )    AM_READ(funcube_battery_r )
+	AM_RANGE( h8_device::PORT_A,   h8_device::PORT_A   )    AM_READWRITE(funcube_outputs_r, funcube_outputs_w ) AM_SHARE("funcube_outputs")
+	AM_RANGE( h8_device::PORT_B,   h8_device::PORT_B   )    AM_WRITE(funcube_leds_w )                           AM_SHARE("funcube_leds")
 ADDRESS_MAP_END
 
-static ADDRESS_MAP_START( funcube2_sub_io, AS_IO, 8, seta2_state )
-	AM_RANGE( H8_PORT_7,   H8_PORT_7   )    AM_READ(funcube_coins_r )
-	AM_RANGE( H8_PORT_4,   H8_PORT_4   )    AM_NOP  // unused
-	AM_RANGE( H8_PORT_A,   H8_PORT_A   )    AM_READWRITE(funcube_outputs_r, funcube_outputs_w ) AM_SHARE("funcube_outputs")
-	AM_RANGE( H8_PORT_B,   H8_PORT_B   )    AM_WRITE(funcube_leds_w )                           AM_SHARE("funcube_leds")
-//  AM_RANGE( H8_SERIAL_0, H8_SERIAL_0 )    // cabinets linking (jpunit)
-	AM_RANGE( H8_SERIAL_1, H8_SERIAL_1 )    AM_READ(funcube_serial_r )
+static ADDRESS_MAP_START( funcube2_sub_io, AS_IO, 16, seta2_state )
+	AM_RANGE( h8_device::PORT_7,   h8_device::PORT_7   )    AM_READ(funcube_coins_r )
+	AM_RANGE( h8_device::PORT_4,   h8_device::PORT_4   )    AM_NOP  // unused
+	AM_RANGE( h8_device::PORT_A,   h8_device::PORT_A   )    AM_READWRITE(funcube_outputs_r, funcube_outputs_w ) AM_SHARE("funcube_outputs")
+	AM_RANGE( h8_device::PORT_B,   h8_device::PORT_B   )    AM_WRITE(funcube_leds_w )                           AM_SHARE("funcube_leds")
 ADDRESS_MAP_END
 
 
@@ -1476,10 +1574,10 @@ INPUT_PORTS_END
 
 static INPUT_PORTS_START( reelquak )
 	PORT_START("DSW1")  // $400300.w
-	PORT_DIPNAME( 0x0001, 0x0001, "Game Style" )
+	PORT_DIPNAME( 0x0001, 0x0001, "Game Style" ) PORT_DIPLOCATION("SW1:1")
 	PORT_DIPSETTING(      0x0001, DEF_STR( Standard ) )
 	PORT_DIPSETTING(      0x0000, "Redemption" )
-	PORT_DIPNAME( 0x000e, 0x000e, "Key-In Credits" )
+	PORT_DIPNAME( 0x000e, 0x000e, "Key-In Credits" ) PORT_DIPLOCATION("SW1:2,3,4")
 	PORT_DIPSETTING(      0x000c, "1 Turn / 2 Credits" )
 	PORT_DIPSETTING(      0x000a, "1 Turn / 3 Credits" )
 	PORT_DIPSETTING(      0x0008, "1 Turn / 5 Credits" )
@@ -1488,58 +1586,58 @@ static INPUT_PORTS_START( reelquak )
 	PORT_DIPSETTING(      0x0004, "1 Turn / 25 Credits" )
 	PORT_DIPSETTING(      0x0002, "1 Turn / 50 Credits" )
 	PORT_DIPSETTING(      0x0000, "1 Turn / 100 Credits" )
-	PORT_DIPNAME( 0x0030, 0x0030, DEF_STR( Coin_A ) )
+	PORT_DIPNAME( 0x0030, 0x0030, DEF_STR( Coin_A ) ) PORT_DIPLOCATION("SW1:5,6")
 	PORT_DIPSETTING(      0x0030, DEF_STR( 1C_1C ) )
 	PORT_DIPSETTING(      0x0020, DEF_STR( 1C_2C ) )
 	PORT_DIPSETTING(      0x0010, DEF_STR( 1C_5C ) )
 	PORT_DIPSETTING(      0x0000, "1 Coin/10 Credits" )
-	PORT_DIPNAME( 0x00c0, 0x00c0, DEF_STR( Coin_B ) )   // bit 7 tested according to game style
+	PORT_DIPNAME( 0x00c0, 0x00c0, DEF_STR( Coin_B ) ) PORT_DIPLOCATION("SW1:7,8")   // bit 7 tested according to game style
 	PORT_DIPSETTING(      0x00c0, DEF_STR( 1C_1C ) )
 	PORT_DIPSETTING(      0x0080, DEF_STR( 1C_2C ) )
 	PORT_DIPSETTING(      0x0040, DEF_STR( 1C_5C ) )
 	PORT_DIPSETTING(      0x0000, "1 Coin/10 Credits" )
 
-	PORT_START("DSW2")  // $400302.w
-	PORT_DIPNAME( 0x0001, 0x0001, DEF_STR( Unknown ) )  // used
+	PORT_START("DSW2")  // $400302.w    PORT_START("DSW2")  // $400302.w
+	PORT_DIPNAME( 0x0001, 0x0001, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW2:1")  // used
 	PORT_DIPSETTING(      0x0001, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x0002, 0x0002, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x0002, 0x0002, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW2:2")
 	PORT_DIPSETTING(      0x0002, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x0004, 0x0004, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x0004, 0x0004, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW2:3")
 	PORT_DIPSETTING(      0x0004, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x0008, 0x0008, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x0008, 0x0008, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW2:4")
 	PORT_DIPSETTING(      0x0008, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x0010, 0x0010, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x0010, 0x0010, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW2:5")
 	PORT_DIPSETTING(      0x0010, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x0020, 0x0020, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x0020, 0x0020, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW2:6")
 	PORT_DIPSETTING(      0x0020, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x0040, 0x0040, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x0040, 0x0040, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW2:7")
 	PORT_DIPSETTING(      0x0040, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x0080, 0x0080, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x0080, 0x0080, DEF_STR( Unknown ) ) PORT_DIPLOCATION("SW2:8")
 	PORT_DIPSETTING(      0x0080, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
 
 	PORT_START("P1")    // $400001.b
-	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_POKER_CANCEL  )    // bet cancel
-	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_GAMBLE_TAKE   )    // collect
-	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_GAMBLE_D_UP   )    // double up
-	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_GAMBLE_HIGH   )    // big
-	PORT_BIT( 0x0010, IP_ACTIVE_LOW, IPT_POKER_BET     )    // bet
-	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_GAMBLE_LOW    )    // small
-	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL   )    // start
+	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_POKER_CANCEL  )                    // bet cancel
+	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_GAMBLE_TAKE   )                    // collect
+	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_GAMBLE_D_UP   )                    // double up
+	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_GAMBLE_HIGH   ) PORT_NAME("Big")   // big
+	PORT_BIT( 0x0010, IP_ACTIVE_LOW, IPT_POKER_BET     )                    // bet
+	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_GAMBLE_LOW    ) PORT_NAME("Small") // small
+	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL   )                    // start
 	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_UNKNOWN       )
 
 	PORT_START("TICKET")    // $400003.b
 	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_SPECIAL       ) PORT_READ_LINE_DEVICE_MEMBER("ticket", ticket_dispenser_device, line_r)    // ticket sensor
 	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_UNKNOWN       )
 	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_UNKNOWN       )
-	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_GAMBLE_PAYOUT )                            // knock down
+	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_GAMBLE_PAYOUT ) PORT_NAME("Knock Down")    // knock down
 	PORT_BIT( 0x0010, IP_ACTIVE_LOW, IPT_SERVICE2      ) PORT_NAME("Ticket Clear")  // ticket clear
 	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_SERVICE3      ) PORT_NAME("Ticket Resume") // ticket resume
 	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_GAMBLE_KEYIN  )                            // key in
@@ -1554,6 +1652,30 @@ static INPUT_PORTS_START( reelquak )
 	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_UNKNOWN       )
 	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_UNKNOWN       )
 	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_UNKNOWN       )
+INPUT_PORTS_END
+
+
+/***************************************************************************
+                              Endless Riches
+***************************************************************************/
+
+static INPUT_PORTS_START( endrichs )
+	PORT_INCLUDE(reelquak)
+
+	PORT_MODIFY("DSW1")  // $400300.w
+	PORT_DIPNAME( 0x0001, 0x0001, "Payout Style" ) PORT_DIPLOCATION("SW1:1")
+	PORT_DIPSETTING(      0x0001, "Normal Payout" )
+	PORT_DIPSETTING(      0x0000, "Ticket Payout" ) // Ticket Printer?
+
+	PORT_MODIFY("DSW2")  // $400302.w
+	PORT_DIPUNUSED_DIPLOC( 0x0001, IP_ACTIVE_LOW, "SW2:1" ) // DSW2 unpopulated
+	PORT_DIPUNUSED_DIPLOC( 0x0002, IP_ACTIVE_LOW, "SW2:2" )
+	PORT_DIPUNUSED_DIPLOC( 0x0004, IP_ACTIVE_LOW, "SW2:3" )
+	PORT_DIPUNUSED_DIPLOC( 0x0008, IP_ACTIVE_LOW, "SW2:4" )
+	PORT_DIPUNUSED_DIPLOC( 0x0010, IP_ACTIVE_LOW, "SW2:5" )
+	PORT_DIPUNUSED_DIPLOC( 0x0020, IP_ACTIVE_LOW, "SW2:6" )
+	PORT_DIPUNUSED_DIPLOC( 0x0040, IP_ACTIVE_LOW, "SW2:7" )
+	PORT_DIPUNUSED_DIPLOC( 0x0080, IP_ACTIVE_LOW, "SW2:8" )
 INPUT_PORTS_END
 
 
@@ -1732,15 +1854,6 @@ INPUT_PORTS_END
 ***************************************************************************/
 
 static INPUT_PORTS_START( funcube )
-	PORT_START("TOUCH_PRESS")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_NAME( "Touch Screen" )
-
-	PORT_START("TOUCH_X")
-	PORT_BIT( 0xff, 0x00, IPT_LIGHTGUN_X ) PORT_MINMAX(0,0x5c+1) PORT_CROSSHAIR(X, -(1.0 * 0x05d/0x5c), -1.0/0x5c, 0) PORT_SENSITIVITY(45) PORT_KEYDELTA(5) PORT_REVERSE
-
-	PORT_START("TOUCH_Y")
-	PORT_BIT( 0xff, 0x00, IPT_LIGHTGUN_Y ) PORT_MINMAX(0,0x46+1) PORT_CROSSHAIR(Y, -(0xf0-8.0)/0xf0*0x047/0x46, -1.0/0x46, 0) PORT_SENSITIVITY(45) PORT_KEYDELTA(5) PORT_REVERSE
-
 	PORT_START("SWITCH")    // c00030.l
 	PORT_BIT(     0x01, IP_ACTIVE_LOW,  IPT_COIN1    ) PORT_IMPULSE(1)  // coin solenoid 1
 	PORT_BIT(     0x02, IP_ACTIVE_HIGH, IPT_SPECIAL  )                  // coin solenoid 2
@@ -1979,26 +2092,21 @@ GFXDECODE_END
 INTERRUPT_GEN_MEMBER(seta2_state::seta2_interrupt)
 {
 	/* VBlank is connected to INT0 (external interrupts pin 0) */
-	tmp68301_external_interrupt_0(machine());
+	m_tmp68301->external_interrupt_0();
 }
 
 INTERRUPT_GEN_MEMBER(seta2_state::samshoot_interrupt)
 {
-	tmp68301_external_interrupt_2(machine());   // to do: hook up x1-10 interrupts
+	m_tmp68301->external_interrupt_2();   // to do: hook up x1-10 interrupts
 }
-
-static const x1_010_interface x1_010_sound_intf =
-{
-	0x0000,     /* address */
-};
 
 static MACHINE_CONFIG_START( seta2, seta2_state )
 	MCFG_CPU_ADD("maincpu", M68301, XTAL_50MHz/3)   // !! TMP68301 !!
 	MCFG_CPU_PROGRAM_MAP(mj4simai_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", seta2_state,  seta2_interrupt)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("tmp68301",tmp68301_device,irq_callback)
 
-	MCFG_MACHINE_START( tmp68301 )
-	MCFG_MACHINE_RESET( tmp68301 )
+	MCFG_DEVICE_ADD("tmp68301", TMP68301, 0)
 
 	// video hardware
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -2006,31 +2114,25 @@ static MACHINE_CONFIG_START( seta2, seta2_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(0x200, 0x200)
 	MCFG_SCREEN_VISIBLE_AREA(0x40, 0x1c0-1, 0x80, 0x170-1)
-	MCFG_SCREEN_UPDATE_DRIVER(seta2_state, screen_update_seta2)
-	MCFG_SCREEN_VBLANK_DRIVER(seta2_state, screen_eof_seta2)
+	MCFG_SCREEN_UPDATE_DRIVER(seta2_state, screen_update)
+	MCFG_SCREEN_VBLANK_DRIVER(seta2_state, screen_eof)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(seta2)
-	MCFG_PALETTE_LENGTH(0x8000+0xf0)    // extra 0xf0 because we might draw 256-color object with 16-color granularity
-
-	MCFG_VIDEO_START_OVERRIDE(seta2_state,seta2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", seta2)
+	MCFG_PALETTE_ADD("palette", 0x8000+0xf0)    // extra 0xf0 because we might draw 256-color object with 16-color granularity
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	// sound hardware
-	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
+	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("x1snd", X1_010, XTAL_50MHz/3)   // clock?
-	MCFG_SOUND_CONFIG(x1_010_sound_intf)
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
 
 static MACHINE_CONFIG_DERIVED( mj4simai, seta2 )
-	MCFG_CPU_MODIFY("maincpu")
-	MCFG_CPU_PROGRAM_MAP(mj4simai_map)
+	MCFG_MACHINE_START_OVERRIDE(seta2_state, mj4simai)
 
-	// video hardware
-	MCFG_SCREEN_MODIFY("screen")
-	MCFG_SCREEN_VISIBLE_AREA(0x40, 0x1c0-1, 0x80, 0x170-1)
 MACHINE_CONFIG_END
 
 
@@ -2038,7 +2140,11 @@ static MACHINE_CONFIG_DERIVED( gundamex, seta2 )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(gundamex_map)
 
-	MCFG_EEPROM_93C46_ADD("eeprom")
+	MCFG_DEVICE_MODIFY("tmp68301")
+	MCFG_TMP68301_IN_PARALLEL_CB(READ16(seta2_state, gundamex_eeprom_r))
+	MCFG_TMP68301_OUT_PARALLEL_CB(WRITE16(seta2_state, gundamex_eeprom_w))
+
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 	// video hardware
 	MCFG_SCREEN_MODIFY("screen")
@@ -2064,7 +2170,7 @@ static MACHINE_CONFIG_DERIVED( myangel, seta2 )
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_VISIBLE_AREA(0, 0x178-1, 0x00, 0xf0-1)
 
-	MCFG_VIDEO_START_OVERRIDE(seta2_state,seta2_yoffset)
+	MCFG_VIDEO_START_OVERRIDE(seta2_state,yoffset)
 MACHINE_CONFIG_END
 
 
@@ -2076,7 +2182,7 @@ static MACHINE_CONFIG_DERIVED( myangel2, seta2 )
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_VISIBLE_AREA(0, 0x178-1, 0x00, 0xf0-1)
 
-	MCFG_VIDEO_START_OVERRIDE(seta2_state,seta2_yoffset)
+	MCFG_VIDEO_START_OVERRIDE(seta2_state,yoffset)
 MACHINE_CONFIG_END
 
 
@@ -2104,6 +2210,9 @@ static MACHINE_CONFIG_DERIVED( reelquak, seta2 )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(reelquak_map)
 
+	MCFG_DEVICE_MODIFY("tmp68301")
+	MCFG_TMP68301_OUT_PARALLEL_CB(WRITE16(seta2_state, reelquak_leds_w))
+
 	MCFG_NVRAM_ADD_0FILL("nvram")
 	MCFG_TICKET_DISPENSER_ADD("ticket", attotime::from_msec(200), TICKET_MOTOR_ACTIVE_HIGH, TICKET_STATUS_ACTIVE_LOW)
 
@@ -2111,7 +2220,7 @@ static MACHINE_CONFIG_DERIVED( reelquak, seta2 )
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_VISIBLE_AREA(0x40, 0x180-1, 0x80, 0x170-1)
 
-	MCFG_VIDEO_START_OVERRIDE(seta2_state,seta2_xoffset)
+	MCFG_VIDEO_START_OVERRIDE(seta2_state,xoffset)
 MACHINE_CONFIG_END
 
 
@@ -2119,6 +2228,9 @@ static MACHINE_CONFIG_DERIVED( samshoot, seta2 )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(samshoot_map)
 	MCFG_CPU_PERIODIC_INT_DRIVER(seta2_state, samshoot_interrupt, 60)
+
+	MCFG_DEVICE_MODIFY("tmp68301")
+	MCFG_TMP68301_IN_PARALLEL_CB(IOPORT("DSW2"))
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
@@ -2143,37 +2255,15 @@ TIMER_DEVICE_CALLBACK_MEMBER(seta2_state::funcube_interrupt)
 		m_maincpu->set_input_line(2, HOLD_LINE);
 }
 
-INTERRUPT_GEN_MEMBER(seta2_state::funcube_sub_timer_irq)
+MACHINE_START_MEMBER(seta2_state, funcube)
 {
-	if ( m_funcube_serial_count )
-	{
-		device.execute().set_input_line(H8_SCI_1_RX, HOLD_LINE);
-	}
-	else
-	{
-		UINT8 press   = ioport("TOUCH_PRESS")->read();
-		UINT8 release = m_funcube_press && !press;
-
-		if ( press || release )
-		{
-			m_funcube_serial_fifo[0] = press ? 0xfe : 0xfd;
-			m_funcube_serial_fifo[1] = ioport("TOUCH_X")->read();
-			m_funcube_serial_fifo[2] = ioport("TOUCH_Y")->read();
-			m_funcube_serial_fifo[3] = 0xff;
-			m_funcube_serial_count = 4;
-		}
-
-		m_funcube_press = press;
-	}
-
-	device.execute().set_input_line(H8_METRO_TIMER_HACK, HOLD_LINE);
+	save_item(NAME(m_funcube_coin_start_cycles));
+	save_item(NAME(m_funcube_hopper_motor));
 }
 
-MACHINE_RESET_MEMBER(seta2_state,funcube)
+MACHINE_RESET_MEMBER(seta2_state, funcube)
 {
 	m_funcube_coin_start_cycles = 0;
-	m_funcube_serial_count = 0;
-	m_funcube_press = 0;
 	m_funcube_hopper_motor = 0;
 }
 
@@ -2186,13 +2276,16 @@ static MACHINE_CONFIG_START( funcube, seta2_state )
 	MCFG_CPU_ADD("sub", H83007, FUNCUBE_SUB_CPU_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(funcube_sub_map)
 	MCFG_CPU_IO_MAP(funcube_sub_io)
-	MCFG_CPU_PERIODIC_INT_DRIVER(seta2_state, funcube_sub_timer_irq,  60*10)
 
 	MCFG_MCF5206E_PERIPHERAL_ADD("maincpu_onboard")
 
+	MCFG_FUNCUBE_TOUCHSCREEN_ADD("touchscreen", 200)
+	MCFG_FUNCUBE_TOUCHSCREEN_TX_CALLBACK(DEVWRITELINE(":sub:sci1", h8_sci_device, rx_w))
+
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
-	MCFG_MACHINE_RESET_OVERRIDE(seta2_state, funcube )
+	MCFG_MACHINE_START_OVERRIDE(seta2_state, funcube)
+	MCFG_MACHINE_RESET_OVERRIDE(seta2_state, funcube)
 
 	// video hardware
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -2200,13 +2293,13 @@ static MACHINE_CONFIG_START( funcube, seta2_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500))  // not accurate
 	MCFG_SCREEN_SIZE(0x200, 0x200)
 	MCFG_SCREEN_VISIBLE_AREA(0x0+1, 0x140-1+1, 0x80, 0x170-1)
-	MCFG_SCREEN_UPDATE_DRIVER(seta2_state, screen_update_seta2)
-	MCFG_SCREEN_VBLANK_DRIVER(seta2_state, screen_eof_seta2)
+	MCFG_SCREEN_UPDATE_DRIVER(seta2_state, screen_update)
+	MCFG_SCREEN_VBLANK_DRIVER(seta2_state, screen_eof)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(funcube)
-	MCFG_PALETTE_LENGTH(0x8000+0xf0)    // extra 0xf0 because we might draw 256-color object with 16-color granularity
-
-	MCFG_VIDEO_START_OVERRIDE(seta2_state,seta2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", funcube)
+	MCFG_PALETTE_ADD("palette", 0x8000+0xf0)    // extra 0xf0 because we might draw 256-color object with 16-color granularity
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	// sound hardware
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -2241,9 +2334,9 @@ static MACHINE_CONFIG_START( namcostr, seta2_state )
 	MCFG_CPU_ADD("maincpu", M68301, XTAL_50MHz/3)   // !! TMP68301 !!
 	MCFG_CPU_PROGRAM_MAP(namcostr_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", seta2_state,  seta2_interrupt)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("tmp68301",tmp68301_device,irq_callback)
 
-	MCFG_MACHINE_START( tmp68301 )
-	MCFG_MACHINE_RESET( tmp68301 )
+	MCFG_DEVICE_ADD("tmp68301", TMP68301, 0)  // does this have a ticket dispenser?
 
 	// video hardware
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -2251,13 +2344,13 @@ static MACHINE_CONFIG_START( namcostr, seta2_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(0x200, 0x200)
 	MCFG_SCREEN_VISIBLE_AREA(0x40, 0x1c0-1, 0x80, 0x170-1)
-	MCFG_SCREEN_UPDATE_DRIVER(seta2_state, screen_update_seta2)
-	MCFG_SCREEN_VBLANK_DRIVER(seta2_state, screen_eof_seta2)
+	MCFG_SCREEN_UPDATE_DRIVER(seta2_state, screen_update)
+	MCFG_SCREEN_VBLANK_DRIVER(seta2_state, screen_eof)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(funcube)
-	MCFG_PALETTE_LENGTH(0x8000+0xf0)    // extra 0xf0 because we might draw 256-color object with 16-color granularity
-
-	MCFG_VIDEO_START_OVERRIDE(seta2_state,seta2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", funcube)
+	MCFG_PALETTE_ADD("palette", 0x8000+0xf0)    // extra 0xf0 because we might draw 256-color object with 16-color granularity
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	// sound hardware
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -2783,7 +2876,7 @@ ROM_END
 
                             Puzzle De Bowling (Japan)
 
-(c)1999 Nihon System / Moss
+(c)1999 MOSS / Nihon System
 
    CPU: Toshiba TMP68301AF-16 (100 Pin PQFP)
  Video: NEC DX-101 (240 Pin PQFP)
@@ -3052,6 +3145,101 @@ ROM_START( reelquak )
 	ROM_REGION( 0x300000, "x1snd", 0 )  // Samples
 	// Leave 1MB empty (addressable by the chip)
 	ROM_LOAD( "kf-001-009_t46.u32", 0x100000, 0x200000, CRC(2a9641f9) SHA1(efb9df78f1877eddf29c4dae2461546adb9cea8f) )
+
+	ROM_REGION( 0x117, "plds", 0 )
+	ROM_LOAD( "gal16v8_kf-001.u38", 0x000, 0x117, NO_DUMP )
+ROM_END
+
+/***************************************************************************
+
+Endless Riches
+(c) 199? E.N.Tiger
+
+   CPU: Toshiba TMP68301AF-16 (100 Pin PQFP)
+ Video: NEC DX-101 (240 Pin PQFP, @ U10)
+        NEC DX-102 (52 Pin PQFP x3, @ U28 U30 & U45)
+ Sound: X1-010 (Mitsubishi M60016 Gate Array, 80 Pin PQFP @ U26)
+   OSC: 50MHz & 28MHz
+ Other: 8 Position Dipswitch x 2
+        Push Button SW1
+        3.6V Battery at BT1
+        GAL 16V8 - labeled "KF-001" at U38
+
+Memory:
+M1 are TC551001BFL-70L at U42 & U43
+M2 is  W2465K-70LL at U27
+M3 are LH5168D-10L at U8 & U9
+M4 are UT62256SC-70L at U6, U7, U13 & U14
+
+PCB Number: P-FG-03
++-----+_+----------------------------------------------------+
+|             +------+      U  U                             |
+| VOL         |Seta  |   M  5  5            +---------------+|
+|             |X1-010|   2  8  7    +-+  M  |KFC-U16-C00 U16||
+|             +------+      *  *    | |  1  +---------------+|
++-+                                 |U|                      |
+  |  +-+    +-+           BT1       |3|            U20*      |
++-+  | |    | |         M           |2|  M                   |
+|    |U| U  |U| U  M M  4           | |  1  +---------------+|
+|    |3| 5  |2| 4  3 3              +-+     |KFC-U15-C00 U15||
+|8   | | *  | | *       M                   +---------------+|
+|    +-+    +-+         4                                    |
+|L                                                 U19*      |
+|I                                                           |
+|N                                          +---------------+|
+|E                                          |KFC-U18-C00 U18||
+|R                           +----------+   +---------------+|
+|           +-------+        |          |                    |
+|C C        |Toshiba|        |   NEC    |          U22*      |
+|o N        |  TMP  |        |  DX-101  |                    |
+|n 1        | 68301 |        |          |   +---------------+|
+|n        U +-------+        |          |   |KFC-U17-C00 U17||
+|e C      5                  +----------+   +---------------+|
+|c N      6                                                  |
+|t 2      *                                        U21*      |
+|e  +---+    +---+       U  50MHz 28MHz                      |
+|r    |DX | S  |DX |       3                                 |
+|     |102| W  |102|       8                   +---+    OSC2*|
+|     +---+ 1  +---+                    M  M   |DX |         |
++-+            D D                      4  4   |102|         |
+  |            S S                             +---+         |
++-+            W W                                           |
+|              2 1                                           |
++------------------------------------------------------------+
+
+CN1   - 7 Pin connector
+CN2   - 8 Pin connector
+
+* Denotes not populated.
+  U56 is unpopulated 93C45 EEPROM
+  DSW2 is unpopulated
+
+    U3-U5 silkscreened 27C4001
+  U57-U58 silkscreened 23C8001E
+  U15-U22 silkscreened 23C32000
+      U32 silkscreened 23C32000
+
+Note:
+  8-Liner version of P-FG-02 (see Reel'N Quake! above)
+  Hitting Service Mode "F2" will show Ver 1.7, but going through the diagnostic "0"
+   Main Menu --> Test Mode --> Memory Test will show Version 1.20
+
+***************************************************************************/
+
+ROM_START( endrichs )
+	ROM_REGION( 0x100000, "maincpu", 0 )    // TMP68301 Code
+	ROM_LOAD16_BYTE( "kfp_u02_c12.u2", 0x00000, 0x80000, CRC(462341d2) SHA1(a88215d74469513f4239853f62d4dbbffe2aa83a) )
+	ROM_LOAD16_BYTE( "kfp_u03_c12.u3", 0x00001, 0x80000, CRC(2baee8d1) SHA1(f86920382c54a259adb1dee253859561746d215a) )
+
+	ROM_REGION( 0x800000, "sprites", 0 )    // Sprites
+	ROM_LOAD( "kfc-u16-c00.u16", 0x000000, 0x200000, CRC(cbfe5e0f) SHA1(6c7c8088c43231997ac47ce05cf43c78c1fdad47) )
+	ROM_LOAD( "kfc-u15-c00.u15", 0x200000, 0x200000, CRC(98e4c36c) SHA1(651be122b78f225d38878ae90776f66989440590) )
+	ROM_LOAD( "kfc-u18-c00.u18", 0x400000, 0x200000, CRC(561ac136) SHA1(96da493157405a5d3d72b8cc3004abd3fa3eadfa) )
+	ROM_LOAD( "kfc-u17-c00.u17", 0x600000, 0x200000, CRC(34660029) SHA1(cf09b97422497d739f71e6ff8b9974fca0329928) )
+
+	ROM_REGION( 0x300000, "x1snd", 0 )  // Samples
+	// Leave 1MB empty (addressable by the chip)
+	ROM_LOAD( "kfs-u32-c00.u32", 0x100000, 0x200000, CRC(e9ffbecf) SHA1(3cc9ab3f4be1a305235603a68ca1e15797fb27cb) ) // Yes, it's actually "KFS" here
 
 	ROM_REGION( 0x117, "plds", 0 )
 	ROM_LOAD( "gal16v8_kf-001.u38", 0x000, 0x117, NO_DUMP )
@@ -3370,14 +3558,15 @@ ROM_END
 
 
 GAME( 1994, gundamex, 0,        gundamex, gundamex, driver_device, 0,        ROT0, "Banpresto",             "Mobile Suit Gundam EX Revue",                  0 )
-GAME( 1995, grdians,  0,        grdians,  grdians, driver_device,  0,        ROT0, "Banpresto",             "Guardians / Denjin Makai II",                  GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )    // Displays (c) Winky Soft at game's end.
+GAME( 1995, grdians,  0,        grdians,  grdians,  driver_device, 0,        ROT0, "Winkysoft (Banpresto license)", "Guardians / Denjin Makai II",          GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
 GAME( 1996, mj4simai, 0,        mj4simai, mj4simai, driver_device, 0,        ROT0, "Maboroshi Ware",        "Wakakusamonogatari Mahjong Yonshimai (Japan)", GAME_NO_COCKTAIL )
-GAME( 1996, myangel,  0,        myangel,  myangel, driver_device,  0,        ROT0, "Namco",                 "Kosodate Quiz My Angel (Japan)",               GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
-GAME( 1997, myangel2, 0,        myangel2, myangel2, driver_device, 0,        ROT0, "Namco",                 "Kosodate Quiz My Angel 2 (Japan)",             GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
-GAME( 1997, reelquak, 0,        reelquak, reelquak, driver_device, 0,        ROT0, "<unknown>",             "Reel'N Quake! (Ver. 1.05)",                    GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
-GAME( 1999, pzlbowl,  0,        pzlbowl,  pzlbowl, driver_device,  0,        ROT0, "Nihon System / Moss",   "Puzzle De Bowling (Japan)",                    GAME_NO_COCKTAIL )
-GAME( 2000, penbros,  0,        penbros,  penbros, driver_device,  0,        ROT0, "Subsino",               "Penguin Brothers (Japan)",                     GAME_NO_COCKTAIL )
-GAME( 2000, namcostr, 0,        namcostr, funcube, driver_device,  0,        ROT0, "Namco",                 "Namco Stars",                                  GAME_NO_COCKTAIL | GAME_NOT_WORKING )
+GAME( 1996, myangel,  0,        myangel,  myangel,  driver_device, 0,        ROT0, "MOSS / Namco",          "Kosodate Quiz My Angel (Japan)",               GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
+GAME( 1997, myangel2, 0,        myangel2, myangel2, driver_device, 0,        ROT0, "MOSS / Namco",          "Kosodate Quiz My Angel 2 (Japan)",             GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
+GAME( 1997, reelquak, 0,        reelquak, reelquak, driver_device, 0,        ROT0, "<unknown>",             "Reel'N Quake! (Version 1.05)",                 GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
+GAME( 199?, endrichs, 0,        reelquak, endrichs, driver_device, 0,        ROT0, "E.N.Tiger",             "Endless Riches (Ver 1.20)",                    GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
+GAME( 1999, pzlbowl,  0,        pzlbowl,  pzlbowl,  driver_device, 0,        ROT0, "MOSS / Nihon System",   "Puzzle De Bowling (Japan)",                    GAME_NO_COCKTAIL )
+GAME( 2000, penbros,  0,        penbros,  penbros,  driver_device, 0,        ROT0, "Subsino",               "Penguin Brothers (Japan)",                     GAME_NO_COCKTAIL )
+GAME( 2000, namcostr, 0,        namcostr, funcube,  driver_device, 0,        ROT0, "Namco",                 "Namco Stars",                                  GAME_NO_COCKTAIL | GAME_NOT_WORKING )
 GAME( 2000, deerhunt, 0,        samshoot, deerhunt, driver_device, 0,        ROT0, "Sammy USA Corporation", "Deer Hunting USA V4.3",                        GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
 GAME( 2000, deerhunta,deerhunt, samshoot, deerhunt, driver_device, 0,        ROT0, "Sammy USA Corporation", "Deer Hunting USA V4.2",                        GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
 GAME( 2000, deerhuntb,deerhunt, samshoot, deerhunt, driver_device, 0,        ROT0, "Sammy USA Corporation", "Deer Hunting USA V4.0",                        GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
@@ -3385,12 +3574,12 @@ GAME( 2000, deerhuntc,deerhunt, samshoot, deerhunt, driver_device, 0,        ROT
 GAME( 2000, deerhuntd,deerhunt, samshoot, deerhunt, driver_device, 0,        ROT0, "Sammy USA Corporation", "Deer Hunting USA V2",                          GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
 GAME( 2000, deerhunte,deerhunt, samshoot, deerhunt, driver_device, 0,        ROT0, "Sammy USA Corporation", "Deer Hunting USA V1",                          GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
 GAME( 2001, turkhunt, 0,        samshoot, turkhunt, driver_device, 0,        ROT0, "Sammy USA Corporation", "Turkey Hunting USA V1.0",                      GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
-GAME( 2001, wschamp,  0,        samshoot, wschamp, driver_device,  0,        ROT0, "Sammy USA Corporation", "Wing Shooting Championship V2.00",             GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
-GAME( 2001, wschampa, wschamp,  samshoot, wschamp, driver_device,  0,        ROT0, "Sammy USA Corporation", "Wing Shooting Championship V1.01",             GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
-GAME( 2001, wschampb, wschamp,  samshoot, wschamp, driver_device,  0,        ROT0, "Sammy USA Corporation", "Wing Shooting Championship V1.00",             GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
-GAME( 2002, trophyh,  0,        samshoot, trophyh, driver_device,  0,        ROT0, "Sammy USA Corporation", "Trophy Hunting - Bear & Moose V1.0",           GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
-GAME( 2000, funcube,  0,        funcube,  funcube, seta2_state,  funcube,  ROT0, "Namco",                 "Funcube (v1.5)",                               GAME_NO_COCKTAIL )
-GAME( 2001, funcube2, 0,        funcube2, funcube, seta2_state,  funcube2, ROT0, "Namco",                 "Funcube 2 (v1.1)",                             GAME_NO_COCKTAIL )
-GAME( 2001, funcube3, 0,        funcube3, funcube, seta2_state,  funcube3, ROT0, "Namco",                 "Funcube 3 (v1.1)",                             GAME_NO_COCKTAIL )
-GAME( 2001, funcube4, 0,        funcube2, funcube, seta2_state,  funcube2, ROT0, "Namco",                 "Funcube 4 (v1.0)",                             GAME_NO_COCKTAIL )
-GAME( 2002, funcube5, 0,        funcube2, funcube, seta2_state,  funcube2, ROT0, "Namco",                 "Funcube 5 (v1.0)",                             GAME_NO_COCKTAIL )
+GAME( 2001, wschamp,  0,        samshoot, wschamp,  driver_device, 0,        ROT0, "Sammy USA Corporation", "Wing Shooting Championship V2.00",             GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
+GAME( 2001, wschampa, wschamp,  samshoot, wschamp,  driver_device, 0,        ROT0, "Sammy USA Corporation", "Wing Shooting Championship V1.01",             GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
+GAME( 2001, wschampb, wschamp,  samshoot, wschamp,  driver_device, 0,        ROT0, "Sammy USA Corporation", "Wing Shooting Championship V1.00",             GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
+GAME( 2002, trophyh,  0,        samshoot, trophyh,  driver_device, 0,        ROT0, "Sammy USA Corporation", "Trophy Hunting - Bear & Moose V1.0",           GAME_NO_COCKTAIL | GAME_IMPERFECT_GRAPHICS )
+GAME( 2000, funcube,  0,        funcube,  funcube,  seta2_state,   funcube,  ROT0, "Namco",                 "Funcube (v1.5)",                               GAME_NO_COCKTAIL )
+GAME( 2001, funcube2, 0,        funcube2, funcube,  seta2_state,   funcube2, ROT0, "Namco",                 "Funcube 2 (v1.1)",                             GAME_NO_COCKTAIL )
+GAME( 2001, funcube3, 0,        funcube3, funcube,  seta2_state,   funcube3, ROT0, "Namco",                 "Funcube 3 (v1.1)",                             GAME_NO_COCKTAIL )
+GAME( 2001, funcube4, 0,        funcube2, funcube,  seta2_state,   funcube2, ROT0, "Namco",                 "Funcube 4 (v1.0)",                             GAME_NO_COCKTAIL )
+GAME( 2002, funcube5, 0,        funcube2, funcube,  seta2_state,   funcube2, ROT0, "Namco",                 "Funcube 5 (v1.0)",                             GAME_NO_COCKTAIL )

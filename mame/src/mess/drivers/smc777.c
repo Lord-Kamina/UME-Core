@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Angelo Salese
 /*************************************************************************************
 
     SMC-777 (c) 1983 Sony
@@ -22,10 +24,10 @@
 #include "sound/sn76496.h"
 #include "sound/beep.h"
 #include "video/mc6845.h"
-
-#include "machine/wd17xx.h"
-#include "formats/basicdsk.h"
+#include "machine/wd_fdc.h"
 #include "imagedev/flopdrv.h"
+
+#define MASTER_CLOCK XTAL_4_028MHz
 
 #define mc6845_h_char_total     (m_crtc_vreg[0]+1)
 #define mc6845_h_display        (m_crtc_vreg[1])
@@ -52,15 +54,61 @@ public:
 	m_maincpu(*this, "maincpu"),
 	m_crtc(*this, "crtc"),
 	m_fdc(*this, "fdc"),
-	m_sn(*this, "sn1"),
-	m_beeper(*this, "beeper")
+	m_floppy0(*this, "fdc:0"),
+	m_floppy1(*this, "fdc:1"),
+	m_beeper(*this, "beeper"),
+	m_gfxdecode(*this, "gfxdecode"),
+	m_palette(*this, "palette")
 	{ }
 
+	DECLARE_WRITE8_MEMBER(mc6845_w);
+	DECLARE_READ8_MEMBER(vram_r);
+	DECLARE_READ8_MEMBER(attr_r);
+	DECLARE_READ8_MEMBER(pcg_r);
+	DECLARE_WRITE8_MEMBER(vram_w);
+	DECLARE_WRITE8_MEMBER(attr_w);
+	DECLARE_WRITE8_MEMBER(pcg_w);
+	DECLARE_READ8_MEMBER(fbuf_r);
+	DECLARE_WRITE8_MEMBER(fbuf_w);
+	DECLARE_READ8_MEMBER(key_r);
+	DECLARE_WRITE8_MEMBER(key_w);
+	DECLARE_WRITE8_MEMBER(border_col_w);
+	DECLARE_READ8_MEMBER(system_input_r);
+	DECLARE_WRITE8_MEMBER(system_output_w);
+	DECLARE_WRITE8_MEMBER(color_mode_w);
+	DECLARE_WRITE8_MEMBER(ramdac_w);
+	DECLARE_READ8_MEMBER(display_reg_r);
+	DECLARE_WRITE8_MEMBER(display_reg_w);
+	DECLARE_READ8_MEMBER(smc777_mem_r);
+	DECLARE_WRITE8_MEMBER(smc777_mem_w);
+	DECLARE_READ8_MEMBER(irq_mask_r);
+	DECLARE_WRITE8_MEMBER(irq_mask_w);
+	DECLARE_PALETTE_INIT(smc777);
+	UINT32 screen_update_smc777(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+	INTERRUPT_GEN_MEMBER(vblank_irq);
+	TIMER_DEVICE_CALLBACK_MEMBER(keyboard_callback);
+
+	DECLARE_READ8_MEMBER(fdc_r);
+	DECLARE_WRITE8_MEMBER(fdc_w);
+	DECLARE_READ8_MEMBER(fdc_request_r);
+	DECLARE_WRITE8_MEMBER(floppy_select_w);
+	DECLARE_WRITE_LINE_MEMBER(fdc_intrq_w);
+	DECLARE_WRITE_LINE_MEMBER(fdc_drq_w);
+
+protected:
+	virtual void machine_start();
+	virtual void machine_reset();
+	virtual void video_start();
+
+private:
 	required_device<cpu_device> m_maincpu;
 	required_device<mc6845_device> m_crtc;
-	required_device<mb8876_device> m_fdc;
-	optional_device<sn76489a_device> m_sn;
+	required_device<mb8876_t> m_fdc;
+	required_device<floppy_connector> m_floppy0;
+	required_device<floppy_connector> m_floppy1;
 	required_device<beep_device> m_beeper;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	UINT8 *m_ipl_rom;
 	UINT8 *m_work_ram;
@@ -81,48 +129,10 @@ public:
 	UINT8 m_raminh,m_raminh_pending_change; //bankswitch
 	UINT8 m_raminh_prefetch;
 	UINT8 m_irq_mask;
-	UINT8 m_keyb_direct;
 	UINT8 m_pal_mode;
 	UINT8 m_keyb_cmd;
 	UINT8 m_crtc_vreg[0x20];
 	UINT8 m_crtc_addr;
-	DECLARE_WRITE8_MEMBER(smc777_6845_w);
-	DECLARE_READ8_MEMBER(smc777_vram_r);
-	DECLARE_READ8_MEMBER(smc777_attr_r);
-	DECLARE_READ8_MEMBER(smc777_pcg_r);
-	DECLARE_WRITE8_MEMBER(smc777_vram_w);
-	DECLARE_WRITE8_MEMBER(smc777_attr_w);
-	DECLARE_WRITE8_MEMBER(smc777_pcg_w);
-	DECLARE_READ8_MEMBER(smc777_fbuf_r);
-	DECLARE_WRITE8_MEMBER(smc777_fbuf_w);
-	DECLARE_READ8_MEMBER(smc777_fdc1_r);
-	DECLARE_WRITE8_MEMBER(smc777_fdc1_w);
-	DECLARE_READ8_MEMBER(key_r);
-	DECLARE_WRITE8_MEMBER(key_w);
-	DECLARE_WRITE8_MEMBER(border_col_w);
-	DECLARE_READ8_MEMBER(system_input_r);
-	DECLARE_WRITE8_MEMBER(system_output_w);
-	DECLARE_READ8_MEMBER(smc777_joystick_r);
-	DECLARE_WRITE8_MEMBER(smc777_color_mode_w);
-	DECLARE_WRITE8_MEMBER(smc777_ramdac_w);
-	DECLARE_READ8_MEMBER(display_reg_r);
-	DECLARE_WRITE8_MEMBER(display_reg_w);
-	DECLARE_READ8_MEMBER(smc777_mem_r);
-	DECLARE_WRITE8_MEMBER(smc777_mem_w);
-	DECLARE_READ8_MEMBER(smc777_irq_mask_r);
-	DECLARE_WRITE8_MEMBER(smc777_irq_mask_w);
-	DECLARE_READ8_MEMBER(smc777_io_r);
-	DECLARE_WRITE8_MEMBER(smc777_io_w);
-	virtual void machine_start();
-	virtual void machine_reset();
-	virtual void video_start();
-	virtual void palette_init();
-	UINT32 screen_update_smc777(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	INTERRUPT_GEN_MEMBER(smc777_vblank_irq);
-	TIMER_DEVICE_CALLBACK_MEMBER(keyboard_callback);
-	DECLARE_WRITE_LINE_MEMBER(smc777_fdc_intrq_w);
-	DECLARE_WRITE_LINE_MEMBER(smc777_fdc_drq_w);
-	void check_floppy_inserted();
 };
 
 
@@ -142,7 +152,7 @@ UINT32 smc777_state::screen_update_smc777(screen_device &screen, bitmap_ind16 &b
 
 //  popmessage("%d %d %d %d",mc6845_v_char_total,mc6845_v_total_adj,mc6845_v_display,mc6845_v_sync_pos);
 
-	bitmap.fill(machine().pens[m_backdrop_pen], cliprect);
+	bitmap.fill(m_palette->pen(m_backdrop_pen), cliprect);
 
 	x_width = ((m_display_reg & 0x80) >> 7);
 
@@ -160,23 +170,23 @@ UINT32 smc777_state::screen_update_smc777(screen_device &screen, bitmap_ind16 &b
 				/* todo: clean this up! */
 				//if(x_width)
 				{
-					bitmap.pix16(y+yi+CRTC_MIN_Y, x*4+0+CRTC_MIN_X) = machine().pens[color];
-					bitmap.pix16(y+yi+CRTC_MIN_Y, x*4+1+CRTC_MIN_X) = machine().pens[color];
+					bitmap.pix16(y+yi+CRTC_MIN_Y, x*4+0+CRTC_MIN_X) = m_palette->pen(color);
+					bitmap.pix16(y+yi+CRTC_MIN_Y, x*4+1+CRTC_MIN_X) = m_palette->pen(color);
 				}
 				//else
 				//{
-				//  bitmap.pix16(y+yi+CRTC_MIN_Y, x*2+0+CRTC_MIN_X) = machine().pens[color];
+				//  bitmap.pix16(y+yi+CRTC_MIN_Y, x*2+0+CRTC_MIN_X) = m_palette->pen(color);
 				//}
 
 				color = (m_gvram[count] & 0x0f) >> 0;
 				//if(x_width)
 				{
-					bitmap.pix16(y+yi+CRTC_MIN_Y, x*4+2+CRTC_MIN_X) = machine().pens[color];
-					bitmap.pix16(y+yi+CRTC_MIN_Y, x*4+3+CRTC_MIN_X) = machine().pens[color];
+					bitmap.pix16(y+yi+CRTC_MIN_Y, x*4+2+CRTC_MIN_X) = m_palette->pen(color);
+					bitmap.pix16(y+yi+CRTC_MIN_Y, x*4+3+CRTC_MIN_X) = m_palette->pen(color);
 				}
 				//else
 				//{
-				//  bitmap.pix16(y+yi+CRTC_MIN_Y, x*2+1+CRTC_MIN_X) = machine().pens[color];
+				//  bitmap.pix16(y+yi+CRTC_MIN_Y, x*2+1+CRTC_MIN_X) = m_palette->pen(color);
 				//}
 
 				count++;
@@ -214,7 +224,7 @@ UINT32 smc777_state::screen_update_smc777(screen_device &screen, bitmap_ind16 &b
 				case 3: bk_pen = (color ^ 0xf); break; //complementary
 			}
 
-			if(blink && machine().primary_screen->frame_number() & 0x10) //blinking, used by Dragon's Alphabet
+			if(blink && machine().first_screen()->frame_number() & 0x10) //blinking, used by Dragon's Alphabet
 				color = bk_pen;
 
 			for(yi=0;yi<8;yi++)
@@ -229,11 +239,11 @@ UINT32 smc777_state::screen_update_smc777(screen_device &screen, bitmap_ind16 &b
 					{
 						if(x_width)
 						{
-							bitmap.pix16(y*8+CRTC_MIN_Y+yi, (x*8+xi)*2+0+CRTC_MIN_X) = machine().pens[pen];
-							bitmap.pix16(y*8+CRTC_MIN_Y+yi, (x*8+xi)*2+1+CRTC_MIN_X) = machine().pens[pen];
+							bitmap.pix16(y*8+CRTC_MIN_Y+yi, (x*8+xi)*2+0+CRTC_MIN_X) = m_palette->pen(pen);
+							bitmap.pix16(y*8+CRTC_MIN_Y+yi, (x*8+xi)*2+1+CRTC_MIN_X) = m_palette->pen(pen);
 						}
 						else
-							bitmap.pix16(y*8+CRTC_MIN_Y+yi, x*8+CRTC_MIN_X+xi) = machine().pens[pen];
+							bitmap.pix16(y*8+CRTC_MIN_Y+yi, x*8+CRTC_MIN_X+xi) = m_palette->pen(pen);
 					}
 				}
 			}
@@ -248,8 +258,8 @@ UINT32 smc777_state::screen_update_smc777(screen_device &screen, bitmap_ind16 &b
 				{
 					case 0x00: cursor_on = 1; break; //always on
 					case 0x20: cursor_on = 0; break; //always off
-					case 0x40: if(machine().primary_screen->frame_number() & 0x10) { cursor_on = 1; } break; //fast blink
-					case 0x60: if(machine().primary_screen->frame_number() & 0x20) { cursor_on = 1; } break; //slow blink
+					case 0x40: if(machine().first_screen()->frame_number() & 0x10) { cursor_on = 1; } break; //fast blink
+					case 0x60: if(machine().first_screen()->frame_number() & 0x20) { cursor_on = 1; } break; //slow blink
 				}
 
 				if(cursor_on)
@@ -260,11 +270,11 @@ UINT32 smc777_state::screen_update_smc777(screen_device &screen, bitmap_ind16 &b
 						{
 							if(x_width)
 							{
-								bitmap.pix16(y*8+CRTC_MIN_Y-yc+7, (x*8+xc)*2+0+CRTC_MIN_X) = machine().pens[0x7];
-								bitmap.pix16(y*8+CRTC_MIN_Y-yc+7, (x*8+xc)*2+1+CRTC_MIN_X) = machine().pens[0x7];
+								bitmap.pix16(y*8+CRTC_MIN_Y-yc+7, (x*8+xc)*2+0+CRTC_MIN_X) = m_palette->pen(0x7);
+								bitmap.pix16(y*8+CRTC_MIN_Y-yc+7, (x*8+xc)*2+1+CRTC_MIN_X) = m_palette->pen(0x7);
 							}
 							else
-								bitmap.pix16(y*8+CRTC_MIN_Y-yc+7, x*8+CRTC_MIN_X+xc) = machine().pens[0x7];
+								bitmap.pix16(y*8+CRTC_MIN_Y-yc+7, x*8+CRTC_MIN_X+xc) = m_palette->pen(0x7);
 						}
 					}
 				}
@@ -277,7 +287,7 @@ UINT32 smc777_state::screen_update_smc777(screen_device &screen, bitmap_ind16 &b
 	return 0;
 }
 
-WRITE8_MEMBER(smc777_state::smc777_6845_w)
+WRITE8_MEMBER(smc777_state::mc6845_w)
 {
 	if(offset == 0)
 	{
@@ -291,7 +301,7 @@ WRITE8_MEMBER(smc777_state::smc777_6845_w)
 	}
 }
 
-READ8_MEMBER(smc777_state::smc777_vram_r)
+READ8_MEMBER(smc777_state::vram_r)
 {
 	UINT16 vram_index;
 
@@ -301,7 +311,7 @@ READ8_MEMBER(smc777_state::smc777_vram_r)
 	return m_vram[vram_index];
 }
 
-READ8_MEMBER(smc777_state::smc777_attr_r)
+READ8_MEMBER(smc777_state::attr_r)
 {
 	UINT16 vram_index;
 
@@ -311,7 +321,7 @@ READ8_MEMBER(smc777_state::smc777_attr_r)
 	return m_attr[vram_index];
 }
 
-READ8_MEMBER(smc777_state::smc777_pcg_r)
+READ8_MEMBER(smc777_state::pcg_r)
 {
 	UINT16 vram_index;
 
@@ -321,7 +331,7 @@ READ8_MEMBER(smc777_state::smc777_pcg_r)
 	return m_pcg[vram_index];
 }
 
-WRITE8_MEMBER(smc777_state::smc777_vram_w)
+WRITE8_MEMBER(smc777_state::vram_w)
 {
 	UINT16 vram_index;
 
@@ -331,7 +341,7 @@ WRITE8_MEMBER(smc777_state::smc777_vram_w)
 	m_vram[vram_index] = data;
 }
 
-WRITE8_MEMBER(smc777_state::smc777_attr_w)
+WRITE8_MEMBER(smc777_state::attr_w)
 {
 	UINT16 vram_index;
 
@@ -341,7 +351,7 @@ WRITE8_MEMBER(smc777_state::smc777_attr_w)
 	m_attr[vram_index] = data;
 }
 
-WRITE8_MEMBER(smc777_state::smc777_pcg_w)
+WRITE8_MEMBER(smc777_state::pcg_w)
 {
 	UINT16 vram_index;
 
@@ -350,10 +360,10 @@ WRITE8_MEMBER(smc777_state::smc777_pcg_w)
 
 	m_pcg[vram_index] = data;
 
-	machine().gfx[0]->mark_dirty(vram_index >> 3);
+	m_gfxdecode->gfx(0)->mark_dirty(vram_index >> 3);
 }
 
-READ8_MEMBER(smc777_state::smc777_fbuf_r)
+READ8_MEMBER(smc777_state::fbuf_r)
 {
 	UINT16 vram_index;
 
@@ -363,7 +373,7 @@ READ8_MEMBER(smc777_state::smc777_fbuf_r)
 	return m_gvram[vram_index];
 }
 
-WRITE8_MEMBER(smc777_state::smc777_fbuf_w)
+WRITE8_MEMBER(smc777_state::fbuf_w)
 {
 	UINT16 vram_index;
 
@@ -373,79 +383,53 @@ WRITE8_MEMBER(smc777_state::smc777_fbuf_w)
 	m_gvram[vram_index] = data;
 }
 
-
-void smc777_state::check_floppy_inserted()
+READ8_MEMBER( smc777_state::fdc_r )
 {
-	int f_num;
-	floppy_image_legacy *floppy;
-
-	/* check if a floppy is there, automatically disconnect the ready line if so (HW doesn't control the ready line) */
-	/* FIXME: floppy drive 1 doesn't work? */
-	for(f_num=0;f_num<2;f_num++)
-	{
-		floppy = flopimg_get_image(floppy_get_device(machine(), f_num));
-		floppy_mon_w(floppy_get_device(machine(), f_num), (floppy != NULL) ? 0 : 1);
-		floppy_drive_set_ready_state(floppy_get_device(machine(), f_num), (floppy != NULL) ? 1 : 0,0);
-	}
+	return m_fdc->read(space, offset) ^ 0xff;
 }
 
-READ8_MEMBER(smc777_state::smc777_fdc1_r)
+WRITE8_MEMBER( smc777_state::fdc_w )
 {
-	check_floppy_inserted();
-
-	switch(offset)
-	{
-		case 0x00:
-			return wd17xx_status_r(m_fdc,space, offset) ^ 0xff;
-		case 0x01:
-			return wd17xx_track_r(m_fdc,space, offset) ^ 0xff;
-		case 0x02:
-			return wd17xx_sector_r(m_fdc,space, offset) ^ 0xff;
-		case 0x03:
-			return wd17xx_data_r(m_fdc,space, offset) ^ 0xff;
-		case 0x04: //irq / drq status
-			//popmessage("%02x %02x\n",m_fdc_irq_flag,m_fdc_drq_flag);
-
-			return (m_fdc_irq_flag ? 0x80 : 0x00) | (m_fdc_drq_flag ? 0x00 : 0x40);
-	}
-
-	return 0x00;
+	m_fdc->write(space, offset, data ^ 0xff);
 }
 
-WRITE8_MEMBER(smc777_state::smc777_fdc1_w)
+READ8_MEMBER( smc777_state::fdc_request_r )
 {
-	check_floppy_inserted();
+	UINT8 data = 0;
 
-	switch(offset)
-	{
-		case 0x00:
-			wd17xx_command_w(m_fdc,space, offset,data ^ 0xff);
-			break;
-		case 0x01:
-			wd17xx_track_w(m_fdc,space, offset,data ^ 0xff);
-			break;
-		case 0x02:
-			wd17xx_sector_w(m_fdc,space, offset,data ^ 0xff);
-			break;
-		case 0x03:
-			wd17xx_data_w(m_fdc,space, offset,data ^ 0xff);
-			break;
-		case 0x04:
-			// ---- xxxx select floppy drive (yes, 15 of them, A to P)
-			wd17xx_set_drive(m_fdc,data & 0x01);
-			//  wd17xx_set_side(m_fdc,(data & 0x10)>>4);
-			if(data & 0xf0)
-				printf("floppy access %02x\n",data);
-			break;
-	}
+	data |= !m_fdc_drq_flag << 6;
+	data |= m_fdc_irq_flag << 7;
+
+	return data;
 }
 
-WRITE_LINE_MEMBER(smc777_state::smc777_fdc_intrq_w)
+WRITE8_MEMBER( smc777_state::floppy_select_w )
+{
+	floppy_image_device *floppy = NULL;
+
+	// ---- xxxx select floppy drive (yes, 15 of them, A to P)
+	switch (data & 0x01)
+	{
+	case 0: floppy = m_floppy0->get_device(); break;
+	case 1: floppy = m_floppy1->get_device(); break;
+	}
+
+	m_fdc->set_floppy(floppy);
+
+	// no idea where the motor on signal is
+	if (floppy)
+		floppy->mon_w(0);
+
+	if(data & 0xf0)
+		printf("floppy access %02x\n", data);
+}
+
+WRITE_LINE_MEMBER( smc777_state::fdc_intrq_w )
 {
 	m_fdc_irq_flag = state;
 }
 
-WRITE_LINE_MEMBER(smc777_state::smc777_fdc_drq_w)
+WRITE_LINE_MEMBER( smc777_state::fdc_drq_w )
 {
 	m_fdc_drq_flag = state;
 }
@@ -467,7 +451,6 @@ READ8_MEMBER(smc777_state::key_r)
 
 			return (offset == 0) ? m_keyb_press : ((m_shift_press_flag << 6) | (m_keyb_press_flag << 2) | (m_keyb_press_flag));
 		}
-		break;
 		default:
 		{
 			//if(offset == 1)
@@ -477,7 +460,8 @@ READ8_MEMBER(smc777_state::key_r)
 		}
 	}
 
-	return 0x00;
+	// never executed
+	//return 0x00;
 }
 
 /* TODO: the packet commands strikes me as something I've already seen before, don't remember where however ... */
@@ -535,13 +519,7 @@ WRITE8_MEMBER(smc777_state::system_output_w)
 	}
 }
 
-/* presumably SMC-777 specific */
-READ8_MEMBER(smc777_state::smc777_joystick_r)
-{
-	return ioport("JOY_1P")->read();
-}
-
-WRITE8_MEMBER(smc777_state::smc777_color_mode_w)
+WRITE8_MEMBER(smc777_state::color_mode_w)
 {
 	switch(data & 0x0f)
 	{
@@ -550,7 +528,7 @@ WRITE8_MEMBER(smc777_state::smc777_color_mode_w)
 	}
 }
 
-WRITE8_MEMBER(smc777_state::smc777_ramdac_w)
+WRITE8_MEMBER(smc777_state::ramdac_w)
 {
 	UINT8 pal_index;
 	pal_index = (offset & 0xf00) >> 8;
@@ -560,9 +538,9 @@ WRITE8_MEMBER(smc777_state::smc777_ramdac_w)
 
 	switch((offset & 0x3000) >> 12)
 	{
-		case 0: m_pal.r = (data & 0xf0) >> 4; palette_set_color_rgb(machine(), pal_index, pal4bit(m_pal.r), pal4bit(m_pal.g), pal4bit(m_pal.b)); break;
-		case 1: m_pal.g = (data & 0xf0) >> 4; palette_set_color_rgb(machine(), pal_index, pal4bit(m_pal.r), pal4bit(m_pal.g), pal4bit(m_pal.b)); break;
-		case 2: m_pal.b = (data & 0xf0) >> 4; palette_set_color_rgb(machine(), pal_index, pal4bit(m_pal.r), pal4bit(m_pal.g), pal4bit(m_pal.b)); break;
+		case 0: m_pal.r = (data & 0xf0) >> 4; m_palette->set_pen_color(pal_index, pal4bit(m_pal.r), pal4bit(m_pal.g), pal4bit(m_pal.b)); break;
+		case 1: m_pal.g = (data & 0xf0) >> 4; m_palette->set_pen_color(pal_index, pal4bit(m_pal.r), pal4bit(m_pal.g), pal4bit(m_pal.b)); break;
+		case 2: m_pal.b = (data & 0xf0) >> 4; m_palette->set_pen_color(pal_index, pal4bit(m_pal.r), pal4bit(m_pal.g), pal4bit(m_pal.b)); break;
 		case 3: printf("RAMdac used with gradient index = 3! pal_index = %02x data = %02x\n",pal_index,data); break;
 	}
 }
@@ -609,12 +587,12 @@ WRITE8_MEMBER(smc777_state::smc777_mem_w)
 	m_work_ram[offset] = data;
 }
 
-READ8_MEMBER(smc777_state::smc777_irq_mask_r)
+READ8_MEMBER(smc777_state::irq_mask_r)
 {
 	return m_irq_mask;
 }
 
-WRITE8_MEMBER(smc777_state::smc777_irq_mask_w)
+WRITE8_MEMBER(smc777_state::irq_mask_w)
 {
 	if(data & 0xfe)
 		printf("Irq mask = %02x\n",data & 0xfe);
@@ -622,93 +600,47 @@ WRITE8_MEMBER(smc777_state::smc777_irq_mask_w)
 	m_irq_mask = data & 1;
 }
 
-static ADDRESS_MAP_START(smc777_mem, AS_PROGRAM, 8, smc777_state )
+static ADDRESS_MAP_START( smc777_mem, AS_PROGRAM, 8, smc777_state )
 	ADDRESS_MAP_UNMAP_HIGH
-	AM_RANGE(0x0000, 0xffff) AM_READWRITE(smc777_mem_r,smc777_mem_w)
+	AM_RANGE(0x0000, 0xffff) AM_READWRITE(smc777_mem_r, smc777_mem_w)
 ADDRESS_MAP_END
 
-READ8_MEMBER(smc777_state::smc777_io_r)
-{
-	UINT8 low_offs;
-
-	low_offs = offset & 0xff;
-
-	if(low_offs <= 0x07)                          { return smc777_vram_r(space,offset & 0xff07); }
-	else if(low_offs >= 0x08 && low_offs <= 0x0f) { return smc777_attr_r(space,offset & 0xff07); }
-	else if(low_offs >= 0x10 && low_offs <= 0x17) { return smc777_pcg_r(space,offset & 0xff07); }
-	else if(low_offs >= 0x18 && low_offs <= 0x19) { logerror("6845 read %02x",low_offs & 1); }
-	else if(low_offs >= 0x1a && low_offs <= 0x1b) { return key_r(space,low_offs & 1); }
-	else if(low_offs == 0x1c)                     { return system_input_r(space,0); }
-	else if(low_offs == 0x1d)                     { logerror("System and control data R PC=%04x\n",space.device().safe_pc()); return 0xff; }
-	else if(low_offs == 0x20)                     { return display_reg_r(space,0); }
-	else if(low_offs == 0x21)                     { return smc777_irq_mask_r(space,0); }
-	else if(low_offs == 0x25)                     { logerror("RTC read PC=%04x\n",space.device().safe_pc()); return 0xff; }
-	else if(low_offs == 0x26)                     { logerror("RS-232c RX %04x\n",space.device().safe_pc()); return 0xff; }
-	else if(low_offs >= 0x28 && low_offs <= 0x2c) { logerror("FDC 2 read %02x\n",low_offs & 7); return 0xff; }
-	else if(low_offs >= 0x2d && low_offs <= 0x2f) { logerror("RS-232c no. 2 read %02x\n",low_offs & 3); return 0xff; }
-	else if(low_offs >= 0x30 && low_offs <= 0x34) { return smc777_fdc1_r(space,low_offs & 7); }
-	else if(low_offs >= 0x35 && low_offs <= 0x37) { logerror("RS-232c no. 3 read %02x\n",low_offs & 3); return 0xff; }
-	else if(low_offs >= 0x38 && low_offs <= 0x3b) { logerror("Cache disk unit read %02x\n",low_offs & 7); return 0xff; }
-	else if(low_offs >= 0x3c && low_offs <= 0x3d) { logerror("RGB superimposer read %02x\n",low_offs & 1); return 0xff; }
-	else if(low_offs >= 0x40 && low_offs <= 0x47) { logerror("IEEE-488 interface unit read %02x\n",low_offs & 7); return 0xff; }
-	else if(low_offs >= 0x48 && low_offs <= 0x4f) { logerror("HDD (Winchester) read %02x\n",low_offs & 1); return 0xff; } //might be 0x48 - 0x50
-	else if(low_offs == 0x51)                     { return smc777_joystick_r(space,0); }
-	else if(low_offs >= 0x54 && low_offs <= 0x59) { logerror("VTR Controller read %02x\n",low_offs & 7); return 0xff; }
-	else if(low_offs == 0x5a || low_offs == 0x5b) { logerror("RAM Banking %02x\n",low_offs & 1); }
-	else if(low_offs == 0x70)                     { logerror("Auto-start ROM read\n"); }
-	else if(low_offs == 0x74)                     { logerror("IEEE-488 ROM read\n"); }
-	else if(low_offs == 0x75)                     { logerror("VTR Controller ROM read\n"); }
-	else if(low_offs == 0x7e || low_offs == 0x7f) { logerror("Kanji ROM read %02x\n",low_offs & 1); }
-	else if(low_offs >= 0x80)                     { return smc777_fbuf_r(space,offset & 0xff7f); }
-
-	logerror("Undefined read at %04x offset = %02x\n",space.device().safe_pc(),low_offs);
-	return 0xff;
-}
-
-WRITE8_MEMBER(smc777_state::smc777_io_w)
-{
-	UINT8 low_offs;
-
-	low_offs = offset & 0xff;
-
-	if(low_offs <= 0x07)                          { smc777_vram_w(space,offset & 0xff07,data); }
-	else if(low_offs >= 0x08 && low_offs <= 0x0f) { smc777_attr_w(space,offset & 0xff07,data); }
-	else if(low_offs >= 0x10 && low_offs <= 0x17) { smc777_pcg_w(space,offset & 0xff07,data); }
-	else if(low_offs >= 0x18 && low_offs <= 0x19) { smc777_6845_w(space,low_offs & 1,data); }
-	else if(low_offs == 0x1a || low_offs == 0x1b) { key_w(space,low_offs & 1,data); }
-	else if(low_offs == 0x1c)                     { system_output_w(space,0,data); }
-	else if(low_offs == 0x1d)                     { logerror("Printer status / strobe write %02x\n",data); }
-	else if(low_offs == 0x1e || low_offs == 0x1f) { logerror("RS-232C irq control [%02x] %02x\n",low_offs & 1,data); }
-	else if(low_offs == 0x20)                     { display_reg_w(space,0,data); }
-	else if(low_offs == 0x21)                     { smc777_irq_mask_w(space,0,data); }
-	else if(low_offs == 0x22)                     { logerror("Printer output data %02x\n",data); }
-	else if(low_offs == 0x23)                     { border_col_w(space,0,data); }
-	else if(low_offs == 0x24)                     { logerror("RTC write / specify address %02x\n",data); }
-	else if(low_offs == 0x26)                     { logerror("RS-232c TX %02x\n",data); }
-	else if(low_offs >= 0x28 && low_offs <= 0x2c) { logerror("FDC 2 write %02x %02x\n",low_offs & 7,data); }
-	else if(low_offs >= 0x2d && low_offs <= 0x2f) { logerror("RS-232c no. 2 write %02x %02x\n",low_offs & 3,data); }
-	else if(low_offs >= 0x30 && low_offs <= 0x34) { smc777_fdc1_w(space,low_offs & 7,data); }
-	else if(low_offs >= 0x35 && low_offs <= 0x37) { logerror("RS-232c no. 3 write %02x %02x\n",low_offs & 3,data); }
-	else if(low_offs >= 0x38 && low_offs <= 0x3b) { logerror("Cache disk unit write %02x %02x\n",low_offs & 7,data); }
-	else if(low_offs >= 0x3c && low_offs <= 0x3d) { logerror("RGB superimposer write %02x %02x\n",low_offs & 1,data); }
-	else if(low_offs >= 0x40 && low_offs <= 0x47) { logerror("IEEE-488 interface unit write %02x %02x\n",low_offs & 7,data); }
-	else if(low_offs >= 0x48 && low_offs <= 0x4f) { logerror("HDD (Winchester) write %02x %02x\n",low_offs & 1,data); } //might be 0x48 - 0x50
-	else if(low_offs == 0x51)                     { smc777_color_mode_w(space,0,data); }
-	else if(low_offs == 0x52)                     { smc777_ramdac_w(space,offset & 0xff00,data); }
-	else if(low_offs == 0x53)                     { m_sn->write(space,0,data); }
-	else if(low_offs >= 0x54 && low_offs <= 0x59) { logerror("VTR Controller write [%02x] %02x\n",low_offs & 7,data); }
-	else if(low_offs == 0x5a || low_offs == 0x5b) { logerror("RAM Banking write [%02x] %02x\n",low_offs & 1,data); }
-	else if(low_offs == 0x70)                     { logerror("Auto-start ROM write %02x\n",data); }
-	else if(low_offs == 0x74)                     { logerror("IEEE-488 ROM write %02x\n",data); }
-	else if(low_offs == 0x75)                     { logerror("VTR Controller ROM write %02x\n",data); }
-	else if(low_offs == 0x7e || low_offs == 0x7f) { logerror("Kanji ROM write [%02x] %02x\n",low_offs & 1,data); }
-	else if(low_offs >= 0x80)                     { smc777_fbuf_w(space,offset & 0xff7f,data); }
-	else                                          { logerror("Undefined write at %04x offset = %02x data = %02x\n",space.device().safe_pc(),low_offs,data); }
-}
-
-static ADDRESS_MAP_START( smc777_io , AS_IO, 8, smc777_state )
+static ADDRESS_MAP_START( smc777_io, AS_IO, 8, smc777_state )
 	ADDRESS_MAP_UNMAP_HIGH
-	AM_RANGE(0x0000, 0xffff) AM_READWRITE(smc777_io_r,smc777_io_w)
+	AM_RANGE(0x00, 0x07) AM_MIRROR(0xff00) AM_MASK(0xffff) AM_READWRITE(vram_r, vram_w)
+	AM_RANGE(0x08, 0x0f) AM_MIRROR(0xff00) AM_MASK(0xffff) AM_READWRITE(attr_r, attr_w)
+	AM_RANGE(0x10, 0x17) AM_MIRROR(0xff00) AM_MASK(0xffff) AM_READWRITE(pcg_r, pcg_w)
+	AM_RANGE(0x18, 0x19) AM_MIRROR(0xff00) AM_WRITE(mc6845_w)
+	AM_RANGE(0x1a, 0x1b) AM_MIRROR(0xff00) AM_READWRITE(key_r, key_w)
+	AM_RANGE(0x1c, 0x1c) AM_MIRROR(0xff00) AM_READWRITE(system_input_r, system_output_w)
+//	AM_RANGE(0x1d, 0x1d) system and control read, printer strobe write
+//	AM_RANGE(0x1e, 0x1f) rs232 irq control
+	AM_RANGE(0x20, 0x20) AM_MIRROR(0xff00) AM_READWRITE(display_reg_r, display_reg_w)
+	AM_RANGE(0x21, 0x21) AM_MIRROR(0xff00) AM_READWRITE(irq_mask_r, irq_mask_w)
+//	AM_RANGE(0x22, 0x22) printer output data
+	AM_RANGE(0x23, 0x23) AM_MIRROR(0xff00) AM_WRITE(border_col_w)
+//	AM_RANGE(0x24, 0x24) rtc write address
+//	AM_RANGE(0x25, 0x25) rtc read
+//	AM_RANGE(0x26, 0x26) rs232 #1
+//	AM_RANGE(0x28, 0x2c) fdc #2
+//	AM_RANGE(0x2d, 0x2f) rs232 #2
+	AM_RANGE(0x30, 0x33) AM_MIRROR(0xff00) AM_READWRITE(fdc_r, fdc_w)
+	AM_RANGE(0x34, 0x34) AM_MIRROR(0xff00) AM_READWRITE(fdc_request_r, floppy_select_w)
+//	AM_RANGE(0x35, 0x37) rs232 #3
+//	AM_RANGE(0x38, 0x3b) cache disk unit
+//	AM_RANGE(0x3c, 0x3d) rgb superimposer
+//	AM_RANGE(0x40, 0x47) ieee-488
+//	AM_RANGE(0x48, 0x4f) hdd (winchester)
+	AM_RANGE(0x51, 0x51) AM_MIRROR(0xff00) AM_READ_PORT("JOY_1P") AM_WRITE(color_mode_w)
+	AM_RANGE(0x52, 0x52) AM_MIRROR(0xff00) AM_MASK(0xffff) AM_WRITE(ramdac_w)
+	AM_RANGE(0x53, 0x53) AM_MIRROR(0xff00) AM_DEVWRITE("sn1", sn76489a_device, write)
+//	AM_RANGE(0x54, 0x59) vrt controller
+//	AM_RANGE(0x5a, 0x5b) ram banking
+//	AM_RANGE(0x70, 0x70) auto-start rom
+//	AM_RANGE(0x74, 0x74) ieee-488 rom
+//	AM_RANGE(0x75, 0x75) vrt controller rom
+//	AM_RANGE(0x7e, 0x7f) kanji rom
+	AM_RANGE(0x80, 0xff) AM_MIRROR(0xff00) AM_MASK(0xffff) AM_READWRITE(fbuf_r, fbuf_w)
 ADDRESS_MAP_END
 
 /* Input ports */
@@ -904,30 +836,30 @@ static const UINT8 smc777_keytable[2][0xa0] =
 	{
 		0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, /* numpad */
 		0x38, 0x39, 0x2f, 0x2a, 0x2d, 0x2b, 0x0d, 0x2e,
-		-1,   0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, /* A - G */
+		0xff, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, /* A - G */
 		0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, /* H - O */
 		0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, /* P - W */
-		0x78, 0x79, 0x7a, 0x2d, 0x5d, 0x60, -1, -1, /* X - Z */
+		0x78, 0x79, 0x7a, 0x2d, 0x5d, 0x60, 0xff, 0xff, /* X - Z */
 		0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, /* 0 - 7*/
-		0x38, 0x39, 0x3b, 0x5c, 0x2c, 0x2e, 0x2f, -1, /* 8 - 9 */
-		0x0d, 0x20, 0x08, 0x09, 0x1b, 0x0f, 0x11, -1,
+		0x38, 0x39, 0x3b, 0x5c, 0x2c, 0x2e, 0x2f, 0xff, /* 8 - 9 */
+		0x0d, 0x20, 0x08, 0x09, 0x1b, 0x0f, 0x11, 0xff,
 		0x17, 0x1c, 0x16, 0x19, 0x14, 0x0e, 0x12, 0x03,
-		0x01, 0x02, 0x04, 0x06, 0x0b, -1, -1, -1,
+		0x01, 0x02, 0x04, 0x06, 0x0b, 0xff, 0xff, 0xff,
 
 	},
 	/* shift */
 	{
 		0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, /* numpad */
 		0x38, 0x39, 0x2f, 0x2a, 0x2d, 0x2b, 0x0d, 0x2e,
-		-1,   0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
+		0xff, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
 		0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, /* H - O */
 		0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, /* P - W */
-		0x58, 0x59, 0x5a, 0x5f, 0x7d, 0x7e,   -1,   -1, /* X - Z */
+		0x58, 0x59, 0x5a, 0x5f, 0x7d, 0x7e, 0xff, 0xff, /* X - Z */
 		0x29, 0x21, 0x40, 0x23, 0x24, 0x25, 0x5e, 0x26,
-		0x2a, 0x28, 0x3a, 0x7c, 0x3c, 0x3e, 0x3f,   -1,
-		0x0d, 0x20, 0x08, 0x09, 0x1b, 0x0f, 0x11,   -1,
+		0x2a, 0x28, 0x3a, 0x7c, 0x3c, 0x3e, 0x3f, 0xff,
+		0x0d, 0x20, 0x08, 0x09, 0x1b, 0x0f, 0x11, 0xff,
 		0x17, 0x1c, 0x16, 0x19, 0x14, 0x0e, 0x12, 0x03,
-		0x15, 0x18, 0x12, 0x05, 0x03, -1, -1, -1, /* F1 - F5 */
+		0x15, 0x18, 0x12, 0x05, 0x03, 0xff, 0xff, 0xff, /* F1 - F5 */
 	}
 };
 
@@ -982,7 +914,7 @@ void smc777_state::machine_start()
 	save_pointer(NAME(m_gvram), 0x8000);
 	save_pointer(NAME(m_pcg), 0x800);
 
-	machine().gfx[0] = auto_alloc(machine(), gfx_element(machine(), smc777_charlayout, (UINT8 *)m_pcg, 8, 0));
+	m_gfxdecode->set_gfx(0, global_alloc(gfx_element(m_palette, smc777_charlayout, (UINT8 *)m_pcg, 0, 8, 0)));
 }
 
 void smc777_state::machine_reset()
@@ -997,23 +929,8 @@ void smc777_state::machine_reset()
 }
 
 
-static MC6845_INTERFACE( mc6845_intf )
-{
-	"screen",   /* screen we are acting on */
-	true,       /* show border area */
-	8,          /* number of pixels per video memory address */
-	NULL,       /* before pixel update callback */
-	NULL,       /* row update callback */
-	NULL,       /* after pixel update callback */
-	DEVCB_NULL, /* callback for display state changes */
-	DEVCB_NULL, /* callback for cursor state changes */
-	DEVCB_NULL, /* HSYNC callback */
-	DEVCB_NULL, /* VSYNC callback */
-	NULL        /* update address callback */
-};
-
 /* set-up SMC-70 mode colors */
-void smc777_state::palette_init()
+PALETTE_INIT_MEMBER(smc777_state, smc777)
 {
 	int i;
 
@@ -1025,74 +942,30 @@ void smc777_state::palette_init()
 		g = (i & 2) >> 1;
 		b = (i & 1) >> 0;
 
-		palette_set_color_rgb(machine(), i, pal1bit(r),pal1bit(g),pal1bit(b));
-		palette_set_color_rgb(machine(), i+8, pal1bit(0),pal1bit(0),pal1bit(0));
+		palette.set_pen_color(i, pal1bit(r),pal1bit(g),pal1bit(b));
+		palette.set_pen_color(i+8, pal1bit(0),pal1bit(0),pal1bit(0));
 	}
 }
 
-static const wd17xx_interface smc777_mb8876_interface =
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(smc777_state, smc777_fdc_intrq_w),
-	DEVCB_DRIVER_LINE_MEMBER(smc777_state, smc777_fdc_drq_w),
-	{FLOPPY_0, FLOPPY_1, NULL, NULL}
-};
 
-static LEGACY_FLOPPY_OPTIONS_START( smc777 )
-	LEGACY_FLOPPY_OPTION( img, "img", "SMC70 disk image", basicdsk_identify_default, basicdsk_construct_default, NULL,
-		HEADS([1])
-		TRACKS([70])
-		SECTORS([16])
-		SECTOR_LENGTH([256])
-		FIRST_SECTOR_ID([1]))
-LEGACY_FLOPPY_OPTIONS_END
-
-static const floppy_interface smc777_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_SSDD,
-	LEGACY_FLOPPY_OPTIONS_NAME(smc777),
-	"floppy_5_25",
-	NULL
-};
-
-INTERRUPT_GEN_MEMBER(smc777_state::smc777_vblank_irq)
+INTERRUPT_GEN_MEMBER(smc777_state::vblank_irq)
 {
 	if(m_irq_mask)
 		device.execute().set_input_line(0,HOLD_LINE);
 }
 
 
-/*************************************
- *
- *  Sound interface
- *
- *************************************/
+static SLOT_INTERFACE_START( smc777_floppies )
+	SLOT_INTERFACE("ssdd", FLOPPY_35_SSDD)
+SLOT_INTERFACE_END
 
-
-
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
-
-#define MASTER_CLOCK XTAL_4_028MHz
 
 static MACHINE_CONFIG_START( smc777, smc777_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu",Z80, MASTER_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(smc777_mem)
 	MCFG_CPU_IO_MAP(smc777_io)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", smc777_state, smc777_vblank_irq)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", smc777_state, vblank_irq)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1101,20 +974,33 @@ static MACHINE_CONFIG_START( smc777, smc777_state )
 	MCFG_SCREEN_SIZE(0x400, 400)
 	MCFG_SCREEN_VISIBLE_AREA(0, 660-1, 0, 220-1) //normal 640 x 200 + 20 pixels for border color
 	MCFG_SCREEN_UPDATE_DRIVER(smc777_state, screen_update_smc777)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x20) // 16 + 8 colors (SMC-777 + SMC-70) + 8 empty entries (SMC-70)
+	MCFG_PALETTE_ADD("palette", 0x20) // 16 + 8 colors (SMC-777 + SMC-70) + 8 empty entries (SMC-70)
+	MCFG_PALETTE_INIT_OWNER(smc777_state, smc777)
 
-	MCFG_MC6845_ADD("crtc", H46505, MASTER_CLOCK/2, mc6845_intf)    /* unknown clock, hand tuned to get ~60 fps */
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", empty)
 
-	MCFG_MB8876_ADD("fdc",smc777_mb8876_interface)
-	MCFG_LEGACY_FLOPPY_2_DRIVES_ADD(smc777_floppy_interface)
-	MCFG_SOFTWARE_LIST_ADD("flop_list","smc777")
+	MCFG_MC6845_ADD("crtc", H46505, "screen", MASTER_CLOCK/2)    /* unknown clock, hand tuned to get ~60 fps */
+	MCFG_MC6845_SHOW_BORDER_AREA(true)
+	MCFG_MC6845_CHAR_WIDTH(8)
 
+	// floppy controller
+	MCFG_MB8876_ADD("fdc", XTAL_1MHz)
+	MCFG_WD_FDC_INTRQ_CALLBACK(WRITELINE(smc777_state, fdc_intrq_w))
+	MCFG_WD_FDC_DRQ_CALLBACK(WRITELINE(smc777_state, fdc_drq_w))
+
+	// does it really support 16 of them?
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", smc777_floppies, "ssdd", floppy_image_device::default_floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", smc777_floppies, "ssdd", floppy_image_device::default_floppy_formats)
+
+	MCFG_SOFTWARE_LIST_ADD("flop_list", "smc777")
+
+	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("sn1", SN76489A, MASTER_CLOCK) // unknown clock / divider
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("beeper", BEEP, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS,"mono",0.50)

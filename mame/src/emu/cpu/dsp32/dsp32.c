@@ -1,38 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     dsp32.c
     Core implementation for the portable DSP32 emulator.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ****************************************************************************
 
@@ -53,7 +24,7 @@
 
     In addition, there are several optimizations enabled which make
     assumptions about the code which may not be valid for other
-    applications. Check dsp32ops.c for details.
+    applications. Check dsp32ops.inc for details.
 
 ***************************************************************************/
 
@@ -172,7 +143,7 @@ const device_type DSP32C = &device_creator<dsp32c_device>;
 //-------------------------------------------------
 
 dsp32c_device::dsp32c_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: cpu_device(mconfig, DSP32C, "DSP32C", tag, owner, clock),
+	: cpu_device(mconfig, DSP32C, "DSP32C", tag, owner, clock, "dsp32c", __FILE__),
 		m_program_config("program", ENDIANNESS_LITTLE, 32, 24),
 		m_pin(0),
 		m_pout(0),
@@ -203,26 +174,12 @@ dsp32c_device::dsp32c_device(const machine_config &mconfig, const char *tag, dev
 		m_lastpins(0),
 		m_ppc(0),
 		m_program(NULL),
-		m_direct(NULL)
+		m_direct(NULL),
+		m_output_pins_changed(*this)
 {
-	m_output_pins_changed = NULL;
-
 	// set our instruction counter
 	m_icountptr = &m_icount;
 }
-
-
-//-------------------------------------------------
-//  static_set_config - set the configuration
-//  structure
-//-------------------------------------------------
-
-void dsp32c_device::static_set_config(device_t &device, const dsp32_config &config)
-{
-	dsp32c_device &dsp = downcast<dsp32c_device &>(device);
-	static_cast<dsp32_config &>(dsp) = config;
-}
-
 
 //-------------------------------------------------
 //  device_start - start up the device
@@ -230,19 +187,21 @@ void dsp32c_device::static_set_config(device_t &device, const dsp32_config &conf
 
 void dsp32c_device::device_start()
 {
+	m_output_pins_changed.resolve_safe();
+
 	// get our address spaces
 	m_program = &space(AS_PROGRAM);
 	m_direct = &m_program->direct();
 
 	// register our state for the debugger
-	astring tempstr;
+	std::string tempstr;
 	state_add(STATE_GENPC,     "GENPC",     m_r[15]).noshow();
 	state_add(STATE_GENPCBASE, "GENPCBASE", m_ppc).noshow();
 	state_add(STATE_GENSP,     "GENSP",     m_r[21]).noshow();
 	state_add(STATE_GENFLAGS,  "GENFLAGS",  m_iotemp).callimport().callexport().formatstr("%6s").noshow();
 	state_add(DSP32_PC,        "PC",        m_r[15]).mask(0xffffff);
 	for (int regnum = 0; regnum <= 14; regnum++)
-		state_add(DSP32_R0 + regnum, tempstr.format("R%d", regnum), m_r[regnum]).mask(0xffffff);
+		state_add(DSP32_R0 + regnum, strformat(tempstr, "R%d", regnum).c_str(), m_r[regnum]).mask(0xffffff);
 	state_add(DSP32_R15,       "R15",       m_r[17]).mask(0xffffff);
 	state_add(DSP32_R16,       "R16",       m_r[18]).mask(0xffffff);
 	state_add(DSP32_R17,       "R17",       m_r[19]).mask(0xffffff);
@@ -326,8 +285,7 @@ void dsp32c_device::device_reset()
 	m_emr = 0xffff;
 
 	// clear the output pins
-	if (m_output_pins_changed != NULL)
-		(*m_output_pins_changed)(*this, 0);
+	m_output_pins_changed(0);
 
 	// initialize fixed registers
 	R0 = R0_ALT = 0;
@@ -372,7 +330,6 @@ void dsp32c_device::state_import(const device_state_entry &entry)
 
 		default:
 			fatalerror("dsp32c_device::state_import called for unexpected value\n");
-			break;
 	}
 }
 
@@ -403,7 +360,6 @@ void dsp32c_device::state_export(const device_state_entry &entry)
 
 		default:
 			fatalerror("dsp32c_device::state_export called for unexpected value\n");
-			break;
 	}
 }
 
@@ -413,12 +369,12 @@ void dsp32c_device::state_export(const device_state_entry &entry)
 //  for the debugger
 //-------------------------------------------------
 
-void dsp32c_device::state_string_export(const device_state_entry &entry, astring &string)
+void dsp32c_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case STATE_GENFLAGS:
-			string.printf("%c%c%c%c%c%c%c%c",
+			strprintf(str, "%c%c%c%c%c%c%c%c",
 				NFLAG ? 'N':'.',
 				ZFLAG ? 'Z':'.',
 				UFLAG ? 'U':'.',
@@ -433,7 +389,7 @@ void dsp32c_device::state_string_export(const device_state_entry &entry, astring
 		case DSP32_A1:
 		case DSP32_A2:
 		case DSP32_A3:
-			string.printf("%8g", *(double *)entry.dataptr());
+			strprintf(str, "%8g", *(double *)entry.dataptr());
 			break;
 	}
 }
@@ -481,7 +437,7 @@ offs_t dsp32c_device::disasm_disassemble(char *buffer, offs_t pc, const UINT8 *o
 
 inline UINT32 dsp32c_device::ROPCODE(offs_t pc)
 {
-	return m_direct->read_decrypted_dword(pc);
+	return m_direct->read_dword(pc);
 }
 
 inline UINT8 dsp32c_device::RBYTE(offs_t addr)
@@ -569,21 +525,18 @@ void dsp32c_device::update_pins(void)
 {
 	if (m_pcr & PCR_ENI)
 	{
-		if (m_output_pins_changed != NULL)
+		UINT16 newoutput = 0;
+
+		if (m_pcr & PCR_PIFs)
+			newoutput |= DSP32_OUTPUT_PIF;
+
+		if (m_pcr & PCR_PDFs)
+			newoutput |= DSP32_OUTPUT_PDF;
+
+		if (newoutput != m_lastpins)
 		{
-			UINT16 newoutput = 0;
-
-			if (m_pcr & PCR_PIFs)
-				newoutput |= DSP32_OUTPUT_PIF;
-
-			if (m_pcr & PCR_PDFs)
-				newoutput |= DSP32_OUTPUT_PDF;
-
-			if (newoutput != m_lastpins)
-			{
-				m_lastpins = newoutput;
-				(*m_output_pins_changed)(*this, newoutput);
-			}
+			m_lastpins = newoutput;
+			m_output_pins_changed(newoutput);
 		}
 	}
 }
@@ -594,7 +547,7 @@ void dsp32c_device::update_pins(void)
 //  CORE INCLUDE
 //**************************************************************************
 
-#include "dsp32ops.c"
+#include "dsp32ops.inc"
 
 
 

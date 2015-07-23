@@ -1,5 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:David Graves
 #include "emu.h"
-#include "video/taitoic.h"
 #include "includes/wgp.h"
 
 
@@ -10,8 +11,7 @@ inline void wgp_state::common_get_piv_tile_info( tile_data &tileinfo, int tile_i
 	UINT16 tilenum = m_pivram[tile_index + num * 0x1000];    /* 3 blocks of $2000 */
 	UINT16 attr = m_pivram[tile_index + num * 0x1000 + 0x8000];  /* 3 blocks of $2000 */
 
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			tilenum & 0x3fff,
 			(attr & 0x3f),  /* attr & 0x1 ?? */
 			TILE_FLIPYX( (attr & 0xc0) >> 6));
@@ -35,9 +35,9 @@ TILE_GET_INFO_MEMBER(wgp_state::get_piv2_tile_info)
 
 void wgp_state::wgp_core_vh_start( int piv_xoffs, int piv_yoffs )
 {
-	m_piv_tilemap[0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(wgp_state::get_piv0_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
-	m_piv_tilemap[1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(wgp_state::get_piv1_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
-	m_piv_tilemap[2] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(wgp_state::get_piv2_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_piv_tilemap[0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(wgp_state::get_piv0_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_piv_tilemap[1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(wgp_state::get_piv1_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_piv_tilemap[2] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(wgp_state::get_piv2_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
 
 	m_piv_xoffs = piv_xoffs;
 	m_piv_yoffs = piv_yoffs;
@@ -55,7 +55,7 @@ void wgp_state::wgp_core_vh_start( int piv_xoffs, int piv_yoffs )
 	m_piv_tilemap[2]->set_scrolldy(-piv_yoffs, 0);
 
 	/* We don't need tilemap_set_scroll_rows, as the custom draw routine applies rowscroll manually */
-	tc0100scn_set_colbanks(m_tc0100scn, 0x80, 0xc0, 0x40);
+	m_tc0100scn->set_colbanks(0x80, 0xc0, 0x40);
 
 	save_item(NAME(m_piv_ctrl_reg));
 	save_item(NAME(m_rotate_ctrl));
@@ -338,7 +338,7 @@ static const UINT8 ylookup[16] =
 		2, 2, 3, 3,
 		2, 2, 3, 3 };
 
-void wgp_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
+void wgp_state::draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int y_offs )
 {
 	UINT16 *spriteram = m_spriteram;
 	int offs, i, j, k;
@@ -347,7 +347,7 @@ void wgp_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, i
 	UINT8 small_sprite, col, flipx, flipy;
 	UINT16 code, bigsprite, map_index;
 //  UINT16 rotate = 0;
-	UINT16 tile_mask = (machine().gfx[0]->elements()) - 1;
+	UINT16 tile_mask = (m_gfxdecode->gfx(0)->elements()) - 1;
 	static const int primasks[2] = {0x0, 0xfffc};   /* fff0 => under rhs of road only */
 
 	for (offs = 0x1ff; offs >= 0; offs--)
@@ -419,13 +419,13 @@ void wgp_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, i
 					zx = x + (((k + 1) * zoomx) / 2) - curx;
 					zy = y + (((j + 1) * zoomy) / 2) - cury;
 
-					pdrawgfxzoom_transpen(bitmap, cliprect,machine().gfx[0],
+					m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 							code,
 							col,
 							flipx, flipy,
 							curx,cury,
 							zx << 12, zy << 12,
-							machine().priority_bitmap,primasks[((priority >> 1) &1)],0);  /* maybe >> 2 or 0...? */
+							screen.priority(),primasks[((priority >> 1) &1)],0);  /* maybe >> 2 or 0...? */
 				}
 			}
 			else
@@ -450,13 +450,13 @@ void wgp_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, i
 					zx = x + (((k + 1) * zoomx) / 4) - curx;
 					zy = y + (((j + 1) * zoomy) / 4) - cury;
 
-					pdrawgfxzoom_transpen(bitmap, cliprect,machine().gfx[0],
+					m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 							code,
 							col,
 							flipx, flipy,
 							curx,cury,
 							zx << 12, zy << 12,
-							machine().priority_bitmap,primasks[((priority >> 1) &1)],0);  /* maybe >> 2 or 0...? */
+							screen.priority(),primasks[((priority >> 1) &1)],0);  /* maybe >> 2 or 0...? */
 				}
 			}
 		}
@@ -509,14 +509,14 @@ INLINE void bryan2_drawscanline( bitmap_ind16 &bitmap, int x, int y, int length,
 
 
 
-void wgp_state::wgp_piv_layer_draw( bitmap_ind16 &bitmap, const rectangle &cliprect, int layer, int flags, UINT32 priority )
+void wgp_state::wgp_piv_layer_draw( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int layer, int flags, UINT32 priority )
 {
 	bitmap_ind16 &srcbitmap = m_piv_tilemap[layer]->pixmap();
 	bitmap_ind8 &flagsbitmap = m_piv_tilemap[layer]->flagsmap();
 
 	UINT16 *dst16,*src16;
 	UINT8 *tsrc;
-	int i, y, y_index, src_y_index, row_index, row_zoom;
+	int y_index, src_y_index, row_index, row_zoom;
 
 	/* I have a fairly strong feeling these should be UINT32's, x_index is
 	   falling through from max +ve to max -ve quite a lot in this routine */
@@ -526,7 +526,6 @@ void wgp_state::wgp_piv_layer_draw( bitmap_ind16 &bitmap, const rectangle &clipr
 	UINT16 scanline[512];
 	UINT16 row_colbank, row_scroll;
 	int flipscreen = 0; /* n/a */
-	int machine_flip = 0;   /* for  ROT 180 ? */
 
 	UINT16 screen_width = cliprect.width();
 	UINT16 min_y = cliprect.min_y;
@@ -560,12 +559,7 @@ void wgp_state::wgp_piv_layer_draw( bitmap_ind16 &bitmap, const rectangle &clipr
 		y_index = 0;
 	}
 
-	if (!machine_flip)
-		y = min_y;
-	else
-		y = max_y;
-
-	do
+	for (int y = min_y; y <= max_y; y++)
 	{
 		int a;
 
@@ -600,7 +594,7 @@ void wgp_state::wgp_piv_layer_draw( bitmap_ind16 &bitmap, const rectangle &clipr
 
 		if (flags & TILEMAP_DRAW_OPAQUE)
 		{
-			for (i = 0; i < screen_width; i++)
+			for (int i = 0; i < screen_width; i++)
 			{
 				*dst16++ = src16[(x_index >> 16) & width_mask] + row_colbank;
 				x_index += x_step;
@@ -608,7 +602,7 @@ void wgp_state::wgp_piv_layer_draw( bitmap_ind16 &bitmap, const rectangle &clipr
 		}
 		else
 		{
-			for (i = 0; i < screen_width; i++)
+			for (int i = 0; i < screen_width; i++)
 			{
 				if (tsrc[(x_index >> 16) & width_mask])
 					*dst16++ = src16[(x_index >> 16) & width_mask] + row_colbank;
@@ -618,13 +612,10 @@ void wgp_state::wgp_piv_layer_draw( bitmap_ind16 &bitmap, const rectangle &clipr
 			}
 		}
 
-		bryan2_drawscanline(bitmap, 0, y, screen_width, scanline, (flags & TILEMAP_DRAW_OPAQUE) ? 0 : 1, ROT0, machine().priority_bitmap, priority);
+		bryan2_drawscanline(bitmap, 0, y, screen_width, scanline, (flags & TILEMAP_DRAW_OPAQUE) ? 0 : 1, ROT0, screen.priority(), priority);
 
 		y_index += zoomy;
-		if (!machine_flip) y++; else y--;
 	}
-	while ((!machine_flip && y <= max_y) || (machine_flip && y >= min_y));
-
 }
 
 
@@ -670,7 +661,7 @@ UINT32 wgp_state::screen_update_wgp(screen_device &screen, bitmap_ind16 &bitmap,
 		m_piv_tilemap[i]->set_scrolly(0, m_piv_scrolly[i]);
 	}
 
-	tc0100scn_tilemap_update(m_tc0100scn);
+	m_tc0100scn->tilemap_update();
 
 	bitmap.fill(0, cliprect);
 
@@ -689,32 +680,32 @@ UINT32 wgp_state::screen_update_wgp(screen_device &screen, bitmap_ind16 &bitmap,
 #ifdef MAME_DEBUG
 	if (m_dislayer[layer[0]] == 0)
 #endif
-	wgp_piv_layer_draw(bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 1);
+	wgp_piv_layer_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 1);
 
 #ifdef MAME_DEBUG
 	if (m_dislayer[layer[1]] == 0)
 #endif
-	wgp_piv_layer_draw(bitmap, cliprect, layer[1], 0, 2);
+	wgp_piv_layer_draw(screen, bitmap, cliprect, layer[1], 0, 2);
 
 #ifdef MAME_DEBUG
 	if (m_dislayer[layer[2]] == 0)
 #endif
-	wgp_piv_layer_draw(bitmap, cliprect, layer[2], 0, 4);
+	wgp_piv_layer_draw(screen, bitmap, cliprect, layer[2], 0, 4);
 
-	draw_sprites(bitmap, cliprect, 16);
+	draw_sprites(screen, bitmap, cliprect, 16);
 
 /* ... then here we should apply rotation from wgp_sate_ctrl[] to the bitmap before we draw the TC0100SCN layers on it */
-	layer[0] = tc0100scn_bottomlayer(m_tc0100scn);
+	layer[0] = m_tc0100scn->bottomlayer();
 	layer[1] = layer[0] ^ 1;
 	layer[2] = 2;
 
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[0], 0, 0);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[0], 0, 0);
 
 #ifdef MAME_DEBUG
 	if (m_dislayer[3] == 0)
 #endif
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[1], 0, 0);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[2], 0, 0);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 0);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 0);
 
 #if 0
 	{

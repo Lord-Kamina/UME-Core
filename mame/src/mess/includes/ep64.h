@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Enterprise Sixty Four / One Two Eight emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -12,15 +11,15 @@
 #ifndef __EP64__
 #define __EP64__
 
-#include "emu.h"
 #include "audio/dave.h"
+#include "bus/rs232/rs232.h"
+#include "bus/ep64/exp.h"
 #include "cpu/z80/z80.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/cassette.h"
-#include "machine/ctronics.h"
-#include "machine/ep64exp.h"
+#include "bus/centronics/ctronics.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 #include "machine/ram.h"
-#include "machine/serial.h"
 #include "video/nick.h"
 
 #define Z80_TAG         "u1"
@@ -44,6 +43,7 @@ public:
 			m_rs232(*this, RS232_TAG),
 			m_cassette1(*this, CASSETTE1_TAG),
 			m_cassette2(*this, CASSETTE2_TAG),
+			m_cart(*this, "cartslot"),
 			m_ram(*this, RAM_TAG),
 			m_rom(*this, Z80_TAG),
 			m_y0(*this, "Y0"),
@@ -65,6 +65,7 @@ public:
 	required_device<rs232_port_device> m_rs232;
 	required_device<cassette_image_device> m_cassette1;
 	required_device<cassette_image_device> m_cassette2;
+	required_device<generic_slot_device> m_cart;
 	required_device<ram_device> m_ram;
 	required_memory_region m_rom;
 	required_ioport m_y0;
@@ -89,6 +90,9 @@ public:
 	DECLARE_WRITE8_MEMBER( wr2_w );
 
 	UINT8 m_key;
+
+	DECLARE_WRITE_LINE_MEMBER(write_centronics_busy);
+	int m_centronics_busy;
 };
 
 #endif

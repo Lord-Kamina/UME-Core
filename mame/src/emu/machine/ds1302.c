@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Dallas DS1302 Trickle-Charge Timekeeping Chip emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -74,7 +73,7 @@ const device_type DS1302 = &device_creator<ds1302_device>;
 //-------------------------------------------------
 
 ds1302_device::ds1302_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, DS1302, "Dallas DS1302", tag, owner, clock),
+	: device_t(mconfig, DS1302, "DS1302", tag, owner, clock, "ds1302", __FILE__),
 		device_rtc_interface(mconfig, *this),
 		device_nvram_interface(mconfig, *this)
 {
@@ -120,6 +119,7 @@ void ds1302_device::device_reset()
 	m_ce = 0;
 	m_state = STATE_COMMAND;
 	m_bits = 0;
+	m_cmd = 0;
 }
 
 

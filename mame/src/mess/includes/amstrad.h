@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Kevin Thacker, Barry Rodewald
 /*****************************************************************************
  *
  * includes/amstrad.h
@@ -7,19 +9,38 @@
 #ifndef AMSTRAD_H_
 #define AMSTRAD_H_
 
+#include "cpu/z80/z80.h"
 #include "sound/ay8910.h"
 #include "machine/upd765.h"
 #include "video/mc6845.h"
 #include "machine/i8255.h"
 #include "machine/mc146818.h"
 #include "imagedev/snapquik.h"
-#include "machine/cpcexp.h"
-#include "machine/cpc_ssa1.h"
-#include "machine/cpc_rom.h"
-#include "machine/mface2.h"
+#include "bus/cpc/cpcexp.h"
+#include "bus/cpc/ddi1.h"
+#include "bus/cpc/cpc_ssa1.h"
+#include "bus/cpc/cpc_rom.h"
+#include "bus/cpc/mface2.h"
+#include "bus/cpc/cpc_pds.h"
+#include "bus/cpc/cpc_rs232.h"
+#include "bus/cpc/symbfac2.h"
+#include "bus/cpc/amdrum.h"
+#include "bus/cpc/playcity.h"
+#include "bus/cpc/smartwatch.h"
+#include "bus/cpc/brunword4.h"
+#include "bus/cpc/hd20.h"
 #include "machine/ram.h"
 #include "imagedev/cassette.h"
-#include "machine/ctronics.h"
+#include "bus/centronics/ctronics.h"
+#include "bus/centronics/comxpl80.h"
+#include "bus/centronics/epson_ex800.h"
+#include "bus/centronics/epson_lx800.h"
+#include "bus/centronics/epson_lx810l.h"
+#include "bus/centronics/printer.h"
+#include "bus/centronics/digiblst.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
+
 
 /****************************
  * Gate Array data (CPC) -
@@ -105,10 +126,10 @@ public:
 		m_ay(*this, "ay"),
 		m_fdc(*this, "upd765"),
 		m_crtc(*this, "mc6845"),
-		m_screen(*this, "screen"),
 		m_ppi(*this, "ppi8255"),
 		m_centronics(*this, "centronics"),
 		m_cassette(*this, "cassette"),
+		m_cart(*this, "cartslot"),
 		m_ram(*this, RAM_TAG),
 		m_exp(*this, "exp"),
 		m_rtc(*this, "rtc"),
@@ -130,32 +151,25 @@ public:
 		m_bank14(*this, "bank14"),
 		m_bank15(*this, "bank15"),
 		m_bank16(*this, "bank16"),
-		m_io_keyboard_row_0(*this, "keyboard_row_0"),
-		m_io_keyboard_row_1(*this, "keyboard_row_1"),
-		m_io_keyboard_row_2(*this, "keyboard_row_2"),
-		m_io_keyboard_row_3(*this, "keyboard_row_3"),
-		m_io_keyboard_row_4(*this, "keyboard_row_4"),
-		m_io_keyboard_row_5(*this, "keyboard_row_5"),
-		m_io_keyboard_row_6(*this, "keyboard_row_6"),
-		m_io_keyboard_row_7(*this, "keyboard_row_7"),
-		m_io_keyboard_row_8(*this, "keyboard_row_8"),
-		m_io_keyboard_row_9(*this, "keyboard_row_9"),
-		m_io_keyboard_row_10(*this, "keyboard_row_10"),
+		m_io_kbrow(*this, "kbrow"),
+		m_io_analog(*this, "analog"),
+		m_io_mouse1(*this,"mouse_input1"),
+		m_io_mouse2(*this,"mouse_input2"),
+		m_io_mouse3(*this,"mouse_input3"),
 		m_io_solder_links(*this, "solder_links"),
 		m_io_green_display(*this, "green_display"),
-		m_io_analog1(*this, "analog1"),
-		m_io_analog2(*this, "analog2"),
-		m_io_analog3(*this, "analog3"),
-		m_io_analog4(*this, "analog4") { }
+		m_io_ctrltype(*this,"controller_type"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette") { }
 
-	required_device<cpu_device> m_maincpu;
+	required_device<z80_device> m_maincpu;
 	required_device<ay8910_device> m_ay;
 	optional_device<upd765_family_device> m_fdc;  // not on a GX4000
 	required_device<mc6845_device> m_crtc;
-	required_device<screen_device> m_screen;
 	required_device<i8255_device> m_ppi;
 	optional_device<centronics_device> m_centronics;  // not on a GX4000
 	optional_device<cassette_image_device> m_cassette; // not on a GX4000, (or technically, the 6128+)
+	optional_device<generic_slot_device> m_cart;  // only on 664+, 6128+ and GX4000
 	required_device<ram_device> m_ram;
 	optional_device<cpc_expansion_slot_device> m_exp; // not on a GX4000
 	optional_device<mc146818_device> m_rtc;  // Aleste 520EX only
@@ -173,7 +187,6 @@ public:
 	UINT8 m_ppi_port_inputs[3];
 	UINT8 m_ppi_port_outputs[3];
 	int m_aleste_rtc_function;
-	int m_aleste_fdc_int;
 	int m_prev_reg;
 	UINT16 m_GateArray_render_colours[17];
 	UINT8 m_mode0_lookup[256];
@@ -183,6 +196,7 @@ public:
 	int m_printer_bit8_selected;
 	unsigned char m_Psg_FunctionSelected;
 	int m_previous_ppi_portc_w;
+	UINT8 m_amx_mouse_data;
 	DECLARE_WRITE8_MEMBER(amstrad_plus_asic_4000_w);
 	DECLARE_WRITE8_MEMBER(amstrad_plus_asic_6000_w);
 	DECLARE_READ8_MEMBER(amstrad_plus_asic_4000_r);
@@ -192,7 +206,6 @@ public:
 	DECLARE_WRITE8_MEMBER(amstrad_cpc_io_w);
 	DECLARE_READ8_MEMBER(amstrad_psg_porta_read);
 	void amstrad_plus_seqcheck(int data);
-	DECLARE_DRIVER_INIT(aleste);
 	DECLARE_MACHINE_START(amstrad);
 	DECLARE_MACHINE_RESET(amstrad);
 	DECLARE_VIDEO_START(amstrad);
@@ -215,7 +228,6 @@ public:
 	TIMER_CALLBACK_MEMBER(amstrad_pc2_low);
 	TIMER_CALLBACK_MEMBER(amstrad_video_update_timer);
 	TIMER_CALLBACK_MEMBER(cb_set_resolution);
-	DECLARE_WRITE_LINE_MEMBER(aleste_interrupt);
 	DECLARE_WRITE_LINE_MEMBER(amstrad_hsync_changed);
 	DECLARE_WRITE_LINE_MEMBER(amstrad_plus_hsync_changed);
 	DECLARE_WRITE_LINE_MEMBER(amstrad_vsync_changed);
@@ -227,7 +239,9 @@ public:
 	DECLARE_READ8_MEMBER(amstrad_ppi_portb_r);
 	DECLARE_WRITE8_MEMBER(amstrad_ppi_portc_w);
 
-	void aleste_interrupt(bool state);
+	DECLARE_WRITE_LINE_MEMBER( cpc_romdis );
+	DECLARE_WRITE_LINE_MEMBER( cpc_romen );
+	DECLARE_WRITE8_MEMBER(rom_select);
 
 	DECLARE_FLOPPY_FORMATS( floppy_formats );
 
@@ -238,6 +252,8 @@ public:
 	void amstrad_handle_snapshot(unsigned char *pSnapshot);
 	void amstrad_rethinkMemory();
 	DECLARE_SNAPSHOT_LOAD_MEMBER( amstrad );
+
+	DECLARE_WRITE_LINE_MEMBER(write_centronics_busy);
 
 protected:
 	required_memory_region m_region_maincpu;
@@ -258,23 +274,18 @@ protected:
 	required_memory_bank m_bank14;
 	required_memory_bank m_bank15;
 	required_memory_bank m_bank16;
-	required_ioport m_io_keyboard_row_0;
-	required_ioport m_io_keyboard_row_1;
-	required_ioport m_io_keyboard_row_2;
-	required_ioport m_io_keyboard_row_3;
-	required_ioport m_io_keyboard_row_4;
-	required_ioport m_io_keyboard_row_5;
-	required_ioport m_io_keyboard_row_6;
-	required_ioport m_io_keyboard_row_7;
-	required_ioport m_io_keyboard_row_8;
-	required_ioport m_io_keyboard_row_9;
-	optional_ioport m_io_keyboard_row_10;
+	optional_ioport_array<11> m_io_kbrow;
+	optional_ioport_array<4> m_io_analog;
+	optional_ioport m_io_mouse1;
+	optional_ioport m_io_mouse2;
+	optional_ioport m_io_mouse3;
 	required_ioport m_io_solder_links;
 	required_ioport m_io_green_display;
-	optional_ioport m_io_analog1;
-	optional_ioport m_io_analog2;
-	optional_ioport m_io_analog3;
-	optional_ioport m_io_analog4;
+	optional_ioport m_io_ctrltype;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
+
+	memory_region *m_region_cart;
 
 	void amstrad_init_lookups();
 	void amstrad_vh_update_mode();
@@ -296,39 +307,18 @@ protected:
 	void kccomp_reset_machine();
 	void update_psg();
 	void amstrad_common_init();
+	void enumerate_roms();
 	unsigned char kccomp_get_colour_element(int colour_value);
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
+
+	int m_centronics_busy;
 };
 
 
 /*----------- defined in machine/amstrad.c -----------*/
 
 
-WRITE_LINE_DEVICE_HANDLER( cpc_irq_w );
-WRITE_LINE_DEVICE_HANDLER( cpc_nmi_w );
-WRITE_LINE_DEVICE_HANDLER( cpc_romdis );
-WRITE_LINE_DEVICE_HANDLER( cpc_romen );
-
-
-extern const mc6845_interface amstrad_mc6845_intf;
-extern const mc6845_interface amstrad_plus_mc6845_intf;
-
-
-
-
-
-
-SLOT_INTERFACE_START(cpc_exp_cards)
-	SLOT_INTERFACE("ssa1", CPC_SSA1)
-	SLOT_INTERFACE("dkspeech", CPC_DKSPEECH)
-	SLOT_INTERFACE("rom", CPC_ROM)
-	SLOT_INTERFACE("multiface2", CPC_MFACE2)
-SLOT_INTERFACE_END
-
-SLOT_INTERFACE_START(cpcplus_exp_cards)
-	SLOT_INTERFACE("ssa1", CPC_SSA1)
-	SLOT_INTERFACE("dkspeech", CPC_DKSPEECH)
-	SLOT_INTERFACE("rom", CPC_ROM)
-SLOT_INTERFACE_END
+SLOT_INTERFACE_EXTERN(cpc_exp_cards);
+SLOT_INTERFACE_EXTERN(cpcplus_exp_cards);
 
 #endif /* AMSTRAD_H_ */

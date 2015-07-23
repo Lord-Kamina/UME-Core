@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     r3000.h
@@ -18,16 +20,16 @@
 	r3000_device::static_set_endianness(*device, _endianness);
 
 #define MCFG_R3000_BRCOND0_INPUT(_devcb) \
-	devcb = &r3000_device::static_set_brcond0_input(*device, DEVCB2_##_devcb);
+	devcb = &r3000_device::static_set_brcond0_input(*device, DEVCB_##_devcb);
 
 #define MCFG_R3000_BRCOND1_INPUT(_devcb) \
-	devcb = &r3000_device::static_set_brcond1_input(*device, DEVCB2_##_devcb);
+	devcb = &r3000_device::static_set_brcond1_input(*device, DEVCB_##_devcb);
 
 #define MCFG_R3000_BRCOND2_INPUT(_devcb) \
-	devcb = &r3000_device::static_set_brcond2_input(*device, DEVCB2_##_devcb);
+	devcb = &r3000_device::static_set_brcond2_input(*device, DEVCB_##_devcb);
 
 #define MCFG_R3000_BRCOND3_INPUT(_devcb) \
-	devcb = &r3000_device::static_set_brcond3_input(*device, DEVCB2_##_devcb);
+	devcb = &r3000_device::static_set_brcond3_input(*device, DEVCB_##_devcb);
 
 
 /***************************************************************************
@@ -71,11 +73,11 @@ protected:
 		CHIP_TYPE_R3051,
 		CHIP_TYPE_R3052,
 		CHIP_TYPE_R3071,
-		CHIP_TYPE_R3081,
+		CHIP_TYPE_R3081
 	};
 
 	// construction/destruction
-	r3000_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, chip_type chiptype);
+	r3000_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, chip_type chiptype, const char *shortname, const char *source);
 	virtual ~r3000_device();
 
 public:
@@ -85,22 +87,22 @@ public:
 		downcast<r3000_device &>(device).m_endianness = endianness;
 	}
 
-	template<class _Object> static devcb2_base &static_set_brcond0_input(device_t &device, _Object object)
+	template<class _Object> static devcb_base &static_set_brcond0_input(device_t &device, _Object object)
 	{
 		return downcast<r3000_device &>(device).m_in_brcond0.set_callback(object);
 	}
 
-	template<class _Object> static devcb2_base &static_set_brcond1_input(device_t &device, _Object object)
+	template<class _Object> static devcb_base &static_set_brcond1_input(device_t &device, _Object object)
 	{
 		return downcast<r3000_device &>(device).m_in_brcond1.set_callback(object);
 	}
 
-	template<class _Object> static devcb2_base &static_set_brcond2_input(device_t &device, _Object object)
+	template<class _Object> static devcb_base &static_set_brcond2_input(device_t &device, _Object object)
 	{
 		return downcast<r3000_device &>(device).m_in_brcond2.set_callback(object);
 	}
 
-	template<class _Object> static devcb2_base &static_set_brcond3_input(device_t &device, _Object object)
+	template<class _Object> static devcb_base &static_set_brcond3_input(device_t &device, _Object object)
 	{
 		return downcast<r3000_device &>(device).m_in_brcond3.set_callback(object);
 	}
@@ -124,7 +126,7 @@ protected:
 	// device_state_interface overrides
 	virtual void state_import(const device_state_entry &entry);
 	virtual void state_export(const device_state_entry &entry);
-	virtual void state_string_export(const device_state_entry &entry, astring &string);
+	virtual void state_string_export(const device_state_entry &entry, std::string &str);
 
 	// device_disasm_interface overrides
 	virtual UINT32 disasm_min_opcode_bytes() const;
@@ -247,17 +249,17 @@ protected:
 
 	// cache memory
 	UINT32 *    m_cache;
-	UINT32 *    m_icache;
-	UINT32 *    m_dcache;
+	std::vector<UINT32> m_icache;
+	std::vector<UINT32> m_dcache;
 	size_t      m_cache_size;
 	size_t      m_icache_size;
 	size_t      m_dcache_size;
 
 	// I/O
-	devcb2_read_line    m_in_brcond0;
-	devcb2_read_line    m_in_brcond1;
-	devcb2_read_line    m_in_brcond2;
-	devcb2_read_line    m_in_brcond3;
+	devcb_read_line    m_in_brcond0;
+	devcb_read_line    m_in_brcond1;
+	devcb_read_line    m_in_brcond2;
+	devcb_read_line    m_in_brcond3;
 };
 
 

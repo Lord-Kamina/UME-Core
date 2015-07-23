@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, Olivier Galibert
 /*********************************************************************
 
     formats/esq16_dsk.c
@@ -8,7 +10,8 @@
 
 *********************************************************************/
 
-#include "emu.h"
+#include <assert.h>
+
 #include "flopimg.h"
 #include "formats/esq16_dsk.h"
 
@@ -50,7 +53,7 @@ esqimg_format::esqimg_format()
 
 const char *esqimg_format::name() const
 {
-	return "img";
+	return "esq16";
 }
 
 const char *esqimg_format::description() const
@@ -68,14 +71,15 @@ bool esqimg_format::supports_save() const
 	return true;
 }
 
-void esqimg_format::find_size(io_generic *io, int &track_count, int &head_count, int &sector_count)
+void esqimg_format::find_size(io_generic *io, UINT8 &track_count, UINT8 &head_count, UINT8 &sector_count)
 {
-	int size = io_generic_size(io);
+	UINT64 size = io_generic_size(io);
 	track_count = 80;
 	head_count = 2;
 	sector_count = 10;
 
-	if (size == 512*track_count*head_count*sector_count)
+	UINT32 expected_size = 512 * track_count*head_count*sector_count;
+	if (size == expected_size)
 	{
 		return;
 	}
@@ -85,7 +89,7 @@ void esqimg_format::find_size(io_generic *io, int &track_count, int &head_count,
 
 int esqimg_format::identify(io_generic *io, UINT32 form_factor)
 {
-	int track_count, head_count, sector_count;
+	UINT8 track_count, head_count, sector_count;
 	find_size(io, track_count, head_count, sector_count);
 
 	if(track_count)
@@ -95,7 +99,7 @@ int esqimg_format::identify(io_generic *io, UINT32 form_factor)
 
 bool esqimg_format::load(io_generic *io, UINT32 form_factor, floppy_image *image)
 {
-	int track_count, head_count, sector_count;
+	UINT8 track_count, head_count, sector_count;
 	find_size(io, track_count, head_count, sector_count);
 
 	UINT8 sectdata[10*512];

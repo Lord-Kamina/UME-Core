@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods,R. Belmont
 /***************************************************************************
 
     video/apple3.c
@@ -28,6 +30,45 @@
 #define AQUA    14
 #define WHITE   15
 
+// derived from the IIgs palette then adjusted to match Sara
+static const unsigned char apple3_palette[] =
+{
+	// text colors, which don't match the Apple II palette
+	0x0, 0x0, 0x0,  /* Black         $0 */
+	0x5, 0x0, 0x5,  /* Magenta       $1 */
+	0x0, 0x0, 0x9,  /* Dark Blue     $2 */
+	0xD, 0x2, 0xD,  /* Purple        $3 */
+	0x0, 0x7, 0x2,  /* Dark Green    $4 */
+	0xa, 0xa, 0xa,  /* Light Gray    $5 */
+	0x2, 0x2, 0xF,  /* Medium Blue   $6 */
+	0x6, 0xA, 0xF,  /* Light Blue    $7 */
+	0x8, 0x5, 0x0,  /* Brown         $8 */
+	0xF, 0x6, 0x0,  /* Orange        $9 */
+	0x5, 0x5, 0x5,  /* Dark Gray     $A */
+	0xF, 0x9, 0xF,  /* Pink          $B */
+	0x1, 0xD, 0x0,  /* Light Green   $C */
+	0xe, 0xe, 0x0,  /* Yellow        $D */
+	0x4, 0xe, 0xd,  /* Cyan          $E */
+	0xF, 0xF, 0xF,  /* White         $F */
+	// graphics colors, which *are* Apple II order
+	0x0, 0x0, 0x0,  /* Black         $0 */
+	0xD, 0x0, 0x3,  /* Deep Red      $1 */
+	0x0, 0x0, 0x9,  /* Dark Blue     $2 */
+	0xD, 0x2, 0xD,  /* Purple        $3 */
+	0x0, 0x7, 0x2,  /* Dark Green    $4 */
+	0x5, 0x5, 0x5,  /* Dark Gray     $5 */
+	0x2, 0x2, 0xF,  /* Medium Blue   $6 */
+	0x6, 0xA, 0xF,  /* Light Blue    $7 */
+	0x8, 0x5, 0x0,  /* Brown         $8 */
+	0xF, 0x6, 0x0,  /* Orange        $9 */
+	0xA, 0xA, 0xA,  /* Light Gray    $A */
+	0xF, 0x9, 0x8,  /* Pink          $B */
+	0x1, 0xD, 0x0,  /* Light Green   $C */
+	0xF, 0xF, 0x0,  /* Yellow        $D */
+	0x4, 0xF, 0x9,  /* Aquamarine    $E */
+	0xF, 0xF, 0xF   /* White         $F */
+
+};
 
 static const UINT32 text_map[] =
 {
@@ -36,6 +77,19 @@ static const UINT32 text_map[] =
 	0x450, 0x4d0, 0x550, 0x5d0, 0x650, 0x6d0, 0x750, 0x7d0
 };
 
+
+PALETTE_INIT_MEMBER(apple3_state, apple3)
+{
+	int i;
+
+	for (i = 0; i < 32; i++)
+	{
+		m_palette->set_pen_color(i,
+			apple3_palette[(3*i)]*17,
+			apple3_palette[(3*i)+1]*17,
+			apple3_palette[(3*i)+2]*17);
+	}
+}
 
 void apple3_state::apple3_write_charmem()
 {
@@ -69,7 +123,6 @@ VIDEO_START_MEMBER(apple3_state,apple3)
 	int i, j;
 	UINT32 v;
 
-	m_char_mem = auto_alloc_array(machine(), UINT8, 0x800);
 	memset(m_char_mem, 0, 0x800);
 
 	m_hgr_map = auto_alloc_array(machine(), UINT32, 192);
@@ -87,7 +140,7 @@ VIDEO_START_MEMBER(apple3_state,apple3)
 
 void apple3_state::apple3_video_text40(bitmap_ind16 &bitmap)
 {
-	int x, y, col, row;
+	int x, y, col, row, lc;
 	offs_t offset;
 	UINT8 ch;
 	const UINT8 *char_data;
@@ -95,6 +148,7 @@ void apple3_state::apple3_video_text40(bitmap_ind16 &bitmap)
 	UINT16 *dest;
 	UINT8 *ram = m_ram->pointer();
 	UINT32 ram_size = m_ram->size();
+	int smooth = m_va | (m_vb << 1) | (m_vc << 2);
 
 	for (y = 0; y < 24; y++)
 	{
@@ -103,7 +157,8 @@ void apple3_state::apple3_video_text40(bitmap_ind16 &bitmap)
 			offset = ram_size - 0x8000 + text_map[y] + x + (m_flags & VAR_VM2 ? 0x0400 : 0x0000);
 			ch = ram[offset];
 
-			if (m_flags & VAR_VM0)
+			// no color text in emulation mode
+			if ((m_flags & VAR_VM0) && (m_via_1_a & 0x40))
 			{
 				/* color text */
 				offset = ram_size - 0x8000 + text_map[y] + x + (m_flags & VAR_VM2 ? 0x0000 : 0x0400);
@@ -112,9 +167,9 @@ void apple3_state::apple3_video_text40(bitmap_ind16 &bitmap)
 			}
 			else
 			{
-				/* monochrome */
+				/* monochrome - on a real /// with an RGB monitor, text is white */
 				bg = BLACK;
-				fg = GREEN;
+				fg = WHITE;
 			}
 
 			/* inverse? */
@@ -131,7 +186,17 @@ void apple3_state::apple3_video_text40(bitmap_ind16 &bitmap)
 			{
 				for (col = 0; col < 7; col++)
 				{
-					dest = &bitmap.pix16(y * 8 + row, x * 14 + col * 2);
+					if (m_smoothscr)
+					{
+						// get the offset into the group of 8 lines
+						lc = (col + smooth) & 7;
+					}
+					else
+					{
+						lc = col;
+					}
+
+					dest = &bitmap.pix16(y * 8 + row, x * 14 + lc * 2);
 					dest[0] = (char_data[row] & (1 << col)) ? fg : bg;
 					dest[1] = (char_data[row] & (1 << col)) ? fg : bg;
 				}
@@ -144,7 +209,7 @@ void apple3_state::apple3_video_text40(bitmap_ind16 &bitmap)
 
 void apple3_state::apple3_video_text80(bitmap_ind16 &bitmap)
 {
-	int x, y, col, row;
+	int x, y, col, row, lc;
 	offs_t offset;
 	UINT8 ch;
 	const UINT8 *char_data;
@@ -152,6 +217,7 @@ void apple3_state::apple3_video_text80(bitmap_ind16 &bitmap)
 	UINT16 *dest;
 	UINT8 *ram = m_ram->pointer();
 	UINT32 ram_size = m_ram->size();
+	int smooth = m_va | (m_vb << 1) | (m_vc << 2);
 
 	for (y = 0; y < 24; y++)
 	{
@@ -169,7 +235,17 @@ void apple3_state::apple3_video_text80(bitmap_ind16 &bitmap)
 			{
 				for (col = 0; col < 7; col++)
 				{
-					dest = &bitmap.pix16(y * 8 + row, x * 14 + col + 0);
+					if (m_smoothscr)
+					{
+						// get the offset into the group of 8 lines
+						lc = (col + smooth) & 7;
+					}
+					else
+					{
+						lc = col;
+					}
+
+					dest = &bitmap.pix16(y * 8 + row, x * 14 + lc + 0);
 					*dest = (char_data[row] & (1 << col)) ? fg : bg;
 				}
 			}
@@ -197,18 +273,30 @@ void apple3_state::apple3_video_text80(bitmap_ind16 &bitmap)
 void apple3_state::apple3_video_graphics_hgr(bitmap_ind16 &bitmap)
 {
 	/* hi-res mode: 280x192x2 */
-	int y, i, x;
+	int y, i, x, ly, lyb;
 	const UINT8 *pix_info;
 	UINT16 *ptr;
 	UINT8 b;
 	UINT8 *ram = m_ram->pointer();
+	int smooth = m_va | (m_vb << 1) | (m_vc << 2);
 
 	for (y = 0; y < 192; y++)
 	{
+		ly = y;
+		if (m_smoothscr)
+		{
+			// get our base Y position
+			ly = y & ~7;
+			// get the offset into the group of 8 lines
+			lyb = ((y % 8) + smooth) & 7;
+			// add to the base
+			ly += lyb;
+		}
+
 		if (m_flags & VAR_VM2)
-			pix_info = &ram[m_hgr_map[y]];
+			pix_info = &ram[m_hgr_map[ly]];
 		else
-			pix_info = &ram[m_hgr_map[y] - 0x2000];
+			pix_info = &ram[m_hgr_map[ly] - 0x2000];
 		ptr = &bitmap.pix16(y);
 
 		for (i = 0; i < 40; i++)
@@ -225,47 +313,47 @@ void apple3_state::apple3_video_graphics_hgr(bitmap_ind16 &bitmap)
 	}
 }
 
-
-
-UINT8 apple3_state::swap_bits(UINT8 b)
-{
-	return (b & 0x08 ? 0x01 : 0x00)
-		|  (b & 0x04 ? 0x02 : 0x00)
-		|  (b & 0x02 ? 0x04 : 0x00)
-		|  (b & 0x01 ? 0x08 : 0x00);
-}
-
-
-
 void apple3_state::apple3_video_graphics_chgr(bitmap_ind16 &bitmap)
 {
 	/* color hi-res mode: 280x192x16 */
-	int y, i, x;
+	int y, i, x, ly, lyb;
 	const UINT8 *pix_info;
 	const UINT8 *col_info;
 	UINT16 *ptr;
 	UINT8 b;
 	UINT16 fgcolor, bgcolor;
 	UINT8 *ram = m_ram->pointer();
+	int smooth = m_va | (m_vb << 1) | (m_vc << 2);
 
 	for (y = 0; y < 192; y++)
 	{
+		ly = y;
+		if (m_smoothscr)
+		{
+			// get our base Y position
+			ly = y & ~7;
+			// get the offset into the group of 8 lines
+			lyb = ((y % 8) + smooth) & 7;
+			// add to the base
+			ly += lyb;
+		}
+
 		if (m_flags & VAR_VM2)
 		{
-			pix_info = &ram[m_hgr_map[y]];
-			col_info = &ram[m_hgr_map[y] - 0x2000];
+			pix_info = &ram[m_hgr_map[ly] + 0x2000];
+			col_info = &ram[m_hgr_map[ly] + 0x4000];
 		}
 		else
 		{
-			pix_info = &ram[m_hgr_map[y] - 0x2000];
-			col_info = &ram[m_hgr_map[y]];
+			pix_info = &ram[m_hgr_map[ly] - 0x2000];
+			col_info = &ram[m_hgr_map[ly]];
 		}
 		ptr = &bitmap.pix16(y);
 
 		for (i = 0; i < 40; i++)
 		{
-			bgcolor = swap_bits((*col_info >> 0) & 0x0F);
-			fgcolor = swap_bits((*col_info >> 4) & 0x0F);
+			bgcolor = ((*col_info >> 0) & 0x0F) + 16;
+			fgcolor = ((*col_info >> 4) & 0x0F) + 16;
 
 			b = *pix_info;
 
@@ -286,24 +374,36 @@ void apple3_state::apple3_video_graphics_chgr(bitmap_ind16 &bitmap)
 void apple3_state::apple3_video_graphics_shgr(bitmap_ind16 &bitmap)
 {
 	/* super hi-res mode: 560x192x2 */
-	int y, i, x;
+	int y, i, x, ly, lyb;
 	const UINT8 *pix_info1;
 	const UINT8 *pix_info2;
 	UINT16 *ptr;
 	UINT8 b1, b2;
 	UINT8 *ram = m_ram->pointer();
+	int smooth = m_va | (m_vb << 1) | (m_vc << 2);
 
 	for (y = 0; y < 192; y++)
 	{
+		ly = y;
+		if (m_smoothscr)
+		{
+			// get our base Y position
+			ly = y & ~7;
+			// get the offset into the group of 8 lines
+			lyb = ((y % 8) + smooth) & 7;
+			// add to the base
+			ly += lyb;
+		}
+
 		if (m_flags & VAR_VM2)
 		{
-			pix_info1 = &ram[m_hgr_map[y]];
-			pix_info2 = &ram[m_hgr_map[y] + 0x2000];
+			pix_info1 = &ram[m_hgr_map[ly] + 0x2000];
+			pix_info2 = &ram[m_hgr_map[ly] + 0x4000];
 		}
 		else
 		{
-			pix_info1 = &ram[m_hgr_map[y] - 0x2000];
-			pix_info2 = &ram[m_hgr_map[y]];
+			pix_info1 = &ram[m_hgr_map[ly] - 0x2000];
+			pix_info2 = &ram[m_hgr_map[ly]];
 		}
 		ptr = &bitmap.pix16(y);
 
@@ -315,8 +415,12 @@ void apple3_state::apple3_video_graphics_shgr(bitmap_ind16 &bitmap)
 			for (x = 0; x < 7; x++)
 			{
 				*(ptr++) = (b1 & 0x01) ? WHITE : BLACK;
-				*(ptr++) = (b2 & 0x01) ? WHITE : BLACK;
 				b1 >>= 1;
+			}
+
+			for (x = 0; x < 7; x++)
+			{
+				*(ptr++) = (b2 & 0x01) ? WHITE : BLACK;
 				b2 >>= 1;
 			}
 		}
@@ -328,27 +432,49 @@ void apple3_state::apple3_video_graphics_shgr(bitmap_ind16 &bitmap)
 void apple3_state::apple3_video_graphics_chires(bitmap_ind16 &bitmap)
 {
 	UINT16 *pen;
-	PAIR pix;
-	int y, i;
+	UINT8 p1, p2, p3, p4;
+	int y, i, ly, lyb;
 	UINT8 *ram = m_ram->pointer();
+	int smooth = m_va | (m_vb << 1) | (m_vc << 2);
 
 	for (y = 0; y < 192; y++)
 	{
+		ly = y;
+		if (m_smoothscr)
+		{
+			// get our base Y position
+			ly = y & ~7;
+			// get the offset into the group of 8 lines
+			lyb = ((y % 8) + smooth) & 7;
+			// add to the base
+			ly += lyb;
+		}
+
 		pen = &bitmap.pix16(y);
 		for (i = 0; i < 20; i++)
 		{
-			pix.b.l  = ram[m_hgr_map[y] - 0x2000 + (i * 2) + (m_flags & VAR_VM2 ? 1 : 0) + 0];
-			pix.b.h  = ram[m_hgr_map[y] - 0x0000 + (i * 2) + (m_flags & VAR_VM2 ? 1 : 0) + 0];
-			pix.b.h2 = ram[m_hgr_map[y] - 0x2000 + (i * 2) + (m_flags & VAR_VM2 ? 1 : 0) + 1];
-			pix.b.h3 = ram[m_hgr_map[y] - 0x0000 + (i * 2) + (m_flags & VAR_VM2 ? 1 : 0) + 1];
+			if (m_flags & VAR_VM2)
+			{
+				p1 = ram[m_hgr_map[ly] + 0x2000 + (i * 2) + 0];
+				p2 = ram[m_hgr_map[ly] + 0x4000 + (i * 2) + 0];
+				p3 = ram[m_hgr_map[ly] + 0x2000 + (i * 2) + 1];
+				p4 = ram[m_hgr_map[ly] + 0x4000 + (i * 2) + 1];
+			}
+			else
+			{
+				p1 = ram[m_hgr_map[ly] - 0x2000 + (i * 2) + 0];
+				p2 = ram[m_hgr_map[ly] - 0x0000 + (i * 2) + 0];
+				p3 = ram[m_hgr_map[ly] - 0x2000 + (i * 2) + 1];
+				p4 = ram[m_hgr_map[ly] - 0x0000 + (i * 2) + 1];
+			}
 
-			pen[ 0] = pen[ 1] = pen[ 2] = pen[ 3] = ((pix.d >>  0) & 0x0F);
-			pen[ 4] = pen[ 5] = pen[ 6] = pen[ 7] = ((pix.d >>  4) & 0x07) | ((pix.d >>  1) & 0x08);
-			pen[ 8] = pen[ 9] = pen[10] = pen[11] = ((pix.d >>  9) & 0x0F);
-			pen[12] = pen[13] = pen[14] = pen[15] = ((pix.d >> 13) & 0x03) | ((pix.d >> 14) & 0x0C);
-			pen[16] = pen[17] = pen[18] = pen[19] = ((pix.d >> 18) & 0x0F);
-			pen[20] = pen[21] = pen[22] = pen[23] = ((pix.d >> 22) & 0x01) | ((pix.d >> 23) & 0x0E);
-			pen[24] = pen[25] = pen[26] = pen[27] = ((pix.d >> 27) & 0x0F);
+			pen[ 0] = pen[ 1] = pen[ 2] = pen[ 3] = (p1 & 0x0f);
+			pen[ 4] = pen[ 5] = pen[ 6] = pen[ 7] = ((p1 >>  4) & 0x07) | ((p2 & 1) << 3);
+			pen[ 8] = pen[ 9] = pen[10] = pen[11] = ((p2 >> 1) & 0x0F);
+			pen[12] = pen[13] = pen[14] = pen[15] = ((p2 >> 5) & 0x03) | ((p3 & 3) << 2);
+			pen[16] = pen[17] = pen[18] = pen[19] = ((p3 >> 2) & 0x0F);
+			pen[20] = pen[21] = pen[22] = pen[23] = ((p3 >> 6) & 0x01) | ((p4 << 1) & 0xe);
+			pen[24] = pen[25] = pen[26] = pen[27] = ((p4 >> 3) & 0x0F);
 			pen += 28;
 		}
 	}
@@ -358,6 +484,8 @@ void apple3_state::apple3_video_graphics_chires(bitmap_ind16 &bitmap)
 
 UINT32 apple3_state::screen_update_apple3(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
+//  printf("gfx mode %x\n", m_flags & (VAR_VM3|VAR_VM1|VAR_VM0));
+
 	switch(m_flags & (VAR_VM3|VAR_VM1|VAR_VM0))
 	{
 		case 0:

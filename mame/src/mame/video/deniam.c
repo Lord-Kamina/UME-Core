@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #include "emu.h"
 #include "includes/deniam.h"
 
@@ -61,8 +63,7 @@ TILE_GET_INFO_MEMBER(deniam_state::get_bg_tile_info)
 {
 	int page = tile_index >> 11;
 	UINT16 attr = m_videoram[m_bg_page[page] * 0x0800 + (tile_index & 0x7ff)];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			attr,
 			(attr & 0x1fc0) >> 6,
 			0);
@@ -72,8 +73,7 @@ TILE_GET_INFO_MEMBER(deniam_state::get_fg_tile_info)
 {
 	int page = tile_index >> 11;
 	UINT16 attr = m_videoram[m_fg_page[page] * 0x0800 + (tile_index & 0x7ff)];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			attr,
 			(attr & 0x1fc0) >> 6,
 			0);
@@ -82,8 +82,7 @@ TILE_GET_INFO_MEMBER(deniam_state::get_fg_tile_info)
 TILE_GET_INFO_MEMBER(deniam_state::get_tx_tile_info)
 {
 	UINT16 attr = m_textram[tile_index];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			attr & 0xf1ff,
 			(attr & 0x0e00) >> 9,
 			0);
@@ -99,9 +98,9 @@ TILE_GET_INFO_MEMBER(deniam_state::get_tx_tile_info)
 
 void deniam_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(deniam_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(deniam_state::scan_pages),this), 8, 8, 128, 64);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(deniam_state::get_fg_tile_info),this), tilemap_mapper_delegate(FUNC(deniam_state::scan_pages),this), 8, 8, 128, 64);
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(deniam_state::get_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(deniam_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(deniam_state::scan_pages),this), 8, 8, 128, 64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(deniam_state::get_fg_tile_info),this), tilemap_mapper_delegate(FUNC(deniam_state::scan_pages),this), 8, 8, 128, 64);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(deniam_state::get_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 	m_tx_tilemap->set_transparent_pen(0);
@@ -147,7 +146,7 @@ WRITE16_MEMBER(deniam_state::deniam_palette_w)
 	r = ((data << 1) & 0x1e) | ((data >> 12) & 0x01);
 	g = ((data >> 3) & 0x1e) | ((data >> 13) & 0x01);
 	b = ((data >> 7) & 0x1e) | ((data >> 14) & 0x01);
-	palette_set_color_rgb(machine(), offset, pal5bit(r), pal5bit(g), pal5bit(b));
+	m_palette->set_pen_color(offset, pal5bit(r), pal5bit(g), pal5bit(b));
 }
 
 READ16_MEMBER(deniam_state::deniam_coinctrl_r)
@@ -200,7 +199,7 @@ WRITE16_MEMBER(deniam_state::deniam_coinctrl_w)
  *   c  | ---------------- | zoomy like in System 16?
  *   e  | ---------------- |
  */
-void deniam_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
+void deniam_state::draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
 	int offs;
 	UINT8 *gfx = memregion("gfx2")->base();
@@ -256,9 +255,9 @@ void deniam_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect
 						{
 							if (cliprect.contains(sx + x, y))
 							{
-								if ((machine().priority_bitmap.pix8(y, sx + x) & primask) == 0)
+								if ((screen.priority().pix8(y, sx + x) & primask) == 0)
 									bitmap.pix16(y, sx + x) = color * 16 + (rom[i] & 0x0f);
-								machine().priority_bitmap.pix8(y, sx + x) = 8;
+								screen.priority().pix8(y, sx + x) = 8;
 							}
 						}
 						x++;
@@ -275,9 +274,9 @@ void deniam_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect
 						{
 							if (cliprect.contains(sx + x, y))
 							{
-								if ((machine().priority_bitmap.pix8(y, sx + x) & primask) == 0)
+								if ((screen.priority().pix8(y, sx + x) & primask) == 0)
 									bitmap.pix16(y, sx + x) = color * 16+(rom[i] >> 4);
-								machine().priority_bitmap.pix8(y, sx + x) = 8;
+								screen.priority().pix8(y, sx + x) = 8;
 							}
 						}
 						x++;
@@ -298,9 +297,9 @@ void deniam_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect
 						{
 							if (cliprect.contains(sx + x, y))
 							{
-								if ((machine().priority_bitmap.pix8(y, sx + x) & primask) == 0)
+								if ((screen.priority().pix8(y, sx + x) & primask) == 0)
 									bitmap.pix16(y, sx + x) = color * 16 + (rom[i] >> 4);
-								machine().priority_bitmap.pix8(y, sx + x) = 8;
+								screen.priority().pix8(y, sx + x) = 8;
 							}
 						}
 						x++;
@@ -317,9 +316,9 @@ void deniam_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect
 						{
 							if (cliprect.contains(sx + x, y))
 							{
-								if ((machine().priority_bitmap.pix8(y, sx + x) & primask) == 0)
+								if ((screen.priority().pix8(y, sx + x) & primask) == 0)
 									bitmap.pix16(y, sx + x) = color * 16 + (rom[i] & 0x0f);
-								machine().priority_bitmap.pix8(y, sx + x) = 8;
+								screen.priority().pix8(y, sx + x) = 8;
 							}
 						}
 						x++;
@@ -385,12 +384,12 @@ UINT32 deniam_state::screen_update_deniam(screen_device &screen, bitmap_ind16 &b
 	m_fg_tilemap->set_scrollx(0, fg_scrollx & 0x1ff);
 	m_fg_tilemap->set_scrolly(0, fg_scrolly & 0x0ff);
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 1);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 2);
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 4);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 1);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 2);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 4);
 
-	draw_sprites(bitmap, cliprect);
+	draw_sprites(screen, bitmap, cliprect);
 	return 0;
 }

@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Steve Baines, Frank Palazzolo
 /***************************************************************************
 
     Atari Star Wars hardware
@@ -55,30 +57,17 @@ WRITE_LINE_MEMBER(starwars_state::snd_interrupt)
 }
 
 
-const riot6532_interface starwars_riot6532_intf =
-{
-	DEVCB_DRIVER_MEMBER(starwars_state,r6532_porta_r),
-	DEVCB_DEVICE_MEMBER("tms", tms5220_device, status_r),
-	DEVCB_DRIVER_MEMBER(starwars_state,r6532_porta_w),
-	DEVCB_DEVICE_MEMBER("tms", tms5220_device, data_w),
-	DEVCB_DRIVER_LINE_MEMBER(starwars_state,snd_interrupt)
-};
-
-
-
-
 /*************************************
  *
  *  Sound CPU to/from main CPU
  *
  *************************************/
 
-static TIMER_CALLBACK( sound_callback )
+TIMER_CALLBACK_MEMBER(starwars_state::sound_callback)
 {
-	starwars_state *state = machine.driver_data<starwars_state>();
-	state->m_riot->porta_in_set(0x40, 0x40);
-	state->m_main_data = param;
-	machine.scheduler().boost_interleave(attotime::zero, attotime::from_usec(100));
+	m_riot->porta_in_set(0x40, 0x40);
+	m_main_data = param;
+	machine().scheduler().boost_interleave(attotime::zero, attotime::from_usec(100));
 }
 
 
@@ -91,7 +80,7 @@ READ8_MEMBER(starwars_state::starwars_sin_r)
 
 WRITE8_MEMBER(starwars_state::starwars_sout_w)
 {
-	machine().scheduler().synchronize(FUNC(sound_callback), data);
+	machine().scheduler().synchronize(timer_expired_delegate(FUNC(starwars_state::sound_callback), this), data);
 }
 
 
@@ -114,20 +103,19 @@ READ8_MEMBER(starwars_state::starwars_main_ready_flag_r)
 	return m_riot->porta_in_get() & 0xc0;    /* only upper two flag bits mapped */
 }
 
-static TIMER_CALLBACK( main_callback )
+TIMER_CALLBACK_MEMBER(starwars_state::main_callback )
 {
-	starwars_state *state = machine.driver_data<starwars_state>();
-	if (state->m_riot->porta_in_get() & 0x80)
-		logerror("Sound data not read %x\n",state->m_sound_data);
+	if (m_riot->porta_in_get() & 0x80)
+		logerror("Sound data not read %x\n", m_sound_data);
 
-	state->m_riot->porta_in_set(0x80, 0x80);
-	state->m_sound_data = param;
-	machine.scheduler().boost_interleave(attotime::zero, attotime::from_usec(100));
+	m_riot->porta_in_set(0x80, 0x80);
+	m_sound_data = param;
+	machine().scheduler().boost_interleave(attotime::zero, attotime::from_usec(100));
 }
 
 WRITE8_MEMBER(starwars_state::starwars_main_wr_w)
 {
-	machine().scheduler().synchronize(FUNC(main_callback), data);
+	machine().scheduler().synchronize(timer_expired_delegate(FUNC(starwars_state::main_callback), this), data);
 }
 
 

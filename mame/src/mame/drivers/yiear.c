@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Enrique Sanchez
 /***************************************************************************
 
     Yie Ar Kung-Fu memory map (preliminary)
@@ -97,7 +99,6 @@ Sound: VLM5030 at 7B
 #include "emu.h"
 #include "cpu/m6809/m6809.h"
 #include "sound/sn76496.h"
-#include "sound/vlm5030.h"
 #include "includes/konamipt.h"
 #include "audio/trackfld.h"
 #include "includes/yiear.h"
@@ -106,8 +107,7 @@ Sound: VLM5030 at 7B
 
 READ8_MEMBER(yiear_state::yiear_speech_r)
 {
-	device_t *device = machine().device("vlm");
-	if (vlm5030_bsy(device))
+	if (m_vlm->bsy())
 		return 1;
 	else
 		return 0;
@@ -115,10 +115,9 @@ READ8_MEMBER(yiear_state::yiear_speech_r)
 
 WRITE8_MEMBER(yiear_state::yiear_VLM5030_control_w)
 {
-	device_t *device = machine().device("vlm");
 	/* bit 0 is latch direction */
-	vlm5030_st(device, (data >> 1) & 1);
-	vlm5030_rst(device, (data >> 2) & 1);
+	m_vlm->st((data >> 1) & 1);
+	m_vlm->rst((data >> 2) & 1);
 }
 
 INTERRUPT_GEN_MEMBER(yiear_state::yiear_vblank_interrupt)
@@ -141,7 +140,7 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, yiear_state )
 	AM_RANGE(0x4800, 0x4800) AM_WRITE(konami_SN76496_latch_w)
 	AM_RANGE(0x4900, 0x4900) AM_WRITE(konami_SN76496_w)
 	AM_RANGE(0x4a00, 0x4a00) AM_WRITE(yiear_VLM5030_control_w)
-	AM_RANGE(0x4b00, 0x4b00) AM_DEVWRITE_LEGACY("vlm", vlm5030_data_w)
+	AM_RANGE(0x4b00, 0x4b00) AM_DEVWRITE("vlm", vlm5030_device, data_w)
 	AM_RANGE(0x4c00, 0x4c00) AM_READ_PORT("DSW2")
 	AM_RANGE(0x4d00, 0x4d00) AM_READ_PORT("DSW3")
 	AM_RANGE(0x4e00, 0x4e00) AM_READ_PORT("SYSTEM")
@@ -269,15 +268,6 @@ void yiear_state::machine_reset()
 	m_yiear_nmi_enable = 0;
 }
 
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
 static MACHINE_CONFIG_START( yiear, yiear_state )
 
 	/* basic machine hardware */
@@ -294,10 +284,11 @@ static MACHINE_CONFIG_START( yiear, yiear_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(yiear_state, screen_update_yiear)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(yiear)
-	MCFG_PALETTE_LENGTH(32)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", yiear)
+	MCFG_PALETTE_ADD("palette", 32)
+	MCFG_PALETTE_INIT_OWNER(yiear_state, yiear)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -306,7 +297,6 @@ static MACHINE_CONFIG_START( yiear, yiear_state )
 
 	MCFG_SOUND_ADD("snsnd", SN76489A, XTAL_18_432MHz/12)   /* verified on pcb */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("vlm", VLM5030, XTAL_3_579545MHz)   /* verified on pcb */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)

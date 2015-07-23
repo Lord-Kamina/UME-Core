@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         AC1 video driver by Miodrag Milanovic
@@ -36,7 +38,7 @@ UINT32 ac1_state::screen_update_ac1(screen_device &screen, bitmap_ind16 &bitmap,
 		for(x = 0; x < 64; x++ )
 		{
 			int code = space.read_byte(AC1_VIDEO_MEMORY + x + y*64);
-			drawgfx_opaque(bitmap, cliprect, machine().gfx[0],  code , 0, 0,0, 63*6-x*6,15*8-y*8);
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect,  code , 0, 0,0, 63*6-x*6,15*8-y*8);
 		}
 	}
 	return 0;
@@ -52,7 +54,7 @@ UINT32 ac1_state::screen_update_ac1_32(screen_device &screen, bitmap_ind16 &bitm
 		for(x = 0; x < 64; x++ )
 		{
 			int code = space.read_byte(AC1_VIDEO_MEMORY + x + y*64);
-			drawgfx_opaque(bitmap, cliprect, machine().gfx[0],  code , 0, 0,0, 63*6-x*6,31*8-y*8);
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect,  code , 0, 0,0, 63*6-x*6,31*8-y*8);
 		}
 	}
 	return 0;

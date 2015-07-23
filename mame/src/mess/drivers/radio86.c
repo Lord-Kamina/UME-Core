@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         Radio-86RK driver by Miodrag Milanovic
@@ -11,10 +13,7 @@
 #include "cpu/i8085/i8085.h"
 #include "sound/wave.h"
 #include "machine/i8255.h"
-#include "machine/8257dma.h"
-#include "video/i8275.h"
 #include "imagedev/cassette.h"
-#include "imagedev/cartslot.h"
 #include "formats/rk_cas.h"
 #include "includes/radio86.h"
 
@@ -25,7 +24,7 @@ static ADDRESS_MAP_START(radio86_mem, AS_PROGRAM, 8, radio86_state )
 	AM_RANGE( 0x8000, 0x8003 ) AM_DEVREADWRITE("ppi8255_1", i8255_device, read, write) AM_MIRROR(0x1ffc)
 	//AM_RANGE( 0xa000, 0xa003 ) AM_DEVREADWRITE("ppi8255_2", i8255_device, read, write) AM_MIRROR(0x1ffc)
 	AM_RANGE( 0xc000, 0xc001 ) AM_DEVREADWRITE("i8275", i8275_device, read, write) AM_MIRROR(0x1ffe) // video
-	AM_RANGE( 0xe000, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, i8257_w)    // DMA
+	AM_RANGE( 0xe000, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, write)    // DMA
 	AM_RANGE( 0xf000, 0xffff ) AM_ROM  // System ROM
 ADDRESS_MAP_END
 
@@ -45,7 +44,7 @@ static ADDRESS_MAP_START(radio86rom_mem, AS_PROGRAM, 8, radio86_state )
 	AM_RANGE( 0x8000, 0x8003 ) AM_DEVREADWRITE("ppi8255_1", i8255_device, read, write) AM_MIRROR(0x1ffc)
 	AM_RANGE( 0xa000, 0xa003 ) AM_DEVREADWRITE("ppi8255_2", i8255_device, read, write) AM_MIRROR(0x1ffc)
 	AM_RANGE( 0xc000, 0xc001 ) AM_DEVREADWRITE("i8275", i8275_device, read, write) AM_MIRROR(0x1ffe) // video
-	AM_RANGE( 0xe000, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, i8257_w)    // DMA
+	AM_RANGE( 0xe000, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, write)    // DMA
 	AM_RANGE( 0xf000, 0xffff ) AM_ROM  // System ROM
 ADDRESS_MAP_END
 
@@ -58,7 +57,7 @@ static ADDRESS_MAP_START(radio86ram_mem, AS_PROGRAM, 8, radio86_state )
 	AM_RANGE( 0xf780, 0xf7bf ) AM_DEVREADWRITE("i8275", i8275_device, read, write) // video
 	AM_RANGE( 0xf684, 0xf687 ) AM_DEVREADWRITE("ppi8255_2", i8255_device, read, write)
 	AM_RANGE( 0xf688, 0xf688 ) AM_WRITE(radio86_pagesel )
-	AM_RANGE( 0xf800, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, i8257_w)    // DMA
+	AM_RANGE( 0xf800, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, write)    // DMA
 	AM_RANGE( 0xf800, 0xffff ) AM_ROM  // System ROM page 1
 ADDRESS_MAP_END
 
@@ -68,9 +67,9 @@ static ADDRESS_MAP_START(radio86_16_mem, AS_PROGRAM, 8, radio86_state )
 	AM_RANGE( 0x1000, 0x3fff ) AM_RAM  // RAM
 	AM_RANGE( 0x4000, 0x7fff ) AM_READ(radio_cpu_state_r)
 	AM_RANGE( 0x8000, 0x8003 ) AM_DEVREADWRITE("ppi8255_1", i8255_device, read, write) AM_MIRROR(0x1ffc)
-	//AM_RANGE( 0xa000, 0xa003 ) AM_DEVREADWRITE_LEGACY("ppi8255_2", i8255a_r, i8255a_w) AM_MIRROR(0x1ffc)
+	//AM_RANGE( 0xa000, 0xa003 ) AM_DEVREADWRITE("ppi8255_2", i8255_device, read, write) AM_MIRROR(0x1ffc)
 	AM_RANGE( 0xc000, 0xc001 ) AM_DEVREADWRITE("i8275", i8275_device, read, write) AM_MIRROR(0x1ffe) // video
-	AM_RANGE( 0xe000, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, i8257_w)    // DMA
+	AM_RANGE( 0xe000, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, write)    // DMA
 	AM_RANGE( 0xf000, 0xffff ) AM_ROM  // System ROM
 ADDRESS_MAP_END
 
@@ -81,7 +80,7 @@ static ADDRESS_MAP_START(mikron2_mem, AS_PROGRAM, 8, radio86_state )
 	AM_RANGE( 0xc000, 0xc003 ) AM_DEVREADWRITE("ppi8255_1", i8255_device, read, write) AM_MIRROR(0x00fc)
 	//AM_RANGE( 0xc100, 0xc103 ) AM_DEVREADWRITE_LEGACY("ppi8255_2", i8255a_r, i8255a_w) AM_MIRROR(0x00fc)
 	AM_RANGE( 0xc200, 0xc201 ) AM_DEVREADWRITE("i8275", i8275_device, read, write) AM_MIRROR(0x00fe) // video
-	AM_RANGE( 0xc300, 0xc3ff ) AM_DEVWRITE("dma8257", i8257_device, i8257_w)    // DMA
+	AM_RANGE( 0xc300, 0xc3ff ) AM_DEVWRITE("dma8257", i8257_device, write)    // DMA
 	AM_RANGE( 0xf000, 0xffff ) AM_ROM  // System ROM
 ADDRESS_MAP_END
 
@@ -91,7 +90,7 @@ static ADDRESS_MAP_START(impuls03_mem, AS_PROGRAM, 8, radio86_state )
 	AM_RANGE( 0x8000, 0x8003 ) AM_DEVREADWRITE("ppi8255_1", i8255_device, read, write) AM_MIRROR(0x1ffc)
 	AM_RANGE( 0xa000, 0xbfff ) AM_ROM  // Basic ROM
 	AM_RANGE( 0xc000, 0xc001 ) AM_DEVREADWRITE("i8275", i8275_device, read, write) AM_MIRROR(0x1ffe) // video
-	AM_RANGE( 0xe000, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, i8257_w)    // DMA
+	AM_RANGE( 0xe000, 0xffff ) AM_DEVWRITE("dma8257", i8257_device, write)    // DMA
 	AM_RANGE( 0xf000, 0xffff ) AM_ROM  // System ROM
 ADDRESS_MAP_END
 
@@ -317,16 +316,6 @@ INPUT_PORTS_START( ms7007 )
 	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_CODE(KEYCODE_2_PAD) PORT_CHAR(UCHAR_MAMEKEY(2_PAD))
 INPUT_PORTS_END
 
-static const cassette_interface radio86_cassette_interface =
-{
-	rkr_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_SPEAKER_ENABLED | CASSETTE_MOTOR_ENABLED),
-	"radio86_cass",
-	NULL
-};
-
-
 /* F4 Character Displayer */
 static const gfx_layout radio86_charlayout =
 {
@@ -354,28 +343,44 @@ static MACHINE_CONFIG_START( radio86, radio86_state )
 	MCFG_CPU_IO_MAP(radio86_io)
 	MCFG_MACHINE_RESET_OVERRIDE(radio86_state, radio86 )
 
-	MCFG_I8255_ADD( "ppi8255_1", radio86_ppi8255_interface_1 )
+	MCFG_DEVICE_ADD("ppi8255_1", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(radio86_state, radio86_8255_porta_w2))
+	MCFG_I8255_IN_PORTB_CB(READ8(radio86_state, radio86_8255_portb_r2))
+	MCFG_I8255_IN_PORTC_CB(READ8(radio86_state, radio86_8255_portc_r2))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(radio86_state, radio86_8255_portc_w2))
 
-	MCFG_I8275_ADD  ( "i8275", radio86_i8275_interface)
+	MCFG_DEVICE_ADD("i8275", I8275, XTAL_16MHz / 12)
+	MCFG_I8275_CHARACTER_WIDTH(6)
+	MCFG_I8275_DRAW_CHARACTER_CALLBACK_OWNER(radio86_state, display_pixels)
+	MCFG_I8275_DRQ_CALLBACK(DEVWRITELINE("dma8257",i8257_device, dreq2_w))
+
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_UPDATE_DEVICE("i8275", i8275_device, screen_update)
 	MCFG_SCREEN_REFRESH_RATE(50)
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
 	MCFG_SCREEN_SIZE(78*6, 30*10)
 	MCFG_SCREEN_VISIBLE_AREA(0, 78*6-1, 0, 30*10-1)
-	MCFG_GFXDECODE(radio86)
-	MCFG_PALETTE_LENGTH(3)
-	MCFG_PALETTE_INIT_OVERRIDE(radio86_state,radio86)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", radio86)
+	MCFG_PALETTE_ADD("palette", 3)
+	MCFG_PALETTE_INIT_OWNER(radio86_state,radio86)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_I8257_ADD("dma8257", XTAL_16MHz / 9, radio86_dma)
+	MCFG_DEVICE_ADD("dma8257", I8257, XTAL_16MHz / 9)
+	MCFG_I8257_OUT_HRQ_CB(WRITELINE(radio86_state, hrq_w))
+	MCFG_I8257_IN_MEMR_CB(READ8(radio86_state, memory_read_byte))
+	MCFG_I8257_OUT_MEMW_CB(WRITE8(radio86_state, memory_write_byte))
+	MCFG_I8257_OUT_IOW_2_CB(DEVWRITE8("i8275", i8275_device, dack_w))
+	MCFG_I8257_REVERSE_RW_MODE(1)
 
-	MCFG_CASSETTE_ADD( "cassette", radio86_cassette_interface )
-	MCFG_SOFTWARE_LIST_ADD("cass_list","radio86")
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_FORMATS(rkr_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_SPEAKER_ENABLED | CASSETTE_MOTOR_ENABLED)
+	MCFG_CASSETTE_INTERFACE("radio86_cass")
+
+	MCFG_SOFTWARE_LIST_ADD("cass_list", "radio86_cass")
 MACHINE_CONFIG_END
 
 
@@ -390,11 +395,15 @@ static MACHINE_CONFIG_DERIVED( radiorom, radio86 )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(radio86rom_mem)
 
-	MCFG_I8255_ADD( "ppi8255_2", radio86_ppi8255_interface_2 )
+	MCFG_DEVICE_ADD("ppi8255_2", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(radio86_state, radio86rom_romdisk_porta_r))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(radio86_state, radio86_romdisk_portb_w))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(radio86_state, radio86_romdisk_portc_w))
 
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin,rom")
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "radio86_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
+
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "radio86_cart")
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( radioram, radio86 )
@@ -402,7 +411,10 @@ static MACHINE_CONFIG_DERIVED( radioram, radio86 )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(radio86ram_mem)
 
-	MCFG_I8255_ADD( "ppi8255_2", radio86_ppi8255_interface_2 )
+	MCFG_DEVICE_ADD("ppi8255_2", I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(radio86_state, radio86ram_romdisk_porta_r))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(radio86_state, radio86_romdisk_portb_w))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(radio86_state, radio86_romdisk_portc_w))
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( rk7007, radio86 )
@@ -410,7 +422,11 @@ static MACHINE_CONFIG_DERIVED( rk7007, radio86 )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_IO_MAP(rk7007_io)
 
-	MCFG_I8255_ADD( "ms7007", rk7007_ppi8255_interface )
+	MCFG_DEVICE_ADD("ms7007", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(radio86_state, radio86_8255_porta_w2))
+	MCFG_I8255_IN_PORTB_CB(READ8(radio86_state, radio86_8255_portb_r2))
+	MCFG_I8255_IN_PORTC_CB(READ8(radio86_state, rk7007_8255_portc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(radio86_state, radio86_8255_portc_w2))
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( rk700716, radio16 )
@@ -418,7 +434,11 @@ static MACHINE_CONFIG_DERIVED( rk700716, radio16 )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_IO_MAP(rk7007_io)
 
-	MCFG_I8255_ADD( "ms7007", rk7007_ppi8255_interface )
+	MCFG_DEVICE_ADD("ms7007", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(radio86_state, radio86_8255_porta_w2))
+	MCFG_I8255_IN_PORTB_CB(READ8(radio86_state, radio86_8255_portb_r2))
+	MCFG_I8255_IN_PORTC_CB(READ8(radio86_state, rk7007_8255_portc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(radio86_state, radio86_8255_portc_w2))
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( mikron2, radio86 )
@@ -468,27 +488,26 @@ ROM_END
 ROM_START( radiorom )
 	ROM_REGION( 0x20000, "maincpu", ROMREGION_ERASEFF )
 	ROM_SYSTEM_BIOS(0, "32k", "32 KB rom disk")
-	ROMX_LOAD( "radiorom.rom", 0xf800, 0x0800, CRC(B5CDEAB7) SHA1(1c80d72082f2fb2190b575726cb82d86ae0ee7d8), ROM_BIOS(1))
+	ROMX_LOAD( "radiorom.rom", 0xf800, 0x0800, CRC(b5cdeab7) SHA1(1c80d72082f2fb2190b575726cb82d86ae0ee7d8), ROM_BIOS(1))
 	ROM_SYSTEM_BIOS(1, "64k", "64 KB rom disk")
 	ROMX_LOAD( "radiorom.64",  0xf800, 0x0800, CRC(5250b927) SHA1(e885e0f5b2325190b38a4c92b20a8b4fa78fbd8f), ROM_BIOS(2))
 	ROM_COPY( "maincpu", 0xf800, 0xf000, 0x0800 )
-	ROM_CART_LOAD("cart", 0x10000,  0x10000, ROM_NOMIRROR | ROM_OPTIONAL)
 	ROM_REGION(0x0800, "gfx1",0)
 	ROM_LOAD ("radio86.fnt", 0x0000, 0x0400, CRC(7666bd5e) SHA1(8652787603bee9b4da204745e3b2aa07a4783dfc))
 ROM_END
 
 ROM_START( radioram )
 	ROM_REGION( 0x20000, "maincpu", ROMREGION_ERASEFF )
-	ROM_LOAD( "r86-1.bin", 0xf800, 0x0800, CRC(7E7AB7CB) SHA1(fedb00b6b8fbe1167faba3e4611b483f800e6934))
-	ROM_LOAD( "r86-2.bin", 0xe000, 0x0800, CRC(955F0616) SHA1(d2b9f960558bdcb60074091fc79d1ad56c313586))
-	ROM_LOAD( "romdisk.bin", 0x10000, 0x10000, CRC(43C0279B) SHA1(bc1dfd9bdbce39460616e2158f5d96279d0af3cf))
+	ROM_LOAD( "r86-1.bin", 0xf800, 0x0800, CRC(7e7ab7cb) SHA1(fedb00b6b8fbe1167faba3e4611b483f800e6934))
+	ROM_LOAD( "r86-2.bin", 0xe000, 0x0800, CRC(955f0616) SHA1(d2b9f960558bdcb60074091fc79d1ad56c313586))
+	ROM_LOAD( "romdisk.bin", 0x10000, 0x10000, CRC(43c0279b) SHA1(bc1dfd9bdbce39460616e2158f5d96279d0af3cf))
 	ROM_REGION(0x0800, "gfx1",0)
 	ROM_LOAD ("radio86.fnt", 0x0000, 0x0400, CRC(7666bd5e) SHA1(8652787603bee9b4da204745e3b2aa07a4783dfc))
 ROM_END
 
 ROM_START( rk7007 )
 	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
-	ROM_LOAD( "ms7007.rom", 0xf800, 0x0800, CRC(002811DC) SHA1(4529eb72198c49af77fbcd7833bcd06a1cf9b1ac))
+	ROM_LOAD( "ms7007.rom", 0xf800, 0x0800, CRC(002811dc) SHA1(4529eb72198c49af77fbcd7833bcd06a1cf9b1ac))
 	ROM_COPY( "maincpu", 0xf800, 0xf000, 0x0800 )
 	ROM_REGION(0x0800, "gfx1",0)
 	ROM_LOAD ("radio86.fnt", 0x0000, 0x0400, CRC(7666bd5e) SHA1(8652787603bee9b4da204745e3b2aa07a4783dfc))
@@ -496,7 +515,7 @@ ROM_END
 
 ROM_START( rk700716 )
 	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
-	ROM_LOAD( "ms7007.16k", 0xf800, 0x0800, CRC(5268D7B6) SHA1(efd69d8456b8cf8b37f33237153c659725608528))
+	ROM_LOAD( "ms7007.16k", 0xf800, 0x0800, CRC(5268d7b6) SHA1(efd69d8456b8cf8b37f33237153c659725608528))
 	ROM_COPY( "maincpu", 0xf800, 0xf000, 0x0800 )
 	ROM_REGION(0x0800, "gfx1",0)
 	ROM_LOAD ("radio86.fnt", 0x0000, 0x0400, CRC(7666bd5e) SHA1(8652787603bee9b4da204745e3b2aa07a4783dfc))
@@ -512,10 +531,10 @@ ROM_END
 
 ROM_START( kr03 )
 	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
-	ROM_LOAD( "kr03-dd17.rf2", 0xf800, 0x0800, CRC(AC2E24D5) SHA1(a1317a261bfd55b3b37109b14d1391308dee04de))
+	ROM_LOAD( "kr03-dd17.rf2", 0xf800, 0x0800, CRC(ac2e24d5) SHA1(a1317a261bfd55b3b37109b14d1391308dee04de))
 	ROM_COPY( "maincpu", 0xf800, 0xf000, 0x0800 )
 	ROM_REGION(0x0800, "gfx1",0)
-	ROM_LOAD ("kr03-dd12.rf2", 0x0000, 0x0800, CRC(085F4259) SHA1(11c5829b072a00961ad936c26559fb63bf2dc896))
+	ROM_LOAD ("kr03-dd12.rf2", 0x0000, 0x0800, CRC(085f4259) SHA1(11c5829b072a00961ad936c26559fb63bf2dc896))
 ROM_END
 
 ROM_START( impuls03 )

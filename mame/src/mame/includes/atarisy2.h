@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     Atari System 2 hardware
@@ -5,8 +7,10 @@
 *************************************************************************/
 
 #include "machine/atarigen.h"
+#include "video/atarimo.h"
 #include "cpu/m6502/m6502.h"
 #include "cpu/t11/t11.h"
+#include "slapstic.h"
 
 class atarisy2_state : public atarigen_state
 {
@@ -15,17 +19,25 @@ public:
 		: atarigen_state(mconfig, type, tag),
 			m_maincpu(*this, "maincpu"),
 			m_audiocpu(*this, "audiocpu"),
+			m_mob(*this, "mob"),
 			m_slapstic_base(*this, "slapstic_base"),
-			m_bankselect(*this, "bankselect"),
+			m_playfield_tilemap(*this, "playfield"),
+			m_alpha_tilemap(*this, "alpha"),
 			m_rombank1(*this, "rombank1"),
-			m_rombank2(*this, "rombank2") { }
+			m_rombank2(*this, "rombank2"),
+			m_generic_paletteram_16(*this, "paletteram"),
+			m_slapstic(*this, "slapstic")
+			{ }
 
 	required_device<t11_device> m_maincpu;
 	required_device<m6502_device> m_audiocpu;
+	required_device<atari_motion_objects_device> m_mob;
 	required_shared_ptr<UINT16> m_slapstic_base;
 
 	UINT8           m_interrupt_enable;
-	required_shared_ptr<UINT16> m_bankselect;
+
+	required_device<tilemap_device> m_playfield_tilemap;
+	required_device<tilemap_device> m_alpha_tilemap;
 
 	INT8            m_pedal_count;
 
@@ -36,8 +48,10 @@ public:
 	UINT8           m_p2portwr_state;
 	UINT8           m_p2portrd_state;
 
-	required_shared_ptr<UINT16> m_rombank1;
-	required_shared_ptr<UINT16> m_rombank2;
+	required_memory_bank m_rombank1;
+	required_memory_bank m_rombank2;
+	required_shared_ptr<UINT16> m_generic_paletteram_16;
+	required_device<atari_slapstic_device> m_slapstic;
 
 	UINT8           m_sound_reset_state;
 
@@ -78,7 +92,6 @@ public:
 	DECLARE_WRITE8_MEMBER(tms5220_w);
 	DECLARE_WRITE8_MEMBER(tms5220_strobe_w);
 	DECLARE_WRITE8_MEMBER(coincount_w);
-	DECLARE_DIRECT_UPDATE_MEMBER(atarisy2_direct_handler);
 	DECLARE_DRIVER_INIT(ssprint);
 	DECLARE_DRIVER_INIT(apb);
 	DECLARE_DRIVER_INIT(csprint);
@@ -100,4 +113,6 @@ public:
 	DECLARE_WRITE16_MEMBER(xscroll_w);
 	DECLARE_WRITE16_MEMBER(videoram_w);
 	DECLARE_WRITE16_MEMBER(paletteram_w);
+
+	static const atari_motion_objects_config s_mob_config;
 };

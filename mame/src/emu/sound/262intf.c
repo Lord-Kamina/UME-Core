@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi
 /***************************************************************************
 
   262intf.c
@@ -39,13 +41,13 @@ void ymf262_device::device_timer(emu_timer &timer, device_timer_id id, int param
 }
 
 
-static void timer_handler(void *param, int c, attotime period)
+static void timer_handler(void *param, int c, const attotime &period)
 {
 	ymf262_device *ymf262 = (ymf262_device *) param;
 	ymf262->_timer_handler(c, period);
 }
 
-void ymf262_device::_timer_handler(int c, attotime period)
+void ymf262_device::_timer_handler(int c, const attotime &period)
 {
 	if( period == attotime::zero )
 	{   /* Reset FM Timer */
@@ -136,7 +138,7 @@ WRITE8_MEMBER( ymf262_device::write )
 const device_type YMF262 = &device_creator<ymf262_device>;
 
 ymf262_device::ymf262_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, YMF262, "YMF262", tag, owner, clock),
+	: device_t(mconfig, YMF262, "YMF262", tag, owner, clock, "ymf262", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_irq_handler(*this)
 {

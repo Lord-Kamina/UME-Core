@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ryan Holtz
 /*
     SGI "Newport" graphics board used in the Indy and some Indigo2s
 
@@ -5,9 +7,6 @@
 
 #ifndef __VIDHRDW_NEWPORT__
 #define __VIDHRDW_NEWPORT__
-
-extern VIDEO_START( newport );
-extern SCREEN_UPDATE_RGB32( newport );
 
 struct VC2_t
 {

@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:R. Belmont, Brad Martin
 /***************************************************************************
 
   snes_snd.c
@@ -154,7 +156,7 @@ static const int ENVCNT[0x20]
 const device_type SNES = &device_creator<snes_sound_device>;
 
 snes_sound_device::snes_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-						: device_t(mconfig, SNES, "SNES Custom DSP (SPC700)", tag, owner, clock),
+						: device_t(mconfig, SNES, "SNES Custom DSP (SPC700)", tag, owner, clock, "snes_sound", __FILE__),
 							device_sound_interface(mconfig, *this)
 {
 }
@@ -175,7 +177,7 @@ void snes_sound_device::device_config_complete()
 
 void snes_sound_device::device_start()
 {
-	m_channel = machine().sound().stream_alloc(*this, 0, 2, 32000, this);
+	m_channel = machine().sound().stream_alloc(*this, 0, 2, 32000);
 
 	m_ram = auto_alloc_array_clear(machine(), UINT8, SNES_SPCRAM_SIZE);
 
@@ -231,7 +233,7 @@ void snes_sound_device::device_reset()
 
 void snes_sound_device::dsp_reset()
 {
-#ifdef DEBUG
+#ifdef MAME_DEBUG
 	logerror("dsp_reset\n");
 #endif
 
@@ -706,7 +708,7 @@ void snes_sound_device::dsp_update( short *sound_ptr )
 		if (m_dsp_regs[0x6c] & 0x40)
 		{
 			/* MUTE */
-#ifdef DEBUG
+#ifdef MAME_DEBUG
 			logerror("MUTED!\n");
 #endif
 
@@ -1071,7 +1073,7 @@ READ8_MEMBER( snes_sound_device::spc_io_r )
 		case 0x5:       /* Port 1 */
 		case 0x6:       /* Port 2 */
 		case 0x7:       /* Port 3 */
-			// mame_printf_debug("SPC: rd %02x @ %d, PC=%x\n", m_port_in[offset - 4], offset - 4, space.device().safe_pc());
+			// osd_printf_debug("SPC: rd %02x @ %d, PC=%x\n", m_port_in[offset - 4], offset - 4, space.device().safe_pc());
 			return m_port_in[offset - 4];
 		case 0x8: //normal RAM, can be read even if the ram disabled flag ($f0 bit 1) is active
 		case 0x9:
@@ -1137,7 +1139,7 @@ WRITE8_MEMBER( snes_sound_device::spc_io_w )
 		case 0x5:       /* Port 1 */
 		case 0x6:       /* Port 2 */
 		case 0x7:       /* Port 3 */
-			// mame_printf_debug("SPC: %02x to APU @ %d (PC=%x)\n", data, offset & 3, space.device().safe_pc());
+			// osd_printf_debug("SPC: %02x to APU @ %d (PC=%x)\n", data, offset & 3, space.device().safe_pc());
 			m_port_out[offset - 4] = data;
 			space.machine().scheduler().boost_interleave(attotime::zero, attotime::from_usec(20));
 			break;

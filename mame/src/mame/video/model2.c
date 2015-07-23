@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, Olivier Galibert, ElSemi, Angelo Salese
 /*********************************************************************************************************************************
 
     Sega Model 2 Geometry Engine and 3D Rasterizer Emulation
@@ -87,7 +89,7 @@
 *********************************************************************************************************************************/
 #include "emu.h"
 #include "video/segaic24.h"
-#include "video/poly.h"
+#include "video/polylgcy.h"
 #include "includes/model2.h"
 
 #define MODEL2_VIDEO_DEBUG 0
@@ -137,7 +139,7 @@ struct quad_m2
 	UINT8               luma;
 };
 
-struct poly_extra_data
+struct m2_poly_extra_data
 {
 	model2_state *  state;
 	UINT32      lumabase;
@@ -855,56 +857,56 @@ INLINE UINT16 get_texel( UINT32 base_x, UINT32 base_y, int x, int y, UINT32 *she
 /* checker = 0, textured = 0, transparent = 0 */
 #define MODEL2_FUNC 0
 #define MODEL2_FUNC_NAME    model2_3d_render_0
-#include "model2rd.c"
+#include "model2rd.inc"
 #undef MODEL2_FUNC
 #undef MODEL2_FUNC_NAME
 
 /* checker = 0, textured = 0, translucent = 1 */
 #define MODEL2_FUNC 1
 #define MODEL2_FUNC_NAME    model2_3d_render_1
-#include "model2rd.c"
+#include "model2rd.inc"
 #undef MODEL2_FUNC
 #undef MODEL2_FUNC_NAME
 
 /* checker = 0, textured = 1, translucent = 0 */
 #define MODEL2_FUNC 2
 #define MODEL2_FUNC_NAME    model2_3d_render_2
-#include "model2rd.c"
+#include "model2rd.inc"
 #undef MODEL2_FUNC
 #undef MODEL2_FUNC_NAME
 
 /* checker = 0, textured = 1, translucent = 1 */
 #define MODEL2_FUNC 3
 #define MODEL2_FUNC_NAME    model2_3d_render_3
-#include "model2rd.c"
+#include "model2rd.inc"
 #undef MODEL2_FUNC
 #undef MODEL2_FUNC_NAME
 
 /* checker = 1, textured = 0, translucent = 0 */
 #define MODEL2_FUNC 4
 #define MODEL2_FUNC_NAME    model2_3d_render_4
-#include "model2rd.c"
+#include "model2rd.inc"
 #undef MODEL2_FUNC
 #undef MODEL2_FUNC_NAME
 
 /* checker = 1, textured = 0, translucent = 1 */
 #define MODEL2_FUNC 5
 #define MODEL2_FUNC_NAME    model2_3d_render_5
-#include "model2rd.c"
+#include "model2rd.inc"
 #undef MODEL2_FUNC
 #undef MODEL2_FUNC_NAME
 
 /* checker = 1, textured = 1, translucent = 0 */
 #define MODEL2_FUNC 6
 #define MODEL2_FUNC_NAME    model2_3d_render_6
-#include "model2rd.c"
+#include "model2rd.inc"
 #undef MODEL2_FUNC
 #undef MODEL2_FUNC_NAME
 
 /* checker = 1, textured = 1, translucent = 1 */
 #define MODEL2_FUNC 7
 #define MODEL2_FUNC_NAME    model2_3d_render_7
-#include "model2rd.c"
+#include "model2rd.inc"
 #undef MODEL2_FUNC
 #undef MODEL2_FUNC_NAME
 
@@ -924,8 +926,8 @@ static const poly_draw_scanline_func render_funcs[8] =
 
 static void model2_3d_render( model2_state *state, bitmap_rgb32 &bitmap, triangle *tri, const rectangle &cliprect )
 {
-	poly_manager *poly = state->m_poly;
-	poly_extra_data *extra = (poly_extra_data *)poly_get_extra_data(poly);
+	legacy_poly_manager *poly = state->m_poly;
+	m2_poly_extra_data *extra = (m2_poly_extra_data *)poly_get_extra_data(poly);
 	UINT8       renderer;
 
 	/* select renderer based on attributes (bit15 = checker, bit14 = textured, bit13 = transparent */
@@ -945,8 +947,9 @@ static void model2_3d_render( model2_state *state, bitmap_rgb32 &bitmap, triangl
 		extra->texheight = 32 << ((tri->texheader[0] >> 3) & 0x7);
 		extra->texx = 32 * ((tri->texheader[2] >> 0) & 0x1f);
 		extra->texy = 32 * (((tri->texheader[2] >> 6) & 0x1f) + ( tri->texheader[2] & 0x20 ));
-		extra->texmirrorx = (tri->texheader[0] >> 9) & 1;
-		extra->texmirrory = (tri->texheader[0] >> 8) & 1;
+		/* TODO: Virtua Striker contradicts with this. */
+		extra->texmirrorx = 0;//(tri->texheader[0] >> 9) & 1;
+		extra->texmirrory = 0;//(tri->texheader[0] >> 8) & 1;
 		extra->texsheet = (tri->texheader[2] & 0x1000) ? state->m_textureram1 : state->m_textureram0;
 
 		tri->v[0].pz = 1.0f / (1.0f + tri->v[0].pz);
@@ -1013,9 +1016,9 @@ static void model2_3d_frame_start( model2_state *state )
 	raster->max_z = 0;
 }
 
-static void model2_3d_frame_end( model2_state *state, bitmap_rgb32 &bitmap, const rectangle &cliprect )
+void model2_state::model2_3d_frame_end( bitmap_rgb32 &bitmap, const rectangle &cliprect )
 {
-	raster_state *raster = state->m_raster;
+	raster_state *raster = m_raster;
 	INT32       z;
 
 	/* if we have nothing to render, bail */
@@ -1023,7 +1026,7 @@ static void model2_3d_frame_end( model2_state *state, bitmap_rgb32 &bitmap, cons
 		return;
 
 #if MODEL2_VIDEO_DEBUG
-	if (machine.input().code_pressed(KEYCODE_Q))
+	if (machine().input().code_pressed(KEYCODE_Q))
 	{
 		UINT32  i;
 
@@ -1038,7 +1041,7 @@ static void model2_3d_frame_end( model2_state *state, bitmap_rgb32 &bitmap, cons
 				fprintf( f, "v1.x = %f, v1.y = %f, v1.z = %f\n", raster->tri_list[i].v[1].x, raster->tri_list[i].v[1].y, raster->tri_list[i].v[1].pz );
 				fprintf( f, "v2.x = %f, v2.y = %f, v2.z = %f\n", raster->tri_list[i].v[2].x, raster->tri_list[i].v[2].y, raster->tri_list[i].v[2].pz );
 
-				fprintf( f, "tri z: %04x\n", raster->tri_list[i].pz );
+				fprintf( f, "tri z: %04x\n", raster->tri_list[i].z );
 				fprintf( f, "texheader - 0: %04x\n", raster->tri_list[i].texheader[0] );
 				fprintf( f, "texheader - 1: %04x\n", raster->tri_list[i].texheader[1] );
 				fprintf( f, "texheader - 2: %04x\n", raster->tri_list[i].texheader[2] );
@@ -1074,13 +1077,13 @@ static void model2_3d_frame_end( model2_state *state, bitmap_rgb32 &bitmap, cons
 			{
 				/* project and render */
 				model2_3d_project( tri );
-				model2_3d_render( state, bitmap, tri, cliprect );
+				model2_3d_render( this, bitmap, tri, cliprect );
 
 				tri = (triangle *)tri->next;
 			}
 		}
 	}
-	poly_wait(state->m_poly, "End of frame");
+	poly_wait(m_poly, "End of frame");
 }
 
 /* 3D Rasterizer main data input port */
@@ -1247,7 +1250,6 @@ static void model2_3d_push( raster_state *raster, UINT32 input )
 			{
 				fatalerror( "SEGA 3D: Unknown rasterizer command %08x\n", raster->cur_command );
 			}
-			break;
 		}
 	}
 	else
@@ -2621,7 +2623,7 @@ static UINT32 * geo_code_jump( geo_state *geo, UINT32 opcode, UINT32 *input )
 
 static UINT32 * geo_process_command( geo_state *geo, UINT32 opcode, UINT32 *input )
 {
-	switch( opcode >> 23 )
+	switch( (opcode >> 23) & 0x1f )
 	{
 		case 0x00: input = geo_nop( geo, opcode, input );               break;
 		case 0x01: input = geo_object_data( geo, opcode, input );       break;
@@ -2699,13 +2701,13 @@ void model2_state::model2_exit()
 
 VIDEO_START_MEMBER(model2_state,model2)
 {
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 	int width = visarea.width();
 	int height = visarea.height();
 
 	m_sys24_bitmap.allocate(width, height+4);
 
-	m_poly = poly_alloc(machine(), 4000, sizeof(poly_extra_data), 0);
+	m_poly = poly_alloc(machine(), 4000, sizeof(m2_poly_extra_data), 0);
 	machine().add_notifier(MACHINE_NOTIFY_EXIT, machine_notify_delegate(FUNC(model2_state::model2_exit), this));
 
 	/* initialize the hardware rasterizer */
@@ -2713,37 +2715,40 @@ VIDEO_START_MEMBER(model2_state,model2)
 
 	/* initialize the geometry engine */
 	geo_init( machine(), (UINT32*)memregion("user2")->base() );
+
+	/* init various video-related pointers */
+	m_palram = auto_alloc_array_clear(machine(), UINT16, 0x2000);
 }
 
 UINT32 model2_state::screen_update_model2(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	logerror("--- frame ---\n");
+	//logerror("--- frame ---\n");
 
-	bitmap.fill(machine().pens[0], cliprect);
+	bitmap.fill(m_palette->pen(0), cliprect);
 	m_sys24_bitmap.fill(0, cliprect);
 
 	segas24_tile *tile = machine().device<segas24_tile>("tile");
-	tile->draw(m_sys24_bitmap, cliprect, 7, 0, 0);
-	tile->draw(m_sys24_bitmap, cliprect, 6, 0, 0);
-	tile->draw(m_sys24_bitmap, cliprect, 5, 0, 0);
-	tile->draw(m_sys24_bitmap, cliprect, 4, 0, 0);
+	tile->draw(screen, m_sys24_bitmap, cliprect, 7, 0, 0);
+	tile->draw(screen, m_sys24_bitmap, cliprect, 6, 0, 0);
+	tile->draw(screen, m_sys24_bitmap, cliprect, 5, 0, 0);
+	tile->draw(screen, m_sys24_bitmap, cliprect, 4, 0, 0);
 
 	copybitmap_trans(bitmap, m_sys24_bitmap, 0, 0, 0, 0, cliprect, 0);
 
 	/* tell the rasterizer we're starting a frame */
 	model2_3d_frame_start(this);
 
-	/* let the geometry engine do it's thing */
+	/* let the geometry engine do it's thing */ /* TODO: don't do it here! */
 	geo_parse(this);
 
 	/* have the rasterizer output the frame */
-	model2_3d_frame_end( this, bitmap, cliprect );
+	model2_3d_frame_end( bitmap, cliprect );
 
 	m_sys24_bitmap.fill(0, cliprect);
-	tile->draw(m_sys24_bitmap, cliprect, 3, 0, 0);
-	tile->draw(m_sys24_bitmap, cliprect, 2, 0, 0);
-	tile->draw(m_sys24_bitmap, cliprect, 1, 0, 0);
-	tile->draw(m_sys24_bitmap, cliprect, 0, 0, 0);
+	tile->draw(screen, m_sys24_bitmap, cliprect, 3, 0, 0);
+	tile->draw(screen, m_sys24_bitmap, cliprect, 2, 0, 0);
+	tile->draw(screen, m_sys24_bitmap, cliprect, 1, 0, 0);
+	tile->draw(screen, m_sys24_bitmap, cliprect, 0, 0, 0);
 
 	copybitmap_trans(bitmap, m_sys24_bitmap, 0, 0, 0, 0, cliprect, 0);
 

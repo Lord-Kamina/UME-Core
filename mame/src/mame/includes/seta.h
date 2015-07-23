@@ -1,8 +1,13 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                             -= Seta Hardware =-
 
 ***************************************************************************/
+
+#include "sound/x1_010.h"
+#include "video/seta001.h"
 
 #define __uPD71054_TIMER    1
 
@@ -30,6 +35,8 @@ public:
 		m_maincpu(*this,"maincpu"),
 		m_audiocpu(*this, "audiocpu"),
 		m_subcpu(*this,"sub"),
+		m_seta001(*this, "spritegen"),
+		m_x1(*this, "x1snd"),
 		m_sharedram(*this,"sharedram"),
 		m_workram(*this,"workram"),
 		m_vregs(*this,"vregs"),
@@ -41,11 +48,15 @@ public:
 		m_paletteram2(*this,"paletteram2"),
 		m_kiwame_nvram(*this,"kiwame_nvram"),
 		m_inttoote_key_select(*this,"inttoote_keysel"),
-		m_inttoote_700000(*this,"inttoote_700000") { }
+		m_inttoote_700000(*this,"inttoote_700000"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	required_device<cpu_device> m_maincpu;
 	optional_device<cpu_device> m_audiocpu;
 	optional_device<cpu_device> m_subcpu;
+	required_device<seta001_device> m_seta001;
+	optional_device<x1_010_device> m_x1;
 
 	optional_shared_ptr<UINT8> m_sharedram;
 	optional_shared_ptr<UINT16> m_workram;
@@ -59,6 +70,9 @@ public:
 	optional_shared_ptr<UINT16> m_kiwame_nvram;
 	optional_shared_ptr<UINT16> m_inttoote_key_select;
 	optional_shared_ptr<UINT16> m_inttoote_700000;
+
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	int m_tiles_offset;
 	tilemap_t *m_tilemap_0;
@@ -158,6 +172,7 @@ public:
 	DECLARE_WRITE16_MEMBER(magspeed_lights_w);
 	DECLARE_READ8_MEMBER(dsw1_r);
 	DECLARE_READ8_MEMBER(dsw2_r);
+	DECLARE_READ16_MEMBER(extra_r);
 	DECLARE_DRIVER_INIT(downtown);
 	DECLARE_DRIVER_INIT(rezon);
 	DECLARE_DRIVER_INIT(twineagl);
@@ -220,5 +235,7 @@ public:
 	void draw_tilemap_palette_effect(bitmap_ind16 &bitmap, const rectangle &cliprect, tilemap_t *tilemap, int scrollx, int scrolly, int gfxnum, int flipscreen);
 	void seta_layers_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int sprite_bank_size, int sprite_setac );
 	void uPD71054_timer_init(  );
+	DECLARE_WRITE_LINE_MEMBER(pit_out0);
 	DECLARE_WRITE_LINE_MEMBER(utoukond_ym3438_interrupt);
+	SETA001_SPRITE_GFXBANK_CB_MEMBER(setac_gfxbank_callback);
 };

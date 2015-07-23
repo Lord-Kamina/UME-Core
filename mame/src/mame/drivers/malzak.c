@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli, Barry Rodewald
 /*
 
   Malzak
@@ -65,8 +67,6 @@
 #include "emu.h"
 #include "cpu/s2650/s2650.h"
 #include "sound/sn76477.h"
-#include "sound/s2636.h"
-#include "video/s2636.h"
 #include "video/saa5050.h"
 #include "machine/nvram.h"
 #include "includes/malzak.h"
@@ -74,7 +74,7 @@
 
 READ8_MEMBER(malzak_state::fake_VRLE_r)
 {
-	return (s2636_work_ram_r(m_s2636_0, space, 0xcb) & 0x3f) + (machine().primary_screen->vblank() * 0x40);
+	return (m_s2636_0->work_ram_r(space, 0xcb) & 0x3f) + (m_screen->vblank() * 0x40);
 }
 
 READ8_MEMBER(malzak_state::s2636_portA_r)
@@ -106,8 +106,8 @@ static ADDRESS_MAP_START( malzak_map, AS_PROGRAM, 8, malzak_state )
 	AM_RANGE(0x1200, 0x12ff) AM_MIRROR(0x6000) AM_RAM
 	AM_RANGE(0x1300, 0x13ff) AM_MIRROR(0x6000) AM_RAM
 	AM_RANGE(0x14cb, 0x14cb) AM_MIRROR(0x6000) AM_READ(fake_VRLE_r)
-	AM_RANGE(0x1400, 0x14ff) AM_MIRROR(0x6000) AM_DEVREADWRITE_LEGACY("s2636_0", s2636_work_ram_r, s2636_work_ram_w)
-	AM_RANGE(0x1500, 0x15ff) AM_MIRROR(0x6000) AM_DEVREADWRITE_LEGACY("s2636_1", s2636_work_ram_r, s2636_work_ram_w)
+	AM_RANGE(0x1400, 0x14ff) AM_MIRROR(0x6000) AM_DEVREADWRITE("s2636_0", s2636_device, work_ram_r, work_ram_w)
+	AM_RANGE(0x1500, 0x15ff) AM_MIRROR(0x6000) AM_DEVREADWRITE("s2636_1", s2636_device, work_ram_r, work_ram_w)
 	AM_RANGE(0x1600, 0x16ff) AM_MIRROR(0x6000) AM_RAM_WRITE(malzak_playfield_w)
 	AM_RANGE(0x1700, 0x17ff) AM_MIRROR(0x6000) AM_RAM
 	AM_RANGE(0x1800, 0x1fff) AM_MIRROR(0x6000) AM_RAM AM_SHARE("videoram")
@@ -127,8 +127,8 @@ static ADDRESS_MAP_START( malzak2_map, AS_PROGRAM, 8, malzak_state )
 	AM_RANGE(0x1300, 0x13ff) AM_MIRROR(0x6000) AM_RAM
 	AM_RANGE(0x14cb, 0x14cb) AM_MIRROR(0x6000) AM_READ(fake_VRLE_r)
 	AM_RANGE(0x14cc, 0x14cc) AM_MIRROR(0x6000) AM_READ(s2636_portA_r)
-	AM_RANGE(0x1400, 0x14ff) AM_MIRROR(0x6000) AM_DEVREADWRITE_LEGACY("s2636_0", s2636_work_ram_r, s2636_work_ram_w)
-	AM_RANGE(0x1500, 0x15ff) AM_MIRROR(0x6000) AM_DEVREADWRITE_LEGACY("s2636_1", s2636_work_ram_r, s2636_work_ram_w)
+	AM_RANGE(0x1400, 0x14ff) AM_MIRROR(0x6000) AM_DEVREADWRITE("s2636_0", s2636_device, work_ram_r, work_ram_w)
+	AM_RANGE(0x1500, 0x15ff) AM_MIRROR(0x6000) AM_DEVREADWRITE("s2636_1", s2636_device, work_ram_r, work_ram_w)
 	AM_RANGE(0x1600, 0x16ff) AM_MIRROR(0x6000) AM_RAM_WRITE(malzak_playfield_w)
 	AM_RANGE(0x1700, 0x17ff) AM_MIRROR(0x6000) AM_RAM AM_SHARE("nvram")
 	AM_RANGE(0x1800, 0x1fff) AM_MIRROR(0x6000) AM_RAM AM_SHARE("videoram")
@@ -261,79 +261,27 @@ static GFXDECODE_START( malzak )
 GFXDECODE_END
 
 
-void malzak_state::palette_init()
+PALETTE_INIT_MEMBER(malzak_state, malzak)
 {
 	int i;
 
 	for (i = 0; i < 8 * 8; i++)
 	{
-		palette_set_color_rgb(machine(), i * 2 + 0, pal1bit(i >> 3), pal1bit(i >> 4), pal1bit(i >> 5));
-		palette_set_color_rgb(machine(), i * 2 + 1, pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
+		palette.set_pen_color(i * 2 + 0, pal1bit(i >> 3), pal1bit(i >> 4), pal1bit(i >> 5));
+		palette.set_pen_color(i * 2 + 1, pal1bit(i >> 0), pal1bit(i >> 1), pal1bit(i >> 2));
 	}
 }
 
-
-static const sn76477_interface sn76477_intf =
-{
-	0,  /* N/C */       /*  4  noise_res         */
-	0,  /* N/C */       /*  5  filter_res        */
-	0,  /* N/C */       /*  6  filter_cap        */
-	0,  /* N/C */       /*  7  decay_res         */
-	0,  /* N/C */       /*  8  attack_decay_cap  */
-	RES_K(100),         /* 10  attack_res        */
-	RES_K(56),          /* 11  amplitude_res     */
-	RES_K(10),          /* 12  feedback_res      */
-	0,  /* N/C */       /* 16  vco_voltage       */
-	CAP_U(0.1),         /* 17  vco_cap           */
-	RES_K(8.2),         /* 18  vco_res           */
-	5.0,                /* 19  pitch_voltage     */
-	RES_K(120),         /* 20  slf_res           */
-	CAP_U(1.0),         /* 21  slf_cap           */
-	0,  /* N/C */       /* 23  oneshot_cap       */
-	0,  /* N/C */       /* 24  oneshot_res       */
-	0,                  /* 22    vco             */
-	1,                  /* 26 mixer A           */
-	1,                  /* 25 mixer B           */
-	1,                  /* 27 mixer C           */
-	1,                  /* 1  envelope 1        */
-	1,                  /* 28 envelope 2        */
-	1                   /* 9     enable          */
-};
-
-
-static const s2636_interface malzac_s2636_0_config =
-{
-	"screen",
-	0x100,
-	0, -16, /* -8, -16 */
-	"s2636snd_0"
-};
-
-static const s2636_interface malzac_s2636_1_config =
-{
-	"screen",
-	0x100,
-	0, -16, /* -9, -16 */
-	"s2636snd_1"
-};
 
 READ8_MEMBER(malzak_state::videoram_r)
 {
 	return m_videoram[offset];
 }
 
-static SAA5050_INTERFACE( malzac_saa5050_intf )
-{
-	DEVCB_DRIVER_MEMBER(malzak_state, videoram_r),
-	42, 24, 64  /* x, y, size */
-};
-
 void malzak_state::machine_start()
 {
 	membank("bank1")->configure_entries(0, 2, memregion("user2")->base(), 0x400);
 
-	m_s2636_0 = machine().device("s2636_0");
-	m_s2636_1 = machine().device("s2636_1");
 	m_saa5050 = machine().device("saa5050");
 
 	save_item(NAME(m_playfield_code));
@@ -356,7 +304,6 @@ static MACHINE_CONFIG_START( malzak, malzak_state )
 	MCFG_CPU_PROGRAM_MAP(malzak_map)
 	MCFG_CPU_IO_MAP(malzak_io_map)
 
-
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(50)
@@ -365,30 +312,59 @@ static MACHINE_CONFIG_START( malzak, malzak_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 479, 0, 479)
 	MCFG_SCREEN_UPDATE_DRIVER(malzak_state, screen_update_malzak)
 
-	MCFG_GFXDECODE(malzak)
-	MCFG_PALETTE_LENGTH(128)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", malzak)
+	MCFG_PALETTE_ADD("palette", 128)
+	MCFG_PALETTE_INIT_OWNER(malzak_state, malzak)
 
-	MCFG_S2636_ADD("s2636_0", malzac_s2636_0_config)
-	MCFG_S2636_ADD("s2636_1", malzac_s2636_1_config)
+	MCFG_DEVICE_ADD("s2636_0", S2636, 0)
+	MCFG_S2636_WORKRAM_SIZE(0x100)
+	MCFG_S2636_OFFSETS(0, -16)  // -8, -16
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_SAA5050_ADD("saa5050", 6000000, malzac_saa5050_intf)
+	MCFG_DEVICE_ADD("s2636_1", S2636, 0)
+	MCFG_S2636_WORKRAM_SIZE(0x100)
+	MCFG_S2636_OFFSETS(0, -16)  // -9, -16
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
+
+	MCFG_DEVICE_ADD("saa5050", SAA5050, 6000000)
+	MCFG_SAA5050_D_CALLBACK(READ8(malzak_state, videoram_r))
+	MCFG_SAA5050_SCREEN_SIZE(42, 24, 64)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("sn1", SN76477, 0)
-	MCFG_SOUND_CONFIG(sn76477_intf)
+	MCFG_SN76477_NOISE_PARAMS(0, 0, 0)                  // noise + filter: N/C
+	MCFG_SN76477_DECAY_RES(0)                           // decay_res: N/C
+	MCFG_SN76477_ATTACK_PARAMS(0, RES_K(100))           // attack_decay_cap + attack_res
+	MCFG_SN76477_AMP_RES(RES_K(56))                     // amplitude_res
+	MCFG_SN76477_FEEDBACK_RES(RES_K(10))                // feedback_res
+	MCFG_SN76477_VCO_PARAMS(0, CAP_U(0.1), RES_K(8.2))  // VCO volt + cap + res
+	MCFG_SN76477_PITCH_VOLTAGE(5.0)                     // pitch_voltage
+	MCFG_SN76477_SLF_PARAMS(CAP_U(1.0), RES_K(120))     // slf caps + res
+	MCFG_SN76477_ONESHOT_PARAMS(0, 0)                   // oneshot caps + res: N/C
+	MCFG_SN76477_VCO_MODE(0)                            // VCO mode
+	MCFG_SN76477_MIXER_PARAMS(1, 1, 1)                  // mixer A, B, C
+	MCFG_SN76477_ENVELOPE_PARAMS(1, 1)                  // envelope 1, 2
+	MCFG_SN76477_ENABLE(1)                              // enable
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	MCFG_SOUND_ADD("sn2", SN76477, 0)
-	MCFG_SOUND_CONFIG(sn76477_intf)
+	MCFG_SN76477_NOISE_PARAMS(0, 0, 0)                  // noise + filter: N/C
+	MCFG_SN76477_DECAY_RES(0)                           // decay_res: N/C
+	MCFG_SN76477_ATTACK_PARAMS(0, RES_K(100))           // attack_decay_cap + attack_res
+	MCFG_SN76477_AMP_RES(RES_K(56))                     // amplitude_res
+	MCFG_SN76477_FEEDBACK_RES(RES_K(10))                // feedback_res
+	MCFG_SN76477_VCO_PARAMS(0, CAP_U(0.1), RES_K(8.2))  // VCO volt + cap + res
+	MCFG_SN76477_PITCH_VOLTAGE(5.0)                     // pitch_voltage
+	MCFG_SN76477_SLF_PARAMS(CAP_U(1.0), RES_K(120))     // slf caps + res
+	MCFG_SN76477_ONESHOT_PARAMS(0, 0)                   // oneshot caps + res: N/C
+	MCFG_SN76477_VCO_MODE(0)                            // VCO mode
+	MCFG_SN76477_MIXER_PARAMS(1, 1, 1)                  // mixer A, B, C
+	MCFG_SN76477_ENVELOPE_PARAMS(1, 1)                  // envelope 1, 2
+	MCFG_SN76477_ENABLE(1)                              // enable
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_SOUND_ADD("s2636snd_0", S2636_SOUND, 0)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
-
-	MCFG_SOUND_ADD("s2636snd_1", S2636_SOUND, 0)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( malzak2, malzak )

@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     osdcore.h
 
     Core OS-dependent code interface.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ****************************************************************************
 
@@ -49,11 +20,7 @@
 #define __OSDCORE_H__
 
 #include "osdcomm.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+#include <stdarg.h>
 
 /***************************************************************************
     FILE I/O INTERFACES
@@ -61,7 +28,11 @@ extern "C" {
 
 /* Make sure we have a path separator (default to /) */
 #ifndef PATH_SEPARATOR
+#if defined(_WIN32) || defined (__OS2__)
+#define PATH_SEPARATOR          "\\"
+#else
 #define PATH_SEPARATOR          "/"
+#endif
 #endif
 
 /* flags controlling file access */
@@ -196,6 +167,23 @@ file_error osd_write(osd_file *file, const void *buffer, UINT64 offset, UINT32 l
 
 
 /*-----------------------------------------------------------------------------
+    osd_truncate: change the size of an open file
+
+    Parameters:
+
+        file - handle to a file previously opened via osd_open
+
+        offset - future size of the file
+
+    Return value:
+
+        a file_error describing any error that occurred while writing to
+        the file, or FILERR_NONE if no error occurred
+-----------------------------------------------------------------------------*/
+file_error osd_truncate(osd_file *file, UINT64 offset);
+
+
+/*-----------------------------------------------------------------------------
     osd_rmfile: deletes a file
 
     Parameters:
@@ -208,6 +196,20 @@ file_error osd_write(osd_file *file, const void *buffer, UINT64 offset, UINT32 l
         the file, or FILERR_NONE if no error occurred
 -----------------------------------------------------------------------------*/
 file_error osd_rmfile(const char *filename);
+
+
+/*-----------------------------------------------------------------------------
+    osd_getenv: return pointer to environment variable
+
+    Parameters:
+
+        name  - name of environment variable
+
+    Return value:
+
+        pointer to value
+-----------------------------------------------------------------------------*/
+const char *osd_getenv(const char *name);
 
 
 /*-----------------------------------------------------------------------------
@@ -859,7 +861,8 @@ char *osd_get_clipboard_text(void);
     Return value:
 
         an allocated pointer to an osd_directory_entry representing
-        info on the path; even if the file does not exist
+        info on the path; even if the file does not exist.
+        free with osd_free()
 
 -----------------------------------------------------------------------------*/
 osd_directory_entry *osd_stat(const char *path);
@@ -887,17 +890,23 @@ file_error osd_get_full_path(char **dst, const char *path);
 /***************************************************************************
     MIDI I/O INTERFACES
 ***************************************************************************/
-struct osd_midi_device;
 
-void osd_init_midi(void);
-void osd_shutdown_midi(void);
-void osd_list_midi_devices(void);
-osd_midi_device *osd_open_midi_input(const char *devname);
-osd_midi_device *osd_open_midi_output(const char *devname);
-void osd_close_midi_channel(osd_midi_device *dev);
-bool osd_poll_midi_channel(osd_midi_device *dev);
-int osd_read_midi_channel(osd_midi_device *dev, UINT8 *pOut);
-void osd_write_midi_channel(osd_midi_device *dev, UINT8 data);
+class osd_midi_device
+{
+public:
+	virtual ~osd_midi_device() { }
+	// free result with osd_close_midi_channel()
+	virtual bool open_input(const char *devname) = 0;
+	// free result with osd_close_midi_channel()
+	virtual bool open_output(const char *devname) = 0;
+	virtual void close() = 0;
+	virtual bool poll() = 0;
+	virtual int read(UINT8 *pOut) = 0;
+	virtual void write(UINT8 data) = 0;
+};
+
+//FIXME: really needed here?
+void osd_list_network_adapters(void);
 
 /***************************************************************************
     UNCATEGORIZED INTERFACES
@@ -917,8 +926,53 @@ void osd_write_midi_channel(osd_midi_device *dev, UINT8 data);
 -----------------------------------------------------------------------------*/
 const char *osd_get_volume_name(int idx);
 
-#ifdef __cplusplus
-}
-#endif
+/* ----- output management ----- */
+
+// output channels
+enum osd_output_channel
+{
+	OSD_OUTPUT_CHANNEL_ERROR,
+	OSD_OUTPUT_CHANNEL_WARNING,
+	OSD_OUTPUT_CHANNEL_INFO,
+	OSD_OUTPUT_CHANNEL_DEBUG,
+	OSD_OUTPUT_CHANNEL_VERBOSE,
+	OSD_OUTPUT_CHANNEL_LOG,
+	OSD_OUTPUT_CHANNEL_COUNT
+};
+
+class osd_output
+{
+public:
+	osd_output() : m_chain(NULL) { }
+	virtual ~osd_output() { }
+
+	virtual void output_callback(osd_output_channel channel, const char *msg, va_list args) = 0;
+
+	static void push(osd_output *delegate);
+	static void pop(osd_output *delegate);
+protected:
+
+	void chain_output(osd_output_channel channel, const char *msg, va_list args)
+	{
+		if (m_chain != NULL)
+			m_chain->output_callback(channel, msg, args);
+	}
+private:
+	osd_output *m_chain;
+};
+
+/* calls to be used by the code */
+void CLIB_DECL osd_printf_error(const char *format, ...) ATTR_PRINTF(1,2);
+void CLIB_DECL osd_printf_warning(const char *format, ...) ATTR_PRINTF(1,2);
+void CLIB_DECL osd_printf_info(const char *format, ...) ATTR_PRINTF(1,2);
+void CLIB_DECL osd_printf_verbose(const char *format, ...) ATTR_PRINTF(1,2);
+void CLIB_DECL osd_printf_debug(const char *format, ...) ATTR_PRINTF(1,2);
+
+/* discourage the use of printf directly */
+/* sadly, can't do this because of the ATTR_PRINTF under GCC */
+/*
+#undef printf
+#define printf !MUST_USE_osd_printf_*_CALLS_WITHIN_THE_CORE!
+*/
 
 #endif  /* __OSDEPEND_H__ */

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles,smf
 /***************************************************************************
 
     timekpr.h
@@ -46,14 +48,6 @@
 //**************************************************************************
 
 
-// ======================> timekeeper_config
-
-struct timekeeper_config
-{
-	const UINT8 *m_data;
-};
-
-
 // ======================> timekeeper_device
 
 class timekeeper_device :   public device_t,
@@ -61,7 +55,7 @@ class timekeeper_device :   public device_t,
 {
 protected:
 	// construction/destruction
-	timekeeper_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	timekeeper_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 
 public:
 	DECLARE_WRITE8_MEMBER( write );
@@ -93,7 +87,7 @@ private:
 	UINT8 m_year;
 	UINT8 m_century;
 
-	UINT8 *m_data;
+	dynamic_buffer m_data;
 	UINT8 *m_default_data;
 
 protected:

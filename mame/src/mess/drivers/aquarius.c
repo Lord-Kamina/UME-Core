@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
     Mattel Aquarius
@@ -171,8 +173,11 @@ WRITE8_MEMBER(aquarius_state::scrambler_w)
 
 READ8_MEMBER(aquarius_state::cartridge_r)
 {
-	UINT8 *rom = m_rom->base() + 0xc000;
-	return rom[offset] ^ m_scrambler;
+	UINT8 data = 0;
+	if (m_cart->exists())
+		data = m_cart->read_rom(space, offset);
+
+	return data ^ m_scrambler;
 }
 
 
@@ -337,25 +342,6 @@ GFXDECODE_END
     MACHINE DRIVERS
 ***************************************************************************/
 
-static const ay8910_interface aquarius_ay8910_interface =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("RIGHT"),
-	DEVCB_INPUT_PORT("LEFT"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static const cassette_interface aquarius_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_MUTED),
-	NULL,
-	NULL
-};
-
 static MACHINE_CONFIG_START( aquarius, aquarius_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_3_579545MHz) // ???
@@ -370,10 +356,13 @@ static MACHINE_CONFIG_START( aquarius, aquarius_state )
 	MCFG_SCREEN_SIZE(40 * 8, 25 * 8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 40 * 8 - 1, 0 * 8, 25 * 8 - 1)
 	MCFG_SCREEN_UPDATE_DRIVER(aquarius_state, screen_update_aquarius)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE( aquarius )
-	MCFG_PALETTE_LENGTH(512)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", aquarius )
+	MCFG_TEA1002_ADD("encoder", XTAL_8_867238MHz)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INDIRECT_ENTRIES(16)
+	MCFG_PALETTE_INIT_OWNER(aquarius_state, aquarius)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -381,17 +370,16 @@ static MACHINE_CONFIG_START( aquarius, aquarius_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	MCFG_SOUND_ADD("ay8910", AY8910, XTAL_3_579545MHz/2) // ??? AY-3-8914
-	MCFG_SOUND_CONFIG(aquarius_ay8910_interface)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("RIGHT"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("LEFT"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* cassette */
-	MCFG_CASSETTE_ADD( "cassette", aquarius_cassette_interface )
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_MUTED)
 
 	/* cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("aquarius_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_linear_slot, "aquarius_cart")
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -416,9 +404,6 @@ ROM_START( aquarius )
 	ROMX_LOAD("aq1.u2", 0x0000, 0x2000, NO_DUMP, ROM_BIOS(1))
 	ROM_SYSTEM_BIOS(1, "rev2", "Revision 2")
 	ROMX_LOAD("aq2.u2", 0x0000, 0x2000, CRC(a2d15bcf) SHA1(ca6ef55e9ead41453efbf5062d6a60285e9661a6), ROM_BIOS(2))
-
-	/* cartridge */
-	ROM_CART_LOAD("cart", 0xc000, 0x4000, ROM_MIRROR)
 
 	/* charrom */
 	ROM_REGION(0x800, "gfx1", 0)

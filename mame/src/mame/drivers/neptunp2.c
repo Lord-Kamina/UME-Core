@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /***************************************************************************
 
     Neptune's Pearls (c) Unidesa?
@@ -8,7 +10,7 @@
 
 
 #include "emu.h"
-#include "cpu/i86/i86.h"
+#include "cpu/i86/i186.h"
 
 
 class neptunp2_state : public driver_device
@@ -103,8 +105,10 @@ static MACHINE_CONFIG_START( neptunp2, neptunp2_state )
 	MCFG_SCREEN_UPDATE_DRIVER(neptunp2_state, screen_update)
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
-	MCFG_GFXDECODE(neptunp2)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", neptunp2)
+	MCFG_PALETTE_ADD("palette", 512)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")

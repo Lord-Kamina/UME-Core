@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*
     Open questions:
 
@@ -39,7 +41,8 @@
          $31FF00 : w--- ---- ---- ---- : Screen width (0= 320, 1= 412)
                    ---- f--- ---- ---- : Bitmap format (1= 8bpp, 0= 4bpp)
                    ---- -t-- ---- ---- : Tile banking related
-                   ---- --f- ---- ---- : 1= All layers X+Y flip
+                   ---- --f- ---- ---- : 1= Global X/Y flip? (most games?)
+                   ---- ---f ---- ---- : 1= prohbit Y flip? (Air Rescue 2nd screen title, also gets set on one of the intro sequence screens)
                    ---- ---- ---- 4--- : 1= X+Y flip for NBG3
                    ---- ---- ---- -2-- : 1= X+Y flip for NBG2
                    ---- ---- ---- --1- : 1= X+Y flip for NBG1
@@ -207,6 +210,9 @@
 
 void segas32_state::common_start(int multi32)
 {
+	if(!m_gfxdecode->started())
+		throw device_missing_dependencies();
+
 	int tmap;
 
 	/* remember whether or not we are multi32 */
@@ -221,7 +227,7 @@ void segas32_state::common_start(int multi32)
 	{
 		struct cache_entry *entry = auto_alloc(machine(), struct cache_entry);
 
-		entry->tmap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(segas32_state::get_tile_info),this), TILEMAP_SCAN_ROWS,  16,16, 32,16);
+		entry->tmap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(segas32_state::get_tile_info),this), TILEMAP_SCAN_ROWS,  16,16, 32,16);
 		entry->page = 0xff;
 		entry->bank = 0;
 		entry->next = m_cache_head;
@@ -243,21 +249,17 @@ void segas32_state::common_start(int multi32)
 	m_solid_ffff = auto_alloc_array(machine(), UINT16, 512);
 	memset(m_solid_ffff, 0xff, sizeof(m_solid_ffff[0]) * 512);
 
+	memset(m_system32_videoram, 0x00, 0x20000);
+
 	/* initialize videoram */
 	m_system32_videoram[0x1ff00/2] = 0x8000;
+
+	memset(m_mixer_control, 0xff, sizeof(m_mixer_control[0][0]) * 0x80 );
+
+
+
 }
 
-
-VIDEO_START_MEMBER(segas32_state,system32)
-{
-	common_start(0);
-}
-
-
-VIDEO_START_MEMBER(segas32_state,multi32)
-{
-	common_start(1);
-}
 
 
 
@@ -334,7 +336,7 @@ inline void segas32_state::update_color(int offset, UINT16 data)
 	/* nice display when you hit F4, which is useful for debugging */
 
 	/* set the color */
-	palette_set_color_rgb(machine(), offset, pal5bit(data >> 0), pal5bit(data >> 5), pal5bit(data >> 10));
+	m_palette->set_pen_color(offset, pal5bit(data >> 0), pal5bit(data >> 5), pal5bit(data >> 10));
 }
 
 
@@ -715,7 +717,7 @@ tilemap_t *segas32_state::find_cache_entry(int page, int bank)
 
 TILE_GET_INFO_MEMBER(segas32_state::get_tile_info)
 {
-	struct segas32_state::cache_entry *entry = (struct segas32_state::cache_entry *)param;
+	struct segas32_state::cache_entry *entry = (struct segas32_state::cache_entry *)tilemap.user_data();
 	UINT16 data = m_system32_videoram[(entry->page & 0x7f) * 0x200 + tile_index];
 	SET_TILE_INFO_MEMBER(0, (entry->bank << 13) + (data & 0x1fff), (data >> 4) & 0x1ff, (data >> 14) & 3);
 }
@@ -830,6 +832,23 @@ int segas32_state::compute_clipping_extents(screen_device &screen, int enable, i
 }
 
 
+void segas32_state::compute_tilemap_flips(int bgnum, int &flipx, int &flipy)
+{
+	/* determine if we're flipped */
+	int global_flip = (m_system32_videoram[0x1ff00 / 2] >> 9)&1;
+
+	flipx = global_flip;
+	flipy = global_flip;
+
+	int layer_flip = (m_system32_videoram[0x1ff00 / 2] >> bgnum) & 1;
+
+	flipy ^= layer_flip;
+	flipx ^= layer_flip;
+
+	// this bit is set on Air Rescue (screen 2) title screen, during the Air Rescue introduction demo, and in f1en when you win a single player race
+	// it seems to prohibit (at least) the per-tilemap y flipping (maybe global y can override it)
+	if ((m_system32_videoram[0x1ff00 / 2] >> 8) & 1) flipy = 0;
+}
 
 /*************************************
  *
@@ -868,7 +887,7 @@ void segas32_state::update_tilemap_zoom(screen_device &screen, struct segas32_st
 	UINT32 srcx, srcx_start, srcy;
 	UINT32 srcxstep, srcystep;
 	int dstxstep, dstystep;
-	int flip, opaque;
+	int opaque;
 	int x, y;
 
 	/* get the tilemaps */
@@ -876,12 +895,13 @@ void segas32_state::update_tilemap_zoom(screen_device &screen, struct segas32_st
 
 	/* configure the layer */
 	opaque = 0;
-//opaque = (state->m_system32_videoram[0x1ff8e/2] >> (8 + bgnum)) & 1;
+//opaque = (m_system32_videoram[0x1ff8e/2] >> (8 + bgnum)) & 1;
 //if (screen.machine().input().code_pressed(KEYCODE_Z) && bgnum == 0) opaque = 1;
 //if (screen.machine().input().code_pressed(KEYCODE_X) && bgnum == 1) opaque = 1;
+	int flipx, flipy;
 
-	/* determine if we're flipped */
-	flip = ((m_system32_videoram[0x1ff00/2] >> 9) ^ (m_system32_videoram[0x1ff00/2] >> bgnum)) & 1;
+	// todo determine flipping
+	compute_tilemap_flips(bgnum, flipx, flipy);
 
 	/* determine the clipping */
 	clipenable = (m_system32_videoram[0x1ff02/2] >> (11 + bgnum)) & 1;
@@ -921,14 +941,20 @@ void segas32_state::update_tilemap_zoom(screen_device &screen, struct segas32_st
 	srcy += cliprect.min_y * srcystep;
 
 	/* if we're flipped, simply adjust the start/step parameters */
-	if (flip)
+	if (flipy)
+	{
+		const rectangle &visarea = screen.visible_area();
+
+		srcy += (visarea.max_y - 2 * cliprect.min_y) * srcystep;
+		srcystep = -srcystep;
+	}
+
+	if (flipx)
 	{
 		const rectangle &visarea = screen.visible_area();
 
 		srcx_start += (visarea.max_x - 2 * cliprect.min_x) * srcxstep;
-		srcy += (visarea.max_y - 2 * cliprect.min_y) * srcystep;
 		srcxstep = -srcxstep;
-		srcystep = -srcystep;
 	}
 
 	/* loop over the target rows */
@@ -1011,6 +1037,7 @@ void segas32_state::update_tilemap_zoom(screen_device &screen, struct segas32_st
  *
  *************************************/
 
+
 void segas32_state::update_tilemap_rowscroll(screen_device &screen, struct segas32_state::layer_info *layer, const rectangle &cliprect, int bgnum)
 {
 	int clipenable, clipout, clips, clipdraw_start;
@@ -1021,7 +1048,7 @@ void segas32_state::update_tilemap_rowscroll(screen_device &screen, struct segas
 	int xscroll, yscroll;
 	UINT16 *table;
 	int srcx, srcy;
-	int flip, opaque;
+	int opaque;
 	int x, y;
 
 	/* get the tilemaps */
@@ -1033,8 +1060,11 @@ void segas32_state::update_tilemap_rowscroll(screen_device &screen, struct segas
 //if (screen.machine().input().code_pressed(KEYCODE_C) && bgnum == 2) opaque = 1;
 //if (screen.machine().input().code_pressed(KEYCODE_V) && bgnum == 3) opaque = 1;
 
-	/* determine if we're flipped */
-	flip = ((m_system32_videoram[0x1ff00/2] >> 9) ^ (m_system32_videoram[0x1ff00/2] >> bgnum)) & 1;
+	int flipx, flipy;
+
+	// todo determine flipping
+	compute_tilemap_flips(bgnum, flipx, flipy);
+
 
 	/* determine the clipping */
 	clipenable = (m_system32_videoram[0x1ff02/2] >> (11 + bgnum)) & 1;
@@ -1070,36 +1100,33 @@ void segas32_state::update_tilemap_rowscroll(screen_device &screen, struct segas
 			int srcxstep;
 
 			/* if we're not flipped, things are straightforward */
-			if (!flip)
+			if (!flipx)
 			{
-				/* get starting scroll values */
 				srcx = cliprect.min_x + xscroll;
-				srcxstep = 1;
-				srcy = yscroll + y;
-
-				/* apply row scroll/select */
-				if (rowscroll)
-					srcx += table[0x000 + 0x100 * (bgnum - 2) + y] & 0x3ff;
-				if (rowselect)
-					srcy = (yscroll + table[0x200 + 0x100 * (bgnum - 2) + y]) & 0x1ff;
+				srcxstep = 1;				
+			}
+			else
+			{	
+				srcx = cliprect.max_x + xscroll;
+				srcxstep = -1;
 			}
 
-			/* otherwise, we have to do some contortions */
+			if (!flipy)
+			{
+				srcy = yscroll + y;
+			}
 			else
 			{
 				const rectangle &visarea = screen.visible_area();
-
-				/* get starting scroll values */
-				srcx = cliprect.max_x + xscroll;
-				srcxstep = -1;
 				srcy = yscroll + visarea.max_y - y;
-
-				/* apply row scroll/select */
-				if (rowscroll)
-					srcx += table[0x000 + 0x100 * (bgnum - 2) + y] & 0x3ff;
-				if (rowselect)
-					srcy = (yscroll + table[0x200 + 0x100 * (bgnum - 2) + y]) & 0x1ff;
 			}
+
+			/* apply row scroll/select */
+			if (rowscroll)
+				srcx += table[0x000 + 0x100 * (bgnum - 2) + y] & 0x3ff;
+			if (rowselect)
+				srcy = (yscroll + table[0x200 + 0x100 * (bgnum - 2) + y]) & 0x1ff;
+
 
 			/* look up the pages and get their source pixmaps */
 			bitmap_ind16 &tm0 = tilemaps[((srcy >> 7) & 2) + 0]->pixmap();
@@ -2093,10 +2120,10 @@ void segas32_state::mix_all_layers(int which, int xoffs, bitmap_rgb32 &bitmap, c
     static const char *const layname[] = { "TEXT", "NBG0", "NBG1", "NBG2", "NBG3", "BITM", "SPRI", "LINE" };
     for (groupnum = 0; groupnum <= sprgroup_mask; groupnum++)
     {
-        mame_printf_debug("%X: ", groupnum);
+        osd_printf_debug("%X: ", groupnum);
         for (i = 0; i <= numlayers; i++)
-            mame_printf_debug("%s(%02X) ", layname[layerorder[groupnum][i].index], layerorder[groupnum][i].effpri);
-        mame_printf_debug("\n");
+            osd_printf_debug("%s(%02X) ", layname[layerorder[groupnum][i].index], layerorder[groupnum][i].effpri);
+        osd_printf_debug("\n");
     }
 }*/
 
@@ -2296,9 +2323,9 @@ void segas32_state::print_mixer_data(int which)
 {
 	if (++m_print_count > 60 * 5)
 	{
-		mame_printf_debug("\n");
-		mame_printf_debug("OP: %04X\n", m_system32_videoram[0x1ff8e/2]);
-		mame_printf_debug("SC: %04X %04X %04X %04X - %04X %04X %04X %04X\n",
+		osd_printf_debug("\n");
+		osd_printf_debug("OP: %04X\n", m_system32_videoram[0x1ff8e/2]);
+		osd_printf_debug("SC: %04X %04X %04X %04X - %04X %04X %04X %04X\n",
 			m_sprite_control_latched[0x00],
 			m_sprite_control_latched[0x01],
 			m_sprite_control_latched[0x02],
@@ -2307,7 +2334,7 @@ void segas32_state::print_mixer_data(int which)
 			m_sprite_control_latched[0x05],
 			m_sprite_control_latched[0x06],
 			m_sprite_control_latched[0x07]);
-		mame_printf_debug("00: %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X\n",
+		osd_printf_debug("00: %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X\n",
 			m_mixer_control[which][0x00],
 			m_mixer_control[which][0x01],
 			m_mixer_control[which][0x02],
@@ -2324,7 +2351,7 @@ void segas32_state::print_mixer_data(int which)
 			m_mixer_control[which][0x0d],
 			m_mixer_control[which][0x0e],
 			m_mixer_control[which][0x0f]);
-		mame_printf_debug("20: %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X\n",
+		osd_printf_debug("20: %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X\n",
 			m_mixer_control[which][0x10],
 			m_mixer_control[which][0x11],
 			m_mixer_control[which][0x12],
@@ -2341,7 +2368,7 @@ void segas32_state::print_mixer_data(int which)
 			m_mixer_control[which][0x1d],
 			m_mixer_control[which][0x1e],
 			m_mixer_control[which][0x1f]);
-		mame_printf_debug("40: %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X\n",
+		osd_printf_debug("40: %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X - %04X %04X %04X %04X\n",
 			m_mixer_control[which][0x20],
 			m_mixer_control[which][0x21],
 			m_mixer_control[which][0x22],
@@ -2375,7 +2402,7 @@ UINT32 segas32_state::screen_update_system32(screen_device &screen, bitmap_rgb32
 	/* if the display is off, punt */
 	if (!m_system32_displayenable[0])
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		return 0;
 	}
 
@@ -2553,7 +2580,7 @@ UINT32 segas32_state::multi32_update(screen_device &screen, bitmap_rgb32 &bitmap
 	/* if the display is off, punt */
 	if (!m_system32_displayenable[index])
 	{
-		bitmap.fill(get_black_pen(screen.machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		return 0;
 	}
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                           -= Yun Sung 16 Bit Games =-
@@ -38,7 +40,7 @@
 #define PAGES_PER_TMAP_X    (0x4)
 #define PAGES_PER_TMAP_Y    (0x4)
 
-TILEMAP_MAPPER_MEMBER(yunsun16_state::yunsun16_tilemap_scan_pages)
+TILEMAP_MAPPER_MEMBER(yunsun16_state::tilemap_scan_pages)
 {
 	return  (row / TILES_PER_PAGE_Y) * TILES_PER_PAGE_X * TILES_PER_PAGE_Y * PAGES_PER_TMAP_X +
 			(row % TILES_PER_PAGE_Y) +
@@ -51,8 +53,7 @@ TILE_GET_INFO_MEMBER(yunsun16_state::get_tile_info_0)
 {
 	UINT16 code = m_vram_0[2 * tile_index + 0];
 	UINT16 attr = m_vram_0[2 * tile_index + 1];
-	SET_TILE_INFO_MEMBER(
-			TMAP_GFX,
+	SET_TILE_INFO_MEMBER(TMAP_GFX,
 			code,
 			attr & 0xf,
 			(attr & 0x20) ? TILE_FLIPX : 0);
@@ -62,20 +63,19 @@ TILE_GET_INFO_MEMBER(yunsun16_state::get_tile_info_1)
 {
 	UINT16 code = m_vram_1[2 * tile_index + 0];
 	UINT16 attr = m_vram_1[2 * tile_index + 1];
-	SET_TILE_INFO_MEMBER(
-			TMAP_GFX,
+	SET_TILE_INFO_MEMBER(TMAP_GFX,
 			code,
 			attr & 0xf,
 			(attr & 0x20) ? TILE_FLIPX : 0);
 }
 
-WRITE16_MEMBER(yunsun16_state::yunsun16_vram_0_w)
+WRITE16_MEMBER(yunsun16_state::vram_0_w)
 {
 	COMBINE_DATA(&m_vram_0[offset]);
 	m_tilemap_0->mark_tile_dirty(offset / 2);
 }
 
-WRITE16_MEMBER(yunsun16_state::yunsun16_vram_1_w)
+WRITE16_MEMBER(yunsun16_state::vram_1_w)
 {
 	COMBINE_DATA(&m_vram_1[offset]);
 	m_tilemap_1->mark_tile_dirty(offset / 2);
@@ -92,9 +92,9 @@ WRITE16_MEMBER(yunsun16_state::yunsun16_vram_1_w)
 
 void yunsun16_state::video_start()
 {
-	m_tilemap_0 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(yunsun16_state::get_tile_info_0),this),tilemap_mapper_delegate(FUNC(yunsun16_state::yunsun16_tilemap_scan_pages),this),
+	m_tilemap_0 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(yunsun16_state::get_tile_info_0),this),tilemap_mapper_delegate(FUNC(yunsun16_state::tilemap_scan_pages),this),
 								16,16, TILES_PER_PAGE_X*PAGES_PER_TMAP_X,TILES_PER_PAGE_Y*PAGES_PER_TMAP_Y);
-	m_tilemap_1 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(yunsun16_state::get_tile_info_1),this),tilemap_mapper_delegate(FUNC(yunsun16_state::yunsun16_tilemap_scan_pages),this),
+	m_tilemap_1 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(yunsun16_state::get_tile_info_1),this),tilemap_mapper_delegate(FUNC(yunsun16_state::tilemap_scan_pages),this),
 								16,16, TILES_PER_PAGE_X*PAGES_PER_TMAP_X,TILES_PER_PAGE_Y*PAGES_PER_TMAP_Y);
 
 	m_tilemap_0->set_scrolldx(-0x34, 0);
@@ -128,10 +128,10 @@ void yunsun16_state::video_start()
 
 ***************************************************************************/
 
-void yunsun16_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
+void yunsun16_state::draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
 	int offs;
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	int max_x = visarea.max_x + 1;
 	int max_y = visarea.max_y + 1;
@@ -171,12 +171,12 @@ void yunsun16_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			flipy = !flipy;     y = max_y - y - 16;
 		}
 
-		pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 					code,
 					attr & 0x1f,
 					flipx, flipy,
 					x,y,
-					machine().priority_bitmap,
+					screen.priority(),
 					pri_mask,15);
 	}
 }
@@ -201,23 +201,23 @@ UINT32 yunsun16_state::screen_update_yunsun16(screen_device &screen, bitmap_ind1
 
 	//popmessage("%04X", *m_priorityram);
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	if ((*m_priorityram & 0x0c) == 4)
 	{
 		/* The color of the this layer's transparent pen goes below everything */
-		m_tilemap_0->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-		m_tilemap_0->draw(bitmap, cliprect, 0, 1);
-		m_tilemap_1->draw(bitmap, cliprect, 0, 2);
+		m_tilemap_0->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		m_tilemap_0->draw(screen, bitmap, cliprect, 0, 1);
+		m_tilemap_1->draw(screen, bitmap, cliprect, 0, 2);
 	}
 	else if ((*m_priorityram & 0x0c) == 8)
 	{
 		/* The color of the this layer's transparent pen goes below everything */
-		m_tilemap_1->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-		m_tilemap_1->draw(bitmap, cliprect, 0, 1);
-		m_tilemap_0->draw(bitmap, cliprect, 0, 2);
+		m_tilemap_1->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		m_tilemap_1->draw(screen, bitmap, cliprect, 0, 1);
+		m_tilemap_0->draw(screen, bitmap, cliprect, 0, 2);
 	}
 
-	draw_sprites(bitmap, cliprect);
+	draw_sprites(screen, bitmap, cliprect);
 	return 0;
 }

@@ -1,3 +1,7 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
+#include "sound/namco.h"
+
 /*************************************************************************
 
     Namco PuckMan
@@ -10,16 +14,21 @@ public:
 	pacman_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
+		m_namco_sound(*this, "namco"),
 		m_spriteram(*this, "spriteram"),
 		m_spriteram2(*this, "spriteram2"),
 		m_s2650_spriteram(*this, "s2650_spriteram"),
 		m_videoram(*this, "videoram"),
 		m_colorram(*this, "colorram"),
 		m_s2650games_tileram(*this, "s2650_tileram"),
-		m_rocktrv2_prot_data(*this, "rocktrv2_prot")
+		m_rocktrv2_prot_data(*this, "rocktrv2_prot"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
+		m_patched_opcodes(*this, "patched_opcodes")
 	{ }
 
 	required_device<cpu_device> m_maincpu;
+	optional_device<namco_device> m_namco_sound;
 	optional_shared_ptr<UINT8> m_spriteram;
 	optional_shared_ptr<UINT8> m_spriteram2;
 	optional_shared_ptr<UINT8> m_s2650_spriteram;
@@ -27,6 +36,9 @@ public:
 	optional_shared_ptr<UINT8> m_colorram;
 	optional_shared_ptr<UINT8> m_s2650games_tileram;
 	optional_shared_ptr<UINT8> m_rocktrv2_prot_data;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+	optional_shared_ptr<UINT8> m_patched_opcodes;
 
 	UINT8 m_cannonb_bit_to_read;
 	int m_mystery;
@@ -117,6 +129,7 @@ public:
 	DECLARE_DRIVER_INIT(8bpm);
 	DECLARE_DRIVER_INIT(porky);
 	DECLARE_DRIVER_INIT(mspacman);
+	DECLARE_DRIVER_INIT(mschamp);
 	TILEMAP_MAPPER_MEMBER(pacman_scan_rows);
 	TILE_GET_INFO_MEMBER(pacman_get_tile_info);
 	TILE_GET_INFO_MEMBER(s2650_get_tile_info);

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:James Wallace
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
 // Electro mechanical meters                                             //
@@ -113,5 +115,5 @@ int MechMtr_update(int id, int state)
 	}
 	}
 
-	return res;
+	return meter_info[id].on;
 }

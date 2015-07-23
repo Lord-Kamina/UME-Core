@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Atari Food Fight hardware
@@ -130,7 +132,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(foodf_state::scanline_update_timer)
 		scanline = 0;
 
 	/* set a timer for it */
-	timer.adjust(machine().primary_screen->time_until_pos(scanline), scanline);
+	timer.adjust(m_screen->time_until_pos(scanline), scanline);
 }
 
 
@@ -144,7 +146,7 @@ MACHINE_START_MEMBER(foodf_state,foodf)
 MACHINE_RESET_MEMBER(foodf_state,foodf)
 {
 	timer_device *scan_timer = machine().device<timer_device>("scan_timer");
-	scan_timer->adjust(machine().primary_screen->time_until_pos(0));
+	scan_timer->adjust(m_screen->time_until_pos(0));
 }
 
 
@@ -209,7 +211,7 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 16, foodf_state )
 	AM_RANGE(0x014000, 0x014fff) AM_MIRROR(0x3e3000) AM_RAM
 	AM_RANGE(0x018000, 0x018fff) AM_MIRROR(0x3e3000) AM_RAM
 	AM_RANGE(0x01c000, 0x01c0ff) AM_MIRROR(0x3e3f00) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0x800000, 0x8007ff) AM_MIRROR(0x03f800) AM_RAM_WRITE(playfield_w) AM_SHARE("playfield")
+	AM_RANGE(0x800000, 0x8007ff) AM_MIRROR(0x03f800) AM_RAM_DEVWRITE("playfield", tilemap_device, write) AM_SHARE("playfield")
 	AM_RANGE(0x900000, 0x9001ff) AM_MIRROR(0x03fe00) AM_DEVREADWRITE8("nvram", x2212_device, read, write, 0x00ff)
 	AM_RANGE(0x940000, 0x940007) AM_MIRROR(0x023ff8) AM_READ(analog_r)
 	AM_RANGE(0x944000, 0x944007) AM_MIRROR(0x023ff8) AM_WRITE(analog_w)
@@ -325,22 +327,6 @@ READ8_MEMBER(foodf_state::pot_r)
 	return (ioport("DSW")->read() >> offset) << 7;
 }
 
-static const pokey_interface pokey_config =
-{
-	{
-		DEVCB_DRIVER_MEMBER(foodf_state,pot_r),
-		DEVCB_DRIVER_MEMBER(foodf_state,pot_r),
-		DEVCB_DRIVER_MEMBER(foodf_state,pot_r),
-		DEVCB_DRIVER_MEMBER(foodf_state,pot_r),
-		DEVCB_DRIVER_MEMBER(foodf_state,pot_r),
-		DEVCB_DRIVER_MEMBER(foodf_state,pot_r),
-		DEVCB_DRIVER_MEMBER(foodf_state,pot_r),
-		DEVCB_DRIVER_MEMBER(foodf_state,pot_r)
-	}
-};
-
-
-
 /*************************************
  *
  *  Machine driver
@@ -364,26 +350,36 @@ static MACHINE_CONFIG_START( foodf, foodf_state )
 	MCFG_TIMER_DRIVER_ADD("scan_timer", foodf_state, scanline_update_timer)
 
 	/* video hardware */
-	MCFG_GFXDECODE(foodf)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", foodf)
+	MCFG_PALETTE_ADD("palette", 256)
+
+	MCFG_TILEMAP_ADD_STANDARD_TRANSPEN("playfield", "gfxdecode", 2, foodf_state, get_playfield_tile_info, 8,8, SCAN_COLS, 32,32, 0)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK/2, 384, 0, 256, 259, 0, 224)
 	MCFG_SCREEN_UPDATE_DRIVER(foodf_state, screen_update_foodf)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(foodf_state,foodf)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_POKEY_ADD("pokey1", MASTER_CLOCK/2/10)
-	MCFG_POKEY_CONFIG(pokey_config)
+	MCFG_SOUND_ADD("pokey1", POKEY, MASTER_CLOCK/2/10)
+	MCFG_POKEY_POT0_R_CB(READ8(foodf_state, pot_r))
+	MCFG_POKEY_POT1_R_CB(READ8(foodf_state, pot_r))
+	MCFG_POKEY_POT2_R_CB(READ8(foodf_state, pot_r))
+	MCFG_POKEY_POT3_R_CB(READ8(foodf_state, pot_r))
+	MCFG_POKEY_POT4_R_CB(READ8(foodf_state, pot_r))
+	MCFG_POKEY_POT5_R_CB(READ8(foodf_state, pot_r))
+	MCFG_POKEY_POT6_R_CB(READ8(foodf_state, pot_r))
+	MCFG_POKEY_POT7_R_CB(READ8(foodf_state, pot_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.33)
 
-	MCFG_POKEY_ADD("pokey2", MASTER_CLOCK/2/10)
+	MCFG_SOUND_ADD("pokey2", POKEY, MASTER_CLOCK/2/10)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.33)
 
-	MCFG_POKEY_ADD("pokey3", MASTER_CLOCK/2/10)
+	MCFG_SOUND_ADD("pokey3", POKEY, MASTER_CLOCK/2/10)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.33)
 MACHINE_CONFIG_END
 
@@ -415,6 +411,9 @@ ROM_START( foodf )
 
 	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "136020-112.2p",   0x000000, 0x000100, CRC(0aa962d6) SHA1(efb51e4c95efb1b85206c416c1d6d35c6f4ff35c) )
+
+	ROM_REGION( 0x100, "nvram", 0 ) // default initialized nvram
+	ROM_LOAD( "foodf.nv", 0x000000, 0x000100, CRC(a4186b13) SHA1(7633ceb6f61403a46e36cc2172839e6c3f31bac2) )
 ROM_END
 
 
@@ -438,6 +437,35 @@ ROM_START( foodf2 )
 
 	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "136020-112.2p",   0x000000, 0x000100, CRC(0aa962d6) SHA1(efb51e4c95efb1b85206c416c1d6d35c6f4ff35c) )
+
+	ROM_REGION( 0x100, "nvram", 0 ) // default initialized nvram
+	ROM_LOAD( "foodf.nv", 0x000000, 0x000100, CRC(a4186b13) SHA1(7633ceb6f61403a46e36cc2172839e6c3f31bac2) )
+ROM_END
+
+
+ROM_START( foodf1 )
+	ROM_REGION( 0x10000, "maincpu", 0 ) /* 64k for 68000 code */
+	ROM_LOAD16_BYTE( "136020-101.8c",   0x000001, 0x002000, CRC(06d0ede0) SHA1(2bc6bef433abcaba8181b76dfa90e45a35b04ada) )
+	ROM_LOAD16_BYTE( "136020-102.9c",   0x000000, 0x002000, CRC(ca6390a4) SHA1(b5a355f7900e96eaeb6946de6d10bfc842ce23d1) )
+	ROM_LOAD16_BYTE( "136020-103.8d",   0x004001, 0x002000, CRC(36e89e89) SHA1(2a71650d71ca8b8e16fdff158e6c8265b9bf8625) )
+	ROM_LOAD16_BYTE( "136020-104.9d",   0x004000, 0x002000, CRC(f667374c) SHA1(d7be70b56500e2071b7f8c810f7a3e2a6743c6bd) )
+	ROM_LOAD16_BYTE( "136020-105.8e",   0x008001, 0x002000, CRC(a8c22e50) SHA1(7c18f58c0b4769fd8b91e134b812d0df0e4b5c13) )
+	ROM_LOAD16_BYTE( "136020-106.9e",   0x008000, 0x002000, CRC(13e013c4) SHA1(2c35261a129c0cd29dcf396067cc3239af71411e) )
+	ROM_LOAD16_BYTE( "136020-107.8f",   0x00c001, 0x002000, CRC(8a3f7ca4) SHA1(7196ebe15a35511276c32111fc69a207bbc7837f) )
+	ROM_LOAD16_BYTE( "136020-108.9f",   0x00c000, 0x002000, CRC(d4244e12) SHA1(f8963c1e170471f5c132005b96fed80bc26f2574) )
+
+	ROM_REGION( 0x2000, "gfx1", 0 )
+	ROM_LOAD( "136020-109.6lm",  0x000000, 0x002000, CRC(c13c90eb) SHA1(ebd2bbbdd7e184851d1ab4b5648481d966c78cc2) )
+
+	ROM_REGION( 0x4000, "gfx2", 0 )
+	ROM_LOAD( "136020-110.4e",   0x000000, 0x002000, CRC(8870e3d6) SHA1(702007d3d543f872b5bf5d00b49f6e05b46d6600) )
+	ROM_LOAD( "136020-111.4d",   0x002000, 0x002000, CRC(84372edf) SHA1(9beef3ff3b28405c45d691adfbc233921073be47) )
+
+	ROM_REGION( 0x100, "proms", 0 )
+	ROM_LOAD( "136020-112.2p",   0x000000, 0x000100, CRC(0aa962d6) SHA1(efb51e4c95efb1b85206c416c1d6d35c6f4ff35c) )
+
+	ROM_REGION( 0x100, "nvram", 0 ) // default initialized nvram
+	ROM_LOAD( "foodf.nv", 0x000000, 0x000100, CRC(a4186b13) SHA1(7633ceb6f61403a46e36cc2172839e6c3f31bac2) )
 ROM_END
 
 
@@ -461,6 +489,9 @@ ROM_START( foodfc )
 
 	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "136020-112.2p",   0x000000, 0x000100, CRC(0aa962d6) SHA1(efb51e4c95efb1b85206c416c1d6d35c6f4ff35c) )
+
+	ROM_REGION( 0x100, "nvram", 0 ) // default initialized nvram, differs from the other sets
+	ROM_LOAD( "foodfc.nv", 0x000000, 0x000100, CRC(c1385dab) SHA1(52f4dc772e5da0f7c9bcef6c6ef3a655dcd3d59d) )
 ROM_END
 
 
@@ -473,4 +504,5 @@ ROM_END
 
 GAME( 1982, foodf,  0,     foodf, foodf, driver_device, 0, ROT0, "General Computer Corporation (Atari license)", "Food Fight (rev 3)", GAME_SUPPORTS_SAVE )
 GAME( 1982, foodf2, foodf, foodf, foodf, driver_device, 0, ROT0, "General Computer Corporation (Atari license)", "Food Fight (rev 2)", GAME_SUPPORTS_SAVE )
+GAME( 1982, foodf1, foodf, foodf, foodf, driver_device, 0, ROT0, "General Computer Corporation (Atari license)", "Food Fight (rev 1)", GAME_SUPPORTS_SAVE )
 GAME( 1982, foodfc, foodf, foodf, foodf, driver_device, 0, ROT0, "General Computer Corporation (Atari license)", "Food Fight (cocktail)", GAME_SUPPORTS_SAVE )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /***************************************************************************
 
     Hudson/NEC HuC6272 "King" device
@@ -64,7 +66,7 @@ inline void huc6272_device::write_dword(offs_t address, UINT32 data)
 //-------------------------------------------------
 
 huc6272_device::huc6272_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, huc6272, "huc6272", tag, owner, clock),
+	: device_t(mconfig, huc6272, "huc6272", tag, owner, clock, "huc6272", __FILE__),
 		device_memory_interface(mconfig, *this),
 		m_space_config("videoram", ENDIANNESS_LITTLE, 32, 32, 0, NULL, *ADDRESS_MAP_NAME(huc6272_vram))
 {

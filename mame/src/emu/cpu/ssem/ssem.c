@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ryan Holtz
 /*
     Manchester Small-Scale Experimental Machine (SSEM) emulator
 
@@ -81,7 +83,7 @@ const device_type SSEMCPU = &device_creator<ssem_device>;
 //-------------------------------------------------
 
 ssem_device::ssem_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: cpu_device(mconfig, SSEMCPU, "SSEMCPU", tag, owner, clock),
+	: cpu_device(mconfig, SSEMCPU, "SSEMCPU", tag, owner, clock, "ssem_cpu", __FILE__),
 		m_program_config("program", ENDIANNESS_LITTLE, 8, 16),
 		m_pc(1),
 		m_shifted_pc(1<<2),
@@ -98,7 +100,7 @@ void ssem_device::device_start()
 	m_program = &space(AS_PROGRAM);
 
 	// register our state for the debugger
-	astring tempstr;
+	std::string tempstr;
 	state_add(STATE_GENPC,     "GENPC",     m_pc).noshow();
 	state_add(STATE_GENFLAGS,  "GENFLAGS",  m_halt).callimport().callexport().formatstr("%1s").noshow();
 	state_add(SSEM_PC,         "PC",        m_shifted_pc).mask(0xffff);
@@ -148,12 +150,12 @@ const address_space_config *ssem_device::memory_space_config(address_spacenum sp
 //  for the debugger
 //-------------------------------------------------
 
-void ssem_device::state_string_export(const device_state_entry &entry, astring &string)
+void ssem_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case STATE_GENFLAGS:
-			string.printf("%c", m_halt ? 'H' : '.');
+			strprintf(str, "%c", m_halt ? 'H' : '.');
 			break;
 	}
 }

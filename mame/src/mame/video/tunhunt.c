@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino, David Haywood
 /*************************************************************************
 
     Atari Tunnel Hunt hardware
@@ -48,7 +50,7 @@
 
 /****************************************************************************************/
 
-WRITE8_MEMBER(tunhunt_state::tunhunt_videoram_w)
+WRITE8_MEMBER(tunhunt_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset);
@@ -72,29 +74,26 @@ void tunhunt_state::video_start()
 	With max RLE expansion, bitmap size is 256x64.
 	*/
 
-	m_tmpbitmap.allocate(256, 64, machine().primary_screen->format());
+	m_tmpbitmap.allocate(256, 64, m_screen->format());
 
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tunhunt_state::get_fg_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 32, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tunhunt_state::get_fg_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 	m_fg_tilemap->set_scrollx(0, 64);
+
+	save_item(NAME(m_control));
 }
 
-void tunhunt_state::palette_init()
+PALETTE_INIT_MEMBER(tunhunt_state, tunhunt)
 {
-	int i;
-
 	/* Tunnel Hunt uses a combination of color proms and palette RAM to specify a 16 color
 	 * palette.  Here, we manage only the mappings for alphanumeric characters and SHELL
 	 * graphics, which are unpacked ahead of time and drawn using MAME's drawgfx primitives.
 	 */
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x10);
-
 	/* motion objects/box */
-	for (i = 0; i < 0x10; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+	for (int i = 0; i < 0x10; i++)
+		palette.set_pen_indirect(i, i);
 
 	/* AlphaNumerics (1bpp)
 	 *  2 bits of hilite select from 4 different background colors
@@ -103,26 +102,26 @@ void tunhunt_state::palette_init()
 	 */
 
 	/* alpha hilite#0 */
-	colortable_entry_set_value(machine().colortable, 0x10, 0x0); /* background color#0 (transparent) */
-	colortable_entry_set_value(machine().colortable, 0x11, 0x4); /* foreground color */
+	palette.set_pen_indirect(0x10, 0x0); /* background color#0 (transparent) */
+	palette.set_pen_indirect(0x11, 0x4); /* foreground color */
 
 	/* alpha hilite#1 */
-	colortable_entry_set_value(machine().colortable, 0x12, 0x5); /* background color#1 */
-	colortable_entry_set_value(machine().colortable, 0x13, 0x4); /* foreground color */
+	palette.set_pen_indirect(0x12, 0x5); /* background color#1 */
+	palette.set_pen_indirect(0x13, 0x4); /* foreground color */
 
 	/* alpha hilite#2 */
-	colortable_entry_set_value(machine().colortable, 0x14, 0x6); /* background color#2 */
-	colortable_entry_set_value(machine().colortable, 0x15, 0x4); /* foreground color */
+	palette.set_pen_indirect(0x14, 0x6); /* background color#2 */
+	palette.set_pen_indirect(0x15, 0x4); /* foreground color */
 
 	/* alpha hilite#3 */
-	colortable_entry_set_value(machine().colortable, 0x16, 0xf); /* background color#3 */
-	colortable_entry_set_value(machine().colortable, 0x17, 0x4); /* foreground color */
+	palette.set_pen_indirect(0x16, 0xf); /* background color#3 */
+	palette.set_pen_indirect(0x17, 0x4); /* foreground color */
 
 	/* shell graphics; these are either 1bpp (2 banks) or 2bpp.  It isn't clear which.
 	 * In any event, the following pens are associated with the shell graphics:
 	 */
-	colortable_entry_set_value(machine().colortable, 0x18, 0);
-	colortable_entry_set_value(machine().colortable, 0x19, 4);//1;
+	palette.set_pen_indirect(0x18, 0);
+	palette.set_pen_indirect(0x19, 4);//1;
 }
 
 /*
@@ -155,10 +154,9 @@ void tunhunt_state::set_pens()
 	//const UINT8 *color_prom = memregion( "proms" )->base();
 	int color;
 	int shade;
-	int i;
 	int red,green,blue;
 
-	for( i=0; i<16; i++ )
+	for( int i=0; i<16; i++ )
 	{
 		color = m_generic_paletteram_8[i];
 		shade = 0xf^(color>>4);
@@ -192,7 +190,7 @@ void tunhunt_state::set_pens()
 		green   = APPLY_SHADE(green,shade);
 		blue    = APPLY_SHADE(blue,shade);
 
-		colortable_palette_set_color( machine().colortable,i,MAKE_RGB(red,green,blue) );
+		m_palette->set_indirect_color( i,rgb_t(red,green,blue) );
 	}
 }
 
@@ -210,11 +208,9 @@ void tunhunt_state::draw_motion_object(bitmap_ind16 &bitmap, const rectangle &cl
  */
 
 	bitmap_ind16 &tmpbitmap = m_tmpbitmap;
-	UINT8 *spriteram = m_spriteram;
-	UINT8 *tunhunt_ram = m_workram;
-	//int skip = tunhunt_ram[MOBST];
-	int x0 = 255-tunhunt_ram[MOBJV];
-	int y0 = 255-tunhunt_ram[MOBJH];
+	//int skip = m_workram[MOBST];
+	int x0 = 255-m_workram[MOBJV];
+	int y0 = 255-m_workram[MOBJH];
 	int scalex,scaley;
 	int line,span;
 	int x,span_data;
@@ -225,7 +221,7 @@ void tunhunt_state::draw_motion_object(bitmap_ind16 &bitmap, const rectangle &cl
 	for( line=0; line<64; line++ )
 	{
 		x = 0;
-		source = &spriteram[line*0x10];
+		source = &m_spriteram[line*0x10];
 		for( span=0; span<0x10; span++ )
 		{
 			span_data = source[span];
@@ -239,7 +235,7 @@ void tunhunt_state::draw_motion_object(bitmap_ind16 &bitmap, const rectangle &cl
 			tmpbitmap.pix16(line, x++) = 0;
 	} /* next line */
 
-	switch( tunhunt_ram[VSTRLO] )
+	switch( m_workram[VSTRLO] )
 	{
 	case 0x01:
 		scaley = (1<<16)*0.33; /* seems correct */
@@ -250,7 +246,7 @@ void tunhunt_state::draw_motion_object(bitmap_ind16 &bitmap, const rectangle &cl
 		break;
 
 	default:
-		scaley = (1<<16)*tunhunt_ram[VSTRLO]/4; /* ??? */
+		scaley = (1<<16)*m_workram[VSTRLO]/4; /* ??? */
 		break;
 	}
 	scalex = (1<<16);
@@ -287,7 +283,6 @@ void tunhunt_state::draw_box(bitmap_ind16 &bitmap, const rectangle &cliprect)
         1280: 07 03 00      01  07 06 04 05 02 07 03 00     09 0a   0b 0c       palette select
         ->hue 06 02 ff      60  06 05 03 04 01 06 02 ff     d2 00   c2 ff
 */
-	UINT8 *tunhunt_ram = m_workram;
 	int span,x,y;
 	int color;
 //  rectangle bbox;
@@ -303,13 +298,13 @@ void tunhunt_state::draw_box(bitmap_ind16 &bitmap, const rectangle &cliprect)
 				z = 0;
 				for( span=3; span<16; span++ )
 				{
-					x0 = tunhunt_ram[span+0x1080];
-					y0 = tunhunt_ram[span+0x1480];
-					y1 = tunhunt_ram[span+0x1400];
+					x0 = m_workram[span+0x1080];
+					y0 = m_workram[span+0x1480];
+					y1 = m_workram[span+0x1400];
 
 					if( y>=y0 && y<=y1 && x>=x0 && x0>=z )
 					{
-						color = tunhunt_ram[span+0x1280]&0xf;
+						color = m_workram[span+0x1280]&0xf;
 						z = x0; /* give priority to rightmost spans */
 					}
 				}
@@ -336,8 +331,7 @@ void tunhunt_state::draw_shell(bitmap_ind16 &bitmap,
 		{
 			for( sy=0; sy<256; sy+=16 )
 			{
-				drawgfx_transpen( bitmap, cliprect,
-					machine().gfx[1],
+					m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					picture_code,
 					0, /* color */
 					0,0, /* flip */
@@ -361,15 +355,15 @@ void tunhunt_state::draw_shell(bitmap_ind16 &bitmap,
 	        vstop       = 0x00
 
 	*/
-	drawgfx_transpen( bitmap, cliprect,
-			machine().gfx[1],
+
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 			picture_code,
 			0, /* color */
 			0,0, /* flip */
 			255-hposition-16,vstart-32,0 );
 }
 
-UINT32 tunhunt_state::screen_update_tunhunt(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 tunhunt_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	set_pens();
 
@@ -393,6 +387,6 @@ UINT32 tunhunt_state::screen_update_tunhunt(screen_device &screen, bitmap_ind16 
 		m_workram[SHL1ST],  /* vstretch */
 		m_control&0x10 ); /* hstretch */
 
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

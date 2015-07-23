@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Peter Trauner
 /*********************************************************************
 
     8042kbdc.c
@@ -173,9 +175,6 @@
 *********************************************************************/
 
 
-#include "emu.h"
-
-#include "machine/pckeybrd.h"
 #include "machine/8042kbdc.h"
 
 
@@ -198,35 +197,23 @@ const device_type KBDC8042 = &device_creator<kbdc8042_device>;
 //-------------------------------------------------
 
 kbdc8042_device::kbdc8042_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, KBDC8042, "Keyboard Controller 8042", tag, owner, clock, "kbdc8042", __FILE__)
+	: device_t(mconfig, KBDC8042, "8042 Keyboard Controller", tag, owner, clock, "kbdc8042", __FILE__)
+	, m_keyboard_dev(*this, "at_keyboard")
+	, m_system_reset_cb(*this)
+	, m_gate_a20_cb(*this)
+	, m_input_buffer_full_cb(*this)
+	, m_output_buffer_empty_cb(*this)
+	, m_speaker_cb(*this)
 {
 }
 
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
+static MACHINE_CONFIG_FRAGMENT( keyboard )
+	MCFG_AT_KEYB_ADD("at_keyboard", 1, WRITELINE(kbdc8042_device, keyboard_w))
+MACHINE_CONFIG_END
 
-void kbdc8042_device::device_config_complete()
+machine_config_constructor kbdc8042_device::device_mconfig_additions() const
 {
-	// inherit a copy of the static data
-	const kbdc8042_interface *intf = reinterpret_cast<const kbdc8042_interface *>(static_config());
-
-	if (intf != NULL)
-	{
-		*static_cast<kbdc8042_interface *>(this) = *intf;
-	}
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_system_reset_cb, 0, sizeof(m_system_reset_cb));
-		memset(&m_gate_a20_cb, 0, sizeof(m_gate_a20_cb));
-		memset(&m_input_buffer_full_func, 0, sizeof(m_input_buffer_full_func));
-		memset(&m_output_buffer_empty_cb, 0, sizeof(m_output_buffer_empty_cb));
-		memset(&m_speaker_cb, 0, sizeof(m_speaker_cb));
-	}
+	return MACHINE_CONFIG_NAME( keyboard );
 }
 
 /*-------------------------------------------------
@@ -236,16 +223,17 @@ void kbdc8042_device::device_config_complete()
 void kbdc8042_device::device_start()
 {
 	// resolve callbacks
-	m_system_reset_func.resolve(m_system_reset_cb, *this);
-	m_gate_a20_func.resolve(m_gate_a20_cb, *this);
-	m_input_buffer_full_func.resolve(m_input_buffer_full_cb, *this);
-	m_output_buffer_empty_func.resolve(m_output_buffer_empty_cb, *this);
-	m_speaker_func.resolve(m_speaker_cb, *this);
-	m_getout2_func.resolve(m_getout2_cb, *this);
-	machine().scheduler().timer_pulse(attotime::from_hz(60), timer_expired_delegate(FUNC(kbdc8042_device::kbdc8042_time),this));
-	at_keyboard_init(machine(), AT_KEYBOARD_TYPE_AT);
-	at_keyboard_set_scan_code_set(1);
+	m_system_reset_cb.resolve_safe();
+	m_gate_a20_cb.resolve();
+	m_input_buffer_full_cb.resolve();
+	m_output_buffer_empty_cb.resolve_safe();
+	m_speaker_cb.resolve();
 	m_operation_write_state = 0; /* first write to 0x60 might occur before anything can set this */
+	memset(&m_keyboard, 0x00, sizeof(m_keyboard));
+	memset(&m_mouse, 0x00, sizeof(m_mouse));
+	m_sending = 0;
+	m_last_write_to_control = 0;
+	m_status_read_mode = 0;
 }
 
 /*-------------------------------------------------
@@ -268,22 +256,22 @@ void kbdc8042_device::at_8042_set_outport(UINT8 data, int initial)
 	m_outport = data;
 	if (change & 0x02)
 	{
-		if (!m_gate_a20_func.isnull())
-			m_gate_a20_func(data & 0x02 ? 1 : 0);
+		if (!m_gate_a20_cb.isnull())
+			m_gate_a20_cb(data & 0x02 ? 1 : 0);
 	}
 }
 
-TIMER_CALLBACK_MEMBER( kbdc8042_device::kbdc8042_time )
+WRITE_LINE_MEMBER( kbdc8042_device::keyboard_w )
 {
-	at_keyboard_polling();
-	at_8042_check_keyboard();
+	if(state)
+		at_8042_check_keyboard();
 }
 
 TIMER_CALLBACK_MEMBER( kbdc8042_device::kbdc8042_clr_int )
 {
 	/* Lets 8952's timers do their job before clear the interrupt line, */
 	/* else Keyboard interrupt never happens. */
-	m_input_buffer_full_func(0);
+	m_input_buffer_full_cb(0);
 }
 
 void kbdc8042_device::at_8042_receive(UINT8 data)
@@ -294,9 +282,9 @@ void kbdc8042_device::at_8042_receive(UINT8 data)
 	m_data = data;
 	m_keyboard.received = 1;
 
-	if (!m_input_buffer_full_func.isnull())
+	if (!m_input_buffer_full_cb.isnull())
 	{
-		m_input_buffer_full_func(1);
+		m_input_buffer_full_cb(1);
 		/* Lets 8952's timers do their job before clear the interrupt line, */
 		/* else Keyboard interrupt never happens. */
 		machine().scheduler().timer_set(attotime::from_usec(2), timer_expired_delegate(FUNC(kbdc8042_device::kbdc8042_clr_int),this));
@@ -309,7 +297,7 @@ void kbdc8042_device::at_8042_check_keyboard()
 
 	if (!m_keyboard.received && !m_mouse.received)
 	{
-		if ( (data = at_keyboard_read())!=-1)
+		if((data = m_keyboard_dev->read(machine().driver_data()->generic_space(), 0)))
 			at_8042_receive(data);
 	}
 }
@@ -399,7 +387,7 @@ READ8_MEMBER(kbdc8042_device::data_r)
 		break;
 
 	case 2:
-		if (m_getout2_func(0))
+		if (m_out2)
 			data |= 0x20;
 		else
 			data &= ~0x20;
@@ -468,7 +456,7 @@ WRITE8_MEMBER(kbdc8042_device::data_w)
 			/* normal case */
 			m_data = data;
 			m_sending=1;
-			at_keyboard_write(space.machine(), data);
+			m_keyboard_dev->write(space, 0, data);
 			break;
 
 		case 1:
@@ -489,7 +477,7 @@ WRITE8_MEMBER(kbdc8042_device::data_w)
 			/* preceded by writing 0xD2 to port 60h */
 			m_data = data;
 			m_sending=1;
-			at_keyboard_write(machine(), data);
+			m_keyboard_dev->write(space, 0, data);
 			break;
 
 		case 3:
@@ -512,8 +500,8 @@ WRITE8_MEMBER(kbdc8042_device::data_w)
 
 	case 1:
 		m_speaker = data;
-		if (!m_speaker_func.isnull())
-					m_speaker_func(0, m_speaker);
+		if (!m_speaker_cb.isnull())
+					m_speaker_cb((offs_t)0, m_speaker);
 
 		break;
 
@@ -614,11 +602,17 @@ WRITE8_MEMBER(kbdc8042_device::data_w)
 			 * the bits low set in the command byte.  The only pulse that has
 			 * an effect currently is bit 0, which pulses the CPU's reset line
 			 */
-			m_system_reset_func(PULSE_LINE);
+			m_system_reset_cb(ASSERT_LINE);
+			m_system_reset_cb(CLEAR_LINE);
 			at_8042_set_outport(m_outport | 0x02, 0);
 			break;
 		}
 		m_sending = 1;
 		break;
 	}
+}
+
+WRITE_LINE_MEMBER(kbdc8042_device::write_out2)
+{
+	m_out2 = state;
 }

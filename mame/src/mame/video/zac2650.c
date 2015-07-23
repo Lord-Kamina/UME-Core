@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Coates
 /*************************************************************/
 /*                                                           */
 /* Zaccaria/Zelco S2650 based games video                    */
@@ -5,7 +7,6 @@
 /*************************************************************/
 
 #include "emu.h"
-#include "sound/s2636.h"
 #include "includes/zac2650.h"
 
 
@@ -17,8 +18,7 @@
 
 WRITE8_MEMBER(zac2650_state::tinvader_videoram_w)
 {
-	UINT8 *videoram = m_videoram;
-	videoram[offset] = data;
+	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
@@ -31,11 +31,11 @@ READ8_MEMBER(zac2650_state::zac_s2636_r)
 WRITE8_MEMBER(zac2650_state::zac_s2636_w)
 {
 	m_s2636_0_ram[offset] = data;
-	machine().gfx[1]->mark_dirty(offset/8);
-	machine().gfx[2]->mark_dirty(offset/8);
+	m_gfxdecode->gfx(1)->mark_dirty(offset/8);
+	m_gfxdecode->gfx(2)->mark_dirty(offset/8);
 	if (offset == 0xc7)
 	{
-		s2636_soundport_w(machine().device("s2636snd"), 0, data);
+		m_s2636->soundport_w(0, data);
 	}
 }
 
@@ -52,7 +52,7 @@ int zac2650_state::SpriteCollision(int first,int second)
 {
 	int Checksum=0;
 	int x,y;
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	if((m_s2636_0_ram[first * 0x10 + 10] < 0xf0) && (m_s2636_0_ram[second * 0x10 + 10] < 0xf0))
 	{
@@ -62,7 +62,7 @@ int zac2650_state::SpriteCollision(int first,int second)
 
 		/* Draw first sprite */
 
-		drawgfx_opaque(m_spritebitmap,m_spritebitmap.cliprect(), machine().gfx[expand],
+		m_gfxdecode->gfx(expand)->opaque(m_spritebitmap,m_spritebitmap.cliprect(),
 				first * 2,
 				0,
 				0,0,
@@ -70,9 +70,9 @@ int zac2650_state::SpriteCollision(int first,int second)
 
 		/* Get fingerprint */
 
-		for (x = fx; x < fx + machine().gfx[expand]->width(); x++)
+		for (x = fx; x < fx + m_gfxdecode->gfx(expand)->width(); x++)
 		{
-			for (y = fy; y < fy + machine().gfx[expand]->height(); y++)
+			for (y = fy; y < fy + m_gfxdecode->gfx(expand)->height(); y++)
 			{
 				if (visarea.contains(x, y))
 					Checksum += m_spritebitmap.pix16(y, x);
@@ -81,7 +81,7 @@ int zac2650_state::SpriteCollision(int first,int second)
 
 		/* Blackout second sprite */
 
-		drawgfx_transpen(m_spritebitmap,m_spritebitmap.cliprect(), machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(m_spritebitmap,m_spritebitmap.cliprect(),
 				second * 2,
 				1,
 				0,0,
@@ -89,9 +89,9 @@ int zac2650_state::SpriteCollision(int first,int second)
 
 		/* Remove fingerprint */
 
-		for (x = fx; x < fx + machine().gfx[expand]->width(); x++)
+		for (x = fx; x < fx + m_gfxdecode->gfx(expand)->width(); x++)
 		{
-			for (y = fy; y < fy + machine().gfx[expand]->height(); y++)
+			for (y = fy; y < fy +m_gfxdecode->gfx(expand)->height(); y++)
 			{
 				if (visarea.contains(x, y))
 					Checksum -= m_spritebitmap.pix16(y, x);
@@ -100,7 +100,7 @@ int zac2650_state::SpriteCollision(int first,int second)
 
 		/* Zero bitmap */
 
-		drawgfx_opaque(m_spritebitmap,m_spritebitmap.cliprect(), machine().gfx[expand],
+		m_gfxdecode->gfx(expand)->opaque(m_spritebitmap,m_spritebitmap.cliprect(),
 				first * 2,
 				1,
 				0,0,
@@ -112,28 +112,32 @@ int zac2650_state::SpriteCollision(int first,int second)
 
 TILE_GET_INFO_MEMBER(zac2650_state::get_bg_tile_info)
 {
-	UINT8 *videoram = m_videoram;
-	int code = videoram[tile_index];
+	int code = m_videoram[tile_index];
 
 	SET_TILE_INFO_MEMBER(0, code, 0, 0);
 }
 
 void zac2650_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(zac2650_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(zac2650_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
 			24, 24, 32, 32);
 
-	machine().primary_screen->register_screen_bitmap(m_bitmap);
-	machine().primary_screen->register_screen_bitmap(m_spritebitmap);
+	m_screen->register_screen_bitmap(m_bitmap);
+	m_screen->register_screen_bitmap(m_spritebitmap);
 
-	machine().gfx[1]->set_source(m_s2636_0_ram);
-	machine().gfx[2]->set_source(m_s2636_0_ram);
+	m_gfxdecode->gfx(1)->set_source(m_s2636_0_ram);
+	m_gfxdecode->gfx(2)->set_source(m_s2636_0_ram);
+
+	save_item(NAME(m_bitmap));
+	save_item(NAME(m_spritebitmap));
+	save_item(NAME(m_CollisionBackground));
+	save_item(NAME(m_CollisionSprite));
 }
 
 void zac2650_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int offs;
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	/* -------------------------------------------------------------- */
 	/* There seems to be a strange setup with this board, in that it  */
@@ -162,15 +166,15 @@ void zac2650_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect
 			int x,y;
 
 			/* Sprite->Background collision detection */
-			drawgfx_transpen(bitmap,cliprect, machine().gfx[expand],
+			m_gfxdecode->gfx(expand)->transpen(bitmap,cliprect,
 					spriteno,
 					1,
 					0,0,
 					bx,by, 0);
 
-			for (x = bx; x < bx + machine().gfx[expand]->width(); x++)
+			for (x = bx; x < bx + m_gfxdecode->gfx(expand)->width(); x++)
 			{
-				for (y = by; y < by + machine().gfx[expand]->height(); y++)
+				for (y = by; y < by +m_gfxdecode->gfx(expand)->height(); y++)
 				{
 					if (visarea.contains(x, y))
 						if (bitmap.pix16(y, x) != m_bitmap.pix16(y, x))
@@ -181,7 +185,7 @@ void zac2650_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect
 				}
 			}
 
-			drawgfx_transpen(bitmap,cliprect, machine().gfx[expand],
+			m_gfxdecode->gfx(expand)->transpen(bitmap,cliprect,
 					spriteno,
 					0,
 					0,0,
@@ -201,7 +205,7 @@ void zac2650_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect
 
 UINT32 zac2650_state::screen_update_tinvader(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, Aaron Giles
 /***************************************************************************
 
     Pipe Dream
@@ -286,7 +288,7 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, pipedrm_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
 	AM_RANGE(0x8000, 0x9fff) AM_RAM
 	AM_RANGE(0xa000, 0xbfff) AM_ROMBANK("bank1")
-	AM_RANGE(0xc000, 0xcfff) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_byte_le_w) AM_SHARE("paletteram")
+	AM_RANGE(0xc000, 0xcfff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xd000, 0xffff) AM_READWRITE(fromance_videoram_r, fromance_videoram_w) AM_SHARE("videoram")
 ADDRESS_MAP_END
 
@@ -556,8 +558,8 @@ static const gfx_layout splayout =
 
 
 static GFXDECODE_START( pipedrm )
-	GFXDECODE_ENTRY( "gfx1", 0, bglayout,    0, 64 )
-	GFXDECODE_ENTRY( "gfx2", 0, bglayout,    0, 64 )
+	GFXDECODE_ENTRY( "gfx1", 0, bglayout,    0, 128 )
+	GFXDECODE_ENTRY( "gfx2", 0, bglayout,    0, 128 )
 	GFXDECODE_ENTRY( "gfx3", 0, splayout, 1024, 32 )
 GFXDECODE_END
 
@@ -580,16 +582,6 @@ WRITE_LINE_MEMBER(pipedrm_state::irqhandler)
 	m_subcpu->set_input_line(0, state ? ASSERT_LINE : CLEAR_LINE);
 }
 
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT | AY8910_SINGLE_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL
-};
-
-
-
 /*************************************
  *
  *  Machine driver
@@ -610,7 +602,7 @@ MACHINE_START_MEMBER(pipedrm_state,pipedrm)
 	save_item(NAME(m_pending_command));
 	save_item(NAME(m_sound_command));
 
-	/* video-related elements are saved in VIDEO_START */
+	/* video-related elements are saved in video_start */
 }
 
 MACHINE_RESET_MEMBER(pipedrm_state,pipedrm)
@@ -659,14 +651,18 @@ static MACHINE_CONFIG_START( pipedrm, pipedrm_state )
 	MCFG_SCREEN_SIZE(44*8, 30*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 44*8-1, 0*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pipedrm_state, screen_update_pipedrm)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(pipedrm)
-	MCFG_PALETTE_LENGTH(2048)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pipedrm)
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	MCFG_DEVICE_ADD("vsystem_spr_old", VSYSTEM_SPR2, 0)
 	MCFG_VSYSTEM_SPR2_SET_GFXREGION(2)
 	MCFG_VSYSTEM_SPR2_SET_OFFSETS(-13, -6)
 	MCFG_VSYSTEM_SPR2_SET_PRITYPE(3)
+	MCFG_VSYSTEM_SPR2_GFXDECODE("gfxdecode")
+	MCFG_VSYSTEM_SPR2_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(pipedrm_state,pipedrm)
 
@@ -703,9 +699,11 @@ static MACHINE_CONFIG_START( hatris, pipedrm_state )
 	MCFG_SCREEN_SIZE(44*8, 30*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 44*8-1, 0*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pipedrm_state, screen_update_fromance)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(hatris)
-	MCFG_PALETTE_LENGTH(2048)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", hatris)
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
 
 	MCFG_VIDEO_START_OVERRIDE(pipedrm_state,hatris)
 
@@ -714,7 +712,6 @@ static MACHINE_CONFIG_START( hatris, pipedrm_state )
 
 	MCFG_SOUND_ADD("ymsnd", YM2608, 8000000)
 	MCFG_YM2608_IRQ_HANDLER(WRITELINE(pipedrm_state, irqhandler))
-	MCFG_YM2608_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(0, "mono", 0.50)
 	MCFG_SOUND_ROUTE(1, "mono", 1.0)
 	MCFG_SOUND_ROUTE(2, "mono", 1.0)
@@ -832,6 +829,41 @@ ROM_START( pipedrmj )
 ROM_END
 
 
+ROM_START( pipedrmt )
+	ROM_REGION( 0x20000, "maincpu", 0 )
+	ROM_LOAD( "t1.u129", 0x00000, 0x08000, CRC(335401a4) SHA1(1839bfbecd1b5198c93fd6ea182cd3b1b9c3ba6a) )
+	ROM_LOAD( "t2.u110", 0x10000, 0x10000, CRC(c8209b67) SHA1(cca7356d75e8091b07e3328aef523ff452abbcd8) )
+
+	ROM_REGION( 0x20000, "sub", 0 )
+	ROM_LOAD( "u4.u86", 0x00000, 0x08000, CRC(497fad4c) SHA1(f151543a0c4a1d6d5d2de5e1dc12fd59dabcf1a8) )
+	ROM_LOAD( "u3.u99", 0x10000, 0x10000, CRC(4800322a) SHA1(a616c497ac18351b68b8307050a2a62c717a7873) )
+
+	ROM_REGION( 0x100000, "gfx1", 0 )
+	ROM_LOAD( "s73", 0x000000, 0x80000, CRC(63f4e10c) SHA1(ba935490578887080d8b16508fa6191236a8fea6) )
+	ROM_LOAD( "s72", 0x080000, 0x80000, CRC(4e669e97) SHA1(1de8a8cd8f8f69fa86b8fe2c73c6997e7a89c706) )
+
+	ROM_REGION( 0x100000, "gfx2", 0 )
+	ROM_LOAD( "s71",  0x000000, 0x80000, CRC(431485ee) SHA1(70a2ba5338598db9fcd9ef2be46e5cc2fd9510ee) )
+	ROM_COPY( "gfx1", 0x080000, 0x080000, 0x80000 )
+
+	ROM_REGION( 0x080000, "gfx3", 0 )
+	ROM_LOAD16_BYTE( "a30.u12", 0x00000, 0x40000, CRC(50bc5e98) SHA1(b351af780d04e67a560935a9eeaedf597ac5bb1f) )
+	ROM_LOAD16_BYTE( "a29.u2",  0x00001, 0x40000, CRC(a240a448) SHA1(d64169258e91eb09e8685bcdd96b16bf56e82ef1) )
+
+	ROM_REGION( 0x80000, "ymsnd", 0 )
+	ROM_LOAD( "g71.u118", 0x00000, 0x80000, CRC(488e2fd1) SHA1(8ef8ceb2bd36a245138802f51babf62f17c30942) )
+
+	ROM_REGION( 0x80000, "ymsnd.deltat", 0 )
+	ROM_LOAD( "g72.u83", 0x00000, 0x80000, CRC(dc3d14be) SHA1(4220f3fd13487dd861ac84b1b0d3e92125b3cc19) )
+
+	ROM_REGION( 0x0800, "plds", 0 )
+	ROM_LOAD( "palce16v8h.114", 0x0000, 0x0117, CRC(1f3a3816) SHA1(2b4d84ab98036b8861961f610b1b1ec23a653ef7) ) /* Stamped 1023 */
+	ROM_LOAD( "gal16v8a.115",   0x0200, 0x0117, CRC(2b32e239) SHA1(a3b9e45a1ce15ea4cc5754b2bf89cbaa416e814a) ) /* Stamped 1015 */
+	ROM_LOAD( "gal16v8a.116",   0x0400, 0x0117, CRC(3674f043) SHA1(06c88f65877a6575149bdd4f7cea64cd310227bd) ) /* Stamped 1014 */
+	ROM_LOAD( "gal16v8a.127",   0x0600, 0x0117, CRC(7115d95c) SHA1(23044039373b5a2face63d72c3fc6bf7f0c8a475) ) /* Stamped 1016 */
+ROM_END
+
+
 ROM_START( hatris )
 	ROM_REGION( 0x10000, "maincpu", 0 )
 	ROM_LOAD( "2.ic79", 0x00000, 0x08000, CRC(4ab50b54) SHA1(0eaab164a88c127bdf05c72f36d95be7fa3bb7de) )
@@ -885,8 +917,9 @@ ROM_END
 
 DRIVER_INIT_MEMBER(pipedrm_state,pipedrm)
 {
+	const memory_share *share = memshare("palette");
 	/* sprite RAM lives at the end of palette RAM */
-	m_spriteram.set_target(&m_generic_paletteram_8[0xc00], 0x400);
+	m_spriteram.set_target((UINT8*)share->ptr() + 0xc00, 0x400);
 	m_maincpu->space(AS_PROGRAM).install_ram(0xcc00, 0xcfff, m_spriteram);
 }
 
@@ -908,5 +941,6 @@ DRIVER_INIT_MEMBER(pipedrm_state,hatris)
 GAME( 1990, pipedrm,  0,       pipedrm, pipedrm, pipedrm_state, pipedrm, ROT0, "Video System Co.", "Pipe Dream (World)", GAME_SUPPORTS_SAVE )
 GAME( 1990, pipedrmu, pipedrm, pipedrm, pipedrm, pipedrm_state, pipedrm, ROT0, "Video System Co.", "Pipe Dream (US)", GAME_SUPPORTS_SAVE )
 GAME( 1990, pipedrmj, pipedrm, pipedrm, pipedrm, pipedrm_state, pipedrm, ROT0, "Video System Co.", "Pipe Dream (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1990, pipedrmt, pipedrm, pipedrm, pipedrm, pipedrm_state, pipedrm, ROT0, "Video System Co.", "Pipe Dream (Taiwan)", GAME_SUPPORTS_SAVE )
 GAME( 1990, hatris,   0,       hatris,  hatris, pipedrm_state,  hatris,  ROT0, "Video System Co.", "Hatris (US)", GAME_SUPPORTS_SAVE )
 GAME( 1990, hatrisj,  hatris,  hatris,  hatris, pipedrm_state,  hatris,  ROT0, "Video System Co.", "Hatris (Japan)", GAME_SUPPORTS_SAVE )

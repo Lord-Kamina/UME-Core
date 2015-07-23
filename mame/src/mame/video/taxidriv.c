@@ -1,15 +1,17 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #include "emu.h"
 #include "includes/taxidriv.h"
 
 
-WRITE8_MEMBER(taxidriv_state::taxidriv_spritectrl_w)
+WRITE8_MEMBER(taxidriv_state::spritectrl_w)
 {
 	m_spritectrl[offset] = data;
 }
 
 
 
-UINT32 taxidriv_state::screen_update_taxidriv(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 taxidriv_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int offs;
 	int sx,sy;
@@ -31,7 +33,7 @@ UINT32 taxidriv_state::screen_update_taxidriv(screen_device &screen, bitmap_ind1
 			sx = offs % 32;
 			sy = offs / 32;
 
-			drawgfx_opaque(bitmap,cliprect,machine().gfx[3],
+			m_gfxdecode->gfx(3)->opaque(bitmap,cliprect,
 					m_vram3[offs],
 					0,
 					0,0,
@@ -43,7 +45,7 @@ UINT32 taxidriv_state::screen_update_taxidriv(screen_device &screen, bitmap_ind1
 			sx = offs % 32;
 			sy = offs / 32;
 
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+			m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 					m_vram2[offs]+256*m_vram2[offs+0x400],
 					0,
 					0,0,
@@ -109,7 +111,7 @@ UINT32 taxidriv_state::screen_update_taxidriv(screen_device &screen, bitmap_ind1
 			sx = offs % 32;
 			sy = offs / 32;
 
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					m_vram1[offs],
 					0,
 					0,0,
@@ -136,7 +138,7 @@ UINT32 taxidriv_state::screen_update_taxidriv(screen_device &screen, bitmap_ind1
 		sx = offs % 32;
 		sy = offs / 32;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				m_vram0[offs],
 				0,
 				0,0,

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli
 /********************************************************************
 
 Pasha Pasha 2
@@ -73,7 +75,7 @@ Notes:
 
 #include "emu.h"
 #include "cpu/e132xs/e132xs.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "sound/okim6295.h"
 
 class pasha2_state : public driver_device
@@ -85,7 +87,8 @@ public:
 		m_paletteram(*this, "paletteram"),
 		m_maincpu(*this, "maincpu"),
 		m_oki1(*this, "oki1"),
-		m_oki2(*this, "oki2") { }
+		m_oki2(*this, "oki2"),
+		m_palette(*this, "palette")  { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_wram;
@@ -116,6 +119,7 @@ public:
 	required_device<cpu_device> m_maincpu;
 	required_device<okim6295_device> m_oki1;
 	required_device<okim6295_device> m_oki2;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -155,10 +159,10 @@ WRITE16_MEMBER(pasha2_state::pasha2_palette_w)
 	offset &= 0xff;
 
 	color = (m_paletteram[offset] >> 8) | (m_paletteram[offset + 0x100] & 0xff00);
-	palette_set_color_rgb(machine(), offset * 2 + 0, pal5bit(color), pal5bit(color >> 5), pal5bit(color >> 10));
+	m_palette->set_pen_color(offset * 2 + 0, pal5bit(color), pal5bit(color >> 5), pal5bit(color >> 10));
 
 	color = (m_paletteram[offset] & 0xff) | ((m_paletteram[offset + 0x100] & 0xff) << 8);
-	palette_set_color_rgb(machine(), offset * 2 + 1, pal5bit(color), pal5bit(color >> 5), pal5bit(color >> 10));
+	m_palette->set_pen_color(offset * 2 + 1, pal5bit(color), pal5bit(color >> 5), pal5bit(color >> 10));
 }
 
 WRITE16_MEMBER(pasha2_state::vbuffer_set_w)
@@ -419,7 +423,7 @@ static MACHINE_CONFIG_START( pasha2, pasha2_state )
 	MCFG_CPU_IO_MAP(pasha2_io)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pasha2_state,  irq0_line_hold)
 
-	MCFG_EEPROM_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -428,8 +432,9 @@ static MACHINE_CONFIG_START( pasha2, pasha2_state )
 	MCFG_SCREEN_SIZE(512, 512)
 	MCFG_SCREEN_VISIBLE_AREA(0, 383, 0, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(pasha2_state, screen_update_pasha2)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x200)
+	MCFG_PALETTE_ADD("palette", 0x200)
 
 
 	/* sound hardware */

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:James Wallace
 /**********************************************************************
 
     Bellfruit 7x5 Dot matrix VFD module interface and emulation by J.Wallace
@@ -82,7 +84,7 @@ static const UINT16 BDAcharset[]=
 };
 
 bfm_bda_t::bfm_bda_t(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, BFM_BDA, "BFM BDA VFD controller", tag, owner, clock),
+	: device_t(mconfig, BFM_BDA, "BFM BDA VFD controller", tag, owner, clock, "bfm_bda", __FILE__),
 	m_port_val(0)
 {
 }

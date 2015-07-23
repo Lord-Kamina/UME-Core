@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Intel 8214 Priority Interrupt Controller emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -42,11 +41,11 @@ inline void i8214_device::trigger_interrupt(int level)
 	m_int_dis = 1;
 
 	// disable next level group
-	m_out_enlg_func(0);
+	m_write_enlg(0);
 
 	// toggle interrupt line
-	m_out_int_func(ASSERT_LINE);
-	m_out_int_func(CLEAR_LINE);
+	m_write_irq(ASSERT_LINE);
+	m_write_irq(CLEAR_LINE);
 }
 
 
@@ -89,31 +88,11 @@ inline void i8214_device::check_interrupt()
 //  i8214_device - constructor
 //-------------------------------------------------
 
-i8214_device::i8214_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, I8214, "I8214", tag, owner, clock)
+i8214_device::i8214_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
+	device_t(mconfig, I8214, "I8214", tag, owner, clock, "i8214", __FILE__),
+	m_write_irq(*this),
+	m_write_enlg(*this)
 {
-}
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void i8214_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const i8214_interface *intf = reinterpret_cast<const i8214_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<i8214_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_out_int_cb, 0, sizeof(m_out_int_cb));
-		memset(&m_out_enlg_cb, 0, sizeof(m_out_enlg_cb));
-	}
 }
 
 
@@ -124,8 +103,8 @@ void i8214_device::device_config_complete()
 void i8214_device::device_start()
 {
 	// resolve callbacks
-	m_out_int_func.resolve(m_out_int_cb, *this);
-	m_out_enlg_func.resolve(m_out_enlg_cb, *this);
+	m_write_irq.resolve_safe();
+	m_write_enlg.resolve_safe();
 
 	m_int_dis = 0;
 
@@ -168,7 +147,7 @@ void i8214_device::b_w(UINT8 data)
 	m_int_dis = 0;
 
 	// enable next level group
-	m_out_enlg_func(1);
+	m_write_enlg(1);
 
 	check_interrupt();
 }

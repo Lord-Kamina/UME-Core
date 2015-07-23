@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /****************************************************************************************
 
 Super Wing - (c) 1985 Wing (UPL?)
@@ -9,9 +11,18 @@ Hardware a bit (interrupts, sound) similar to mouser as well
 
 TODO:
 - unused rom 6.8s (located on the pcb near the gfx rom 7.8p, but contains
-  data (similar to the one in roms 4.5p and 5.5r).
-  There are two possibilities: its bad dump of gfx rom (two extra bit layers
-  of current gfx) or it's banked at 0x4000 - 0x7fff area.
+  data (similar to the one in roms 4.5p and 5.5r)
+
+  The game currently crashes after the bonus round rather than moving on to
+  the next level, it writes 01 to 0xa187 which is probably ROM bank, however
+  banking the ROM in there results in the game crashing anyway, and looking
+  at the data I wonder if it is corrupt, there are odd patterns in FF fill
+  areas.
+
+  (to access the bonus round take out the targets on the middle-left then hit
+   the ball into one of the portals at the top left)
+
+
 - dump color prom
 - some unknown DSW and inputs
 - hopper
@@ -37,7 +48,9 @@ public:
 		m_videoram_bg(*this, "videorabg"),
 		m_videoram_fg(*this, "videorafg"),
 		m_colorram_bg(*this, "colorrabg"),
-		m_colorram_fg(*this, "colorrafg")
+		m_colorram_fg(*this, "colorrafg"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")
 	{ }
 
 	required_device<cpu_device> m_maincpu;
@@ -46,6 +59,8 @@ public:
 	required_shared_ptr<UINT8> m_videoram_fg;
 	required_shared_ptr<UINT8> m_colorram_bg;
 	required_shared_ptr<UINT8> m_colorram_fg;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	UINT8 m_tile_bank;
 	UINT8 m_sound_byte;
@@ -67,16 +82,29 @@ public:
 	DECLARE_WRITE8_MEMBER(superwng_cointcnt2_w);
 	DECLARE_WRITE8_MEMBER(superwng_hopper_w);
 	DECLARE_READ8_MEMBER(superwng_sound_byte_r);
+	DECLARE_WRITE8_MEMBER(superwng_unk_a187_w);
+	DECLARE_WRITE8_MEMBER(superwng_unk_a185_w);
+
 	TILE_GET_INFO_MEMBER(get_bg_tile_info);
 	TILE_GET_INFO_MEMBER(get_fg_tile_info);
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(superwng);
 	UINT32 screen_update_superwng(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(superwng_nmi_interrupt);
 	INTERRUPT_GEN_MEMBER(superwng_sound_nmi_assert);
 };
+
+WRITE8_MEMBER(superwng_state::superwng_unk_a187_w)
+{
+	membank("bank1")->set_entry(data&1);
+}
+
+WRITE8_MEMBER(superwng_state::superwng_unk_a185_w)
+{
+//  printf("superwng_unk_a185_w %02x\n", data);
+}
 
 TILE_GET_INFO_MEMBER(superwng_state::get_bg_tile_info)
 {
@@ -109,26 +137,26 @@ TILE_GET_INFO_MEMBER(superwng_state::get_fg_tile_info)
 
 void superwng_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(superwng_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(superwng_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(superwng_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(superwng_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_bg_tilemap->set_scrollx(0, 64);
 }
 
 UINT32 superwng_state::screen_update_superwng(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	rectangle tmp = cliprect;
 
 	if (flip_screen())
 	{
 		tmp.min_x += 32;
-		m_fg_tilemap->draw(bitmap, tmp, 0, 0);
+		m_fg_tilemap->draw(screen, bitmap, tmp, 0, 0);
 	}
 	else
 	{
 		tmp.max_x -= 32;
-		m_fg_tilemap->draw(bitmap, tmp, 0, 0);
+		m_fg_tilemap->draw(screen, bitmap, tmp, 0, 0);
 	}
 
 	//sprites
@@ -153,7 +181,7 @@ UINT32 superwng_state::screen_update_superwng(screen_device &screen, bitmap_ind1
 		int sy = m_colorram_bg[i];
 		int color = m_colorram_bg[i + 1] & 0xf;
 
-		drawgfx_transpen(bitmap, cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 						code,
 						color,
 						flip, flip,
@@ -172,12 +200,12 @@ static const UINT8 superwng_colors[]= /* temporary */
 	0x00, 0xc0, 0x07, 0x3f, 0x00, 0x1f, 0x3f, 0xff, 0x00, 0x86, 0x05, 0xff, 0x00, 0xc0, 0xe8, 0xff
 };
 
-void superwng_state::palette_init()
+PALETTE_INIT_MEMBER(superwng_state, superwng)
 {
 	int i;
 	const UINT8 * ptr=superwng_colors;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int bit0, bit1, bit2, r, g, b;
 
@@ -195,7 +223,7 @@ void superwng_state::palette_init()
 		bit1 = BIT(*ptr, 7);
 		b = 0x4f * bit0 + 0xa8 * bit1;
 
-		palette_set_color(machine(),i,MAKE_RGB(r,g,b));
+		palette.set_pen_color(i,rgb_t(r,g,b));
 		++ptr;
 	}
 }
@@ -287,7 +315,8 @@ WRITE8_MEMBER(superwng_state::superwng_hopper_w)
 }
 
 static ADDRESS_MAP_START( superwng_map, AS_PROGRAM, 8, superwng_state )
-	AM_RANGE(0x0000, 0x6fff) AM_ROM AM_WRITENOP
+	AM_RANGE(0x0000, 0x3fff) AM_ROM
+	AM_RANGE(0x4000, 0x6fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x7000, 0x7fff) AM_RAM
 	AM_RANGE(0x8000, 0x83ff) AM_RAM_WRITE(superwng_bg_vram_w) AM_SHARE("videorabg")
 	AM_RANGE(0x8400, 0x87ff) AM_RAM_WRITE(superwng_fg_vram_w) AM_SHARE("videorafg")
@@ -305,9 +334,9 @@ static ADDRESS_MAP_START( superwng_map, AS_PROGRAM, 8, superwng_state )
 	AM_RANGE(0xa182, 0xa182) AM_WRITE(superwng_tilebank_w)
 	AM_RANGE(0xa183, 0xa183) AM_WRITE(superwng_flip_screen_w)
 	AM_RANGE(0xa184, 0xa184) AM_WRITE(superwng_cointcnt1_w)
-	AM_RANGE(0xa185, 0xa185) AM_WRITENOP // unknown, always(?) 0
+	AM_RANGE(0xa185, 0xa185) AM_WRITE(superwng_unk_a185_w)  // unknown, always(?) 0
 	AM_RANGE(0xa186, 0xa186) AM_WRITE(superwng_cointcnt2_w)
-	AM_RANGE(0xa187, 0xa187) AM_WRITENOP // unknown, always(?) 0
+	AM_RANGE(0xa187, 0xa187) AM_WRITE(superwng_unk_a187_w) // unknown, always(?) 0
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( superwng_sound_map, AS_PROGRAM, 8, superwng_state )
@@ -429,6 +458,7 @@ void superwng_state::machine_start()
 	save_item(NAME(m_tile_bank));
 	save_item(NAME(m_sound_byte));
 	save_item(NAME(m_nmi_enable));
+	membank("bank1")->configure_entries(0, 2, memregion("maincpu")->base()+0x4000, 0x4000);
 }
 
 void superwng_state::machine_reset()
@@ -436,26 +466,6 @@ void superwng_state::machine_reset()
 	m_sound_byte = 0;
 	m_nmi_enable = 0;
 }
-
-static const ay8910_interface ay8910_config_1 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(superwng_state,superwng_sound_byte_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static const ay8910_interface ay8910_config_2 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
 
 static MACHINE_CONFIG_START( superwng, superwng_state )
 
@@ -475,20 +485,21 @@ static MACHINE_CONFIG_START( superwng, superwng_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500))
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
-
-	MCFG_GFXDECODE(superwng)
-
-	MCFG_PALETTE_LENGTH(0x40)
 	MCFG_SCREEN_UPDATE_DRIVER(superwng_state, screen_update_superwng)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", superwng)
+
+	MCFG_PALETTE_ADD("palette", 0x40)
+	MCFG_PALETTE_INIT_OWNER(superwng_state, superwng)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ay1", AY8910, MASTER_CLOCK/12)
-	MCFG_SOUND_CONFIG(ay8910_config_1)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(superwng_state, superwng_sound_byte_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
 	MCFG_SOUND_ADD("ay2", AY8910, MASTER_CLOCK/12)
-	MCFG_SOUND_CONFIG(ay8910_config_2)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 
@@ -498,8 +509,7 @@ ROM_START( superwng )
 	ROM_LOAD( "3.5m",         0x2000, 0x2000, CRC(3b08bd19) SHA1(2020e2835df86a6a279bbf9d013a489f0e32a4bd) )
 	ROM_LOAD( "4.5p",         0x4000, 0x2000, CRC(6a49746d) SHA1(f5cd5eb77f60972a3897243f9ee3d61aac0878fc) )
 	ROM_LOAD( "5.5r",         0x6000, 0x2000, CRC(ebd23487) SHA1(16e8faf989aa80dbf9934450ec4ba642a6f88c63) )
-
-	ROM_LOAD( "6.8s",        0x10000, 0x4000, CRC(774433e0) SHA1(82b10d797581c14914bcce320f2aa5d3fb1fba33) ) /* unknown */
+	ROM_LOAD( "6.8s",         0x8000, 0x4000, BAD_DUMP CRC(774433e0) SHA1(82b10d797581c14914bcce320f2aa5d3fb1fba33) ) // banked but probably bad, bits at 0xxx39 offsets appear to be missing / corrupt.
 
 	ROM_REGION( 0x10000, "audiocpu", 0 )
 	ROM_LOAD( "1.1a",         0x0000, 0x2000, CRC(a70aa39e) SHA1(b03de65d7bd020eb77495997128dce5ccbdbefac) )
@@ -512,4 +522,4 @@ ROM_START( superwng )
 ROM_END
 
 
-GAME( 1985, superwng,   0,      superwng, superwng, driver_device, 0, ROT90, "Wing", "Super Wing", GAME_WRONG_COLORS | GAME_SUPPORTS_SAVE )
+GAME( 1985, superwng,   0,      superwng, superwng, driver_device, 0, ROT90, "Wing", "Super Wing", GAME_NOT_WORKING | GAME_WRONG_COLORS | GAME_SUPPORTS_SAVE ) // crashes after bonus stage, see notes, bad rom?

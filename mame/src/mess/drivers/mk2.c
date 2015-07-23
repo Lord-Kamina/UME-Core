@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner
 /******************************************************************************
  PeT mess@utanet.at September 2000
 
@@ -49,7 +51,7 @@ Usage:
 
 #include "emu.h"
 #include "machine/mos6530.h"
-#include "cpu/m6502/m6502.h"
+#include "cpu/m6502/m6504.h"
 #include "sound/speaker.h"
 #include "mk2.lh"
 
@@ -79,9 +81,8 @@ public:
 
 // only lower 12 address bits on bus!
 static ADDRESS_MAP_START(mk2_mem , AS_PROGRAM, 8, mk2_state)
-	ADDRESS_MAP_GLOBAL_MASK(0x1FFF) // m6504
 	AM_RANGE( 0x0000, 0x01ff) AM_RAM // 2 2111, should be mirrored
-	AM_RANGE( 0x0b00, 0x0b0f) AM_DEVREADWRITE_LEGACY("miot", mos6530_r, mos6530_w)
+	AM_RANGE( 0x0b00, 0x0b0f) AM_DEVREADWRITE("miot", mos6530_device, read, write)
 	AM_RANGE( 0x0b80, 0x0bbf) AM_RAM // rriot ram
 	AM_RANGE( 0x0c00, 0x0fff) AM_ROM // rriot rom
 	AM_RANGE( 0x1000, 0x1fff) AM_ROM
@@ -137,7 +138,7 @@ READ8_MEMBER( mk2_state::mk2_read_a )
 	int data=0xff;
 	int help=ioport("BLACK")->read() | ioport("WHITE")->read(); // looks like white and black keys are the same!
 
-	switch (mos6530_portb_out_get(m_miot)&0x7)
+	switch (m_miot->portb_out_get()&0x7)
 	{
 	case 4:
 		if (BIT(help, 5)) data&=~0x1; //F
@@ -159,7 +160,7 @@ READ8_MEMBER( mk2_state::mk2_read_a )
 
 WRITE8_MEMBER( mk2_state::mk2_write_a )
 {
-	UINT8 temp = mos6530_portb_out_get(m_miot);
+	UINT8 temp = m_miot->portb_out_get();
 
 	m_led[temp & 3] |= data;
 }
@@ -181,26 +182,21 @@ WRITE8_MEMBER( mk2_state::mk2_write_b )
 	m_maincpu->set_input_line(M6502_IRQ_LINE, (data & 0x80) ? CLEAR_LINE : ASSERT_LINE );
 }
 
-static MOS6530_INTERFACE( mk2_mos6530_interface )
-{
-	DEVCB_DRIVER_MEMBER(mk2_state, mk2_read_a),
-	DEVCB_DRIVER_MEMBER(mk2_state, mk2_write_a),
-	DEVCB_DRIVER_MEMBER(mk2_state, mk2_read_b),
-	DEVCB_DRIVER_MEMBER(mk2_state, mk2_write_b)
-};
-
 
 static MACHINE_CONFIG_START( mk2, mk2_state )
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M6502, 1000000)        /* 6504 */
+	MCFG_CPU_ADD("maincpu", M6504, 1000000)
 	MCFG_CPU_PROGRAM_MAP(mk2_mem)
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
-
 
 	/* video hardware */
 	MCFG_DEFAULT_LAYOUT(layout_mk2)
 
-	MCFG_MOS6530_ADD( "miot", 1000000, mk2_mos6530_interface )
+	MCFG_DEVICE_ADD("miot", MOS6530, 1000000)
+	MCFG_MOS6530_IN_PA_CB(READ8(mk2_state, mk2_read_a))
+	MCFG_MOS6530_OUT_PA_CB(WRITE8(mk2_state, mk2_write_a))
+	MCFG_MOS6530_IN_PB_CB(READ8(mk2_state, mk2_read_b))
+	MCFG_MOS6530_OUT_PB_CB(WRITE8(mk2_state, mk2_write_b))
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -224,6 +220,6 @@ ROM_END
 ***************************************************************************/
 
 
-/*    YEAR  NAME    PARENT  COMPAT  MACHINE INPUT   INIT    COMPANY               FULLNAME */
+/*    YEAR  NAME    PARENT  COMPAT  MACHINE INPUT  CLASS            INIT    COMPANY               FULLNAME */
 CONS( 1979, ccmk2,    0,      0,      mk2,    mk2, driver_device,    0, "Quelle International", "Chess Champion MK II", 0)
 // second design sold (same computer/program?)

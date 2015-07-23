@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     OKI MSM5832 Real Time Clock/Calendar emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -89,7 +88,7 @@ inline void msm5832_device::write_counter(int counter, int value)
 //-------------------------------------------------
 
 msm5832_device::msm5832_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MSM5832, "MSM5832", tag, owner, clock),
+	: device_t(mconfig, MSM5832, "MSM5832", tag, owner, clock, "msm5832", __FILE__),
 		device_rtc_interface(mconfig, *this),
 		m_hold(0),
 		m_address(0),
@@ -159,7 +158,7 @@ void msm5832_device::rtc_clock_updated(int year, int month, int day, int day_of_
 	write_counter(REGISTER_Y1, year);
 	write_counter(REGISTER_MO1, month);
 	write_counter(REGISTER_D1, day);
-	m_reg[REGISTER_W] = day_of_week;
+	m_reg[REGISTER_W] = day_of_week-1;
 	write_counter(REGISTER_H1, hour);
 	write_counter(REGISTER_MI1, minute);
 	write_counter(REGISTER_S1, second);
@@ -180,13 +179,14 @@ READ8_MEMBER( msm5832_device::data_r )
 		{
 			// TODO reference output
 		}
-		else if(m_address == 0x0d || m_address == 0x0e)  // Otrona Attache CP/M BIOS checks these unused registers to detect it
+		else if (m_address <= REGISTER_Y10)
 		{
-			data = 0x0f;
+			data = m_reg[m_address];
 		}
 		else
 		{
-			data = m_reg[m_address];
+			// Otrona Attache CP/M BIOS checks unused registers to detect it
+			data = 0x0f;
 		}
 	}
 
@@ -206,10 +206,17 @@ WRITE8_MEMBER( msm5832_device::data_w )
 
 	if (m_cs && m_write)
 	{
-		m_reg[m_address] = data & 0x0f;
+		if (m_address == REGISTER_REF)
+		{
+			// TODO reference output
+		}
+		else if (m_address <= REGISTER_Y10)
+		{
+			m_reg[m_address] = data & 0x0f;
 
-		set_time(false, read_counter(REGISTER_Y1), read_counter(REGISTER_MO1), read_counter(REGISTER_D1), m_reg[REGISTER_W],
-			read_counter(REGISTER_H1), read_counter(REGISTER_MI1), read_counter(REGISTER_S1));
+			set_time(false, read_counter(REGISTER_Y1), read_counter(REGISTER_MO1), read_counter(REGISTER_D1), m_reg[REGISTER_W],
+				read_counter(REGISTER_H1), read_counter(REGISTER_MI1), read_counter(REGISTER_S1));
+		}
 	}
 }
 

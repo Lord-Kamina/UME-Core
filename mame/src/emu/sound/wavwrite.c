@@ -1,4 +1,6 @@
-#include "osdcore.h"
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
+#include "emu.h"
 #include "sound/wavwrite.h"
 
 struct wav_file
@@ -16,7 +18,7 @@ wav_file *wav_open(const char *filename, int sample_rate, int channels)
 	UINT16 align, temp16;
 
 	/* allocate memory for the wav struct */
-	wav = (wav_file *) osd_malloc(sizeof(wav_file));
+	wav = (wav_file *) global_alloc(wav_file);
 	if (!wav)
 		return NULL;
 
@@ -24,7 +26,7 @@ wav_file *wav_open(const char *filename, int sample_rate, int channels)
 	wav->file = fopen(filename, "wb");
 	if (!wav->file)
 	{
-		osd_free(wav);
+		global_free(wav);
 		return NULL;
 	}
 
@@ -106,7 +108,7 @@ void wav_close(wav_file *wav)
 	fwrite(&temp32, 1, 4, wav->file);
 
 	fclose(wav->file);
-	osd_free(wav);
+	global_free(wav);
 }
 
 
@@ -122,15 +124,13 @@ void wav_add_data_16(wav_file *wav, INT16 *data, int samples)
 
 void wav_add_data_32(wav_file *wav, INT32 *data, int samples, int shift)
 {
-	INT16 *temp;
+	std::vector<INT16> temp;
 	int i;
 
-	if (!wav) return;
+	if (!wav || !samples) return;
 
-	/* allocate temp memory */
-	temp = (INT16 *)osd_malloc_array(samples * sizeof(temp[0]));
-	if (!temp)
-		return;
+	/* resize dynamic array */
+	temp.resize(samples);
 
 	/* clamp */
 	for (i = 0; i < samples; i++)
@@ -140,50 +140,40 @@ void wav_add_data_32(wav_file *wav, INT32 *data, int samples, int shift)
 	}
 
 	/* write and flush */
-	fwrite(temp, 2, samples, wav->file);
+	fwrite(&temp[0], 2, samples, wav->file);
 	fflush(wav->file);
-
-	/* free memory */
-	osd_free(temp);
 }
 
 
 void wav_add_data_16lr(wav_file *wav, INT16 *left, INT16 *right, int samples)
 {
-	INT16 *temp;
+	std::vector<INT16> temp;
 	int i;
 
-	if (!wav) return;
+	if (!wav || !samples) return;
 
-	/* allocate temp memory */
-	temp = (INT16 *)osd_malloc_array(samples * 2 * sizeof(temp[0]));
-	if (!temp)
-		return;
+	/* resize dynamic array */
+	temp.resize(samples * 2);
 
 	/* interleave */
 	for (i = 0; i < samples * 2; i++)
 		temp[i] = (i & 1) ? right[i / 2] : left[i / 2];
 
 	/* write and flush */
-	fwrite(temp, 4, samples, wav->file);
+	fwrite(&temp[0], 4, samples, wav->file);
 	fflush(wav->file);
-
-	/* free memory */
-	osd_free(temp);
 }
 
 
 void wav_add_data_32lr(wav_file *wav, INT32 *left, INT32 *right, int samples, int shift)
 {
-	INT16 *temp;
+	std::vector<INT16> temp;
 	int i;
 
-	if (!wav) return;
+	if (!wav || !samples) return;
 
-	/* allocate temp memory */
-	temp = (INT16 *)osd_malloc_array(samples * 2 * sizeof(temp[0]));
-	if (!temp)
-		return;
+	/* resize dynamic array */
+	temp.resize(samples);
 
 	/* interleave */
 	for (i = 0; i < samples * 2; i++)
@@ -194,9 +184,6 @@ void wav_add_data_32lr(wav_file *wav, INT32 *left, INT32 *right, int samples, in
 	}
 
 	/* write and flush */
-	fwrite(temp, 4, samples, wav->file);
+	fwrite(&temp[0], 4, samples, wav->file);
 	fflush(wav->file);
-
-	/* free memory */
-	osd_free(temp);
 }

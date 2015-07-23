@@ -1,6 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /*************************************************************************************
 
-    Pinball
+    PINBALL
     Zaccaria Generation 1
 
     Made working in Sept 2012 [Robbbert]
@@ -44,7 +46,7 @@ public:
 	DECLARE_READ8_MEMBER(ctrl_r);
 	DECLARE_WRITE8_MEMBER(ctrl_w);
 	DECLARE_READ8_MEMBER(serial_r);
-	DECLARE_WRITE8_MEMBER(serial_w);
+	DECLARE_WRITE_LINE_MEMBER(serial_w);
 	DECLARE_READ8_MEMBER(reset_int_r);
 	DECLARE_WRITE8_MEMBER(reset_int_w);
 	TIMER_DEVICE_CALLBACK_MEMBER(zac_1_inttimer);
@@ -75,7 +77,7 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( zac_1_io, AS_IO, 8, zac_1_state )
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(S2650_CTRL_PORT, S2650_CTRL_PORT) AM_READWRITE(ctrl_r,ctrl_w)
-	AM_RANGE(S2650_SENSE_PORT, S2650_FO_PORT) AM_READWRITE(serial_r,serial_w)
+	AM_RANGE(S2650_SENSE_PORT, S2650_SENSE_PORT) AM_READ(serial_r)
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START( zac_1 )
@@ -180,7 +182,7 @@ READ8_MEMBER( zac_1_state::serial_r )
 	return 0;
 }
 
-WRITE8_MEMBER( zac_1_state::serial_w )
+WRITE_LINE_MEMBER( zac_1_state::serial_w )
 {
 // to printer
 }
@@ -217,7 +219,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(zac_1_state::zac_1_inttimer)
    182E-183F is a storage area for inputs. */
 TIMER_DEVICE_CALLBACK_MEMBER(zac_1_state::zac_1_outtimer)
 {
-	static const UINT8 patterns[16] = { 0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0, 0, 0, 0, 0, 0 };
+	static const UINT8 patterns[16] = { 0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7c, 0x07, 0x7f, 0x67, 0, 0, 0, 0, 0, 0 }; // 4511
 	m_out_offs++;
 
 	if (m_out_offs < 0x40)
@@ -242,9 +244,10 @@ TIMER_DEVICE_CALLBACK_MEMBER(zac_1_state::zac_1_outtimer)
 
 static MACHINE_CONFIG_START( zac_1, zac_1_state )
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", S2650, 6000000/2)
+	MCFG_CPU_ADD("maincpu", S2650, 6000000/2) // no xtal, just 2 chips forming a random oscillator
 	MCFG_CPU_PROGRAM_MAP(zac_1_map)
 	MCFG_CPU_IO_MAP(zac_1_io)
+	MCFG_S2650_FLAG_HANDLER(WRITELINE(zac_1_state, serial_w))
 	MCFG_NVRAM_ADD_0FILL("ram")
 
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("zac_1_inttimer", zac_1_state, zac_1_inttimer, attotime::from_hz(200))
@@ -270,7 +273,7 @@ static ADDRESS_MAP_START( locomotp_io, AS_IO, 8, zac_1_state)
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(S2650_CTRL_PORT, S2650_CTRL_PORT) AM_READWRITE(ctrl_r,ctrl_w)
 	AM_RANGE(S2650_DATA_PORT, S2650_DATA_PORT) AM_READ(reset_int_r)
-	AM_RANGE(S2650_SENSE_PORT, S2650_FO_PORT) AM_READWRITE(serial_r,serial_w)
+	AM_RANGE(S2650_SENSE_PORT, S2650_SENSE_PORT) AM_READ(serial_r)
 ADDRESS_MAP_END
 
 READ8_MEMBER( zac_1_state::reset_int_r )
@@ -318,12 +321,11 @@ ROM_END
 /*--------------------------------
 / Future World (10/78)
 /-------------------------------*/
-// Game ROMs #2 and #3 have to be swapped!
 ROM_START(futurwld)
 	ROM_REGION(0x8000, "maincpu", 0)
 	ROM_LOAD ( "futwld_1.lgc", 0x0000, 0x0400, CRC(d83b8793) SHA1(3bb04d8395191ecf324b6da0bcddcf7bd8d41867))
-	ROM_LOAD ( "futwld_3.lgc", 0x0400, 0x0400, CRC(bdcb7e1d) SHA1(e6c0c7e8188df87937f0b22dbb0639872e03e948))
-	ROM_LOAD ( "futwld_2.lgc", 0x0800, 0x0400, CRC(48e3d293) SHA1(0029f30c4a94067e7782e22499b11db86f051934))
+	ROM_LOAD ( "futwld_2.lgc", 0x0400, 0x0400, CRC(bdcb7e1d) SHA1(e6c0c7e8188df87937f0b22dbb0639872e03e948))
+	ROM_LOAD ( "futwld_3.lgc", 0x0800, 0x0400, CRC(48e3d293) SHA1(0029f30c4a94067e7782e22499b11db86f051934))
 	ROM_LOAD ( "futwld_4.lgc", 0x0c00, 0x0400, CRC(b1de2120) SHA1(970e1c4eadb7ace1398684accac289a434d13d84))
 	ROM_LOAD ( "futwld_5.lgc", 0x1000, 0x0400, CRC(6b7965f2) SHA1(31314bc63f01717004c5c2448b5db7d292145b60))
 ROM_END

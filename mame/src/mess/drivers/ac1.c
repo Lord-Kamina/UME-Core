@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         AC1 video driver by Miodrag Milanovic
@@ -126,7 +128,11 @@ static MACHINE_CONFIG_START( ac1, ac1_state )
 	MCFG_CPU_PROGRAM_MAP(ac1_mem)
 	MCFG_CPU_IO_MAP(ac1_io)
 
-	MCFG_Z80PIO_ADD( "z80pio", XTAL_8MHz / 4, ac1_z80pio_intf )
+	MCFG_DEVICE_ADD("z80pio", Z80PIO, XTAL_8MHz / 4)
+	MCFG_Z80PIO_IN_PA_CB(READ8(ac1_state, ac1_port_a_r))
+	MCFG_Z80PIO_OUT_PA_CB(WRITE8(ac1_state, ac1_port_a_w))
+	MCFG_Z80PIO_IN_PB_CB(READ8(ac1_state, ac1_port_b_r))
+	MCFG_Z80PIO_OUT_PB_CB(WRITE8(ac1_state, ac1_port_b_w))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -135,18 +141,17 @@ static MACHINE_CONFIG_START( ac1, ac1_state )
 	MCFG_SCREEN_SIZE(64*6, 16*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 64*6-1, 0, 16*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(ac1_state, screen_update_ac1)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE( ac1 )
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", ac1 )
 
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(black_and_white)
-
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_CASSETTE_ADD( "cassette", default_cassette_interface )
+	MCFG_CASSETTE_ADD( "cassette" )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ac1_32, ac1 )
@@ -166,7 +171,7 @@ ROM_START( ac1 )
 	ROM_SYSTEM_BIOS( 0, "v1", "Version 3.1 (orig)" )
 	ROMX_LOAD( "mon_v31_16.bin",  0x0000, 0x0800, CRC(1ba65e4d) SHA1(3382b8d03f31166a56aea49fd1ec1e82a7108300), ROM_BIOS(1))
 	ROM_SYSTEM_BIOS( 1, "v2", "Version 3.1 (fixed)" )
-	ROMX_LOAD( "mon_v31_16_v2.bin",  0x0000, 0x0800, CRC(8904BEB4) SHA1(db8d00a2537ac3a662e3c91e55eb2bf824a72062), ROM_BIOS(2))
+	ROMX_LOAD( "mon_v31_16_v2.bin",  0x0000, 0x0800, CRC(8904beb4) SHA1(db8d00a2537ac3a662e3c91e55eb2bf824a72062), ROM_BIOS(2))
 	// from Funkamateur 01/85
 	ROM_LOAD( "minibasic.bin",   0x0800, 0x0800, CRC(06782639) SHA1(3fd57b3ae3f538374b0d794d8aa15d06bcaaddd8))
 	ROM_REGION(0x0800, "gfx1",0)

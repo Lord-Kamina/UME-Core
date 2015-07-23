@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, Acho A. Tang, Nicola Salmoria
 /***************************************************************************
 
     POW - Prisoners Of War (US version 1)    A7008   SNK 1988
@@ -44,29 +46,18 @@ Notes:
 #include "cpu/m68000/m68000.h"
 #include "cpu/z80/z80.h"
 #include "sound/3812intf.h"
-#include "sound/upd7759.h"
 #include "includes/snk68.h"
 
 /******************************************************************************/
 
-READ16_MEMBER(snk68_state::sound_status_r)
+void snk68_state::machine_start()
 {
-	return (m_sound_status << 8);
-}
-
-WRITE8_MEMBER(snk68_state::sound_status_w)
-{
-	m_sound_status = data;
+	save_item(NAME(m_invert_controls));
 }
 
 READ16_MEMBER(snk68_state::control_1_r)
 {
 	return (ioport("P1")->read() + (ioport("P2")->read() << 8));
-}
-
-READ16_MEMBER(snk68_state::control_2_r)
-{
-	return ioport("SYSTEM")->read();
 }
 
 READ16_MEMBER(snk68_state::rotary_1_r)
@@ -118,16 +109,16 @@ static ADDRESS_MAP_START( pow_map, AS_PROGRAM, 16, snk68_state )
 	AM_RANGE(0x040000, 0x043fff) AM_RAM
 	AM_RANGE(0x080000, 0x080001) AM_READ(control_1_r)
 	AM_RANGE(0x080000, 0x080001) AM_WRITE(sound_w)
-	AM_RANGE(0x0c0000, 0x0c0001) AM_READ(control_2_r)
-	AM_RANGE(0x0c0000, 0x0c0001) AM_WRITE(pow_flipscreen16_w)   // + char bank
+	AM_RANGE(0x0c0000, 0x0c0001) AM_READ_PORT("SYSTEM")
+	AM_RANGE(0x0c0000, 0x0c0001) AM_WRITE(pow_flipscreen_w)   // + char bank
 	AM_RANGE(0x0e0000, 0x0e0001) AM_READNOP /* Watchdog or IRQ ack */
 	AM_RANGE(0x0e8000, 0x0e8001) AM_READNOP /* Watchdog or IRQ ack */
 	AM_RANGE(0x0f0000, 0x0f0001) AM_READ_PORT("DSW1")
 	AM_RANGE(0x0f0008, 0x0f0009) AM_READ_PORT("DSW2")
 //  AM_RANGE(0x0f0008, 0x0f0009) AM_WRITENOP    /* ?? */
 	AM_RANGE(0x100000, 0x100fff) AM_READWRITE(pow_fg_videoram_r, pow_fg_videoram_w) AM_MIRROR(0x1000) AM_SHARE("pow_fg_videoram")   // 8-bit
-	AM_RANGE(0x200000, 0x207fff) AM_READWRITE(pow_spriteram_r, pow_spriteram_w) AM_SHARE("spriteram")   // only partially populated
-	AM_RANGE(0x400000, 0x400fff) AM_RAM_WRITE(pow_paletteram16_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x200000, 0x207fff) AM_READWRITE(spriteram_r, spriteram_w) AM_SHARE("spriteram")   // only partially populated
+	AM_RANGE(0x400000, 0x400fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( searchar_map, AS_PROGRAM, 16, snk68_state )
@@ -136,7 +127,7 @@ static ADDRESS_MAP_START( searchar_map, AS_PROGRAM, 16, snk68_state )
 	AM_RANGE(0x080000, 0x080005) AM_READ(protcontrols_r) /* Player 1 & 2 */
 	AM_RANGE(0x080000, 0x080001) AM_WRITE(sound_w)
 	AM_RANGE(0x080006, 0x080007) AM_WRITE(protection_w) /* top byte unknown, bottom is protection in ikari3 and streetsm */
-	AM_RANGE(0x0c0000, 0x0c0001) AM_WRITE(searchar_flipscreen16_w)
+	AM_RANGE(0x0c0000, 0x0c0001) AM_WRITE(searchar_flipscreen_w)
 	AM_RANGE(0x0c0000, 0x0c0001) AM_READ(rotary_1_r) /* Player 1 rotary */
 	AM_RANGE(0x0c8000, 0x0c8001) AM_READ(rotary_2_r) /* Player 2 rotary */
 	AM_RANGE(0x0d0000, 0x0d0001) AM_READ(rotary_lsb_r) /* Extra rotary bits */
@@ -145,11 +136,11 @@ static ADDRESS_MAP_START( searchar_map, AS_PROGRAM, 16, snk68_state )
 //  AM_RANGE(0x0f0000, 0x0f0001) AM_WRITENOP    /* ?? */
 	AM_RANGE(0x0f0000, 0x0f0001) AM_READ_PORT("DSW1")
 	AM_RANGE(0x0f0008, 0x0f0009) AM_READ_PORT("DSW2")
-	AM_RANGE(0x0f8000, 0x0f8001) AM_READ(sound_status_r)
-	AM_RANGE(0x100000, 0x107fff) AM_READWRITE(pow_spriteram_r, pow_spriteram_w) AM_SHARE("spriteram")   // only partially populated
+	AM_RANGE(0x0f8000, 0x0f8001) AM_READ8(soundlatch2_byte_r, 0xff00)
+	AM_RANGE(0x100000, 0x107fff) AM_READWRITE(spriteram_r, spriteram_w) AM_SHARE("spriteram")   // only partially populated
 	AM_RANGE(0x200000, 0x200fff) AM_RAM_WRITE(searchar_fg_videoram_w) AM_MIRROR(0x1000) AM_SHARE("pow_fg_videoram") /* Mirror is used by Ikari 3 */
-	AM_RANGE(0x300000, 0x33ffff) AM_ROMBANK("bank1") /* Extra code bank */
-	AM_RANGE(0x400000, 0x400fff) AM_RAM_WRITE(pow_paletteram16_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x300000, 0x33ffff) AM_ROM AM_REGION("user1", 0) /* Extra code bank */
+	AM_RANGE(0x400000, 0x400fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 ADDRESS_MAP_END
 
 /******************************************************************************/
@@ -157,19 +148,19 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, snk68_state )
 	AM_RANGE(0x0000, 0xefff) AM_ROM
 	AM_RANGE(0xf000, 0xf7ff) AM_RAM
-	AM_RANGE(0xf800, 0xf800) AM_READ(soundlatch_byte_r) AM_WRITE(sound_status_w)
+	AM_RANGE(0xf800, 0xf800) AM_READ(soundlatch_byte_r) AM_WRITE(soundlatch2_byte_w)
 ADDRESS_MAP_END
 
 WRITE8_MEMBER(snk68_state::D7759_write_port_0_w)
 {
-	upd7759_port_w(m_upd7759, space, 0, data);
-	upd7759_start_w(m_upd7759, 0);
-	upd7759_start_w(m_upd7759, 1);
+	m_upd7759->port_w(space, 0, data);
+	m_upd7759->start_w(0);
+	m_upd7759->start_w(1);
 }
 
 WRITE8_MEMBER(snk68_state::D7759_upd_reset_w)
 {
-	upd7759_reset_w(m_upd7759, data & 0x80);
+	m_upd7759->reset_w(data & 0x80);
 }
 
 static ADDRESS_MAP_START( sound_io_map, AS_IO, 8, snk68_state )
@@ -215,46 +206,46 @@ static INPUT_PORTS_START( pow )
 
 	PORT_START("DSW1")
 	PORT_BIT( 0x00ff, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_DIPNAME( 0x0300, 0x0000, DEF_STR( Coin_B ) )
+	PORT_DIPNAME( 0x0300, 0x0000, DEF_STR( Coin_B ) )       PORT_DIPLOCATION("SW1:!8,!7")
 	PORT_DIPSETTING(      0x0000, DEF_STR( 1C_1C ) )
 	PORT_DIPSETTING(      0x0200, DEF_STR( 1C_2C ) )
 	PORT_DIPSETTING(      0x0100, DEF_STR( 1C_3C ) )
 	PORT_DIPSETTING(      0x0300, DEF_STR( 1C_4C ) )
-	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Coin_A ) )
+	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Coin_A ) )       PORT_DIPLOCATION("SW1:!6,!5")
 	PORT_DIPSETTING(      0x0c00, DEF_STR( 4C_1C ) )
 	PORT_DIPSETTING(      0x0400, DEF_STR( 3C_1C ) )
 	PORT_DIPSETTING(      0x0800, DEF_STR( 2C_1C ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( 1C_1C ) )
-	PORT_DIPNAME( 0x1000, 0x1000, DEF_STR( Lives ) )
+	PORT_DIPNAME( 0x1000, 0x1000, DEF_STR( Lives ) )        PORT_DIPLOCATION("SW1:!4")
 	PORT_DIPSETTING(      0x0000, "2" )
 	PORT_DIPSETTING(      0x1000, "3" )
-	PORT_DIPNAME( 0x2000, 0x0000, "Bonus Occurrence" )
+	PORT_DIPNAME( 0x2000, 0x0000, "Bonus Occurrence" )      PORT_DIPLOCATION("SW1:!3")
 	PORT_DIPSETTING(      0x0000, "1st & 2nd only" )
 	PORT_DIPSETTING(      0x2000, "1st & every 2nd" )
-	PORT_DIPNAME( 0x4000, 0x0000, DEF_STR( Language ) )
+	PORT_DIPNAME( 0x4000, 0x0000, DEF_STR( Language ) )     PORT_DIPLOCATION("SW1:!2")
 	PORT_DIPSETTING(      0x0000, DEF_STR( English ) )
 	PORT_DIPSETTING(      0x4000, DEF_STR( Japanese ) )
-	PORT_DIPNAME( 0x8000, 0x0000, DEF_STR( Flip_Screen ) )
+	PORT_DIPNAME( 0x8000, 0x0000, DEF_STR( Flip_Screen ) )      PORT_DIPLOCATION("SW1:!1")
 	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x8000, DEF_STR( On ) )
 
 	PORT_START("DSW2")
 	PORT_BIT( 0x00ff, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_SERVICE( 0x0100, IP_ACTIVE_HIGH )
-	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Allow_Continue ) )
+	PORT_SERVICE_DIPLOC(  0x0100, IP_ACTIVE_HIGH, "SW2:!8" )
+	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Allow_Continue ) )   PORT_DIPLOCATION("SW2:!7")
 	PORT_DIPSETTING(      0x0200, DEF_STR( No ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( Yes ) )
-	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Bonus_Life ) )
+	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Bonus_Life ) )       PORT_DIPLOCATION("SW2:!6,!5")
 	PORT_DIPSETTING(      0x0000, "20k 50k" )
 	PORT_DIPSETTING(      0x0800, "40k 100k" )
 	PORT_DIPSETTING(      0x0400, "60k 150k" )
 	PORT_DIPSETTING(      0x0c00, DEF_STR( None ) )
-	PORT_DIPNAME( 0x3000, 0x0000, "Game Mode" )
+	PORT_DIPNAME( 0x3000, 0x0000, "Game Mode" )         PORT_DIPLOCATION("SW2:!4,!3")
 	PORT_DIPSETTING(      0x2000, "Demo Sounds Off" )
 	PORT_DIPSETTING(      0x0000, "Demo Sounds On" )
 	PORT_DIPSETTING(      0x3000, "Freeze" )
 	PORT_DIPSETTING(      0x1000, "Infinite Lives (Cheat)")
-	PORT_DIPNAME( 0xc000, 0x0000, DEF_STR( Difficulty ) )
+	PORT_DIPNAME( 0xc000, 0x0000, DEF_STR( Difficulty ) )       PORT_DIPLOCATION("SW2:!2,!1")
 	PORT_DIPSETTING(      0x8000, DEF_STR( Easy ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( Normal ) )
 	PORT_DIPSETTING(      0x4000, DEF_STR( Hard ) )
@@ -266,9 +257,7 @@ static INPUT_PORTS_START( powj )
 	PORT_INCLUDE( pow )
 
 	PORT_MODIFY("DSW1")
-	PORT_DIPNAME( 0x4000, 0x0000, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) )
-	PORT_DIPSETTING(      0x4000, DEF_STR( On ) )
+	PORT_DIPUNUSED_DIPLOC( 0x4000, IP_ACTIVE_HIGH, "SW1:!2" )
 INPUT_PORTS_END
 
 
@@ -305,46 +294,46 @@ static INPUT_PORTS_START( searchar )
 
 	PORT_START("DSW1")
 	PORT_BIT( 0x00ff, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_DIPNAME( 0x0100, 0x0000, DEF_STR( Joystick ) )
+	PORT_DIPNAME( 0x0100, 0x0000, DEF_STR( Joystick ) )     PORT_DIPLOCATION("SW1:!8")
 	PORT_DIPSETTING(      0x0000, "Rotary Joystick" )
 	PORT_DIPSETTING(      0x0100, "Standard Joystick" )
-	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Unknown ) )      PORT_DIPLOCATION("SW1:!7")
 	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0200, DEF_STR( On ) )
-	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Lives ) )
+	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Lives ) )        PORT_DIPLOCATION("SW1:!6,!5")
 	PORT_DIPSETTING(      0x0800, "2" )
 	PORT_DIPSETTING(      0x0000, "3" )
 	PORT_DIPSETTING(      0x0400, "4" )
 	PORT_DIPSETTING(      0x0c00, "5" )
-	PORT_DIPNAME( 0x3000, 0x0000, "Coin A & B" )
+	PORT_DIPNAME( 0x3000, 0x0000, "Coin A & B" )            PORT_DIPLOCATION("SW1:!4,!3")
 	PORT_DIPSETTING(      0x2000, DEF_STR( 2C_1C ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( 1C_1C ) )
 	PORT_DIPSETTING(      0x1000, DEF_STR( 1C_2C ) )
 	PORT_DIPSETTING(      0x3000, DEF_STR( Free_Play ) )
-	PORT_DIPNAME( 0x4000, 0x0000, "Bonus Occurrence" )
+	PORT_DIPNAME( 0x4000, 0x0000, "Bonus Occurrence" )      PORT_DIPLOCATION("SW1:!2")
 	PORT_DIPSETTING(      0x0000, "1st & 2nd only" )
 	PORT_DIPSETTING(      0x4000, "1st & every 2nd" )
-	PORT_DIPNAME( 0x8000, 0x0000, DEF_STR( Flip_Screen ) )
+	PORT_DIPNAME( 0x8000, 0x0000, DEF_STR( Flip_Screen ) )      PORT_DIPLOCATION("SW1:!1")
 	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x8000, DEF_STR( On ) )
 
 	PORT_START("DSW2")
 	PORT_BIT( 0x00ff, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_SERVICE( 0x0100, IP_ACTIVE_HIGH )
-	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Allow_Continue ) )
+	PORT_SERVICE_DIPLOC(  0x0100, IP_ACTIVE_HIGH, "SW2:!8" )
+	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Allow_Continue ) )   PORT_DIPLOCATION("SW2:!7")
 	PORT_DIPSETTING(      0x0200, DEF_STR( No ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( Yes ) )
-	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Bonus_Life ) )
+	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Bonus_Life ) )       PORT_DIPLOCATION("SW2:!6,!5")
 	PORT_DIPSETTING(      0x0000, "50k 200k" )
 	PORT_DIPSETTING(      0x0800, "70k 270k" )
 	PORT_DIPSETTING(      0x0400, "90k 350k" )
 	PORT_DIPSETTING(      0x0c00, DEF_STR( None ) )
-	PORT_DIPNAME( 0x3000, 0x0000, "Game Mode" )
+	PORT_DIPNAME( 0x3000, 0x0000, "Game Mode" )         PORT_DIPLOCATION("SW2:!4,!3")
 	PORT_DIPSETTING(      0x2000, "Demo Sounds Off" )
 	PORT_DIPSETTING(      0x0000, "Demo Sounds On" )
 	PORT_DIPSETTING(      0x3000, "Freeze" )
 	PORT_DIPSETTING(      0x1000, "Infinite Lives (Cheat)")
-	PORT_DIPNAME( 0xc000, 0x0000, DEF_STR( Difficulty ) )
+	PORT_DIPNAME( 0xc000, 0x0000, DEF_STR( Difficulty ) )       PORT_DIPLOCATION("SW2:!2,!1")
 	PORT_DIPSETTING(      0x8000, DEF_STR( Easy ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( Normal ) )
 	PORT_DIPSETTING(      0x4000, DEF_STR( Hard ) )
@@ -391,46 +380,46 @@ static INPUT_PORTS_START( streetsm )
 
 	PORT_START("DSW1")  /* Dip switches (Active high) */
 	PORT_BIT( 0x00ff, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_DIPNAME( 0x0300, 0x0000, DEF_STR( Lives ) )
+	PORT_DIPNAME( 0x0300, 0x0000, DEF_STR( Lives ) )        PORT_DIPLOCATION("SW1:!8,7")
 	PORT_DIPSETTING(      0x0200, "1" )
 	PORT_DIPSETTING(      0x0000, "2" )
 	PORT_DIPSETTING(      0x0100, "3" )
 	PORT_DIPSETTING(      0x0300, "4" )
-	PORT_DIPNAME( 0x0c00, 0x0000, "Coin A & B" )
+	PORT_DIPNAME( 0x0c00, 0x0000, "Coin A & B" )            PORT_DIPLOCATION("SW1:!6,5")
 	PORT_DIPSETTING(      0x0800, DEF_STR( 2C_1C ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( 1C_1C ) )
 	PORT_DIPSETTING(      0x0400, DEF_STR( 1C_2C ) )
 	PORT_DIPSETTING(      0x0c00, DEF_STR( Free_Play ) )
-	PORT_DIPNAME( 0x1000, 0x0000, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x1000, 0x0000, DEF_STR( Unknown ) )      PORT_DIPLOCATION("SW1:!4")
 	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x1000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x2000, 0x0000, "Bonus Occurrence" )
+	PORT_DIPNAME( 0x2000, 0x0000, "Bonus Occurrence" )      PORT_DIPLOCATION("SW1:!3")
 	PORT_DIPSETTING(      0x0000, "1st & 2nd only" )
 	PORT_DIPSETTING(      0x2000, "1st & every 2nd" )
-	PORT_DIPNAME( 0x4000, 0x0000, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x4000, 0x0000, DEF_STR( Unknown ) )      PORT_DIPLOCATION("SW1:!2")
 	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x4000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x8000, 0x0000, DEF_STR( Flip_Screen ) )
+	PORT_DIPNAME( 0x8000, 0x0000, DEF_STR( Flip_Screen ) )      PORT_DIPLOCATION("SW1:!1")
 	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x8000, DEF_STR( On ) )
 
 	PORT_START("DSW2") /* Dip switches (Active high) */
 	PORT_BIT( 0x00ff, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_SERVICE( 0x0100, IP_ACTIVE_HIGH )
-	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Allow_Continue ) )
+	PORT_SERVICE_DIPLOC(  0x0100, IP_ACTIVE_HIGH, "SW2:!8" )
+	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Allow_Continue ) )   PORT_DIPLOCATION("SW2:!7")
 	PORT_DIPSETTING(      0x0200, DEF_STR( No ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( Yes ) )
-	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Bonus_Life ) )
+	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Bonus_Life ) )       PORT_DIPLOCATION("SW2:!6,!5")
 	PORT_DIPSETTING(      0x0000, "200k 400k" )
 	PORT_DIPSETTING(      0x0800, "400k 600k" )
 	PORT_DIPSETTING(      0x0400, "600k 800k" )
 	PORT_DIPSETTING(      0x0c00, DEF_STR( None ) )
-	PORT_DIPNAME( 0x3000, 0x0000, "Game Mode" )
+	PORT_DIPNAME( 0x3000, 0x0000, "Game Mode" )         PORT_DIPLOCATION("SW2:!4,!3")
 	PORT_DIPSETTING(      0x2000, "Demo Sounds Off" )
 	PORT_DIPSETTING(      0x0000, "Demo Sounds On" )
 	PORT_DIPSETTING(      0x3000, "Freeze" )
 	PORT_DIPSETTING(      0x1000, "Infinite Lives (Cheat)")
-	PORT_DIPNAME( 0xc000, 0x0000, DEF_STR( Difficulty ) )
+	PORT_DIPNAME( 0xc000, 0x0000, DEF_STR( Difficulty ) )       PORT_DIPLOCATION("SW2:!2,!1")
 	PORT_DIPSETTING(      0x8000, DEF_STR( Easy ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( Normal ) )
 	PORT_DIPSETTING(      0x4000, DEF_STR( Hard ) )
@@ -448,7 +437,7 @@ static INPUT_PORTS_START( streetsj )
 	PORT_INCLUDE( streetsm )
 
 	PORT_MODIFY("DSW1")
-	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Coinage ) )
+	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Coinage ) )      PORT_DIPLOCATION("SW1:!6,5")
 	PORT_DIPSETTING(      0x0c00, "A 4/1 B 1/4" )
 	PORT_DIPSETTING(      0x0400, "A 3/1 B 1/3" )
 	PORT_DIPSETTING(      0x0800, "A 2/1 B 1/2" )
@@ -489,46 +478,46 @@ static INPUT_PORTS_START( ikari3 )
 
 	PORT_START("DSW1")  /* Dip switches (Active high) */
 	PORT_BIT( 0x00ff, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_DIPNAME( 0x0300, 0x0000, DEF_STR( Lives ) )
+	PORT_DIPNAME( 0x0300, 0x0000, DEF_STR( Lives ) )        PORT_DIPLOCATION("SW1:!8,!7")
 	PORT_DIPSETTING(      0x0200, "2" )
 	PORT_DIPSETTING(      0x0000, "3" )
 	PORT_DIPSETTING(      0x0100, "4" )
 	PORT_DIPSETTING(      0x0300, "5" )
-	PORT_DIPNAME( 0x0c00, 0x0000, "Coin A & B" )
+	PORT_DIPNAME( 0x0c00, 0x0000, "Coin A & B" )            PORT_DIPLOCATION("SW1:!6,!5")
 	PORT_DIPSETTING(      0x0800, "First 2 Coins/1 Credit then 1/1" )
 	PORT_DIPSETTING(      0x0000, DEF_STR( 1C_1C ) )
 	PORT_DIPSETTING(      0x0400, "First 1 Coin/2 Credits then 1/1" )
 	PORT_DIPSETTING(      0x0c00, DEF_STR( Free_Play ) )
-	PORT_DIPNAME( 0x1000, 0x0000, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x1000, 0x0000, DEF_STR( Unknown ) )      PORT_DIPLOCATION("SW1:!4")
 	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x1000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x2000, 0x0000, "Bonus Occurrence" )
+	PORT_DIPNAME( 0x2000, 0x0000, "Bonus Occurrence" )      PORT_DIPLOCATION("SW1:!3")
 	PORT_DIPSETTING(      0x0000, "1st & 2nd only" )
 	PORT_DIPSETTING(      0x2000, "1st & every 2nd" )
-	PORT_DIPNAME( 0x4000, 0x0000, "Blood" )
+	PORT_DIPNAME( 0x4000, 0x0000, "Blood" )             PORT_DIPLOCATION("SW1:!2")
 	PORT_DIPSETTING(      0x4000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x8000, 0x0000, DEF_STR( Flip_Screen ) )
+	PORT_DIPNAME( 0x8000, 0x0000, DEF_STR( Flip_Screen ) )      PORT_DIPLOCATION("SW1:!1")
 	PORT_DIPSETTING(      0x0000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x8000, DEF_STR( On ) )
 
 	PORT_START("DSW2") /* Dip switches (Active high) */
 	PORT_BIT( 0x00ff, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_SERVICE( 0x0100, IP_ACTIVE_HIGH )
-	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Allow_Continue ) )
+	PORT_SERVICE_DIPLOC(  0x0100, IP_ACTIVE_HIGH, "SW2:!8" )
+	PORT_DIPNAME( 0x0200, 0x0000, DEF_STR( Allow_Continue ) )   PORT_DIPLOCATION("SW2:!7")
 	PORT_DIPSETTING(      0x0200, DEF_STR( No ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( Yes ) )
-	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Bonus_Life ) )
+	PORT_DIPNAME( 0x0c00, 0x0000, DEF_STR( Bonus_Life ) )       PORT_DIPLOCATION("SW2:!6,!5")
 	PORT_DIPSETTING(      0x0000, "20k 50k" )
 	PORT_DIPSETTING(      0x0800, "40k 100k" )
 	PORT_DIPSETTING(      0x0400, "60k 150k" )
 	PORT_DIPSETTING(      0x0c00, DEF_STR( None ) )
-	PORT_DIPNAME( 0x3000, 0x0000, "Game Mode" )
+	PORT_DIPNAME( 0x3000, 0x0000, "Game Mode" )         PORT_DIPLOCATION("SW2:!4,!3")
 	PORT_DIPSETTING(      0x2000, "Demo Sounds Off" )
 	PORT_DIPSETTING(      0x0000, "Demo Sounds On" )
 	PORT_DIPSETTING(      0x3000, "Freeze" )
 	PORT_DIPSETTING(      0x1000, "Infinite Lives (Cheat)")
-	PORT_DIPNAME( 0xc000, 0x8000, DEF_STR( Difficulty ) )
+	PORT_DIPNAME( 0xc000, 0x8000, DEF_STR( Difficulty ) )       PORT_DIPLOCATION("SW2:!2,!1")
 	PORT_DIPSETTING(      0x0000, DEF_STR( Easy ) )
 	PORT_DIPSETTING(      0x8000, DEF_STR( Normal ) )
 	PORT_DIPSETTING(      0x4000, DEF_STR( Hard ) )
@@ -572,13 +561,6 @@ GFXDECODE_END
 
 /******************************************************************************/
 
-WRITE_LINE_MEMBER(snk68_state::irqhandler)
-{
-	m_soundcpu->set_input_line(0, state ? ASSERT_LINE : CLEAR_LINE);
-}
-
-/******************************************************************************/
-
 static MACHINE_CONFIG_START( pow, snk68_state )
 
 	/* basic machine hardware */
@@ -596,17 +578,18 @@ static MACHINE_CONFIG_START( pow, snk68_state )
 	// give a theoretical refresh rate of 59.1856Hz while the measured
 	// rate on a SAR board is 59.16Hz.
 	MCFG_SCREEN_RAW_PARAMS(XTAL_24MHz/4, 384, 0, 256, 264, 16, 240)
-	MCFG_SCREEN_UPDATE_DRIVER(snk68_state, screen_update_pow)
+	MCFG_SCREEN_UPDATE_DRIVER(snk68_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(pow)
-	MCFG_PALETTE_LENGTH(0x800)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pow)
+	MCFG_PALETTE_ADD("palette", 0x800)
+	MCFG_PALETTE_FORMAT(xRGBRRRRGGGGBBBB_bit0)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM3812, XTAL_8MHz/2) /* verified on pcb  */
-	MCFG_YM3812_IRQ_HANDLER(WRITELINE(snk68_state, irqhandler))
+	MCFG_YM3812_IRQ_HANDLER(INPUTLINE("soundcpu", 0))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
 	MCFG_SOUND_ADD("upd", UPD7759, UPD7759_STANDARD_CLOCK)
@@ -752,6 +735,8 @@ ROM_START( streetsm1 )
 
 	ROM_REGION( 0x20000, "upd", 0 ) /* UPD7759 samples */
 	ROM_LOAD( "s2-6.18d",    0x000000, 0x20000, CRC(47db1605) SHA1(ae00e633eb98567f04ff97e3d63e04e049d955ec) )
+
+	ROM_REGION16_BE( 0x40000, "user1", ROMREGION_ERASE00 ) /* Extra code bank */
 ROM_END
 
 ROM_START( streetsmw )
@@ -778,6 +763,8 @@ ROM_START( streetsmw )
 
 	ROM_REGION( 0x20000, "upd", 0 ) /* UPD7759 samples */
 	ROM_LOAD( "s2-6.18d",    0x000000, 0x20000, CRC(47db1605) SHA1(ae00e633eb98567f04ff97e3d63e04e049d955ec) )
+
+	ROM_REGION16_BE( 0x40000, "user1", ROMREGION_ERASE00 ) /* Extra code bank */
 ROM_END
 
 ROM_START( streetsmj )
@@ -804,6 +791,8 @@ ROM_START( streetsmj )
 
 	ROM_REGION( 0x20000, "upd", 0 ) /* UPD7759 samples */
 	ROM_LOAD( "s2-6.18d",    0x000000, 0x20000, CRC(47db1605) SHA1(ae00e633eb98567f04ff97e3d63e04e049d955ec) )
+
+	ROM_REGION16_BE( 0x40000, "user1", ROMREGION_ERASE00 ) /* Extra code bank */
 ROM_END
 
 ROM_START( ikari3 )
@@ -812,11 +801,11 @@ ROM_START( ikari3 )
 	ROM_LOAD16_BYTE( "ik3-3-ver1.c9",  0x000001, 0x20000, CRC(10e38b66) SHA1(28cc82d868f59cd6dde1c4e4c890627012e5e978) ) /* 8-Way Joystick */
 
 	ROM_REGION( 0x10000, "soundcpu", 0 )    /* Sound CPU */
-	ROM_LOAD( "ik3-5.bin",  0x000000, 0x10000, CRC(ce6706fc) SHA1(95505b90a9524abf0c8c1ec6b2c40d8f25cb1d92) )
+	ROM_LOAD( "ik3-5.16d",  0x000000, 0x10000, CRC(ce6706fc) SHA1(95505b90a9524abf0c8c1ec6b2c40d8f25cb1d92) )
 
 	ROM_REGION( 0x010000, "gfx1", 0 )   /* characters */
-	ROM_LOAD( "ik3-7.bin",  0x000000, 0x08000, CRC(0b4804df) SHA1(66d16d245bfc404366164823faaea0bfec83e487) )
-	ROM_LOAD( "ik3-8.bin",  0x008000, 0x08000, CRC(10ab4e50) SHA1(dee8416eb720848cf6471e568dadc1cfc6c2e67f) )
+	ROM_LOAD( "ik3-7.16l",  0x000000, 0x08000, CRC(0b4804df) SHA1(66d16d245bfc404366164823faaea0bfec83e487) )
+	ROM_LOAD( "ik3-8.16m",  0x008000, 0x08000, CRC(10ab4e50) SHA1(dee8416eb720848cf6471e568dadc1cfc6c2e67f) )
 
 	ROM_REGION( 0x400000, "gfx2", 0 )   /* sprites */
 	ROM_LOAD16_BYTE( "ik3-23.bin", 0x000000, 0x20000, CRC(d0fd5c77) SHA1(c171c64ad252f0ba5b0bbdf37808102fca37b488) )
@@ -843,7 +832,7 @@ ROM_START( ikari3 )
 	// 340000-3fffff empty
 
 	ROM_REGION( 0x20000, "upd", 0 ) /* UPD7759 samples */
-	ROM_LOAD( "ik3-6.bin",  0x000000, 0x20000, CRC(59d256a4) SHA1(1e7b33329f761c695bc9a817bbc0c5e13386d073) )
+	ROM_LOAD( "ik3-6.18e",  0x000000, 0x20000, CRC(59d256a4) SHA1(1e7b33329f761c695bc9a817bbc0c5e13386d073) )
 
 	ROM_REGION16_BE( 0x40000, "user1", 0 ) /* Extra code bank */
 	ROM_LOAD16_BYTE( "ik3-1.c8",   0x000000, 0x10000, CRC(47e4d256) SHA1(7c6921cf2f1b8c3dae867eb1fc14e3da218cc1e0) )
@@ -856,11 +845,11 @@ ROM_START( ikari3u )
 	ROM_LOAD16_BYTE( "ik3-3.c9",  0x000001, 0x20000, CRC(50f2b83d) SHA1(b1f0c554b262614dd2cff7a3857cb974d361937f) ) /* Rotary Joystick */
 
 	ROM_REGION( 0x10000, "soundcpu", 0 )    /* Sound CPU */
-	ROM_LOAD( "ik3-5.bin",  0x000000, 0x10000, CRC(ce6706fc) SHA1(95505b90a9524abf0c8c1ec6b2c40d8f25cb1d92) )
+	ROM_LOAD( "ik3-5.15d",  0x000000, 0x10000, CRC(ce6706fc) SHA1(95505b90a9524abf0c8c1ec6b2c40d8f25cb1d92) )
 
 	ROM_REGION( 0x010000, "gfx1", 0 )   /* characters */
-	ROM_LOAD( "ik3-7.bin",  0x000000, 0x08000, CRC(0b4804df) SHA1(66d16d245bfc404366164823faaea0bfec83e487) )
-	ROM_LOAD( "ik3-8.bin",  0x008000, 0x08000, CRC(10ab4e50) SHA1(dee8416eb720848cf6471e568dadc1cfc6c2e67f) )
+	ROM_LOAD( "ik3-7.16l",  0x000000, 0x08000, CRC(0b4804df) SHA1(66d16d245bfc404366164823faaea0bfec83e487) )
+	ROM_LOAD( "ik3-8.16m",  0x008000, 0x08000, CRC(10ab4e50) SHA1(dee8416eb720848cf6471e568dadc1cfc6c2e67f) )
 
 	ROM_REGION( 0x400000, "gfx2", 0 )   /* sprites */
 	ROM_LOAD16_BYTE( "ik3-23.bin", 0x000000, 0x20000, CRC(d0fd5c77) SHA1(c171c64ad252f0ba5b0bbdf37808102fca37b488) )
@@ -887,7 +876,7 @@ ROM_START( ikari3u )
 	// 340000-3fffff empty
 
 	ROM_REGION( 0x20000, "upd", 0 ) /* UPD7759 samples */
-	ROM_LOAD( "ik3-6.bin",  0x000000, 0x20000, CRC(59d256a4) SHA1(1e7b33329f761c695bc9a817bbc0c5e13386d073) )
+	ROM_LOAD( "ik3-6.18e",  0x000000, 0x20000, CRC(59d256a4) SHA1(1e7b33329f761c695bc9a817bbc0c5e13386d073) )
 
 	ROM_REGION16_BE( 0x40000, "user1", 0 ) /* Extra code bank */
 	ROM_LOAD16_BYTE( "ik3-1.c8",   0x000000, 0x10000, CRC(47e4d256) SHA1(7c6921cf2f1b8c3dae867eb1fc14e3da218cc1e0) )
@@ -900,11 +889,11 @@ ROM_START( ikari3j )
 	ROM_LOAD16_BYTE( "ik3-3-j.c9",  0x000001, 0x20000, CRC(8e6e2aa9) SHA1(e624809c42a79510b34d99d9ca152a38c7051e87) ) /* Rotary Joystick */
 
 	ROM_REGION( 0x10000, "soundcpu", 0 )    /* Sound CPU */
-	ROM_LOAD( "ik3-5.bin",  0x000000, 0x10000, CRC(ce6706fc) SHA1(95505b90a9524abf0c8c1ec6b2c40d8f25cb1d92) )
+	ROM_LOAD( "ik3-5.16d",  0x000000, 0x10000, CRC(ce6706fc) SHA1(95505b90a9524abf0c8c1ec6b2c40d8f25cb1d92) )
 
 	ROM_REGION( 0x010000, "gfx1", 0 )   /* characters */
-	ROM_LOAD( "ik3-7.bin",  0x000000, 0x08000, CRC(0b4804df) SHA1(66d16d245bfc404366164823faaea0bfec83e487) )
-	ROM_LOAD( "ik3-8.bin",  0x008000, 0x08000, CRC(10ab4e50) SHA1(dee8416eb720848cf6471e568dadc1cfc6c2e67f) )
+	ROM_LOAD( "ik3-7.16l",  0x000000, 0x08000, CRC(0b4804df) SHA1(66d16d245bfc404366164823faaea0bfec83e487) )
+	ROM_LOAD( "ik3-8.16m",  0x008000, 0x08000, CRC(10ab4e50) SHA1(dee8416eb720848cf6471e568dadc1cfc6c2e67f) )
 
 	ROM_REGION( 0x400000, "gfx2", 0 )   /* sprites */
 	ROM_LOAD16_BYTE( "ik3-23.bin", 0x000000, 0x20000, CRC(d0fd5c77) SHA1(c171c64ad252f0ba5b0bbdf37808102fca37b488) )
@@ -931,7 +920,51 @@ ROM_START( ikari3j )
 	// 340000-3fffff empty
 
 	ROM_REGION( 0x20000, "upd", 0 ) /* UPD7759 samples */
-	ROM_LOAD( "ik3-6.bin",  0x000000, 0x20000, CRC(59d256a4) SHA1(1e7b33329f761c695bc9a817bbc0c5e13386d073) )
+	ROM_LOAD( "ik3-6.18e",  0x000000, 0x20000, CRC(59d256a4) SHA1(1e7b33329f761c695bc9a817bbc0c5e13386d073) )
+
+	ROM_REGION16_BE( 0x40000, "user1", 0 ) /* Extra code bank */
+	ROM_LOAD16_BYTE( "ik3-1.c8",   0x000000, 0x10000, CRC(47e4d256) SHA1(7c6921cf2f1b8c3dae867eb1fc14e3da218cc1e0) )
+	ROM_LOAD16_BYTE( "ik3-4.c12",  0x000001, 0x10000, CRC(a43af6b5) SHA1(1ad3acadbadd21642932028ecd7c282f7fd02856) )
+ROM_END
+
+ROM_START( ikari3k )
+	ROM_REGION( 0x40000, "maincpu", 0 )
+	ROM_LOAD16_BYTE( "ik3-2k.c10", 0x000000, 0x20000, CRC(a15d2222) SHA1(7f9702516f9c74314b093435937dfecb69495b6c) ) /* 8-Way Joystick */
+	ROM_LOAD16_BYTE( "ik3-3k.c9",  0x000001, 0x20000, CRC(e3fc006e) SHA1(14e8ba1064e9bd168a4f7e5b5cc2a4b1ddbc7e32) ) /* 8-Way Joystick */
+
+	ROM_REGION( 0x10000, "soundcpu", 0 )    /* Sound CPU */
+	ROM_LOAD( "ik3-5.16d",  0x000000, 0x10000, CRC(ce6706fc) SHA1(95505b90a9524abf0c8c1ec6b2c40d8f25cb1d92) )
+
+	ROM_REGION( 0x010000, "gfx1", 0 )   /* characters */
+	ROM_LOAD( "ik3-7k.16l",  0x000000, 0x08000, CRC(8bfb399b) SHA1(f9f9d947a7739d13269e2ab84ab25a7e403aed34) )
+	ROM_LOAD( "ik3-8k.16m",  0x008000, 0x08000, CRC(3f0fe576) SHA1(70f4438e31b06ee0dc4660c04f512ccf3b7fa55f) )
+
+	ROM_REGION( 0x400000, "gfx2", 0 )   /* sprites */
+	ROM_LOAD16_BYTE( "ik3-23.bin", 0x000000, 0x20000, CRC(d0fd5c77) SHA1(c171c64ad252f0ba5b0bbdf37808102fca37b488) ) /* Missing 4M mask ROM dumps from the A7007-SUB4M */
+	ROM_LOAD16_BYTE( "ik3-13.bin", 0x000001, 0x20000, CRC(9a56bd32) SHA1(9301b48f970b71a909fb44514b2e93c3f1516b38) ) /* ROM board. Assumed to be the same data */
+	ROM_LOAD16_BYTE( "ik3-22.bin", 0x040000, 0x20000, CRC(4878d883) SHA1(8cdb541bad00e707fb65399d637b7cc9288ada77) )
+	ROM_LOAD16_BYTE( "ik3-12.bin", 0x040001, 0x20000, CRC(0ce6a10a) SHA1(13a231aa0002b2c5a0d9404ba05a879e212d638e) )
+	ROM_LOAD16_BYTE( "ik3-21.bin", 0x080000, 0x20000, CRC(50d0fbf0) SHA1(9ff5fbea8d35d0f9a38ddd7eb093edcd91d9f874) )
+	ROM_LOAD16_BYTE( "ik3-11.bin", 0x080001, 0x20000, CRC(e4e2be43) SHA1(959d2799708ddae909b017c0696694c46a52697e) )
+	ROM_LOAD16_BYTE( "ik3-20.bin", 0x0c0000, 0x20000, CRC(9a851efc) SHA1(bc7be338ee4da7fbfe6fe44a9c7889817416bc44) )
+	ROM_LOAD16_BYTE( "ik3-10.bin", 0x0c0001, 0x20000, CRC(ac222372) SHA1(8a17e37699d691b962a6d0256a18550cc73ddfef) )
+	ROM_LOAD16_BYTE( "ik3-19.bin", 0x100000, 0x20000, CRC(4ebdba89) SHA1(f3ecfef4c9d2aba58dc3e6aa3cf5813d68686909) )
+	ROM_LOAD16_BYTE( "ik3-9.bin",  0x100001, 0x20000, CRC(c33971c2) SHA1(91f3eb301803f5a7027da1ff7dd2a28bc97e5125) )
+	// 140000-1fffff empty
+	ROM_LOAD16_BYTE( "ik3-14.bin", 0x200000, 0x20000, CRC(453bea77) SHA1(f8f8d0c048fcf32ad99e1de622d9ab635bb86eae) )
+	ROM_LOAD16_BYTE( "ik3-24.bin", 0x200001, 0x20000, CRC(e9b26d68) SHA1(067d582d33157ed4b7980bd87f2f260ab74c347b) )
+	ROM_LOAD16_BYTE( "ik3-15.bin", 0x240000, 0x20000, CRC(781a81fc) SHA1(e08a6cf9c632d1002176afe618605bc06168e8aa) )
+	ROM_LOAD16_BYTE( "ik3-25.bin", 0x240001, 0x20000, CRC(073b03f1) SHA1(b8053139799fa06c7324cee928154c89d4425ab1) )
+	ROM_LOAD16_BYTE( "ik3-16.bin", 0x280000, 0x20000, CRC(80ba400b) SHA1(2cc3e53c45f239516a60c461ad9cfa5955164262) )
+	ROM_LOAD16_BYTE( "ik3-26.bin", 0x280001, 0x20000, CRC(9c613561) SHA1(fc7c9a642b18faa94e6a2ba53f35a4d756a25da3) )
+	ROM_LOAD16_BYTE( "ik3-17.bin", 0x2c0000, 0x20000, CRC(0cc3ce4a) SHA1(7b34435d0bbb089055a183b821ab255170db6bec) )
+	ROM_LOAD16_BYTE( "ik3-27.bin", 0x2c0001, 0x20000, CRC(16dd227e) SHA1(db3b1718dea65bc9a1a736aa62aa2be389313baf) )
+	ROM_LOAD16_BYTE( "ik3-18.bin", 0x300000, 0x20000, CRC(ba106245) SHA1(ac609ec3046c21fe6058f91dd4528c5c6448dc15) )
+	ROM_LOAD16_BYTE( "ik3-28.bin", 0x300001, 0x20000, CRC(711715ae) SHA1(90978c86884ca3d23c138d95b654e2fb3afc6f9a) )
+	// 340000-3fffff empty
+
+	ROM_REGION( 0x20000, "upd", 0 ) /* UPD7759 samples */
+	ROM_LOAD( "ik3-6.18e",  0x000000, 0x20000, CRC(59d256a4) SHA1(1e7b33329f761c695bc9a817bbc0c5e13386d073) )
 
 	ROM_REGION16_BE( 0x40000, "user1", 0 ) /* Extra code bank */
 	ROM_LOAD16_BYTE( "ik3-1.c8",   0x000000, 0x10000, CRC(47e4d256) SHA1(7c6921cf2f1b8c3dae867eb1fc14e3da218cc1e0) )
@@ -1030,22 +1063,16 @@ ROM_END
 
 /******************************************************************************/
 
-DRIVER_INIT_MEMBER(snk68_state,searchar)
-{
-	membank("bank1")->set_base(memregion("user1")->base());
-}
-
-/******************************************************************************/
-
-GAME( 1988, pow,      0,        pow,      pow, driver_device,      0,        ROT0,  "SNK", "P.O.W. - Prisoners of War (US version 1)", 0 )
-GAME( 1988, powj,     pow,      pow,      powj, driver_device,     0,        ROT0,  "SNK", "Datsugoku - Prisoners of War (Japan)", 0 )
-GAME( 1989, streetsm, 0,        pow,      streetsm, driver_device, 0,        ROT0,  "SNK", "Street Smart (US version 2)", 0 )
-GAME( 1989, streetsm1,streetsm, searchar, streetsm, driver_device, 0,        ROT0,  "SNK", "Street Smart (US version 1)", 0 )
-GAME( 1989, streetsmw,streetsm, searchar, streetsj, driver_device, 0,        ROT0,  "SNK", "Street Smart (World version 1)", 0 )
-GAME( 1989, streetsmj,streetsm, searchar, streetsj, driver_device, 0,        ROT0,  "SNK", "Street Smart (Japan version 1)", 0 )
-GAME( 1989, ikari3,   0,        searchar, ikari3, snk68_state,   searchar, ROT0,  "SNK", "Ikari III - The Rescue (World, 8-Way Joystick)", 0 )
-GAME( 1989, ikari3u,  ikari3,   searchar, ikari3, snk68_state,   searchar, ROT0,  "SNK", "Ikari III - The Rescue (US, Rotary Joystick)", 0 )
-GAME( 1989, ikari3j,  ikari3,   searchar, ikari3, snk68_state,   searchar, ROT0,  "SNK", "Ikari Three (Japan, Rotary Joystick)", 0 )
-GAME( 1989, searchar, 0,        searchar, searchar, snk68_state, searchar, ROT90, "SNK", "SAR - Search And Rescue (World)", 0 )
-GAME( 1989, searcharu,searchar, searchar, searchar, snk68_state, searchar, ROT90, "SNK", "SAR - Search And Rescue (US)", 0 )
-GAME( 1989, searcharj,searchar, searchar, searchar, snk68_state, searchar, ROT90, "SNK", "SAR - Search And Rescue (Japan)", 0 )
+GAME( 1988, pow,       0,        pow,      pow,      driver_device, 0, ROT0,  "SNK", "P.O.W. - Prisoners of War (US version 1)", GAME_SUPPORTS_SAVE )
+GAME( 1988, powj,      pow,      pow,      powj,     driver_device, 0, ROT0,  "SNK", "Datsugoku - Prisoners of War (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1989, streetsm,  0,        pow,      streetsm, driver_device, 0, ROT0,  "SNK", "Street Smart (US version 2)", GAME_SUPPORTS_SAVE )
+GAME( 1989, streetsm1, streetsm, searchar, streetsm, driver_device, 0, ROT0,  "SNK", "Street Smart (US version 1)", GAME_SUPPORTS_SAVE )
+GAME( 1989, streetsmw, streetsm, searchar, streetsj, driver_device, 0, ROT0,  "SNK", "Street Smart (World version 1)", GAME_SUPPORTS_SAVE )
+GAME( 1989, streetsmj, streetsm, searchar, streetsj, driver_device, 0, ROT0,  "SNK", "Street Smart (Japan version 1)", GAME_SUPPORTS_SAVE )
+GAME( 1989, ikari3,    0,        searchar, ikari3,   driver_device, 0, ROT0,  "SNK", "Ikari III - The Rescue (World, 8-Way Joystick)", GAME_SUPPORTS_SAVE )
+GAME( 1989, ikari3u,   ikari3,   searchar, ikari3,   driver_device, 0, ROT0,  "SNK", "Ikari III - The Rescue (US, Rotary Joystick)", GAME_SUPPORTS_SAVE )
+GAME( 1989, ikari3j,   ikari3,   searchar, ikari3,   driver_device, 0, ROT0,  "SNK", "Ikari Three (Japan, Rotary Joystick)", GAME_SUPPORTS_SAVE )
+GAME( 1989, ikari3k,   ikari3,   searchar, ikari3,   driver_device, 0, ROT0,  "SNK", "Ikari Three (Korea, 8-Way Joystick)", GAME_SUPPORTS_SAVE )
+GAME( 1989, searchar,  0,        searchar, searchar, driver_device, 0, ROT90, "SNK", "SAR - Search And Rescue (World)", GAME_SUPPORTS_SAVE )
+GAME( 1989, searcharu, searchar, searchar, searchar, driver_device, 0, ROT90, "SNK", "SAR - Search And Rescue (US)", GAME_SUPPORTS_SAVE )
+GAME( 1989, searcharj, searchar, searchar, searchar, driver_device, 0, ROT90, "SNK", "SAR - Search And Rescue (Japan)", GAME_SUPPORTS_SAVE )

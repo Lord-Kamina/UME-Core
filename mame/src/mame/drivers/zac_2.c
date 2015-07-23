@@ -1,6 +1,11 @@
-/*
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
+/***************************************************************************************************
+
+    PINBALL
     Zaccaria Generation 2
-*/
+
+****************************************************************************************************/
 
 
 #include "machine/genpin.h"
@@ -13,7 +18,8 @@ public:
 	zac_2_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 	m_maincpu(*this, "maincpu"),
-	m_p_ram(*this, "ram")
+	m_p_ram(*this, "ram"),
+	m_row(*this, "ROW")
 	{ }
 
 	DECLARE_READ8_MEMBER(ctrl_r);
@@ -21,11 +27,12 @@ public:
 	DECLARE_READ8_MEMBER(data_r);
 	DECLARE_WRITE8_MEMBER(data_w);
 	DECLARE_READ8_MEMBER(serial_r);
-	DECLARE_WRITE8_MEMBER(serial_w);
+	DECLARE_WRITE_LINE_MEMBER(serial_w);
 	UINT8 m_t_c;
 	UINT8 m_out_offs;
 	required_device<cpu_device> m_maincpu;
 	required_shared_ptr<UINT8> m_p_ram;
+	required_ioport_array<6> m_row;
 	TIMER_DEVICE_CALLBACK_MEMBER(zac_2_inttimer);
 	TIMER_DEVICE_CALLBACK_MEMBER(zac_2_outtimer);
 protected:
@@ -53,7 +60,7 @@ static ADDRESS_MAP_START(zac_2_io, AS_IO, 8, zac_2_state)
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(S2650_CTRL_PORT, S2650_CTRL_PORT) AM_READWRITE(ctrl_r,ctrl_w)
 	AM_RANGE(S2650_DATA_PORT, S2650_DATA_PORT) AM_READWRITE(data_r,data_w)
-	AM_RANGE(S2650_SENSE_PORT, S2650_FO_PORT) AM_READWRITE(serial_r,serial_w)
+	AM_RANGE(S2650_SENSE_PORT, S2650_SENSE_PORT) AM_READ(serial_r)
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START( zac_2 )
@@ -73,7 +80,7 @@ static INPUT_PORTS_START( zac_2 )
 	PORT_DIPSETTING(    0x08, DEF_STR(Off))
 	PORT_DIPSETTING(    0x00, DEF_STR(On))
 
-	PORT_START("ROW0")
+	PORT_START("ROW.0")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_SERVICE ) PORT_NAME("Advance Test")
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Return Test")
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_TILT )
@@ -83,14 +90,14 @@ static INPUT_PORTS_START( zac_2 )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_COIN3 )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Printer")
 
-	PORT_START("ROW1")
+	PORT_START("ROW.1")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("RAM Reset")
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_TILT )
 	PORT_BIT( 0x3c, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_TILT )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Burn Test")
 	// from here is not correct
-	PORT_START("ROW2")
+	PORT_START("ROW.2")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Outhole") PORT_CODE(KEYCODE_X)
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("LH Flap") PORT_CODE(KEYCODE_Q)
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("RH Flap") PORT_CODE(KEYCODE_W)
@@ -100,7 +107,7 @@ static INPUT_PORTS_START( zac_2 )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Bottom Inside LH Canal") PORT_CODE(KEYCODE_U)
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("LH Top Hole") PORT_CODE(KEYCODE_I)
 
-	PORT_START("ROW3")
+	PORT_START("ROW.3")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("RH Bumper") PORT_CODE(KEYCODE_O)
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("LH Top Canal") PORT_CODE(KEYCODE_A)
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Top Centre Canal") PORT_CODE(KEYCODE_S)
@@ -110,7 +117,7 @@ static INPUT_PORTS_START( zac_2 )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("LH Bumper") PORT_CODE(KEYCODE_H)
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("RH Top Hole") PORT_CODE(KEYCODE_J)
 
-	PORT_START("ROW4")
+	PORT_START("ROW.4")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Bottom Bumper") PORT_CODE(KEYCODE_K)
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("LH Top Contact") PORT_CODE(KEYCODE_L)
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("RH Top Contact") PORT_CODE(KEYCODE_Z)
@@ -120,7 +127,7 @@ static INPUT_PORTS_START( zac_2 )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Bank Contacts") PORT_CODE(KEYCODE_B)
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Moving Target") PORT_CODE(KEYCODE_N)
 
-	PORT_START("ROW5")
+	PORT_START("ROW.5")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("LH Bank Target 1") PORT_CODE(KEYCODE_M)
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("LH Bank Target 2") PORT_CODE(KEYCODE_MINUS)
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("LH Bank Target 3") PORT_CODE(KEYCODE_EQUALS)
@@ -134,11 +141,7 @@ INPUT_PORTS_END
 READ8_MEMBER( zac_2_state::ctrl_r )
 {
 	if (m_input_line < 6)
-	{
-		char kbdrow[8];
-		sprintf(kbdrow,"ROW%X",offset);
-		return ioport(kbdrow)->read();
-	}
+		return m_row[m_input_line]->read();
 
 	return 0xff;
 }
@@ -164,7 +167,7 @@ READ8_MEMBER( zac_2_state::serial_r )
 	return 0;
 }
 
-WRITE8_MEMBER( zac_2_state::serial_w )
+WRITE_LINE_MEMBER( zac_2_state::serial_w )
 {
 // to printer
 }
@@ -202,6 +205,7 @@ static MACHINE_CONFIG_START( zac_2, zac_2_state )
 	MCFG_CPU_ADD("maincpu", S2650, 6000000/2)
 	MCFG_CPU_PROGRAM_MAP(zac_2_map)
 	MCFG_CPU_IO_MAP(zac_2_io)
+	MCFG_S2650_FLAG_HANDLER(WRITELINE(zac_2_state, serial_w))
 	MCFG_NVRAM_ADD_0FILL("ram")
 
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("zac_2_inttimer", zac_2_state, zac_2_inttimer, attotime::from_hz(200))
@@ -924,10 +928,10 @@ GAME(1983,  pinchamp7i, pinchamp, zac_2,  zac_2, driver_device, 0,  ROT0,    "Za
 GAME(1985,  poolcham,   0,        zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Pool Champion",                GAME_IS_SKELETON_MECHANICAL)
 GAME(1985,  poolchami,  poolcham, zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Pool Champion (Italian speech)",               GAME_IS_SKELETON_MECHANICAL)
 GAME(1985,  poolchama,  poolcham, zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Pool Champion (alternate sound)",              GAME_IS_SKELETON_MECHANICAL)
-GAME(1985,  robot,      0,        zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Robot",                GAME_IS_SKELETON_MECHANICAL)
-GAME(1985,  roboti,     robot,    zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Robot (Italian speech)",               GAME_IS_SKELETON_MECHANICAL)
-GAME(1985,  robotg,     robot,    zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Robot (German speech)",                GAME_IS_SKELETON_MECHANICAL)
-GAME(1985,  robotf,     robot,    zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Robot (French speech)",                GAME_IS_SKELETON_MECHANICAL)
+GAME(1985,  robot,      0,        zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Robot (Zaccaria)",                GAME_IS_SKELETON_MECHANICAL)
+GAME(1985,  roboti,     robot,    zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Robot (Zaccaria, Italian speech)",               GAME_IS_SKELETON_MECHANICAL)
+GAME(1985,  robotg,     robot,    zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Robot (Zaccaria, German speech)",                GAME_IS_SKELETON_MECHANICAL)
+GAME(1985,  robotf,     robot,    zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Robot (Zaccaria, French speech)",                GAME_IS_SKELETON_MECHANICAL)
 GAME(1987,  scram_tp,   0,        zac_2,  zac_2, driver_device, 0,  ROT0,    "Tecnoplay",   "Scramble (Pinball)",               GAME_IS_SKELETON_MECHANICAL)
 GAME(1982,  socrking,   0,        zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Soccer Kings",             GAME_IS_SKELETON_MECHANICAL)
 GAME(1982,  socrkingi,  socrking, zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Soccer Kings (Italian speech)",                GAME_IS_SKELETON_MECHANICAL)
@@ -936,6 +940,6 @@ GAME(1987,  spookyp,    0,        zac_2,  zac_2, driver_device, 0,  ROT0,    "Za
 GAME(1987,  spookyi,    spookyp,  zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Spooky (Italian speech)",              GAME_IS_SKELETON_MECHANICAL)
 GAME(1987,  strsphnx,   0,        zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Star's Phoenix (Italian speech)",              GAME_IS_SKELETON_MECHANICAL)
 GAME(1983,  tmachzac,   0,        zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Time Machine (Zaccaria)",              GAME_IS_SKELETON_MECHANICAL)
-GAME(1983,  tmachzacg,  tmachzac, zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Time Machine (Zaccaria German speech)",                GAME_IS_SKELETON_MECHANICAL)
-GAME(1983,  tmachzacf,  tmachzac, zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Time Machine (Zaccaria French speech)",                GAME_IS_SKELETON_MECHANICAL)
+GAME(1983,  tmachzacg,  tmachzac, zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Time Machine (Zaccaria, German speech)",                GAME_IS_SKELETON_MECHANICAL)
+GAME(1983,  tmachzacf,  tmachzac, zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Time Machine (Zaccaria, French speech)",                GAME_IS_SKELETON_MECHANICAL)
 GAME(1986,  zankor,     0,        zac_2,  zac_2, driver_device, 0,  ROT0,    "Zaccaria",    "Zankor (Italian speech)",              GAME_IS_SKELETON_MECHANICAL)

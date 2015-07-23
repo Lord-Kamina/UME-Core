@@ -1,12 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Carl
 #ifndef QX10KBD_H_
 #define QX10KBD_H_
 
-#include "emu.h"
-#include "machine/keyboard.h"
-
-#define MCFG_QX10_KEYBOARD_ADD(_tag, _intrf) \
-	MCFG_DEVICE_ADD(_tag, QX10_KEYBOARD, 1200) \
-	MCFG_DEVICE_CONFIG(_intrf)
+#include "bus/rs232/keyboard.h"
 
 class qx10_keyboard_device : public serial_keyboard_device
 {

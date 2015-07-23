@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /*
     Sega/Stern Whitestar
 */
@@ -6,6 +8,7 @@
 #include "emu.h"
 #include "video/mc6845.h"
 #include "audio/decobsmt.h"
+#include "video/decodmd2.h"
 #include "rendlay.h"
 
 class whitestar_state : public driver_device
@@ -14,22 +17,20 @@ public:
 	whitestar_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
-		m_dmdcpu(*this, "dmdcpu"),
-		m_mc6845(*this, "mc6845"),
 		m_decobsmt(*this, "decobsmt"),
-		m_vram(*this, "vram"){ }
+		m_decodmd(*this, "decodmd")
+	{ }
 
 	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_dmdcpu;
-	required_device<mc6845_device> m_mc6845;
+	//required_device<cpu_device> m_dmdcpu;
+	//required_device<mc6845_device> m_mc6845;
 	required_device<decobsmt_device> m_decobsmt;
+	required_device<decodmd_type2_device> m_decodmd;
 
 	UINT8 m_dmd_latch;
 	UINT8 m_dmd_ctrl;
 	UINT8 m_dmd_status;
 	UINT8 m_dmd_busy;
-
-	required_shared_ptr<UINT8> m_vram;
 
 	DECLARE_WRITE8_MEMBER(dmd_latch_w);
 	DECLARE_READ8_MEMBER(dmd_latch_r);
@@ -40,6 +41,7 @@ public:
 
 	DECLARE_WRITE8_MEMBER(bank_w);
 	DECLARE_WRITE8_MEMBER(dmd_bank_w);
+	DECLARE_WRITE8_MEMBER(dmddata_w);
 
 	DECLARE_READ8_MEMBER(dips_r);
 	DECLARE_READ8_MEMBER(switch_r);
@@ -47,7 +49,6 @@ public:
 	DECLARE_READ8_MEMBER(dedicated_switch_r);
 	DECLARE_DRIVER_INIT(whitestar);
 	virtual void machine_reset();
-	virtual void palette_init();
 	INTERRUPT_GEN_MEMBER(whitestar_firq_interrupt);
 };
 
@@ -82,9 +83,9 @@ static ADDRESS_MAP_START( whitestar_map, AS_PROGRAM, 8, whitestar_state )
 	AM_RANGE(0x3200, 0x3200) AM_WRITE(bank_w)
 	AM_RANGE(0x3300, 0x3300) AM_WRITE(switch_w)
 	AM_RANGE(0x3400, 0x3400) AM_READ(switch_r)
-	AM_RANGE(0x3600, 0x3600) AM_WRITE(dmd_latch_w)
-	AM_RANGE(0x3601, 0x3601) AM_READWRITE(dmd_ctrl_r, dmd_ctrl_w)
-	AM_RANGE(0x3700, 0x3700) AM_READ(dmd_status_r)
+	AM_RANGE(0x3600, 0x3600) AM_WRITE(dmddata_w)
+	AM_RANGE(0x3601, 0x3601) AM_DEVREADWRITE("decodmd",decodmd_type2_device,ctrl_r, ctrl_w)
+	AM_RANGE(0x3700, 0x3700) AM_DEVREAD("decodmd",decodmd_type2_device,busy_r)
 	AM_RANGE(0x3800, 0x3800) AM_DEVWRITE(DECOBSMT_TAG, decobsmt_device, bsmt_comms_w)
 	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x8000, 0xffff) AM_ROM AM_REGION("user1", 0x18000)
@@ -104,77 +105,16 @@ WRITE8_MEMBER(whitestar_state::bank_w)
 	membank("bank1")->set_base(memregion("user1")->base() + (data & 0x1f) * 0x4000);
 }
 
-WRITE8_MEMBER(whitestar_state::dmd_bank_w)
+// Whitestar automatically pulses the DMD IRQ line?  DE hardware doesn't do that...
+WRITE8_MEMBER(whitestar_state::dmddata_w)
 {
-	membank("dmd_bank1")->set_base(memregion("dmdcpu")->base() + (data & 0x1f) * 0x4000);
+	m_decodmd->data_w(space,offset,data);
+	m_decodmd->ctrl_w(space,0,1);
+	m_decodmd->ctrl_w(space,0,0);
 }
-
-READ8_MEMBER(whitestar_state::dmd_latch_r)
-{
-	m_dmd_busy = 0;
-	m_dmdcpu->set_input_line(M6809_IRQ_LINE, CLEAR_LINE);
-	return m_dmd_latch;
-}
-
-WRITE8_MEMBER(whitestar_state::dmd_latch_w)
-{
-	m_dmd_latch = data;
-	m_dmd_busy = 1;
-	m_dmdcpu->set_input_line(M6809_IRQ_LINE, CLEAR_LINE);
-	m_dmdcpu->set_input_line(M6809_IRQ_LINE, ASSERT_LINE);
-}
-
-READ8_MEMBER(whitestar_state::dmd_ctrl_r)
-{
-	return m_dmd_ctrl;
-}
-
-WRITE8_MEMBER(whitestar_state::dmd_ctrl_w)
-{
-	m_dmd_ctrl = data;
-	m_dmdcpu->set_input_line(M6809_IRQ_LINE, CLEAR_LINE);
-	if (data!=0) {
-		bank_w(space,0,0);
-		m_dmdcpu->reset();
-	}
-}
-
-/*U202 - HC245
-  D0 = BUSY   -> SOUND BUSY?
-  D1 = SSTO   -> SOUND RELATED
-  D2 = MPIN   -> ??
-  D3 = CN8-22 -> DMD STAT0
-  D4 = CN8-23 -> DMD STAT1
-  D5 = CN8-24 -> DMD STAT2
-  D6 = CN8-25 -> DMD STAT3
-  D7 = CN8-26 -> DMD BUSY
-*/
-READ8_MEMBER(whitestar_state::dmd_status_r)
-{
-	return (m_dmd_busy ? 0x80 : 0x00) | (m_dmd_status << 3);
-}
-
-WRITE8_MEMBER(whitestar_state::dmd_status_w)
-{
-	m_dmd_status = data & 0x0f;
-}
-
-static ADDRESS_MAP_START( whitestar_dmd_map, AS_PROGRAM, 8, whitestar_state )
-	AM_RANGE(0x0000, 0x1fff) AM_RAM
-	AM_RANGE(0x2000, 0x2fff) AM_RAM AM_SHARE("vram") // video out
-	AM_RANGE(0x3000, 0x3000) AM_DEVREADWRITE("mc6845", mc6845_device, register_r, address_w)
-	AM_RANGE(0x3001, 0x3001) AM_DEVWRITE("mc6845", mc6845_device, register_w)
-	AM_RANGE(0x3002, 0x3002) AM_WRITE(dmd_bank_w)
-	AM_RANGE(0x3003, 0x3003) AM_READ(dmd_latch_r)
-	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("dmd_bank1")
-	AM_RANGE(0x4000, 0x4000) AM_WRITE(dmd_status_w)
-	AM_RANGE(0x8000, 0xffff) AM_ROM AM_REGION("dmdcpu", 0x78000)
-ADDRESS_MAP_END
-
 void whitestar_state::machine_reset()
 {
 	membank("bank1")->set_base(memregion("user1")->base());
-	membank("dmd_bank1")->set_base(memregion("dmdcpu")->base());
 }
 
 DRIVER_INIT_MEMBER(whitestar_state,whitestar)
@@ -187,107 +127,16 @@ INTERRUPT_GEN_MEMBER(whitestar_state::whitestar_firq_interrupt)
 	device.execute().set_input_line(M6809_FIRQ_LINE, HOLD_LINE);
 }
 
-#define DMD_CHUNK_SIZE 10
-#define MCFG_DMD_ADD(_tag, _width, _height) \
-	MCFG_DEVICE_ADD(_tag, SCREEN, 0) \
-	MCFG_SCREEN_TYPE(LCD) \
-	MCFG_SCREEN_REFRESH_RATE(60) \
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) \
-	MCFG_SCREEN_UPDATE_DEVICE("mc6845", mc6845_device, screen_update) \
-	MCFG_SCREEN_SIZE( _width * DMD_CHUNK_SIZE, _height *DMD_CHUNK_SIZE) \
-	MCFG_SCREEN_VISIBLE_AREA( 0, _width * DMD_CHUNK_SIZE-1, 0, _height*DMD_CHUNK_SIZE-1 ) \
-	MCFG_DEFAULT_LAYOUT( layout_lcd )
-
-
-void dmd_put_pixel(bitmap_rgb32 &bitmap, int x, int y, rgb_t color)
-{
-	int midx = x * DMD_CHUNK_SIZE + DMD_CHUNK_SIZE/2;
-	int midy = y * DMD_CHUNK_SIZE + DMD_CHUNK_SIZE/2;
-	int width = DMD_CHUNK_SIZE-2;
-	// compute parameters
-	width /= 2;
-	float ooradius2 = 1.0f / (float)(width * width);
-
-	// iterate over y
-	for (UINT32 y = 0; y <= width; y++)
-	{
-		UINT32 *d0 = &bitmap.pix32(midy - y);
-		UINT32 *d1 = &bitmap.pix32(midy + y);
-		float xval = width * sqrt(1.0f - (float)(y * y) * ooradius2);
-		INT32 left, right;
-
-		// compute left/right coordinates
-		left = midx - (INT32)(xval + 0.5f);
-		right = midx + (INT32)(xval + 0.5f);
-
-		// draw this scanline
-		for (UINT32 x = left; x < right; x++)
-			d0[x] = d1[x] = color;
-	}
-}
-
-MC6845_UPDATE_ROW( whitestar_update_row )
-{
-	whitestar_state *state = device->machine().driver_data<whitestar_state>();
-	const rgb_t *palette = palette_entry_list_raw(bitmap.palette());
-	UINT8 *vram  = state->m_vram + ((ma & 0x100)<<2) + (ra << 4);
-	int xi;
-
-	for (int x = 0; x < 128/8; x++)
-	{
-		UINT16 val = (vram[x]<<8) + vram[x+0x200];
-		val = BITSWAP16(val,15,7,14,6,13,5,12,4,11,3,10,2,9,1,8,0);
-
-		for(xi=0;xi<8;xi++)
-			dmd_put_pixel(bitmap, (x*8 + xi), ra, palette[((val>>(14-xi*2)) & 0x03) + 1]);
-	}
-}
-
-static MC6845_INTERFACE( whitestar_crtc6845_interface )
-{
-	NULL,
-	false,      /* show border area */
-	1,
-	NULL,
-	whitestar_update_row,
-	NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	NULL
-};
-
-void whitestar_state::palette_init()
-{
-	palette_set_color(machine(), 0, MAKE_RGB(0, 0, 0));
-
-	palette_set_color(machine(), 1, MAKE_RGB(20, 20, 20));
-	palette_set_color(machine(), 2, MAKE_RGB(84, 73, 10));
-	palette_set_color(machine(), 3, MAKE_RGB(168, 147, 21));
-	palette_set_color(machine(), 4, MAKE_RGB(255, 224, 32));
-}
-
 static MACHINE_CONFIG_START( whitestar, whitestar_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M6809, 2000000)
 	MCFG_CPU_PROGRAM_MAP(whitestar_map)
 	MCFG_CPU_PERIODIC_INT_DRIVER(whitestar_state, whitestar_firq_interrupt,  976) // value taken from PinMAME
 
-	MCFG_CPU_ADD("dmdcpu", M6809, (8000000/4))
-	MCFG_CPU_PROGRAM_MAP(whitestar_dmd_map)
-	MCFG_CPU_PERIODIC_INT_DRIVER(whitestar_state, whitestar_firq_interrupt,  80) // value taken from PinMAME
-
-
 	/* sound hardware */
 	MCFG_DECOBSMT_ADD(DECOBSMT_TAG)
 
-	MCFG_MC6845_ADD("mc6845", MC6845, 2000000, whitestar_crtc6845_interface)
-
-	/* video hardware */
-	MCFG_DMD_ADD("screen", 128, 32)
-
-	MCFG_PALETTE_LENGTH(5)
+	MCFG_DECODMD_TYPE2_ADD("decodmd",":dmdcpu")
 MACHINE_CONFIG_END
 
 // 8Mbit ROMs are mapped oddly: the first 4Mbit of each of the ROMs goes in order u17, u21, u36, u37
@@ -307,6 +156,22 @@ ROM_START(apollo13)
 	ROM_RELOAD(0x60000, 0x20000)
 	ROM_REGION(0x80000, "dmdcpu", 0)
 	ROM_LOAD("a13dspa.500", 0x00000, 0x80000, CRC(bf8e3249) SHA1(5e04681901ca794feb970f5388cb355427cf9a9a))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("apollo13.u7", 0x0000, 0x10000, CRC(e58a36b8) SHA1(ae60470a7b6c41cd40dbb7c0bea6f2f148f7b088))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD("apollo13.u17", 0x000000, 0x80000, CRC(4e863aca) SHA1(264f9176a1abf758b7a894d83883330ef91b7388))
+	ROM_LOAD("apollo13.u21", 0x080000, 0x80000, CRC(28169e37) SHA1(df5209d24187b546a4296fc4629c58bf729349d2))
+	ROM_LOAD("apollo13.u36", 0x100000, 0x80000, CRC(cede5e0f) SHA1(fa3b5820ed58e57b3c6185d91e9aea28aebc28d7))
+ROM_END
+
+ROM_START(apollo13_10)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("a13cpu.100", 0x00000, 0x20000, CRC(5971e956) SHA1(89853912fc569480e66bec4cef369d8320c3a07d))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("a13dps.100", 0x00000, 0x80000, CRC(224f6149) SHA1(b2a1786adc358834615989fce8835e0f039abb24))
 	ROM_REGION(0x010000, "soundcpu", 0)
 	ROM_LOAD("apollo13.u7", 0x0000, 0x10000, CRC(e58a36b8) SHA1(ae60470a7b6c41cd40dbb7c0bea6f2f148f7b088))
 	ROM_REGION(0x1000000, "bsmt", 0 )
@@ -525,6 +390,23 @@ ROM_END
 ROM_START(harl_a13)
 	ROM_REGION(0x80000, "user1", 0)
 	ROM_LOAD("harcpu.103", 0x00000, 0x20000, CRC(2a812c75) SHA1(46e1f18e1c9992ca1823f7818b6d51c001f5a934))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("hddispa.104", 0x00000, 0x80000, CRC(fc7c2924) SHA1(172fceb4d3221608f48a4abe4c4c5f3043834957))
+	ROM_REGION(0x010000, "soundcpu",0)
+	ROM_LOAD("hdsnd.u7",0x0000,0x10000,CRC(b9accb75) SHA1(9575f1c372ec5603322255778fc003047acc8b01))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("hdvc1.u17", 0x000000, CRC(0265fe72) SHA1(7bd7b321bfa2a5092cdf273dfaf4ccdb043c06e8))
+	ROM_LOAD_SND_8M("hdvc2.u21", 0x080000, CRC(89230898) SHA1(42d225e33ac1d679415e9dbf659591b7c4109740))
+	ROM_LOAD_SND_8M("hdvc3.u36", 0x100000, CRC(41239811) SHA1(94fceff4dbefd3467ecb8b19e4b8baf24ddd68a3))
+	ROM_LOAD("hdvc4.u37", 0x180000, 0x080000, CRC(a1bc39f6) SHA1(25af40cb3d8f774e1e37cbef9166e41753440460))
+ROM_END
+
+ROM_START(harl_u13)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("harcpuk.103", 0x00000, 0x20000, CRC(e39130a7) SHA1(7854c885a82f42f35e266e3cb96a68969d49fbad))
 	ROM_RELOAD(0x20000, 0x20000)
 	ROM_RELOAD(0x40000, 0x20000)
 	ROM_RELOAD(0x60000, 0x20000)
@@ -1000,6 +882,21 @@ ROM_END
 ROM_START(id4)
 	ROM_REGION(0x80000, "user1", 0)
 	ROM_LOAD("id4cpu.202", 0x00000, 0x20000, CRC(108d88fd) SHA1(8317944201acfb97dadfdd364696c9e81a21d2c5))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("id4dspa.200", 0x00000, 0x80000, CRC(2d3fbcc4) SHA1(0bd69ebb68ae880ac9aae40916f13e1ff84ecfaa))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("id4sndu7.512", 0x0000, 0x10000, CRC(deeaed37) SHA1(06d79967a25af0b90a5f1d6360a5b5fdbb972d5a))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD("id4sdu17.400", 0x000000, 0x80000, CRC(89ffeca3) SHA1(b94c60e3a433f797d6c5ea793c3ecff0a3b6ba60))
+	ROM_LOAD("id4sdu21.400", 0x080000, 0x80000, CRC(f384a9ab) SHA1(06bd607e7efd761017a7b605e0294a34e4c6255c))
+ROM_END
+
+ROM_START(id4_201)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("id4cpu.201", 0x00000, 0x20000, CRC(c0cd47a1) SHA1(63bb6da28b4f6fcc8525a8f1a6d262e35931efc9))
 	ROM_RELOAD(0x20000, 0x20000)
 	ROM_RELOAD(0x40000, 0x20000)
 	ROM_RELOAD(0x60000, 0x20000)
@@ -1678,6 +1575,92 @@ ROM_START(playboyl_203)
 	ROM_LOAD_SND_8M("pbsndu36.100", 0x200000, CRC(d10f14a3) SHA1(972b480c23d484b627ecdce0322c08fe760a127f))
 	ROM_LOAD_SND_8M("pbsndu37.100", 0x300000, CRC(6642524a) SHA1(9d0c0be5887cf4510c11243ee47b11c08cbae17c))
 ROM_END
+
+ROM_START(playboys_302)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("pbcpu.302", 0x00000, 0x20000, CRC(206285ed) SHA1(65ec90b20f7be6fac62170f69b744f9e4eb6254c))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("pbdispa.300", 0x00000, 0x80000, CRC(2dbb372a) SHA1(b694ae06f380ea9f9730ea6bbfab7f9f7ec7342b))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("pbsndu7.102",0x0000,0x10000,CRC(12a68f34) SHA1(f2cd42918dec353883bc465f6302c2d94dcd6b87))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("pbsndu17.100", 0x000000, CRC(f5502fec) SHA1(c8edd56e0c4365dd6b4bef0f1c7cc83ea5fd73d6))
+	ROM_LOAD_SND_8M("pbsndu21.100", 0x100000, CRC(7869d34f) SHA1(48a051045523c14ca06a7227b34ed9e3818828d0))
+	ROM_LOAD_SND_8M("pbsndu36.100", 0x200000, CRC(d10f14a3) SHA1(972b480c23d484b627ecdce0322c08fe760a127f))
+	ROM_LOAD_SND_8M("pbsndu37.100", 0x300000, CRC(6642524a) SHA1(9d0c0be5887cf4510c11243ee47b11c08cbae17c))
+ROM_END
+
+ROM_START(playboyl_302)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("pbcpu.302", 0x00000, 0x20000, CRC(206285ed) SHA1(65ec90b20f7be6fac62170f69b744f9e4eb6254c))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("pbdispl.300", 0x00000, 0x80000, CRC(e7697fc3) SHA1(7a9796e7b99af0d3d2079876a8054209a3067e64))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("pbsndu7.102",0x0000,0x10000,CRC(12a68f34) SHA1(f2cd42918dec353883bc465f6302c2d94dcd6b87))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("pbsndu17.100", 0x000000, CRC(f5502fec) SHA1(c8edd56e0c4365dd6b4bef0f1c7cc83ea5fd73d6))
+	ROM_LOAD_SND_8M("pbsndu21.100", 0x100000, CRC(7869d34f) SHA1(48a051045523c14ca06a7227b34ed9e3818828d0))
+	ROM_LOAD_SND_8M("pbsndu36.100", 0x200000, CRC(d10f14a3) SHA1(972b480c23d484b627ecdce0322c08fe760a127f))
+	ROM_LOAD_SND_8M("pbsndu37.100", 0x300000, CRC(6642524a) SHA1(9d0c0be5887cf4510c11243ee47b11c08cbae17c))
+ROM_END
+
+ROM_START(playboyg_302)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("pbcpu.302", 0x00000, 0x20000, CRC(206285ed) SHA1(65ec90b20f7be6fac62170f69b744f9e4eb6254c))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("pbdispg.300", 0x00000, 0x80000, CRC(ed7b7c62) SHA1(28b0ab490f8abd5f29e8cb0996da9e7200918157))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("pbsndu7.102",0x0000,0x10000,CRC(12a68f34) SHA1(f2cd42918dec353883bc465f6302c2d94dcd6b87))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("pbsndu17.100", 0x000000, CRC(f5502fec) SHA1(c8edd56e0c4365dd6b4bef0f1c7cc83ea5fd73d6))
+	ROM_LOAD_SND_8M("pbsndu21.100", 0x100000, CRC(7869d34f) SHA1(48a051045523c14ca06a7227b34ed9e3818828d0))
+	ROM_LOAD_SND_8M("pbsndu36.100", 0x200000, CRC(d10f14a3) SHA1(972b480c23d484b627ecdce0322c08fe760a127f))
+	ROM_LOAD_SND_8M("pbsndu37.100", 0x300000, CRC(6642524a) SHA1(9d0c0be5887cf4510c11243ee47b11c08cbae17c))
+ROM_END
+
+ROM_START(playboyf_302)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("pbcpu.302", 0x00000, 0x20000, CRC(206285ed) SHA1(65ec90b20f7be6fac62170f69b744f9e4eb6254c))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("pbdispf.300", 0x00000, 0x80000, CRC(69ab3bb2) SHA1(59d7ad5eca701d1216200cd489d2d07825a0856e))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("pbsndu7.102",0x0000,0x10000,CRC(12a68f34) SHA1(f2cd42918dec353883bc465f6302c2d94dcd6b87))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("pbsndu17.100", 0x000000, CRC(f5502fec) SHA1(c8edd56e0c4365dd6b4bef0f1c7cc83ea5fd73d6))
+	ROM_LOAD_SND_8M("pbsndu21.100", 0x100000, CRC(7869d34f) SHA1(48a051045523c14ca06a7227b34ed9e3818828d0))
+	ROM_LOAD_SND_8M("pbsndu36.100", 0x200000, CRC(d10f14a3) SHA1(972b480c23d484b627ecdce0322c08fe760a127f))
+	ROM_LOAD_SND_8M("pbsndu37.100", 0x300000, CRC(6642524a) SHA1(9d0c0be5887cf4510c11243ee47b11c08cbae17c))
+ROM_END
+
+ROM_START(playboyi_302)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("pbcpu.302", 0x00000, 0x20000, CRC(206285ed) SHA1(65ec90b20f7be6fac62170f69b744f9e4eb6254c))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("pbdispi.300", 0x00000, 0x80000, CRC(74c8cedf) SHA1(474ad1939ea0a58852003e549ed85478e239a67c))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("pbsndu7.102",0x0000,0x10000,CRC(12a68f34) SHA1(f2cd42918dec353883bc465f6302c2d94dcd6b87))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("pbsndu17.100", 0x000000, CRC(f5502fec) SHA1(c8edd56e0c4365dd6b4bef0f1c7cc83ea5fd73d6))
+	ROM_LOAD_SND_8M("pbsndu21.100", 0x100000, CRC(7869d34f) SHA1(48a051045523c14ca06a7227b34ed9e3818828d0))
+	ROM_LOAD_SND_8M("pbsndu36.100", 0x200000, CRC(d10f14a3) SHA1(972b480c23d484b627ecdce0322c08fe760a127f))
+	ROM_LOAD_SND_8M("pbsndu37.100", 0x300000, CRC(6642524a) SHA1(9d0c0be5887cf4510c11243ee47b11c08cbae17c))
+ROM_END
+
 /*-------------------------------------------------------------------
 / Roller Coaster Tycoon
 /-------------------------------------------------------------------*/
@@ -2581,6 +2564,91 @@ ROM_START(term3i_205)
 	ROM_LOAD_SND_8M("t3100.u37", 0x180000, CRC(3efb0c19) SHA1(6894295eef05891d64c7274512ba27f2b63ca3ec))
 ROM_END
 
+ROM_START(term3_301)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("t3cpu.301", 0x00000, 0x20000, CRC(172a0b83) SHA1(68f6a228182040a0ea6b310cb25d3d5bdd2574bf))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("t3dispa.300", 0x00000, 0x80000, CRC(79b68a2f) SHA1(cd466c15ffe09666c115f843775e457138bf23bc))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("t3100.u7",0x0000,0x10000,CRC(7f99e3af) SHA1(4916c074e2a4c947d1a658300f9f9629da1a8bb8))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("t3100.u17", 0x000000, CRC(f0c71b5d) SHA1(e9f726a232fbd4f34b8b07069f337dbb3daf394a))
+	ROM_LOAD_SND_8M("t3100.u21", 0x080000, CRC(694331f7) SHA1(e9ae8c5db2e59c0f9df923c98f6e75896e150807))
+	ROM_LOAD_SND_8M("t3100.u36", 0x100000, CRC(9eb512e9) SHA1(fa2fecf6cb0c1af3c6db244f9d94ba53d13e10fc))
+	ROM_LOAD_SND_8M("t3100.u37", 0x180000, CRC(3efb0c19) SHA1(6894295eef05891d64c7274512ba27f2b63ca3ec))
+ROM_END
+
+ROM_START(term3l_301)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("t3cpu.301", 0x00000, 0x20000, CRC(172a0b83) SHA1(68f6a228182040a0ea6b310cb25d3d5bdd2574bf))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("t3displ.300", 0x00000, 0x80000, CRC(2df35b3f) SHA1(5716b46c16cc7c4478f3118c4e6c3959b10624f8))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("t3100.u7",0x0000,0x10000,CRC(7f99e3af) SHA1(4916c074e2a4c947d1a658300f9f9629da1a8bb8))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("t3100.u17", 0x000000, CRC(f0c71b5d) SHA1(e9f726a232fbd4f34b8b07069f337dbb3daf394a))
+	ROM_LOAD_SND_8M("t3100.u21", 0x080000, CRC(694331f7) SHA1(e9ae8c5db2e59c0f9df923c98f6e75896e150807))
+	ROM_LOAD_SND_8M("t3100.u36", 0x100000, CRC(9eb512e9) SHA1(fa2fecf6cb0c1af3c6db244f9d94ba53d13e10fc))
+	ROM_LOAD_SND_8M("t3100.u37", 0x180000, CRC(3efb0c19) SHA1(6894295eef05891d64c7274512ba27f2b63ca3ec))
+ROM_END
+
+ROM_START(term3f_301)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("t3cpu.301", 0x00000, 0x20000, CRC(172a0b83) SHA1(68f6a228182040a0ea6b310cb25d3d5bdd2574bf))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("t3dispf.300", 0x00000, 0x80000, CRC(d5c68903) SHA1(00ca09f087e5b2a742d0bf6f2ff5706a2b83a295))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("t3100.u7",0x0000,0x10000,CRC(7f99e3af) SHA1(4916c074e2a4c947d1a658300f9f9629da1a8bb8))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("t3100.u17", 0x000000, CRC(f0c71b5d) SHA1(e9f726a232fbd4f34b8b07069f337dbb3daf394a))
+	ROM_LOAD_SND_8M("t3100.u21", 0x080000, CRC(694331f7) SHA1(e9ae8c5db2e59c0f9df923c98f6e75896e150807))
+	ROM_LOAD_SND_8M("t3100.u36", 0x100000, CRC(9eb512e9) SHA1(fa2fecf6cb0c1af3c6db244f9d94ba53d13e10fc))
+	ROM_LOAD_SND_8M("t3100.u37", 0x180000, CRC(3efb0c19) SHA1(6894295eef05891d64c7274512ba27f2b63ca3ec))
+ROM_END
+
+ROM_START(term3g_301)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("t3cpu.301", 0x00000, 0x20000, CRC(172a0b83) SHA1(68f6a228182040a0ea6b310cb25d3d5bdd2574bf))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("t3dispg.300", 0x00000, 0x80000, CRC(9115ea52) SHA1(52bd2cbe609363d9904b82704072fc3c398a7c18))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("t3100.u7",0x0000,0x10000,CRC(7f99e3af) SHA1(4916c074e2a4c947d1a658300f9f9629da1a8bb8))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("t3100.u17", 0x000000, CRC(f0c71b5d) SHA1(e9f726a232fbd4f34b8b07069f337dbb3daf394a))
+	ROM_LOAD_SND_8M("t3100.u21", 0x080000, CRC(694331f7) SHA1(e9ae8c5db2e59c0f9df923c98f6e75896e150807))
+	ROM_LOAD_SND_8M("t3100.u36", 0x100000, CRC(9eb512e9) SHA1(fa2fecf6cb0c1af3c6db244f9d94ba53d13e10fc))
+	ROM_LOAD_SND_8M("t3100.u37", 0x180000, CRC(3efb0c19) SHA1(6894295eef05891d64c7274512ba27f2b63ca3ec))
+ROM_END
+
+ROM_START(term3i_301)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("t3cpu.301", 0x00000, 0x20000, CRC(172a0b83) SHA1(68f6a228182040a0ea6b310cb25d3d5bdd2574bf))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("t3dispi.300", 0x00000, 0x80000, CRC(30573629) SHA1(85ae7183b42a62f62aa3ba6441717fc7a49dd03a))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("t3100.u7",0x0000,0x10000,CRC(7f99e3af) SHA1(4916c074e2a4c947d1a658300f9f9629da1a8bb8))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("t3100.u17", 0x000000, CRC(f0c71b5d) SHA1(e9f726a232fbd4f34b8b07069f337dbb3daf394a))
+	ROM_LOAD_SND_8M("t3100.u21", 0x080000, CRC(694331f7) SHA1(e9ae8c5db2e59c0f9df923c98f6e75896e150807))
+	ROM_LOAD_SND_8M("t3100.u36", 0x100000, CRC(9eb512e9) SHA1(fa2fecf6cb0c1af3c6db244f9d94ba53d13e10fc))
+	ROM_LOAD_SND_8M("t3100.u37", 0x180000, CRC(3efb0c19) SHA1(6894295eef05891d64c7274512ba27f2b63ca3ec))
+ROM_END
+
 /*-------------------------------------------------------------------
 / The Brain
 /-------------------------------------------------------------------*/
@@ -2864,6 +2932,74 @@ ROM_START(simpprti_204)
 	ROM_LOAD_SND_8M("spp100.u37", 0x180000, CRC(0738e1fc) SHA1(268462c06e5c1f286e5faaee1c0815448cc2eafa))
 ROM_END
 
+ROM_START(simpprty_300)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("spp-cpu.300",  0x00000, 0x20000, CRC(d9e02665) SHA1(12875c845c12b6676aa0af7c717fdf074156d938))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("sppdspa.300", 0x00000, 0x80000, CRC(57c4f297) SHA1(91ae894293b1252213a7137400f89c7ac2c6e877))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("spp101.u7",0x0000,0x10000,CRC(32efcdf6) SHA1(1d437e8649408be91e0dd10598cc67336203077f))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("spp100.u17", 0x000000, CRC(65e9344e) SHA1(fe4797ccb71b31aa39d6a5d373a01fc22f9d055c))
+	ROM_LOAD_SND_8M("spp100.u21", 0x080000, CRC(17fee0f9) SHA1(5b5ceb667f3bc9bde4ea08a1ef837e3b56c01977))
+	ROM_LOAD_SND_8M("spp100.u36", 0x100000, CRC(ffb957b0) SHA1(d6876ec63525099a7073c196867c17111272c69a))
+	ROM_LOAD_SND_8M("spp100.u37", 0x180000, CRC(0738e1fc) SHA1(268462c06e5c1f286e5faaee1c0815448cc2eafa))
+ROM_END
+
+ROM_START(simpprtl_300)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("spp-cpu.300",  0x00000, 0x20000, CRC(d9e02665) SHA1(12875c845c12b6676aa0af7c717fdf074156d938))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("sppdspl.300", 0x00000, 0x80000, CRC(d91ec782) SHA1(a01ebecb03200738b47177b02a689148d822ff0e))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("spp101.u7",0x0000,0x10000,CRC(32efcdf6) SHA1(1d437e8649408be91e0dd10598cc67336203077f))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("spp100.u17", 0x000000, CRC(65e9344e) SHA1(fe4797ccb71b31aa39d6a5d373a01fc22f9d055c))
+	ROM_LOAD_SND_8M("spp100.u21", 0x080000, CRC(17fee0f9) SHA1(5b5ceb667f3bc9bde4ea08a1ef837e3b56c01977))
+	ROM_LOAD_SND_8M("spp100.u36", 0x100000, CRC(ffb957b0) SHA1(d6876ec63525099a7073c196867c17111272c69a))
+	ROM_LOAD_SND_8M("spp100.u37", 0x180000, CRC(0738e1fc) SHA1(268462c06e5c1f286e5faaee1c0815448cc2eafa))
+ROM_END
+
+ROM_START(simpprtf_300)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("spp-cpu.300",  0x00000, 0x20000, CRC(d9e02665) SHA1(12875c845c12b6676aa0af7c717fdf074156d938))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("sppdspf.300", 0x00000, 0x80000, CRC(cb848e0d) SHA1(ab9f32d3b693ebcef92fe21e04d760756c8f59c2))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("spp101.u7",0x0000,0x10000,CRC(32efcdf6) SHA1(1d437e8649408be91e0dd10598cc67336203077f))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("spp100.u17", 0x000000, CRC(65e9344e) SHA1(fe4797ccb71b31aa39d6a5d373a01fc22f9d055c))
+	ROM_LOAD_SND_8M("spp100.u21", 0x080000, CRC(17fee0f9) SHA1(5b5ceb667f3bc9bde4ea08a1ef837e3b56c01977))
+	ROM_LOAD_SND_8M("spp100.u36", 0x100000, CRC(ffb957b0) SHA1(d6876ec63525099a7073c196867c17111272c69a))
+	ROM_LOAD_SND_8M("spp100.u37", 0x180000, CRC(0738e1fc) SHA1(268462c06e5c1f286e5faaee1c0815448cc2eafa))
+ROM_END
+
+ROM_START(simpprti_300)
+	ROM_REGION(0x80000, "user1", 0)
+	ROM_LOAD("spp-cpu.300",  0x00000, 0x20000, CRC(d9e02665) SHA1(12875c845c12b6676aa0af7c717fdf074156d938))
+	ROM_RELOAD(0x20000, 0x20000)
+	ROM_RELOAD(0x40000, 0x20000)
+	ROM_RELOAD(0x60000, 0x20000)
+	ROM_REGION(0x80000, "dmdcpu", 0)
+	ROM_LOAD("sppdspi.300", 0x00000, 0x80000, CRC(31acf30a) SHA1(aad2b363bed93d22613b0530fcd2d7f850f8e616))
+	ROM_REGION(0x010000, "soundcpu", 0)
+	ROM_LOAD("spp101.u7",0x0000,0x10000,CRC(32efcdf6) SHA1(1d437e8649408be91e0dd10598cc67336203077f))
+	ROM_REGION(0x1000000, "bsmt", 0 )
+	ROM_LOAD_SND_8M("spp100.u17", 0x000000, CRC(65e9344e) SHA1(fe4797ccb71b31aa39d6a5d373a01fc22f9d055c))
+	ROM_LOAD_SND_8M("spp100.u21", 0x080000, CRC(17fee0f9) SHA1(5b5ceb667f3bc9bde4ea08a1ef837e3b56c01977))
+	ROM_LOAD_SND_8M("spp100.u36", 0x100000, CRC(ffb957b0) SHA1(d6876ec63525099a7073c196867c17111272c69a))
+	ROM_LOAD_SND_8M("spp100.u37", 0x180000, CRC(0738e1fc) SHA1(268462c06e5c1f286e5faaee1c0815448cc2eafa))
+ROM_END
+
 /*-------------------------------------------------------------------
 / X-Files
 /-------------------------------------------------------------------*/
@@ -3036,7 +3172,8 @@ ROM_END
 
 #define GAME_IS_PINBALL GAME_NOT_WORKING | GAME_NO_SOUND | GAME_MECHANICAL
 
-GAME(1995,  apollo13,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Apollo 13",                GAME_IS_PINBALL)
+GAME(1995,  apollo13,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Apollo 13 (5.01)",                GAME_IS_PINBALL)
+GAME(1995,  apollo13_10,apollo13,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Apollo 13 (1.00)",                GAME_IS_PINBALL)
 GAME(2001,  austin,     0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Austin Powers (3.02)",             GAME_IS_PINBALL)
 GAME(2001,  aust301,    austin,     whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Austin Powers (3.01)",             GAME_IS_PINBALL)
 GAME(2001,  aust300,    austin,     whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Austin Powers (3.00)",             GAME_IS_PINBALL)
@@ -3049,6 +3186,7 @@ GAME(1998,  godzillp,   0,          whitestar,  whitestar, whitestar_state, whit
 GAME(1996,  gldneye,    0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Goldeneye",                GAME_IS_PINBALL)
 GAME(1998,  goldcue,    0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Golden Cue",               GAME_IS_PINBALL)
 GAME(1999,  harl_a13,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Harley Davidson (1.03)",               GAME_IS_PINBALL)
+GAME(1999,  harl_u13,   harl_a13,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Harley Davidson (1.03 UK)",             GAME_IS_PINBALL)
 GAME(1999,  harl_a10,   harl_a13,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Harley Davidson (1.03 Display rev. 1.00)",             GAME_IS_PINBALL)
 GAME(1999,  harl_f13,   harl_a13,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Harley Davidson (1.03 France)",                GAME_IS_PINBALL)
 GAME(1999,  harl_g13,   harl_a13,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Harley Davidson (1.03 Germany)",               GAME_IS_PINBALL)
@@ -3078,6 +3216,7 @@ GAME(2001,  hirol_gr,   hirolcas,   whitestar,  whitestar, whitestar_state, whit
 GAME(2001,  hirol_gr_210,hirolcas,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "High Roller Casino (2.10 Germany)",                GAME_IS_PINBALL)
 GAME(2001,  hirol_it,   hirolcas,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "High Roller Casino (3.00 Italy)",              GAME_IS_PINBALL)
 GAME(1996,  id4,        0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Independence Day",             GAME_IS_PINBALL)
+GAME(1996,  id4_201,    id4,        whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Independence Day (v2.01)",             GAME_IS_PINBALL)
 GAME(1998,  lostspc,    0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Lost in Space",                GAME_IS_PINBALL)
 GAME(2001,  monopolp,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Monopoly (3.20)",              GAME_IS_PINBALL)
 GAME(2002,  monop303,   monopolp,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Monopoly (3.03)",              GAME_IS_PINBALL)
@@ -3093,27 +3232,32 @@ GAME(2001,  nfl,        0,          whitestar,  whitestar, whitestar_state, whit
 GAME(2002,  playboys,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (5.00)",               GAME_IS_PINBALL)
 GAME(2002,  playboys_401,playboys,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (4.01)",               GAME_IS_PINBALL)
 GAME(2002,  playboys_303,playboys,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.03)",               GAME_IS_PINBALL)
+GAME(2002,  playboys_302,playboys,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.02)",               GAME_IS_PINBALL)
 GAME(2002,  playboys_300,playboys,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.00)",               GAME_IS_PINBALL)
 GAME(2002,  playboys_203,playboys,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (2.03)",               GAME_IS_PINBALL)
 GAME(2002,  playnew,    playboys,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (ARM7 Sound Board)",               GAME_IS_PINBALL)
 GAME(2002,  playboyf,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (5.00 France)",                GAME_IS_PINBALL)
 GAME(2002,  playboyf_401,playboyf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (4.01 France)",                GAME_IS_PINBALL)
 GAME(2002,  playboyf_303,playboyf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.03 France)",                GAME_IS_PINBALL)
+GAME(2002,  playboyf_302,playboyf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.02 France)",                GAME_IS_PINBALL)
 GAME(2002,  playboyf_300,playboyf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.00 France)",                GAME_IS_PINBALL)
 GAME(2002,  playboyf_203,playboyf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (2.03 France)",                GAME_IS_PINBALL)
 GAME(2002,  playboyg,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (5.00 Germany)",               GAME_IS_PINBALL)
 GAME(2002,  playboyg_401,playboyg,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (4.01 Germany)",               GAME_IS_PINBALL)
 GAME(2002,  playboyg_303,playboyg,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.03 Germany)",               GAME_IS_PINBALL)
+GAME(2002,  playboyg_302,playboyg,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.02 Germany)",               GAME_IS_PINBALL)
 GAME(2002,  playboyg_300,playboyg,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.00 Germany)",               GAME_IS_PINBALL)
 GAME(2002,  playboyg_203,playboyg,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (2.03 Germany)",               GAME_IS_PINBALL)
 GAME(2002,  playboyi,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (5.00 Italy)",             GAME_IS_PINBALL)
 GAME(2002,  playboyi_401,playboyi,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (4.01 Italy)",             GAME_IS_PINBALL)
 GAME(2002,  playboyi_303,playboyi,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.03 Italy)",             GAME_IS_PINBALL)
+GAME(2002,  playboyi_302,playboyi,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.02 Italy)",             GAME_IS_PINBALL)
 GAME(2002,  playboyi_300,playboyi,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.00 Italy)",             GAME_IS_PINBALL)
 GAME(2002,  playboyi_203,playboyi,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (2.03 Italy)",             GAME_IS_PINBALL)
 GAME(2002,  playboyl,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (5.00 Spain)",             GAME_IS_PINBALL)
 GAME(2002,  playboyl_401,playboyl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (4.01 Spain)",             GAME_IS_PINBALL)
 GAME(2002,  playboyl_303,playboyl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.03 Spain)",             GAME_IS_PINBALL)
+GAME(2002,  playboyl_302,playboyl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.02 Spain)",             GAME_IS_PINBALL)
 GAME(2002,  playboyl_300,playboyl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (3.00 Spain)",             GAME_IS_PINBALL)
 GAME(2002,  playboyl_203,playboyl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Playboy (2.03 Spain)",             GAME_IS_PINBALL)
 GAME(2002,  rctycn,     0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Roller Coaster Tycoon (7.02)",             GAME_IS_PINBALL)
@@ -3163,32 +3307,41 @@ GAME(1999,  strxt_fr,   strikext,   whitestar,  whitestar, whitestar_state, whit
 GAME(1999,  strxt_it,   strikext,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Striker Xtreme (Italy)",               GAME_IS_PINBALL)
 GAME(1999,  strxt_sp,   strikext,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Striker Xtreme (Spain)",               GAME_IS_PINBALL)
 GAME(2003,  term3,      0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (4.00)",                GAME_IS_PINBALL)
+GAME(2003,  term3_301,  term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (3.01)",                GAME_IS_PINBALL)
 GAME(2003,  term3_205,  term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (2.05)",                GAME_IS_PINBALL)
 GAME(2003,  t3new,      term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (ARM7 Sound Board)",                GAME_IS_PINBALL)
 GAME(2003,  term3g,     term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (4.00 Germany)",                GAME_IS_PINBALL)
+GAME(2003,  term3g_301, term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (3.01 Germany)",              GAME_IS_PINBALL)
 GAME(2003,  term3l,     term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (4.00 Spain)",              GAME_IS_PINBALL)
+GAME(2003,  term3l_301, term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (3.01 Spain)",              GAME_IS_PINBALL)
 GAME(2003,  term3l_205, term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (2.05 Spain)",              GAME_IS_PINBALL)
 GAME(2003,  term3f,     term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (4.00 France)",             GAME_IS_PINBALL)
+GAME(2003,  term3f_301, term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (3.01 France)",             GAME_IS_PINBALL)
 GAME(2003,  term3f_205, term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (2.05 France)",             GAME_IS_PINBALL)
 GAME(2003,  term3i,     term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (4.00 Italy)",              GAME_IS_PINBALL)
+GAME(2003,  term3i_301, term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (3.01 Italy)",              GAME_IS_PINBALL)
 GAME(2003,  term3i_205, term3,      whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Terminator 3: Rise of the Machines (2.05 Italy)",              GAME_IS_PINBALL)
-GAME(1997,  jplstw22,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Lost World: Jurassic Park, The (2.02)",                GAME_IS_PINBALL)
-GAME(1997,  jplstw20,   jplstw22,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Lost World: Jurassic Park, The (2.00)",                GAME_IS_PINBALL)
-GAME(2003,  simpprty,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (5.00)",               GAME_IS_PINBALL)
-GAME(2003,  simpprty_400,simpprty,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (4.00)",               GAME_IS_PINBALL)
-GAME(2003,  simpprty_204,simpprty,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (2.04)",               GAME_IS_PINBALL)
-GAME(2003,  simpnew,    simpprty,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (ARM7 Sound Board)",               GAME_IS_PINBALL)
-GAME(2003,  simpprtg,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (5.00 Germany)",               GAME_IS_PINBALL)
-GAME(2003,  simpprtg_400,simpprtg,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (4.00 Germany)",               GAME_IS_PINBALL)
-GAME(2003,  simpprtl,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (5.00 Spain)",             GAME_IS_PINBALL)
-GAME(2003,  simpprtl_400,simpprtl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (4.00 Spain)",             GAME_IS_PINBALL)
-GAME(2003,  simpprtl_204,simpprtl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (2.04 Spain)",             GAME_IS_PINBALL)
-GAME(2003,  simpprtf,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (5.00 France)",                GAME_IS_PINBALL)
-GAME(2003,  simpprtf_400,simpprtf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (4.00 France)",                GAME_IS_PINBALL)
-GAME(2003,  simpprtf_204,simpprtf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (2.04 France)",                GAME_IS_PINBALL)
-GAME(2003,  simpprti,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (5.00 Italy)",             GAME_IS_PINBALL)
-GAME(2003,  simpprti_400,simpprti,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (4.00 Italy)",             GAME_IS_PINBALL)
-GAME(2003,  simpprti_204,simpprti,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "Simpsons Pinball Party, The (2.04 Italy)",             GAME_IS_PINBALL)
+GAME(1997,  jplstw22,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "The Lost World: Jurassic Park (2.02)",                GAME_IS_PINBALL)
+GAME(1997,  jplstw20,   jplstw22,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "The Lost World: Jurassic Park (2.00)",                GAME_IS_PINBALL)
+GAME(2003,  simpprty,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (5.00)",               GAME_IS_PINBALL)
+GAME(2003,  simpprty_400,simpprty,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (4.00)",               GAME_IS_PINBALL)
+GAME(2003,  simpprty_300,simpprty,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (3.00)",               GAME_IS_PINBALL)
+GAME(2003,  simpprty_204,simpprty,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (2.04)",               GAME_IS_PINBALL)
+GAME(2003,  simpnew,    simpprty,   whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (ARM7 Sound Board)",               GAME_IS_PINBALL)
+GAME(2003,  simpprtg,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (5.00 Germany)",               GAME_IS_PINBALL)
+GAME(2003,  simpprtg_400,simpprtg,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (4.00 Germany)",               GAME_IS_PINBALL)
+GAME(2003,  simpprtl,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (5.00 Spain)",             GAME_IS_PINBALL)
+GAME(2003,  simpprtl_400,simpprtl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (4.00 Spain)",             GAME_IS_PINBALL)
+GAME(2003,  simpprtl_300,simpprtl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (3.00 Spain)",             GAME_IS_PINBALL)
+GAME(2003,  simpprtl_204,simpprtl,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (2.04 Spain)",             GAME_IS_PINBALL)
+GAME(2003,  simpprtf,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (5.00 France)",                GAME_IS_PINBALL)
+GAME(2003,  simpprtf_400,simpprtf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (4.00 France)",                GAME_IS_PINBALL)
+GAME(2003,  simpprtf_300,simpprtf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (3.00 France)",                GAME_IS_PINBALL)
+GAME(2003,  simpprtf_204,simpprtf,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (2.04 France)",                GAME_IS_PINBALL)
+GAME(2003,  simpprti,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (5.00 Italy)",             GAME_IS_PINBALL)
+GAME(2003,  simpprti_400,simpprti,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (4.00 Italy)",             GAME_IS_PINBALL)
+GAME(2003,  simpprti_300,simpprti,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (3.00 Italy)",             GAME_IS_PINBALL)
+GAME(2003,  simpprti_204,simpprti,  whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Stern",    "The Simpsons Pinball Party (2.04 Italy)",             GAME_IS_PINBALL)
 GAME(1997,  xfilesp,    0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "X-Files (3.03)",               GAME_IS_PINBALL)
 GAME(1997,  xfiles2,    xfilesp,    whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "X-Files (2.04)",               GAME_IS_PINBALL)
 GAME(1996,  twst_405,   0,          whitestar,  whitestar, whitestar_state, whitestar,  ROT0,   "Sega",     "Twister (4.05)",               GAME_IS_PINBALL)

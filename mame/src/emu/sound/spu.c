@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:pSXAuthor, R. Belmont
 /*
 
     Sony PlayStation SPU (CXD2922BQ/CXD2925Q) emulator
@@ -126,7 +128,7 @@ enum srrr_flags
 	srrr_rr_mask=0x1f
 };
 
-static const unsigned int sound_buffer_size=65536*4,
+static const unsigned int /*sound_buffer_size=65536*4,*/
 													xa_sector_size=(18*28*8)<<1,
 													xa_buffer_sectors=16,
 													cdda_sector_size=2352,
@@ -136,15 +138,15 @@ static const unsigned int sound_buffer_size=65536*4,
 													spu_ram_size=512*1024,
 													spu_infinity=0xffffffff,
 
-													output_buffer_size=65536/8,
+													output_buffer_size=65536/8/*,
 
-													sample_loop_cache_pool_size=64,
-													sample_loop_cache_extend_size=64,
-													sample_cache_pool_size=64,
-													sample_cache_extend_size=64,
+                                                    sample_loop_cache_pool_size=64,
+                                                    sample_loop_cache_extend_size=64,
+                                                    sample_cache_pool_size=64,
+                                                    sample_cache_extend_size=64,
 
-													stream_marker_pool_size=64,
-													stream_marker_extend_size=64;
+                                                    stream_marker_pool_size=64,
+                                                    stream_marker_extend_size=64*/;
 
 //
 //
@@ -473,7 +475,7 @@ public:
 									*prev;
 	};
 
-	unsigned char *buffer;
+	dynamic_buffer buffer;
 	unsigned int head,
 								tail,
 								in,
@@ -494,14 +496,13 @@ public:
 			marker_tail(NULL)
 	{
 		buffer_size=sector_size*num_sectors;
-		buffer=new unsigned char [buffer_size];
-		memset(buffer,0,buffer_size);
+		buffer.resize(buffer_size);
+		memset(&buffer[0], 0, buffer_size);
 	}
 
 	~stream_buffer()
 	{
 		flush_all();
-		global_free(buffer);
 	}
 
 	unsigned char *add_sector(const unsigned int sector)
@@ -520,7 +521,7 @@ public:
 		}
 		marker_tail=xam;
 
-		unsigned char *ret=buffer+head;
+		unsigned char *ret=&buffer[head];
 		head=(head+sector_size)%buffer_size;
 		in+=sector_size;
 		return ret;
@@ -594,10 +595,10 @@ public:
 	unsigned int get_bytes_in() const { return in; }
 	unsigned int get_bytes_free() const { return buffer_size-in; }
 
-	unsigned char *get_tail_ptr() const { return buffer+tail; }
-	unsigned char *get_tail_ptr(const unsigned int offset) const
+	unsigned char *get_tail_ptr() { return &buffer[tail]; }
+	unsigned char *get_tail_ptr(const unsigned int offset)
 	{
-		return buffer+((tail+offset)%buffer_size);
+		return &buffer[((tail+offset)%buffer_size)];
 	}
 	unsigned int get_tail_offset() const { return tail; }
 	void increment_tail(const unsigned int offset)
@@ -624,7 +625,7 @@ static inline int clamp(const int v)
 
 spu_device::sample_cache::~sample_cache()
 {
-	global_free(data);
+	global_free_array(data);
 	while (loop_cache)
 	{
 		sample_loop_cache *lc=loop_cache;
@@ -954,7 +955,7 @@ static int shift_register15(int &shift)
 //-------------------------------------------------
 
 spu_device::spu_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
-	device_t(mconfig, SPU, "SPU", tag, owner, clock),
+	device_t(mconfig, SPU, "SPU", tag, owner, clock, "spu", __FILE__),
 	device_sound_interface(mconfig, *this),
 	m_irq_handler(*this),
 	dirty_flags(-1),
@@ -1003,7 +1004,7 @@ void spu_device::device_start()
 	save_item(NAME(xa_buffer->sector_size));
 	save_item(NAME(xa_buffer->num_sectors));
 	save_item(NAME(xa_buffer->buffer_size));
-	save_pointer(NAME(xa_buffer->buffer), xa_sector_size*xa_buffer_sectors);
+	save_item(NAME(xa_buffer->buffer));
 
 	save_item(NAME(cdda_buffer->head));
 	save_item(NAME(cdda_buffer->tail));
@@ -1011,7 +1012,7 @@ void spu_device::device_start()
 	save_item(NAME(cdda_buffer->sector_size));
 	save_item(NAME(cdda_buffer->num_sectors));
 	save_item(NAME(cdda_buffer->buffer_size));
-	save_pointer(NAME(cdda_buffer->buffer), cdda_sector_size*cdda_buffer_sectors);
+	save_item(NAME(cdda_buffer->buffer));
 }
 
 void spu_device::device_reset()
@@ -1082,16 +1083,16 @@ void spu_device::device_post_load()
 void spu_device::device_stop()
 {
 	for (unsigned int i=0; i<4; i++)
-		global_free(output_buf[i]);
+		global_free_array(output_buf[i]);
 
 	kill_stream();
 
-	global_free(spu_ram);
+	global_free_array(spu_ram);
 	invalidate_cache(0,spu_ram_size);
-	global_free(cache);
+	global_free_array(cache);
 	global_free(xa_buffer);
 	global_free(cdda_buffer);
-	global_free(voice);
+	global_free_array(voice);
 }
 //
 //
@@ -2332,9 +2333,9 @@ void spu_device::set_xa_format(const float _freq, const int channels)
 	// Adjust frequency to compensate for slightly slower/faster frame rate
 //  float freq=44100.0; //(_freq*get_adjusted_frame_rate())/ps1hw.rcnt->get_vertical_refresh();
 
-	xa_freq=(unsigned int)((_freq/44100.0)*4096.0f);
+	xa_freq=(unsigned int)((_freq/44100.0f)*4096.0f);
 	xa_channels=channels;
-	xa_spf=(unsigned int)(_freq/60.0)*channels;
+	xa_spf=(unsigned int)(_freq/60.0f)*channels;
 }
 
 //
@@ -2547,7 +2548,7 @@ void spu_device::update_reverb()
 //          printf("spu: reverb=%s\n",cur_reverb_preset->name);
 			spu_reverb_cfg=&cur_reverb_preset->cfg;
 
-			if ((mame_stricmp("reverb off",cur_reverb_preset->name)) && (spu_reverb_cfg->band_gain<=0.0f))
+			if ((core_stricmp("reverb off",cur_reverb_preset->name)) && (spu_reverb_cfg->band_gain<=0.0f))
 			{
 //              printf("spu: no reverb config for %s\n",cur_reverb_preset->name);
 			}

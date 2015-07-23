@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /*********************************************************************
 
     flopimg.h
@@ -12,6 +14,7 @@
 #include "osdcore.h"
 #include "ioprocs.h"
 #include "opresolv.h"
+#include "coretmpl.h"
 
 #ifndef LOG_FORMATS
 #define LOG_FORMATS if (0) printf
@@ -302,12 +305,18 @@ protected:
 		MFM,                    //!< One byte in p1 to be mfm-encoded, msb first, repeated p2 times
 		MFMBITS,                //!< A value of p2 bits in p1 to be mfm-encoded, msb first
 		GCR5,                   //!< One byte in p1 to be gcr5-encoded, repeated p2 times
+		_8N1,                   //!< One byte in p1 to be 8N1-encoded, repeated p2 times
 		RAW,                    //!< One 16 bits word in p1 to be written raw, msb first, repeated p2 times
 		RAWBYTE,                //!< One 8 bit byte in p1 to be written raw, msb first, repeated p2 times
 		RAWBITS,                //!< A value of p2 bits in p1 to be copied as-is, msb first
+		SYNC_GCR5,              //!< gcr5 sync byte
 		TRACK_ID,               //!< Track id byte, mfm-encoded
 		TRACK_ID_FM,            //!< Track id byte, fm-encoded
+		TRACK_ID_DOS2_GCR5,     //!< Track id byte, gcr5-encoded
+		TRACK_ID_DOS25_GCR5,    //!< Track id byte, gcr5-encoded
 		TRACK_ID_GCR6,          //!< Track id low 6 bits, gcr6-encoded
+		TRACK_ID_8N1,           //!< Track id byte, 8N1-encoded
+		TRACK_ID_VICTOR_GCR5,   //!< Track id byte, gcr5-encoded
 		HEAD_ID,                //!< Head id byte, mfm-encoded
 		HEAD_ID_FM,             //!< Head id byte, fm-encoded
 		HEAD_ID_SWAP,           //!< Head id byte swapped (0->1, 1->0), mfm-encoded
@@ -316,6 +325,7 @@ protected:
 		SECTOR_ID_FM,           //!< Sector id byte, fm-encoded
 		SECTOR_ID_GCR5,         //!< Sector id byte, gcr5-encoded
 		SECTOR_ID_GCR6,         //!< Sector id byte, gcr6-encoded
+		SECTOR_ID_8N1,          //!< Sector id byte, 8N1-encoded
 		SIZE_ID,                //!< Sector size code on one byte [log2(size/128)], mfm-encoded
 		SIZE_ID_FM,             //!< Sector size code on one byte [log2(size/128)], fm-encoded
 		SECTOR_INFO_GCR6,       //!< Sector info byte, gcr6-encoded
@@ -332,18 +342,22 @@ protected:
 		SECTOR_DATA_E,          //!< Sector data to mfm-encode, even bits only, which in p1, -1 for the current one per the sector id
 		SECTOR_DATA_GCR5,       //!< Sector data to gcr5-encode, which in p1, -1 for the current one per the sector id
 		SECTOR_DATA_MAC,        //!< Transformed sector data + checksum, mac style, id in p1, -1 for the current one per the sector id
+		SECTOR_DATA_8N1,        //!< Sector data to 8N1-encode, which in p1, -1 for the current one per the sector id
 
 		CRC_CCITT_START,        //!< Start a CCITT CRC calculation, with the usual x^16 + x^12 + x^5 + 1 (11021) polynomial, p1 = crc id
 		CRC_CCITT_FM_START,     //!< Start a CCITT CRC calculation, with the usual x^16 + x^12 + x^5 + 1 (11021) polynomial, p1 = crc id
 		CRC_AMIGA_START,        //!< Start an amiga checksum calculation, p1 = crc id
-		CRC_CBM_START,          //<! Start a CBM checksum calculation (xor of original data values, gcr5-encoded), p1 = crc id
+		CRC_CBM_START,          //!< Start a CBM checksum calculation (xor of original data values, gcr5-encoded), p1 = crc id
 		CRC_MACHEAD_START,      //!< Start of the mac gcr6 sector header checksum calculation (xor of pre-encode 6-bits values, gcr6-encoded)
+		CRC_FCS_START,          //!< Start a Compucolor File Control System checksum calculation, p1 = crc id
+		CRC_VICTOR_HDR_START,   //!< Start a Victor 9000 checksum calculation, p1 = crc id
+		CRC_VICTOR_DATA_START,  //!< Start a Victor 9000 checksum calculation, p1 = crc id
 		CRC_END,                //!< End the checksum, p1 = crc id
 		CRC,                    //!< Write a checksum in the apporpriate format, p1 = crc id
 
 		SECTOR_LOOP_START,      //!< Start of the per-sector loop, sector number goes from p1 to p2 inclusive
 		SECTOR_LOOP_END,        //!< End of the per-sector loop
-		SECTOR_INTERLEAVE_SKEW, //!< Defines interleave and skew for sector counting
+		SECTOR_INTERLEAVE_SKEW  //!< Defines interleave and skew for sector counting
 	};
 
 	//! Sector data description
@@ -373,7 +387,7 @@ protected:
 	    @param track_size in cells, not bytes.
 	    @param image
 	*/
-	void generate_track_from_bitstream(int track, int head, const UINT8 *trackbuf, int track_size, floppy_image *image);
+	void generate_track_from_bitstream(int track, int head, const UINT8 *trackbuf, int track_size, floppy_image *image, int subtrack = 0);
 
 	//! @brief Generate a track from cell level values (0/1/W/D/N).
 
@@ -390,10 +404,10 @@ protected:
 	    know. trackbuf may be modified at that position or after.
 	    @param image
 	*/
-	void generate_track_from_levels(int track, int head, UINT32 *trackbuf, int track_size, int splice_pos, floppy_image *image);
+	void generate_track_from_levels(int track, int head, std::vector<UINT32> &trackbuf, int splice_pos, floppy_image *image);
 
 	//! Normalize the times in a cell buffer to sum up to 200000000
-	void normalize_times(UINT32 *buffer, int bitlen);
+	void normalize_times(std::vector<UINT32> &buffer);
 
 	// Some conversion tables for gcr
 	static const UINT8 gcr5fw_tb[0x10], gcr5bw_tb[0x20];
@@ -459,6 +473,7 @@ protected:
 	 C1541 tr 18-24   3.50    300    3500
 	 C1541 tr 25-30   3.75    300    3750
 	 C1541 tr 31+     4.00    300    4000
+	 8" DD            1       360    1200
 	 5.25" SD         4       300    4000
 	 5.25" DD         2       300    2000
 	 5.25" HD         1       360    1200
@@ -469,7 +484,7 @@ protected:
 	 @endverbatim
 	 */
 
-	void generate_bitstream_from_track(int track, int head, int cell_size,  UINT8 *trackbuf, int &track_size, floppy_image *image);
+	void generate_bitstream_from_track(int track, int head, int cell_size, UINT8 *trackbuf, int &track_size, floppy_image *image, int subtrack = 0);
 
 	//! Defines a standard sector for extracting.
 	struct desc_xs {
@@ -507,6 +522,10 @@ protected:
 	void extract_sectors_from_bitstream_mfm_pc(const UINT8 *bitstream, int track_size, desc_xs *sectors, UINT8 *sectdata, int sectdata_size);
 	//! PC-type sectors with FM encoding
 	void extract_sectors_from_bitstream_fm_pc(const UINT8 *bitstream, int track_size, desc_xs *sectors, UINT8 *sectdata, int sectdata_size);
+	//! Commodore type sectors with GCR5 encoding
+	void extract_sectors_from_bitstream_gcr5(const UINT8 *bitstream, int track_size, desc_xs *sectors, UINT8 *sectdata, int sectdata_size, int head, int tracks);
+	//! Victor 9000 type sectors with GCR5 encoding
+	void extract_sectors_from_bitstream_victor_gcr5(const UINT8 *bitstream, int track_size, desc_xs *sectors, UINT8 *sectdata, int sectdata_size);
 
 
 	//! @brief Get a geometry (including sectors) from an image.
@@ -526,23 +545,30 @@ protected:
 	void get_track_data_fm_pc(int track, int head, floppy_image *image, int cell_size, int sector_size, int sector_count, UINT8 *sectdata);
 
 	//! Look up a bit in a level-type stream.
-	bool bit_r(const UINT32 *buffer, int offset);
+	bool bit_r(const std::vector<UINT32> &buffer, int offset);
 	//! Look up multiple bits
-	UINT32 bitn_r(const UINT32 *buffer, int offset, int count);
+	UINT32 bitn_r(const std::vector<UINT32> &buffer, int offset, int count);
 	//! Write a bit with a given size.
-	void bit_w(UINT32 *buffer, int offset, bool val, UINT32 size = 1000);
+	void bit_w(std::vector<UINT32> &buffer, bool val, UINT32 size = 1000);
+	void bit_w(std::vector<UINT32> &buffer, bool val, UINT32 size, int offset);
 	//! Calculate a CCITT-type CRC.
-	UINT16 calc_crc_ccitt(const UINT32 *buffer, int start, int end);
-	//! Write a series of (raw) bits and increment the offset.
-	void raw_w(UINT32 *buffer, int &offset, int n, UINT32 val, UINT32 size = 1000);
+	UINT16 calc_crc_ccitt(const std::vector<UINT32> &buffer, int start, int end);
+	//! Write a series of (raw) bits
+	void raw_w(std::vector<UINT32> &buffer, int n, UINT32 val, UINT32 size = 1000);
+	void raw_w(std::vector<UINT32> &buffer, int n, UINT32 val, UINT32 size, int offset);
 	//! FM-encode and write a series of bits
-	void fm_w(UINT32 *buffer, int &offset, int n, UINT32 val, UINT32 size = 1000);
+	void fm_w(std::vector<UINT32> &buffer, int n, UINT32 val, UINT32 size = 1000);
+	void fm_w(std::vector<UINT32> &buffer, int n, UINT32 val, UINT32 size, int offset);
 	//! MFM-encode and write a series of bits
-	void mfm_w(UINT32 *buffer, int &offset, int n, UINT32 val, UINT32 size = 1000);
+	void mfm_w(std::vector<UINT32> &buffer, int n, UINT32 val, UINT32 size = 1000);
+	void mfm_w(std::vector<UINT32> &buffer, int n, UINT32 val, UINT32 size, int offset);
 	//! MFM-encode every two bits and write
-	void mfm_half_w(UINT32 *buffer, int &offset, int start_bit, UINT32 val, UINT32 size = 1000);
+	void mfm_half_w(std::vector<UINT32> &buffer, int start_bit, UINT32 val, UINT32 size = 1000);
 	//! GCR5-encode and write a series of bits
-	void gcr5_w(UINT32 *buffer, int &offset, int n, UINT32 val, UINT32 size = 1000);
+	void gcr5_w(std::vector<UINT32> &buffer, UINT8 val, UINT32 size = 1000);
+	void gcr5_w(std::vector<UINT32> &buffer, UINT8 val, UINT32 size, int offset);
+	//! 8N1-encode and write a series of bits
+	void _8n1_w(std::vector<UINT32> &buffer, int n, UINT32 val, UINT32 size = 1000);
 	//! GCR4 encode (Apple II sector header)
 	UINT16 gcr4_encode(UINT8 va);
 	//! GCR4 decode
@@ -552,8 +578,11 @@ protected:
 	//! GCR6 decode
 	void gcr6_decode(UINT8 e0, UINT8 e1, UINT8 e2, UINT8 e3, UINT8 &va, UINT8 &vb, UINT8 &vc);
 
+	UINT8 sbyte_mfm_r(const UINT8 *bitstream, int &pos, int track_size);
+	UINT8 sbyte_gcr5_r(const UINT8 *bitstream, int &pos, int track_size);
+
 private:
-	enum { CRC_NONE, CRC_AMIGA, CRC_CBM, CRC_CCITT, CRC_CCITT_FM, CRC_MACHEAD };
+	enum { CRC_NONE, CRC_AMIGA, CRC_CBM, CRC_CCITT, CRC_CCITT_FM, CRC_MACHEAD, CRC_FCS, CRC_VICTOR_HDR, CRC_VICTOR_DATA };
 	enum { MAX_CRC_COUNT = 64 };
 
 	//! Holds data used internally for generating CRCs.
@@ -569,17 +598,19 @@ private:
 	bool type_data_mfm(int type, int p1, const gen_crc_info *crcs) const;
 
 	int crc_cells_size(int type) const;
-	void fixup_crc_amiga(UINT32 *buffer, const gen_crc_info *crc);
-	void fixup_crc_cbm(UINT32 *buffer, const gen_crc_info *crc);
-	void fixup_crc_ccitt(UINT32 *buffer, const gen_crc_info *crc);
-	void fixup_crc_ccitt_fm(UINT32 *buffer, const gen_crc_info *crc);
-	void fixup_crc_machead(UINT32 *buffer, const gen_crc_info *crc);
-	void fixup_crcs(UINT32 *buffer, gen_crc_info *crcs);
+	void fixup_crc_amiga(std::vector<UINT32> &buffer, const gen_crc_info *crc);
+	void fixup_crc_cbm(std::vector<UINT32> &buffer, const gen_crc_info *crc);
+	void fixup_crc_ccitt(std::vector<UINT32> &buffer, const gen_crc_info *crc);
+	void fixup_crc_ccitt_fm(std::vector<UINT32> &buffer, const gen_crc_info *crc);
+	void fixup_crc_machead(std::vector<UINT32> &buffer, const gen_crc_info *crc);
+	void fixup_crc_fcs(std::vector<UINT32> &buffer, const gen_crc_info *crc);
+	void fixup_crc_victor_header(std::vector<UINT32> &buffer, const gen_crc_info *crc);
+	void fixup_crc_victor_data(std::vector<UINT32> &buffer, const gen_crc_info *crc);
+	void fixup_crcs(std::vector<UINT32> &buffer, gen_crc_info *crcs);
 	void collect_crcs(const desc_e *desc, gen_crc_info *crcs);
 
 	int sbit_r(const UINT8 *bitstream, int pos);
 	int sbit_rp(const UINT8 *bitstream, int &pos, int track_size);
-	UINT8 sbyte_mfm_r(const UINT8 *bitstream, int &pos, int track_size);
 
 	int calc_sector_index(int num, int interleave, int skew, int total_sectors, int track_head);
 };
@@ -626,7 +657,13 @@ floppy_image_format_t *floppy_image_format_creator()
 //! form factor can be physically inserted in a reader that handles
 //! it.  The second half indicates the variants which are usually
 //! detectable by the reader, such as density and number of sides.
-
+//!
+//! Resolution is quarter-track.  The optional subtrack parameter is
+//! 0-3:
+//! - 0 = Track itself
+//! - 1 = 1st quarter track
+//! - 2 = Half track
+//! - 3 = 2nd quarter track
 
 class floppy_image
 {
@@ -649,7 +686,7 @@ public:
 		FF_3        = 0x20202033, //!< "3   " 3 inch disk
 		FF_35       = 0x20203533, //!< "35  " 3.5 inch disk
 		FF_525      = 0x20353235, //!< "525 " 5.25 inch disk
-		FF_8        = 0x20202038, //!< "8   " 8 inch disk
+		FF_8        = 0x20202038  //!< "8   " 8 inch disk
 	};
 
 	//! Variants
@@ -661,17 +698,17 @@ public:
 		DSDD  = 0x44445344, //!< "DSDD", Double-sided double-density (720K in 3.5, 360K in 5.25)
 		DSQD  = 0x44515344, //!< "DSQD", Double-sided quad-density (720K in 5.25, means DD+80 tracks)
 		DSHD  = 0x44485344, //!< "DSHD", Double-sided high-density (1440K)
-		DSED  = 0x44455344, //!< "DSED", Double-sided extra-density (2880K)
+		DSED  = 0x44455344  //!< "DSED", Double-sided extra-density (2880K)
 	};
 
 	//! Encodings
 	enum {
 		FM   = 0x2020464D, //!< "  FM", frequency modulation
 		MFM  = 0x204D464D, //!< " MFM", modified frequency modulation
-		M2FM = 0x4D32464D, //!< "M2FM", modified modified frequency modulation
+		M2FM = 0x4D32464D  //!< "M2FM", modified modified frequency modulation
 	};
 
-// construction/destruction
+	// construction/destruction
 
 
 	//! floppy_image constructor
@@ -692,21 +729,11 @@ public:
 
 	/*!
 	  @param track
-	  @param head
-	  @param size size of this track
-	*/
-	void set_track_size(int track, int head, UINT32 size) { track_size[track][head] = size; ensure_alloc(track, head); }
-
-	/*!
-	  @param track track number
+	  @param subtrack
 	  @param head head number
 	  @return a pointer to the data buffer for this track and head
 	*/
-	UINT32 *get_buffer(int track, int head) { return cell_data[track][head]; }
-	//! @return the track size
-	//! @param track
-	//! @param head
-	UINT32 get_track_size(int track, int head) { return track_size[track][head]; }
+	std::vector<UINT32> &get_buffer(int track, int head, int subtrack = 0) { return track_array[track*4+subtrack][head].cell_data; }
 
 	//! Sets the write splice position.
 	//! The "track splice" information indicates where to start writing
@@ -716,17 +743,21 @@ public:
 	//! representation is the angular position relative to the index.
 
 	/*! @param track
+	    @param subtrack
 	    @param head
 	    @param pos the position
 	*/
-	void set_write_splice_position(int track, int head, UINT32 pos) { write_splice[track][head] = pos; }
+	void set_write_splice_position(int track, int head, UINT32 pos, int subtrack = 0) { track_array[track*4+subtrack][head].write_splice = pos; }
 	//! @return the current write splice position.
-	UINT32 get_write_splice_position(int track, int head) const { return write_splice[track][head]; }
+	UINT32 get_write_splice_position(int track, int head, int subtrack = 0) const { return track_array[track*4+subtrack][head].write_splice; }
 	//! @return the maximal geometry supported by this format.
 	void get_maximal_geometry(int &tracks, int &heads);
 
 	//! @return the current geometry of the loaded image.
 	void get_actual_geometry(int &tracks, int &heads);
+
+	//! @return the track resolution (0=full track, 1 = half-track, 2 = quarter track)
+	int get_resolution() const;
 
 	//! Returns the variant name for the particular disk form factor/variant
 	//! @param form_factor
@@ -735,22 +766,20 @@ public:
 	static const char *get_variant_name(UINT32 form_factor, UINT32 variant);
 
 private:
-
-	enum {
-		MAX_FLOPPY_HEADS = 2,
-		MAX_FLOPPY_TRACKS = 84
-	};
-
 	int tracks, heads;
 
 	UINT32 form_factor, variant;
 
-	UINT32 *cell_data[MAX_FLOPPY_TRACKS][MAX_FLOPPY_HEADS];
-	UINT32 track_size[MAX_FLOPPY_TRACKS][MAX_FLOPPY_HEADS];
-	UINT32 track_alloc_size[MAX_FLOPPY_TRACKS][MAX_FLOPPY_HEADS];
-	UINT32 write_splice[MAX_FLOPPY_TRACKS][MAX_FLOPPY_HEADS];
+	struct track_info {
+		std::vector<UINT32> cell_data;
+		UINT32 write_splice;
 
-	void ensure_alloc(int track, int head);
+		track_info() { write_splice = 0; }
+	};
+
+	// track number multiplied by 4 then head
+	// last array size may be bigger than actual track size
+	std::vector<std::vector<track_info> > track_array;
 };
 
 #endif /* FLOPIMG_H */

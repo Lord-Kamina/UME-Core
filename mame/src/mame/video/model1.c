@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #include "emu.h"
 #include "video/segaic24.h"
 #include "cpu/mb86233/mb86233.h"
@@ -14,7 +16,7 @@ enum { MOIRE = 0x01000000 };
 
 
 
-struct vector {
+struct vector_t {
 	float x, y, z;
 };
 
@@ -31,23 +33,23 @@ struct view {
 	float a_bottom, a_top, a_left, a_right;
 	float vxx, vyy, vzz, ayy, ayyc, ayys;
 	float trans_mat[12];
-	struct vector light;
+	struct vector_t light;
 	struct lightparam lightparams[32];
 };
 
-struct spoint {
+struct m1_spoint {
 	INT32 x, y;
 };
 
-struct point {
+struct m1_point {
 	float x, y, z;
 	float xx, yy;
-	struct spoint s;
+	struct m1_spoint s;
 };
 
 
 struct quad_m1 {
-	struct point *p[4];
+	struct m1_point *p[4];
 	float z;
 	int col;
 };
@@ -69,9 +71,9 @@ static float readf(const UINT16 *adr)
 	return u2f(readi(adr));
 }
 
-static void transform_point(struct view *view, struct point *p)
+static void _transform_point(struct view *view, struct m1_point *p)
 {
-	struct point q = *p;
+	struct m1_point q = *p;
 	float *trans = view->trans_mat;
 	float xx, zz;
 	xx = trans[0]*q.x+trans[3]*q.y+trans[6]*q.z+trans[9]+view->vxx;
@@ -81,16 +83,16 @@ static void transform_point(struct view *view, struct point *p)
 	p->z = view->ayys*xx+view->ayyc*zz;
 }
 
-static void transform_vector(struct view *view, struct vector *p)
+static void transform_vector(struct view *view, struct vector_t *p)
 {
-	struct vector q = *p;
+	struct vector_t q = *p;
 	float *trans = view->trans_mat;
 	p->x = trans[0]*q.x+trans[3]*q.y+trans[6]*q.z;
 	p->y = trans[1]*q.x+trans[4]*q.y+trans[7]*q.z;
 	p->z = trans[2]*q.x+trans[5]*q.y+trans[8]*q.z;
 }
 
-static void normalize_vector(struct vector *p)
+static void normalize_vector(struct vector_t *p)
 {
 	float norm = sqrt(p->x*p->x+p->y*p->y+p->z*p->z);
 	if(norm) {
@@ -100,12 +102,12 @@ static void normalize_vector(struct vector *p)
 	}
 }
 
-static float mult_vector(const struct vector *p, const struct vector *q)
+static float mult_vector(const struct vector_t *p, const struct vector_t *q)
 {
 	return p->x*q->x+p->y*q->y+p->z*q->z;
 }
 
-static float view_determinant(const struct point *p1, const struct point *p2, const struct point *p3)
+static float view_determinant(const struct m1_point *p1, const struct m1_point *p2, const struct m1_point *p3)
 {
 	float x1 = p2->x - p1->x;
 	float y1 = p2->y - p1->y;
@@ -118,7 +120,7 @@ static float view_determinant(const struct point *p1, const struct point *p2, co
 }
 
 
-static void project_point(struct view *view, struct point *p)
+static void project_point(struct view *view, struct m1_point *p)
 {
 	p->xx = p->x / p->z;
 	p->yy = p->y / p->z;
@@ -126,7 +128,7 @@ static void project_point(struct view *view, struct point *p)
 	p->s.y = view->yc-(p->yy*view->zoomy+view->transy);
 }
 
-static void project_point_direct(struct view *view, struct point *p)
+static void project_point_direct(struct view *view, struct m1_point *p)
 {
 	p->xx = p->x /*/ p->z*/;
 	p->yy = p->y /*/ p->z*/;
@@ -239,7 +241,7 @@ static void fill_quad(bitmap_rgb32 &bitmap, struct view *view, const struct quad
 {
 	INT32 sl1, sl2, cury, limy, x1, x2;
 	int pmin, pmax, i, ps1, ps2;
-	struct spoint p[8];
+	struct m1_spoint p[8];
 	int color = q->col;
 
 	if(color < 0) {
@@ -415,28 +417,28 @@ static int comp_quads(const void *q1, const void *q2)
 	return +1;
 }
 
-static void sort_quads(model1_state *state)
+void model1_state::sort_quads()
 {
-	int count = state->m_quadpt - state->m_quaddb;
+	int count = m_quadpt - m_quaddb;
 	int i;
 	for(i=0; i<count; i++)
-		state->m_quadind[i] = state->m_quaddb+i;
-	qsort(state->m_quadind, count, sizeof(struct quad_m1 *), comp_quads);
+		m_quadind[i] = m_quaddb+i;
+	qsort(m_quadind, count, sizeof(struct quad_m1 *), comp_quads);
 }
 
-static void unsort_quads(model1_state *state)
+void model1_state::unsort_quads()
 {
-	int count = state->m_quadpt - state->m_quaddb;
+	int count = m_quadpt - m_quaddb;
 	int i;
 	for(i=0; i<count; i++)
-		state->m_quadind[i] = state->m_quaddb+i;
+		m_quadind[i] = m_quaddb+i;
 }
 
 
-static void draw_quads(model1_state *state, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+void model1_state::draw_quads(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	struct view *view = state->m_view;
-	int count = state->m_quadpt - state->m_quaddb;
+	struct view *view = m_view;
+	int count = m_quadpt - m_quaddb;
 	int i;
 
 	/* clip to the cliprect */
@@ -450,14 +452,14 @@ static void draw_quads(model1_state *state, bitmap_rgb32 &bitmap, const rectangl
 	view->y2 = MIN(view->y2, cliprect.max_y);
 
 	for(i=0; i<count; i++) {
-		struct quad_m1 *q = state->m_quadind[i];
+		struct quad_m1 *q = m_quadind[i];
 
 		fill_quad(bitmap, view, q);
 #if 0
-		draw_line(bitmap, get_black_pen(screen.machine()), q->p[0]->s.x, q->p[0]->s.y, q->p[1]->s.x, q->p[1]->s.y);
-		draw_line(bitmap, get_black_pen(screen.machine()), q->p[1]->s.x, q->p[1]->s.y, q->p[2]->s.x, q->p[2]->s.y);
-		draw_line(bitmap, get_black_pen(screen.machine()), q->p[2]->s.x, q->p[2]->s.y, q->p[3]->s.x, q->p[3]->s.y);
-		draw_line(bitmap, get_black_pen(screen.machine()), q->p[3]->s.x, q->p[3]->s.y, q->p[0]->s.x, q->p[0]->s.y);
+		draw_line(bitmap, m_palette->black_pen(), q->p[0]->s.x, q->p[0]->s.y, q->p[1]->s.x, q->p[1]->s.y);
+		draw_line(bitmap, m_palette->black_pen(), q->p[1]->s.x, q->p[1]->s.y, q->p[2]->s.x, q->p[2]->s.y);
+		draw_line(bitmap, m_palette->black_pen(), q->p[2]->s.x, q->p[2]->s.y, q->p[3]->s.x, q->p[3]->s.y);
+		draw_line(bitmap, m_palette->black_pen(), q->p[3]->s.x, q->p[3]->s.y, q->p[0]->s.x, q->p[0]->s.y);
 #endif
 	}
 
@@ -500,12 +502,12 @@ static void recompute_frustrum(struct view *view)
 	view->a_top    = (-view->y2+view->yc-view->transy)/view->zoomy;
 }
 
-static int fclip_isc_bottom(struct view *view, struct point *p)
+static int fclip_isc_bottom(struct view *view, struct m1_point *p)
 {
 	return p->y > p->z*view->a_bottom;
 }
 
-static void fclip_clip_bottom(struct view *view, struct point *pt, struct point *p1, struct point *p2)
+static void fclip_clip_bottom(struct view *view, struct m1_point *pt, struct m1_point *p1, struct m1_point *p2)
 {
 	float t = (p2->z*view->a_bottom-p2->y)/((p2->z-p1->z)*view->a_bottom-(p2->y-p1->y));
 	pt->x = p1->x*t + p2->x*(1-t);
@@ -514,12 +516,12 @@ static void fclip_clip_bottom(struct view *view, struct point *pt, struct point 
 	project_point(view, pt);
 }
 
-static int fclip_isc_top(struct view *view, struct point *p)
+static int fclip_isc_top(struct view *view, struct m1_point *p)
 {
 	return p->y < p->z*view->a_top;
 }
 
-static void fclip_clip_top(struct view *view, struct point *pt, struct point *p1, struct point *p2)
+static void fclip_clip_top(struct view *view, struct m1_point *pt, struct m1_point *p1, struct m1_point *p2)
 {
 	float t = (p2->z*view->a_top-p2->y)/((p2->z-p1->z)*view->a_top-(p2->y-p1->y));
 	pt->x = p1->x*t + p2->x*(1-t);
@@ -528,12 +530,12 @@ static void fclip_clip_top(struct view *view, struct point *pt, struct point *p1
 	project_point(view, pt);
 }
 
-static int fclip_isc_left(struct view *view, struct point *p)
+static int fclip_isc_left(struct view *view, struct m1_point *p)
 {
 	return p->x < p->z*view->a_left;
 }
 
-static void fclip_clip_left(struct view *view, struct point *pt, struct point *p1, struct point *p2)
+static void fclip_clip_left(struct view *view, struct m1_point *pt, struct m1_point *p1, struct m1_point *p2)
 {
 	float t = (p2->z*view->a_left-p2->x)/((p2->z-p1->z)*view->a_left-(p2->x-p1->x));
 	pt->x = p1->x*t + p2->x*(1-t);
@@ -542,12 +544,12 @@ static void fclip_clip_left(struct view *view, struct point *pt, struct point *p
 	project_point(view, pt);
 }
 
-static int fclip_isc_right(struct view *view, struct point *p)
+static int fclip_isc_right(struct view *view, struct m1_point *p)
 {
 	return p->x > p->z*view->a_right;
 }
 
-static void fclip_clip_right(struct view *view, struct point *pt, struct point *p1, struct point *p2)
+static void fclip_clip_right(struct view *view, struct m1_point *pt, struct m1_point *p1, struct m1_point *p2)
 {
 	float t = (p2->z*view->a_right-p2->x)/((p2->z-p1->z)*view->a_right-(p2->x-p1->x));
 	pt->x = p1->x*t + p2->x*(1-t);
@@ -557,8 +559,8 @@ static void fclip_clip_right(struct view *view, struct point *pt, struct point *
 }
 
 static const struct {
-	int (*isclipped)(struct view *view, struct point *p);
-	void (*clip)(struct view *view, struct point *pt, struct point *p1, struct point *p2);
+	int (*isclipped)(struct view *view, struct m1_point *p);
+	void (*clip)(struct view *view, struct m1_point *pt, struct m1_point *p1, struct m1_point *p2);
 } clipfn[4] = {
 	{ fclip_isc_bottom, fclip_clip_bottom },
 	{ fclip_isc_top,    fclip_clip_top },
@@ -566,10 +568,8 @@ static const struct {
 	{ fclip_isc_right,  fclip_clip_right },
 };
 
-static void fclip_push_quad(model1_state *state, int level, struct quad_m1 *q);
-
-static void fclip_push_quad_next(model1_state *state, int level, struct quad_m1 *q,
-									struct point *p1, struct point *p2, struct point *p3, struct point *p4)
+void model1_state::fclip_push_quad_next(int level, struct quad_m1 *q,
+									struct m1_point *p1, struct m1_point *p2, struct m1_point *p3, struct m1_point *p4)
 {
 	struct quad_m1 q2;
 	q2.col = q->col;
@@ -579,24 +579,24 @@ static void fclip_push_quad_next(model1_state *state, int level, struct quad_m1 
 	q2.p[2] = p3;
 	q2.p[3] = p4;
 
-	fclip_push_quad(state, level+1, &q2);
+	fclip_push_quad(level+1, &q2);
 }
 
-static void fclip_push_quad(model1_state *state, int level, struct quad_m1 *q)
+void model1_state::fclip_push_quad(int level, struct quad_m1 *q)
 {
-	struct view *view = state->m_view;
+	struct view *view = m_view;
 	int i, j;
-	struct point *pt[4], *pi1, *pi2;
+	struct m1_point *pt[4], *pi1, *pi2;
 	int is_out[4], is_out2[4];
-	void (*fclip_point)(struct view *view, struct point *pt, struct point *p1, struct point *p2);
+	void (*fclip_point)(struct view *view, struct m1_point *pt, struct m1_point *p1, struct m1_point *p2);
 
 	if(level == 4) {
 		LOG_TGP(("VIDEOCQ %d", level));
 		for(i=0; i<4; i++)
 			LOG_TGP((" (%f, %f, %f)", q->p[i]->x, q->p[i]->y, q->p[i]->z));
 		LOG_TGP(("\n"));
-		*state->m_quadpt = *q;
-		state->m_quadpt++;
+		*m_quadpt = *q;
+		m_quadpt++;
 		return;
 	}
 
@@ -610,7 +610,7 @@ static void fclip_push_quad(model1_state *state, int level, struct quad_m1 *q)
 
 	// No clipping
 	if(!is_out[0] && !is_out[1] && !is_out[2] && !is_out[3]) {
-		fclip_push_quad(state, level+1, q);
+		fclip_push_quad(level+1, q);
 		return;
 	}
 
@@ -634,40 +634,40 @@ static void fclip_push_quad(model1_state *state, int level, struct quad_m1 *q)
 	if(is_out2[1])
 		if(is_out2[2]) {
 			// pt 0,1,2 clipped out, one triangle left
-			fclip_point(view, state->m_pointpt, pt[2], pt[3]);
-			pi1 = state->m_pointpt++;
-			fclip_point(view, state->m_pointpt, pt[3], pt[0]);
-			pi2 = state->m_pointpt++;
-			fclip_push_quad_next(state, level, q, pi1, pt[3], pi2, pi2);
+			fclip_point(view, m_pointpt, pt[2], pt[3]);
+			pi1 = m_pointpt++;
+			fclip_point(view, m_pointpt, pt[3], pt[0]);
+			pi2 = m_pointpt++;
+			fclip_push_quad_next(level, q, pi1, pt[3], pi2, pi2);
 		} else {
 			// pt 0,1 clipped out, one quad left
-			fclip_point(view, state->m_pointpt, pt[1], pt[2]);
-			pi1 = state->m_pointpt++;
-			fclip_point(view, state->m_pointpt, pt[3], pt[0]);
-			pi2 = state->m_pointpt++;
-			fclip_push_quad_next(state, level, q, pi1, pt[2], pt[3], pi2);
+			fclip_point(view, m_pointpt, pt[1], pt[2]);
+			pi1 = m_pointpt++;
+			fclip_point(view, m_pointpt, pt[3], pt[0]);
+			pi2 = m_pointpt++;
+			fclip_push_quad_next(level, q, pi1, pt[2], pt[3], pi2);
 		}
 	else
 		if(is_out2[2]) {
 			// pt 0,2 clipped out, shouldn't happen, two triangles
-			fclip_point(view, state->m_pointpt, pt[0], pt[1]);
-			pi1 = state->m_pointpt++;
-			fclip_point(view, state->m_pointpt, pt[1], pt[2]);
-			pi2 = state->m_pointpt++;
-			fclip_push_quad_next(state, level, q, pi1, pt[1], pi2, pi2);
-			fclip_point(view, state->m_pointpt, pt[2], pt[3]);
-			pi1 = state->m_pointpt++;
-			fclip_point(view, state->m_pointpt, pt[3], pt[0]);
-			pi2 = state->m_pointpt++;
-			fclip_push_quad_next(state, level, q, pi1, pt[3], pi2, pi2);
+			fclip_point(view, m_pointpt, pt[0], pt[1]);
+			pi1 = m_pointpt++;
+			fclip_point(view, m_pointpt, pt[1], pt[2]);
+			pi2 = m_pointpt++;
+			fclip_push_quad_next(level, q, pi1, pt[1], pi2, pi2);
+			fclip_point(view, m_pointpt, pt[2], pt[3]);
+			pi1 = m_pointpt++;
+			fclip_point(view, m_pointpt, pt[3], pt[0]);
+			pi2 = m_pointpt++;
+			fclip_push_quad_next(level, q, pi1, pt[3], pi2, pi2);
 		} else {
 			// pt 0 clipped out, one decagon left, split in quad+tri
-			fclip_point(view, state->m_pointpt, pt[0], pt[1]);
-			pi1 = state->m_pointpt++;
-			fclip_point(view, state->m_pointpt, pt[3], pt[0]);
-			pi2 = state->m_pointpt++;
-			fclip_push_quad_next(state, level, q, pi1, pt[1], pt[2], pt[3]);
-			fclip_push_quad_next(state, level, q, pt[3], pi2, pi1, pi1);
+			fclip_point(view, m_pointpt, pt[0], pt[1]);
+			pi1 = m_pointpt++;
+			fclip_point(view, m_pointpt, pt[3], pt[0]);
+			pi2 = m_pointpt++;
+			fclip_push_quad_next(level, q, pi1, pt[1], pt[2], pt[3]);
+			fclip_push_quad_next(level, q, pt[3], pi2, pi1, pi1);
 		}
 }
 
@@ -698,7 +698,7 @@ static float max4f(float a, float b, float c, float d)
 #ifdef UNUSED_DEFINITION
 static const UINT8 num_of_times[]={1,1,1,1,2,2,2,3};
 #endif
-static float compute_specular(struct vector *normal, struct vector *light,float diffuse,int lmode)
+static float compute_specular(struct vector_t *normal, struct vector_t *light,float diffuse,int lmode)
 {
 #if 0
 	float s;
@@ -724,14 +724,13 @@ static float compute_specular(struct vector *normal, struct vector *light,float 
 	return 0;
 }
 
-static void push_object(running_machine &machine, UINT32 tex_adr, UINT32 poly_adr, UINT32 size)
+void model1_state::push_object(UINT32 tex_adr, UINT32 poly_adr, UINT32 size)
 {
-	model1_state *state = machine.driver_data<model1_state>();
-	struct view *view = state->m_view;
+	struct view *view = m_view;
 	int i;
 	UINT32 flags;
-	struct point *old_p0, *old_p1, *p0, *p1;
-	struct vector vn;
+	struct m1_point *old_p0, *old_p1, *p0, *p1;
+	struct vector_t vn;
 	int link, type;
 #if 0
 	int dump;
@@ -742,9 +741,9 @@ static void push_object(running_machine &machine, UINT32 tex_adr, UINT32 poly_ad
 	float *poly_data;
 
 	if(poly_adr & 0x800000)
-		poly_data=(float *) state->m_poly_ram;
+		poly_data=(float *) m_poly_ram;
 	else
-		poly_data=(float *) state->m_poly_rom;
+		poly_data=(float *) m_poly_rom;
 
 	poly_adr &= 0x7fffff;
 #if 0
@@ -773,8 +772,8 @@ static void push_object(running_machine &machine, UINT32 tex_adr, UINT32 poly_ad
 	if(!size)
 		size = 0xffffffff;
 
-	old_p0 = state->m_pointpt++;
-	old_p1 = state->m_pointpt++;
+	old_p0 = m_pointpt++;
+	old_p1 = m_pointpt++;
 
 	old_p0->x = poly_data[poly_adr+0];
 	old_p0->y = poly_data[poly_adr+1];
@@ -782,8 +781,8 @@ static void push_object(running_machine &machine, UINT32 tex_adr, UINT32 poly_ad
 	old_p1->x = poly_data[poly_adr+3];
 	old_p1->y = poly_data[poly_adr+4];
 	old_p1->z = poly_data[poly_adr+5];
-	transform_point(view, old_p0);
-	transform_point(view, old_p1);
+	_transform_point(view, old_p0);
+	_transform_point(view, old_p1);
 	if(old_p0->z > 0)
 		project_point(view, old_p0);
 	else
@@ -815,8 +814,8 @@ static void push_object(running_machine &machine, UINT32 tex_adr, UINT32 poly_ad
 			tex_adr ++;
 		lightmode=(flags>>17)&15;
 
-		p0 = state->m_pointpt++;
-		p1 = state->m_pointpt++;
+		p0 = m_pointpt++;
+		p1 = m_pointpt++;
 
 		vn.x = poly_data[poly_adr+1];
 		vn.y = poly_data[poly_adr+2];
@@ -832,8 +831,8 @@ static void push_object(running_machine &machine, UINT32 tex_adr, UINT32 poly_ad
 
 		transform_vector(view, &vn);
 
-		transform_point(view, p0);
-		transform_point(view, p1);
+		_transform_point(view, p0);
+		_transform_point(view, p1);
 		if(p0->z > 0)
 			project_point(view, p0);
 		else
@@ -896,30 +895,30 @@ static void push_object(running_machine &machine, UINT32 tex_adr, UINT32 poly_ad
 #if 0
 			float dif=mult_vector(&vn, &view->light);
 			float ln=view->lightparams[lightmode].a + view->lightparams[lightmode].d*MAX(0.0,dif);
-			cquad.col = scale_color(machine.pens[0x1000|(state->m_tgp_ram[tex_adr-0x40000] & 0x3ff)], MIN(1.0,ln));
-			cquad.col = scale_color(machine.pens[0x1000|(state->m_tgp_ram[tex_adr-0x40000] & 0x3ff)], MIN(1.0,ln));
+			cquad.col = scale_color(machine().pens[0x1000|(m_tgp_ram[tex_adr-0x40000] & 0x3ff)], MIN(1.0,ln));
+			cquad.col = scale_color(machine().pens[0x1000|(m_tgp_ram[tex_adr-0x40000] & 0x3ff)], MIN(1.0,ln));
 #endif
 			float dif=mult_vector(&vn, &view->light);
 			float spec=compute_specular(&vn,&view->light,dif,lightmode);
-			float ln=view->lightparams[lightmode].a + view->lightparams[lightmode].d*MAX(0.0,dif) + spec;
-			int lumval=255.0*MIN(1.0,ln);
-			int color=state->m_paletteram16[0x1000|(state->m_tgp_ram[tex_adr-0x40000] & 0x3ff)];
+			float ln=view->lightparams[lightmode].a + view->lightparams[lightmode].d*MAX(0.0f,dif) + spec;
+			int lumval=255.0f*MIN(1.0f,ln);
+			int color=m_paletteram16[0x1000|(m_tgp_ram[tex_adr-0x40000] & 0x3ff)];
 			int r=(color>>0x0)&0x1f;
 			int g=(color>>0x5)&0x1f;
 			int b=(color>>0xA)&0x1f;
 			lumval>>=2; //there must be a luma translation table somewhere
 			if(lumval>0x3f) lumval=0x3f;
 			else if(lumval<0) lumval=0;
-			r=(state->m_color_xlat[(r<<8)|lumval|0x0]>>3)&0x1f;
-			g=(state->m_color_xlat[(g<<8)|lumval|0x2000]>>3)&0x1f;
-			b=(state->m_color_xlat[(b<<8)|lumval|0x4000]>>3)&0x1f;
+			r=(m_color_xlat[(r<<8)|lumval|0x0]>>3)&0x1f;
+			g=(m_color_xlat[(g<<8)|lumval|0x2000]>>3)&0x1f;
+			b=(m_color_xlat[(b<<8)|lumval|0x4000]>>3)&0x1f;
 			cquad.col=(pal5bit(r)<<16)|(pal5bit(g)<<8)|(pal5bit(b)<<0);
 		}
 
 		if(flags & 0x00002000)
 			cquad.col |= MOIRE;
 
-		fclip_push_quad(state, 0, &cquad);
+		fclip_push_quad(0, &cquad);
 
 	next:
 		poly_adr += 10;
@@ -939,12 +938,12 @@ static void push_object(running_machine &machine, UINT32 tex_adr, UINT32 poly_ad
 	}
 }
 
-static UINT16 *push_direct(model1_state *state, UINT16 *list)
+UINT16 *model1_state::push_direct(UINT16 *list)
 {
-	struct view *view = state->m_view;
+	struct view *view = m_view;
 	UINT32 flags;
 	UINT32 tex_adr, lum; //, v1, v2;
-	struct point *old_p0, *old_p1, *p0, *p1;
+	struct m1_point *old_p0, *old_p1, *p0, *p1;
 	int link, type;
 	float z;
 	struct quad_m1 cquad;
@@ -953,8 +952,8 @@ static UINT16 *push_direct(model1_state *state, UINT16 *list)
 //  v1      = readi(list+2);
 //  v2      = readi(list+10);
 
-	old_p0 = state->m_pointpt++;
-	old_p1 = state->m_pointpt++;
+	old_p0 = m_pointpt++;
+	old_p1 = m_pointpt++;
 
 	old_p0->x = readf(list+4);
 	old_p0->y = readf(list+6);
@@ -968,8 +967,8 @@ static UINT16 *push_direct(model1_state *state, UINT16 *list)
 				old_p0->x, old_p0->y, old_p0->z,
 				old_p1->x, old_p1->y, old_p1->z));
 
-	//transform_point(view, old_p0);
-	//transform_point(view, old_p1);
+	//_transform_point(view, old_p0);
+	//_transform_point(view, old_p1);
 	if(old_p0->z > 0)
 		project_point_direct(view, old_p0);
 	else
@@ -995,8 +994,8 @@ static UINT16 *push_direct(model1_state *state, UINT16 *list)
 		// list+4 is 0?
 		// list+12 is z?
 
-		p0 = state->m_pointpt++;
-		p1 = state->m_pointpt++;
+		p0 = m_pointpt++;
+		p1 = m_pointpt++;
 
 		lum   = readi(list+2);
 //      v1    = readi(list+4);
@@ -1028,8 +1027,8 @@ static UINT16 *push_direct(model1_state *state, UINT16 *list)
 
 		link = (flags >> 8) & 3;
 
-		//transform_point(view, p0);
-		//transform_point(view, p1);
+		//_transform_point(view, p0);
+		//_transform_point(view, p1);
 		if(p0->z > 0)
 			project_point_direct(view, p0);
 		if(p1->z > 0)
@@ -1060,24 +1059,24 @@ static UINT16 *push_direct(model1_state *state, UINT16 *list)
 		cquad.p[3] = p1;
 		cquad.z    = z;
 		{
-			int lumval=((float) (lum>>24)) * 2.0;
-			int color=state->m_paletteram16[0x1000|(state->m_tgp_ram[tex_adr-0x40000] & 0x3ff)];
+			int lumval=((float) (lum>>24)) * 2.0f;
+			int color=m_paletteram16[0x1000|(m_tgp_ram[tex_adr-0x40000] & 0x3ff)];
 			int r=(color>>0x0)&0x1f;
 			int g=(color>>0x5)&0x1f;
 			int b=(color>>0xA)&0x1f;
 			lumval>>=2; //there must be a luma translation table somewhere
 			if(lumval>0x3f) lumval=0x3f;
 			else if(lumval<0) lumval=0;
-			r=(state->m_color_xlat[(r<<8)|lumval|0x0]>>3)&0x1f;
-			g=(state->m_color_xlat[(g<<8)|lumval|0x2000]>>3)&0x1f;
-			b=(state->m_color_xlat[(b<<8)|lumval|0x4000]>>3)&0x1f;
+			r=(m_color_xlat[(r<<8)|lumval|0x0]>>3)&0x1f;
+			g=(m_color_xlat[(g<<8)|lumval|0x2000]>>3)&0x1f;
+			b=(m_color_xlat[(b<<8)|lumval|0x4000]>>3)&0x1f;
 			cquad.col=(pal5bit(r)<<16)|(pal5bit(g)<<8)|(pal5bit(b)<<0);
 		}
-		//cquad.col  = scale_color(machine.pens[0x1000|(state->m_tgp_ram[tex_adr-0x40000] & 0x3ff)],((float) (lum>>24)) / 128.0);
+		//cquad.col  = scale_color(machine().pens[0x1000|(m_tgp_ram[tex_adr-0x40000] & 0x3ff)],((float) (lum>>24)) / 128.0);
 		if(flags & 0x00002000)
 			cquad.col |= MOIRE;
 
-		fclip_push_quad(state, 0, &cquad);
+		fclip_push_quad(0, &cquad);
 
 	next:
 		switch(link) {
@@ -1119,53 +1118,52 @@ static UINT16 *skip_direct(UINT16 *list)
 	return list+2;
 }
 
-static void draw_objects(model1_state *state, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+void model1_state::draw_objects(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	if(state->m_quadpt != state->m_quaddb) {
+	if(m_quadpt != m_quaddb) {
 		LOG_TGP(("VIDEO: sort&draw\n"));
-		sort_quads(state);
-		draw_quads(state, bitmap, cliprect);
+		sort_quads();
+		draw_quads(bitmap, cliprect);
 	}
 
-	state->m_quadpt = state->m_quaddb;
-	state->m_pointpt = state->m_pointdb;
+	m_quadpt = m_quaddb;
+	m_pointpt = m_pointdb;
 }
 
-static UINT16 *draw_direct(model1_state *state, bitmap_rgb32 &bitmap, const rectangle &cliprect, UINT16 *list)
+UINT16 *model1_state::draw_direct(bitmap_rgb32 &bitmap, const rectangle &cliprect, UINT16 *list)
 {
 	UINT16 *res;
 
 	LOG_TGP(("VIDEO:   draw direct %x\n", readi(list)));
 
-	draw_objects(state, bitmap, cliprect);
-	res = push_direct(state, list);
-	unsort_quads(state);
-	draw_quads(state, bitmap, cliprect);
+	draw_objects(bitmap, cliprect);
+	res = push_direct(list);
+	unsort_quads();
+	draw_quads(bitmap, cliprect);
 
-	state->m_quadpt = state->m_quaddb;
-	state->m_pointpt = state->m_pointdb;
+	m_quadpt = m_quaddb;
+	m_pointpt = m_pointdb;
 	return res;
 }
 
-static UINT16 *get_list(model1_state *state)
+UINT16 *model1_state::get_list()
 {
-	if(!(state->m_listctl[0] & 4))
-		state->m_listctl[0] = (state->m_listctl[0] & ~0x40) | (state->m_listctl[0] & 8 ? 0x40 : 0);
-	return state->m_listctl[0] & 0x40 ? state->m_display_list1 : state->m_display_list0;
+	if(!(m_listctl[0] & 4))
+		m_listctl[0] = (m_listctl[0] & ~0x40) | (m_listctl[0] & 8 ? 0x40 : 0);
+	return m_listctl[0] & 0x40 ? m_display_list1 : m_display_list0;
 }
 
-static int get_list_number(model1_state *state)
+int model1_state::get_list_number()
 {
-	if(!(state->m_listctl[0] & 4))
-		state->m_listctl[0] = (state->m_listctl[0] & ~0x40) | (state->m_listctl[0] & 8 ? 0x40 : 0);
-	return state->m_listctl[0] & 0x40 ? 0 : 1;
+	if(!(m_listctl[0] & 4))
+		m_listctl[0] = (m_listctl[0] & ~0x40) | (m_listctl[0] & 8 ? 0x40 : 0);
+	return m_listctl[0] & 0x40 ? 0 : 1;
 }
 
-static void end_frame(running_machine &machine)
+void model1_state::end_frame()
 {
-	model1_state *state = machine.driver_data<model1_state>();
-	if((state->m_listctl[0] & 4) && (machine.primary_screen->frame_number() & 1))
-		state->m_listctl[0] ^= 0x40;
+	if((m_listctl[0] & 4) && (m_screen->frame_number() & 1))
+		m_listctl[0] ^= 0x40;
 }
 
 READ16_MEMBER(model1_state::model1_listctl_r)
@@ -1182,15 +1180,14 @@ WRITE16_MEMBER(model1_state::model1_listctl_w)
 	LOG_TGP(("VIDEO: control=%08x\n", (m_listctl[1]<<16)|m_listctl[0]));
 }
 
-static void tgp_render(running_machine &machine, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+void model1_state::tgp_render(bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	model1_state *state = machine.driver_data<model1_state>();
-	struct view *view = state->m_view;
-	state->m_render_done = 1;
-	if((state->m_listctl[1] & 0x1f) == 0x1f) {
-		UINT16 *list = get_list(state);
+	struct view *view = m_view;
+	m_render_done = 1;
+	if((m_listctl[1] & 0x1f) == 0x1f) {
+		UINT16 *list = get_list();
 		int zz = 0;
-		LOG_TGP(("VIDEO: render list %d\n", get_list_number(state)));
+		LOG_TGP(("VIDEO: render list %d\n", get_list_number()));
 
 		memset(view->trans_mat, 0, sizeof(view->trans_mat));
 		view->trans_mat[0] = 1.0;
@@ -1199,7 +1196,7 @@ static void tgp_render(running_machine &machine, bitmap_rgb32 &bitmap, const rec
 
 		for(;;) {
 			int type = (list[1]<<16)|list[0];
-			state->m_glist=list;
+			m_glist=list;
 			switch(type & 15) {
 			case 0:
 				list += 2;
@@ -1213,11 +1210,11 @@ static void tgp_render(running_machine &machine, bitmap_rgb32 &bitmap, const rec
 				// 6 = ??  draw object (57bd4, 387460, 2ad)
 
 				if(1 || zz >= 666)
-					push_object(machine, readi(list+2), readi(list+4), readi(list+6));
+					push_object(readi(list+2), readi(list+4), readi(list+6));
 				list += 8;
 				break;
 			case 2:
-				list = draw_direct(state, bitmap, cliprect, list+2);
+				list = draw_direct(bitmap, cliprect, list+2);
 				break;
 			case 3:
 				LOG_TGP(("VIDEO:   viewport (%d, %d, %d, %d, %d, %d, %d)\n",
@@ -1225,7 +1222,7 @@ static void tgp_render(running_machine &machine, bitmap_rgb32 &bitmap, const rec
 							readi16(list+4), readi16(list+6), readi16(list+8),
 							readi16(list+10), readi16(list+12), readi16(list+14)));
 
-				draw_objects(state, bitmap, cliprect);
+				draw_objects(bitmap, cliprect);
 
 				view->xc = readi16(list+4);
 				view->yc = 383-(readi16(list+6)-39);
@@ -1244,7 +1241,7 @@ static void tgp_render(running_machine &machine, bitmap_rgb32 &bitmap, const rec
 				int i;
 				LOG_TGP(("ZVIDEO:   color write, adr=%x, len=%x\n", adr, len));
 				for(i=0; i<len; i++)
-					state->m_tgp_ram[adr-0x40000+i] = list[6+2*i];
+					m_tgp_ram[adr-0x40000+i] = list[6+2*i];
 				list += 6+len*2;
 				break;
 			}
@@ -1255,7 +1252,7 @@ static void tgp_render(running_machine &machine, bitmap_rgb32 &bitmap, const rec
 					int i;
 					for(i=0;i<len;++i)
 					{
-						state->m_poly_ram[adr-0x800000+i]=readi(list+2*i+6);
+						m_poly_ram[adr-0x800000+i]=readi(list+2*i+6);
 					}
 					list+=6+len*2;
 				}
@@ -1268,9 +1265,9 @@ static void tgp_render(running_machine &machine, bitmap_rgb32 &bitmap, const rec
 				for(i=0;i<len;++i)
 				{
 					int v=readi(list+6+i*2);
-					view->lightparams[i+adr].d=((float) (v&0xff))/255.0;
-					view->lightparams[i+adr].a=((float) ((v>>8)&0xff))/255.0;
-					view->lightparams[i+adr].s=((float) ((v>>16)&0xff))/255.0;
+					view->lightparams[i+adr].d=((float) (v&0xff))/255.0f;
+					view->lightparams[i+adr].a=((float) ((v>>8)&0xff))/255.0f;
+					view->lightparams[i+adr].s=((float) ((v>>16)&0xff))/255.0f;
 					view->lightparams[i+adr].p=(v>>24)&0xff;
 				}
 				list += 6+len*2;
@@ -1332,31 +1329,30 @@ static void tgp_render(running_machine &machine, bitmap_rgb32 &bitmap, const rec
 			}
 		}
 	end:
-		draw_objects(state, bitmap, cliprect);
+		draw_objects(bitmap, cliprect);
 	}
 }
 
-static void tgp_scan(running_machine &machine)
+void model1_state::tgp_scan()
 {
-	model1_state *state = machine.driver_data<model1_state>();
-	struct view *view = state->m_view;
+	struct view *view = m_view;
 #if 0
-	if (machine.input().code_pressed_once(KEYCODE_F))
+	if (machine().input().code_pressed_once(KEYCODE_F))
 		{
 		FILE *fp;
 		fp=fopen("tgp-ram.bin", "w+b");
 		if (fp)
 				{
-			fwrite(state->m_tgp_ram, (0x100000-0x40000)*2, 1, fp);
+			fwrite(m_tgp_ram, (0x100000-0x40000)*2, 1, fp);
 			fclose(fp);
 				}
 		exit(0);
 		}
 #endif
-	if(!state->m_render_done && (state->m_listctl[1] & 0x1f) == 0x1f) {
-		UINT16 *list = get_list(state);
+	if(!m_render_done && (m_listctl[1] & 0x1f) == 0x1f) {
+		UINT16 *list = get_list();
 		// Skip everything but the data uploads
-		LOG_TGP(("VIDEO: scan list %d\n", get_list_number(state)));
+		LOG_TGP(("VIDEO: scan list %d\n", get_list_number()));
 		for(;;) {
 			int type = (list[1]<<16)|list[0];
 			switch(type) {
@@ -1378,7 +1374,7 @@ static void tgp_scan(running_machine &machine)
 				int i;
 				LOG_TGP(("ZVIDEO:   scan color write, adr=%x, len=%x\n", adr, len));
 				for(i=0; i<len; i++)
-					state->m_tgp_ram[adr-0x40000+i] = list[6+2*i];
+					m_tgp_ram[adr-0x40000+i] = list[6+2*i];
 				list += 6+len*2;
 				break;
 			}
@@ -1389,7 +1385,7 @@ static void tgp_scan(running_machine &machine)
 					int i;
 					for(i=0;i<len;++i)
 					{
-						state->m_poly_ram[adr-0x800000+i]=readi(list+2*i+6);
+						m_poly_ram[adr-0x800000+i]=readi(list+2*i+6);
 					}
 					list+=6+len*2;
 				}
@@ -1402,9 +1398,9 @@ static void tgp_scan(running_machine &machine)
 				for(i=0;i<len;++i)
 				{
 					int v=readi(list+6+i*2);
-					view->lightparams[i+adr].d=((float) (v&0xff))/255.0;
-					view->lightparams[i+adr].a=((float) ((v>>8)&0xff))/255.0;
-					view->lightparams[i+adr].s=((float) ((v>>16)&0xff))/255.0;
+					view->lightparams[i+adr].d=((float) (v&0xff))/255.0f;
+					view->lightparams[i+adr].a=((float) ((v>>8)&0xff))/255.0f;
+					view->lightparams[i+adr].s=((float) ((v>>16)&0xff))/255.0f;
 					view->lightparams[i+adr].p=(v>>24)&0xff;
 					//LOG_TGP(("         %02X\n",v));
 				}
@@ -1440,19 +1436,17 @@ static void tgp_scan(running_machine &machine)
 	end:
 		;
 	}
-	state->m_render_done = 0;
+	m_render_done = 0;
 }
 
 VIDEO_START_MEMBER(model1_state,model1)
 {
-	m_paletteram16 = m_generic_paletteram_16;
-
 	m_view = auto_alloc_clear(machine(), struct view);
 
 	m_poly_rom = (UINT32 *)memregion("user1")->base();
 	m_poly_ram = auto_alloc_array_clear(machine(), UINT32, 0x400000);
 	m_tgp_ram = auto_alloc_array_clear(machine(), UINT16, 0x100000-0x40000);
-	m_pointdb = auto_alloc_array_clear(machine(), struct point, 1000000*2);
+	m_pointdb = auto_alloc_array_clear(machine(), struct m1_point, 1000000*2);
 	m_quaddb  = auto_alloc_array_clear(machine(), struct quad_m1, 1000000);
 	m_quadind = auto_alloc_array_clear(machine(), struct quad_m1 *, 1000000);
 
@@ -1514,21 +1508,21 @@ UINT32 model1_state::screen_update_model1(screen_device &screen, bitmap_rgb32 &b
 	view->ayyc = cos(view->ayy);
 	view->ayys = sin(view->ayy);
 
-	machine().priority_bitmap.fill(0);
-	bitmap.fill(machine().pens[0], cliprect);
+	screen.priority().fill(0);
+	bitmap.fill(m_palette->pen(0), cliprect);
 
 	segas24_tile *tile = machine().device<segas24_tile>("tile");
-	tile->draw(bitmap, cliprect, 6, 0, 0);
-	tile->draw(bitmap, cliprect, 4, 0, 0);
-	tile->draw(bitmap, cliprect, 2, 0, 0);
-	tile->draw(bitmap, cliprect, 0, 0, 0);
+	tile->draw(screen, bitmap, cliprect, 6, 0, 0);
+	tile->draw(screen, bitmap, cliprect, 4, 0, 0);
+	tile->draw(screen, bitmap, cliprect, 2, 0, 0);
+	tile->draw(screen, bitmap, cliprect, 0, 0, 0);
 
-	tgp_render(machine(), bitmap, cliprect);
+	tgp_render(bitmap, cliprect);
 
-	tile->draw(bitmap, cliprect, 7, 0, 0);
-	tile->draw(bitmap, cliprect, 5, 0, 0);
-	tile->draw(bitmap, cliprect, 3, 0, 0);
-	tile->draw(bitmap, cliprect, 1, 0, 0);
+	tile->draw(screen, bitmap, cliprect, 7, 0, 0);
+	tile->draw(screen, bitmap, cliprect, 5, 0, 0);
+	tile->draw(screen, bitmap, cliprect, 3, 0, 0);
+	tile->draw(screen, bitmap, cliprect, 1, 0, 0);
 
 	return 0;
 }
@@ -1538,8 +1532,8 @@ void model1_state::screen_eof_model1(screen_device &screen, bool state)
 	// on rising edge
 	if (state)
 	{
-		tgp_scan(machine());
-		end_frame(machine());
+		tgp_scan();
+		end_frame();
 		LOG_TGP(("TGP: vsync\n"));
 	}
 }

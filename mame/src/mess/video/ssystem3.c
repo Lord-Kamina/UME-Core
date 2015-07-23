@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner
 /******************************************************************************
  PeT mess@utanet.at
 ******************************************************************************/
@@ -34,12 +36,12 @@ static const unsigned char ssystem3_palette[] =
 };
 
 
-void ssystem3_state::palette_init()
+PALETTE_INIT_MEMBER(ssystem3_state, ssystem3)
 {
 	int i;
 
 	for ( i = 0; i < sizeof(ssystem3_palette) / 3; i++ ) {
-		palette_set_color_rgb(machine(), i, ssystem3_palette[i*3], ssystem3_palette[i*3+1], ssystem3_palette[i*3+2]);
+		m_palette->set_pen_color(i, ssystem3_palette[i*3], ssystem3_palette[i*3+1], ssystem3_palette[i*3+2]);
 	}
 }
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Roberto Fresca
 /******************************************************************************
 
   Good Luck II
@@ -204,21 +206,28 @@ class gluck2_state : public driver_device
 public:
 	gluck2_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag) ,
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
 		m_videoram(*this, "videoram"),
-		m_colorram(*this, "colorram"),
-		m_maincpu(*this, "maincpu"){ }
+		m_colorram(*this, "colorram") { }
+
+	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
 
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_colorram;
+
 	tilemap_t *m_bg_tilemap;
-	DECLARE_WRITE8_MEMBER(gluck2_videoram_w);
-	DECLARE_WRITE8_MEMBER(gluck2_colorram_w);
+
+	DECLARE_WRITE8_MEMBER(videoram_w);
+	DECLARE_WRITE8_MEMBER(colorram_w);
 	DECLARE_WRITE8_MEMBER(counters_w);
-	TILE_GET_INFO_MEMBER(get_gluck2_tile_info);
+	TILE_GET_INFO_MEMBER(get_tile_info);
+
 	virtual void video_start();
 	DECLARE_PALETTE_INIT(gluck2);
-	UINT32 screen_update_gluck2(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	required_device<cpu_device> m_maincpu;
+
+	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 };
 
 
@@ -227,20 +236,20 @@ public:
 *********************************************/
 
 
-WRITE8_MEMBER(gluck2_state::gluck2_videoram_w)
+WRITE8_MEMBER(gluck2_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(gluck2_state::gluck2_colorram_w)
+WRITE8_MEMBER(gluck2_state::colorram_w)
 {
 	m_colorram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
 
-TILE_GET_INFO_MEMBER(gluck2_state::get_gluck2_tile_info)
+TILE_GET_INFO_MEMBER(gluck2_state::get_tile_info)
 {
 /*  - bits -
     7654 3210
@@ -259,13 +268,13 @@ TILE_GET_INFO_MEMBER(gluck2_state::get_gluck2_tile_info)
 
 void gluck2_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(gluck2_state::get_gluck2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(gluck2_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 }
 
 
-UINT32 gluck2_state::screen_update_gluck2(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 gluck2_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
@@ -301,7 +310,7 @@ PALETTE_INIT_MEMBER(gluck2_state, gluck2)
 		bit3 = (color_prom[i + 0x200] >> 3) & 0x01;
 		b = 0x0e * bit0 + 0x1f * bit1 + 0x43 * bit2 + 0x8f * bit3;
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 
 	}
 }
@@ -338,8 +347,8 @@ static ADDRESS_MAP_START( gluck2_map, AS_PROGRAM, 8, gluck2_state )
 	AM_RANGE(0x0800, 0x0800) AM_DEVWRITE("crtc", mc6845_device, address_w)
 	AM_RANGE(0x0801, 0x0801) AM_DEVREADWRITE("crtc", mc6845_device, register_r, register_w)
 	AM_RANGE(0x0844, 0x084b) AM_NOP /* see below */
-	AM_RANGE(0x1000, 0x13ff) AM_RAM_WRITE(gluck2_videoram_w) AM_SHARE("videoram") /* 6116 #1 (2K x 8) RAM (only 1st half used) */
-	AM_RANGE(0x1800, 0x1bff) AM_RAM_WRITE(gluck2_colorram_w) AM_SHARE("colorram") /* 6116 #2 (2K x 8) RAM (only 1st half used) */
+	AM_RANGE(0x1000, 0x13ff) AM_RAM_WRITE(videoram_w) AM_SHARE("videoram") /* 6116 #1 (2K x 8) RAM (only 1st half used) */
+	AM_RANGE(0x1800, 0x1bff) AM_RAM_WRITE(colorram_w) AM_SHARE("colorram") /* 6116 #2 (2K x 8) RAM (only 1st half used) */
 	AM_RANGE(0x2000, 0x2000) AM_READ_PORT("SW1")
 	AM_RANGE(0x2d00, 0x2d01) AM_DEVWRITE("ymsnd", ym2413_device, write)
 	AM_RANGE(0x3400, 0x3400) AM_READ_PORT("IN0")
@@ -500,46 +509,6 @@ static GFXDECODE_START( gluck2 )
 	GFXDECODE_ENTRY( "gfx", 0x3800, tilelayout, 0, 16 )
 GFXDECODE_END
 
-
-/********************************************
-*              CRTC Interface               *
-********************************************/
-
-static MC6845_INTERFACE( mc6845_intf )
-{
-	"screen",   /* screen we are acting on */
-	false,      /* show border area */
-	8,          /* number of pixels per video memory address */
-	NULL,       /* before pixel update callback */
-	NULL,       /* row update callback */
-	NULL,       /* after pixel update callback */
-	DEVCB_NULL, /* callback for display state changes */
-	DEVCB_NULL, /* callback for cursor state changes */
-	DEVCB_NULL, /* HSYNC callback */
-	DEVCB_NULL, /* VSYNC callback */
-	NULL        /* update address callback */
-};
-
-
-/*************************************************
-*                Sound Interfaces                *
-*************************************************/
-
-static const ay8910_interface ay8910_intf =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("SW3"),
-	DEVCB_INPUT_PORT("SW2"),
-
-/*  Output ports have a minimal activity during init.
-    They seems unused (at least for Good Luck II)
-*/
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
 /*********************************************
 *              Machine Drivers               *
 *********************************************/
@@ -563,19 +532,26 @@ static MACHINE_CONFIG_START( gluck2, gluck2_state )
 */
 	MCFG_SCREEN_SIZE((39+1)*8, (38+1)*8)                /* from MC6845 init, registers 00 & 04. (value - 1) */
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 32*8-1)  /* from MC6845 init, registers 01 & 06. */
-	MCFG_SCREEN_UPDATE_DRIVER(gluck2_state, screen_update_gluck2)
+	MCFG_SCREEN_UPDATE_DRIVER(gluck2_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(gluck2)
-	MCFG_PALETTE_LENGTH(0x100)
-	MCFG_PALETTE_INIT_OVERRIDE(gluck2_state, gluck2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", gluck2)
+	MCFG_PALETTE_ADD("palette", 0x100)
+	MCFG_PALETTE_INIT_OWNER(gluck2_state, gluck2)
 
-	MCFG_MC6845_ADD("crtc", MC6845, MASTER_CLOCK/16, mc6845_intf) /* guess */
+	MCFG_MC6845_ADD("crtc", MC6845, "screen", MASTER_CLOCK/16) /* guess */
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ay8910", AY8910, MASTER_CLOCK/8)    /* guess */
-	MCFG_SOUND_CONFIG(ay8910_intf)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("SW3"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("SW2"))
+/*  Output ports have a minimal activity during init.
+    They seems unused (at least for Good Luck II)
+*/
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
 	MCFG_SOUND_ADD("ymsnd", YM2413, SND_CLOCK)
@@ -609,4 +585,4 @@ ROM_END
 *********************************************/
 
 /*    YEAR  NAME      PARENT  MACHINE   INPUT     STATE          INIT   ROT    COMPANY          FULLNAME       FLAGS... */
-GAME( 1992, gluck2,   0,      gluck2,   gluck2,   driver_device, 0,     ROT0, "Yung Yu / CYE", "Good Luck II", 0 )
+GAME( 1992, gluck2,   0,      gluck2,   gluck2,   driver_device, 0,     ROT0, "Yung Yu / CYE", "Good Luck II", GAME_SUPPORTS_SAVE )

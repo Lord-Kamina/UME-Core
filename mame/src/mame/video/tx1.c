@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /***************************************************************************
 
     Tatsumi TX-1/Buggy Boy video hardware
@@ -36,7 +38,7 @@
 TIMER_CALLBACK_MEMBER(tx1_state::interrupt_callback)
 {
 	m_maincpu->set_input_line_and_vector(0, HOLD_LINE, 0xff);
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(CURSOR_YPOS, CURSOR_XPOS));
+	m_interrupt_timer->adjust(m_screen->time_until_pos(CURSOR_YPOS, CURSOR_XPOS));
 }
 
 
@@ -54,29 +56,29 @@ if (PRINT_CRTC_DATA)
 	{
 		switch (data)
 		{
-			case 0x00: mame_printf_debug("Horizontal Total         "); break;
-			case 0x01: mame_printf_debug("Horizontal displayed     "); break;
-			case 0x02: mame_printf_debug("Horizontal sync position "); break;
-			case 0x03: mame_printf_debug("Horizontal sync width    "); break;
-			case 0x04: mame_printf_debug("Vertical total           "); break;
-			case 0x05: mame_printf_debug("Vertical total adjust    "); break;
-			case 0x06: mame_printf_debug("Vertical displayed       "); break;
-			case 0x07: mame_printf_debug("Vertical sync position   "); break;
-			case 0x08: mame_printf_debug("Interlace mode           "); break;
-			case 0x09: mame_printf_debug("Max. scan line address   "); break;
-			case 0x0a: mame_printf_debug("Cursror start            "); break;
-			case 0x0b: mame_printf_debug("Cursor end               "); break;
-			case 0x0c: mame_printf_debug("Start address (h)        "); break;
-			case 0x0d: mame_printf_debug("Start address (l)        "); break;
-			case 0x0e: mame_printf_debug("Cursor (h)               "); break;
-			case 0x0f: mame_printf_debug("Cursor (l)               "); break;
-			case 0x10: mame_printf_debug("Light pen (h))           "); break;
-			case 0x11: mame_printf_debug("Light pen (l)            "); break;
+			case 0x00: osd_printf_debug("Horizontal Total         "); break;
+			case 0x01: osd_printf_debug("Horizontal displayed     "); break;
+			case 0x02: osd_printf_debug("Horizontal sync position "); break;
+			case 0x03: osd_printf_debug("Horizontal sync width    "); break;
+			case 0x04: osd_printf_debug("Vertical total           "); break;
+			case 0x05: osd_printf_debug("Vertical total adjust    "); break;
+			case 0x06: osd_printf_debug("Vertical displayed       "); break;
+			case 0x07: osd_printf_debug("Vertical sync position   "); break;
+			case 0x08: osd_printf_debug("Interlace mode           "); break;
+			case 0x09: osd_printf_debug("Max. scan line address   "); break;
+			case 0x0a: osd_printf_debug("Cursror start            "); break;
+			case 0x0b: osd_printf_debug("Cursor end               "); break;
+			case 0x0c: osd_printf_debug("Start address (h)        "); break;
+			case 0x0d: osd_printf_debug("Start address (l)        "); break;
+			case 0x0e: osd_printf_debug("Cursor (h)               "); break;
+			case 0x0f: osd_printf_debug("Cursor (l)               "); break;
+			case 0x10: osd_printf_debug("Light pen (h))           "); break;
+			case 0x11: osd_printf_debug("Light pen (l)            "); break;
 		}
 	}
 	else if (offset == 1)
 	{
-		mame_printf_debug("0x%.2x, (%d)\n",data, data);
+		osd_printf_debug("0x%.2x, (%d)\n",data, data);
 	}
 }
 }
@@ -113,7 +115,7 @@ enum
 
 PALETTE_INIT_MEMBER(tx1_state,tx1)
 {
-	const UINT8 *color_prom = memregion("proms")->base();
+	const UINT8 *const color_prom = &m_proms[0];
 	int i;
 
 	static const res_net_info tx1_net_info =
@@ -130,11 +132,11 @@ PALETTE_INIT_MEMBER(tx1_state,tx1)
 	{
 		int r, g, b;
 
-		r = compute_res_net(color_prom[i + 0x300] & 0xf, 0, &tx1_net_info);
-		g = compute_res_net(color_prom[i + 0x400] & 0xf, 1, &tx1_net_info);
-		b = compute_res_net(color_prom[i + 0x500] & 0xf, 2, &tx1_net_info);
+		r = compute_res_net(color_prom[i + 0x300] & 0xf, 0, tx1_net_info);
+		g = compute_res_net(color_prom[i + 0x400] & 0xf, 1, tx1_net_info);
+		b = compute_res_net(color_prom[i + 0x500] & 0xf, 2, tx1_net_info);
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -233,11 +235,10 @@ void tx1_state::tx1_draw_char(UINT8 *bitmap)
 	UINT16 *tx1_vram = m_vram;
 	INT32 x, y;
 	UINT32 scroll_x;
-	UINT8 *chars, *gfx2;
 
 	/* 2bpp characters */
-	chars = memregion("char_tiles")->base();
-	gfx2 = chars + 0x4000;
+	const UINT8 *const chars = &m_char_tiles[0];
+	const UINT8 *const gfx2 = &m_char_tiles[0x4000];
 
 	/* X scroll value is the last word in char RAM */
 	scroll_x = tx1_vram[0xfff] & 0x3ff;
@@ -414,17 +415,15 @@ void tx1_state::tx1_draw_road(UINT8 *bitmap)
 	UINT8   pix[2][4][3];
 
 	/* Road slice map ROMs */
-	const UINT8 *const gfx3 = memregion("gfx3")->base();
-	const UINT8 *const rom_a = gfx3;
-	const UINT8 *const rom_b = gfx3 + 0x2000;
-	const UINT8 *const rom_c = gfx3 + 0x4000;
+	const UINT8 *const rom_a = &m_road_rom[0];
+	const UINT8 *const rom_b = &m_road_rom[0x2000];
+	const UINT8 *const rom_c = &m_road_rom[0x4000];
 
 	/* Pixel data */
-	const UINT8 *const proms = memregion("proms")->base();
-	const UINT8 *const prom_a = proms + 0x1100;
-	const UINT8 *const prom_b = proms + 0x1300;
-	const UINT8 *const prom_c = proms + 0x1500;
-	const UINT8 *const vprom  = proms + 0x1700;
+	const UINT8 *const prom_a = &m_proms[0x1100];
+	const UINT8 *const prom_b = &m_proms[0x1300];
+	const UINT8 *const prom_c = &m_proms[0x1500];
+	const UINT8 *const vprom  = &m_proms[0x1700];
 
 	rva9_8  = (tx1_vregs.flags & 3) << 8;
 	rva7    = !BIT(tx1_vregs.flags, TX1_RDFLAG_RVA7) << 7;
@@ -855,18 +854,17 @@ void tx1_state::tx1_draw_objects(UINT8 *bitmap)
 	UINT32 offs;
 
 	/* The many lookup table ROMs */
-	const UINT8 *const ic48 = memregion("user3")->base();
-	const UINT8 *const ic281 = ic48 + 0x2000;
+	const UINT8 *const ic48 = &m_obj_luts[0];
+	const UINT8 *const ic281 = &m_obj_luts[0x2000];
 
-	const UINT8 *const proms = memregion("proms")->base();
-	const UINT8 *const ic190 = proms + 0xc00;
-	const UINT8 *const ic162 = proms + 0xe00;
-	const UINT8 *const ic25  = proms + 0x1000;
+	const UINT8 *const ic190 = &m_proms[0xc00];
+	const UINT8 *const ic162 = &m_proms[0xe00];
+	const UINT8 *const ic25  = &m_proms[0x1000];
 
-	const UINT8 *const ic106 = memregion("obj_map")->base();
-	const UINT8 *const ic73  = ic106 + 0x4000;
+	const UINT8 *const ic106 = &m_obj_map[0];
+	const UINT8 *const ic73  = &m_obj_map[0x4000];
 
-	const UINT8 *const pixdata_rgn = memregion("obj_tiles")->base();
+	const UINT8 *const pixdata_rgn = &m_obj_tiles[0];
 
 	for (offs = 0x0; offs <= 0x300; offs += 8)
 	{
@@ -995,7 +993,7 @@ void tx1_state::tx1_draw_objects(UINT8 *bitmap)
 						dataend |= ic106_data & 0x40;
 
 						/* Retrieve data for an 8x8 tile */
-						ic73_data = ic73[rom_addr2];
+						ic73_data = ic73[rom_addr2 & 0x3fff];
 
 						/* This is the data from the LUT pair */
 						lut_data = (ic106_data << 8) | ic73_data;
@@ -1112,7 +1110,7 @@ VIDEO_START_MEMBER(tx1_state,tx1)
 	m_interrupt_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(tx1_state::interrupt_callback),this));
 
 	/* /CUDISP CRTC interrupt */
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(CURSOR_YPOS, CURSOR_XPOS));
+	m_interrupt_timer->adjust(m_screen->time_until_pos(CURSOR_YPOS, CURSOR_XPOS));
 }
 
 void tx1_state::screen_eof_tx1(screen_device &screen, bool state)
@@ -1130,7 +1128,7 @@ void tx1_state::screen_eof_tx1(screen_device &screen, bool state)
 void tx1_state::tx1_combine_layers(bitmap_ind16 &bitmap, int screen)
 {
 	int x, y;
-	UINT8 *chr_pal = memregion("proms")->base() + 0x900;
+	UINT8 *chr_pal = &m_proms[0x900];
 
 	int x_offset = screen * 256;
 
@@ -1256,7 +1254,7 @@ UINT32 tx1_state::screen_update_tx1_right(screen_device &screen, bitmap_ind16 &b
 
 PALETTE_INIT_MEMBER(tx1_state,buggyboy)
 {
-	const UINT8 *color_prom = memregion("proms")->base();
+	const UINT8 *const color_prom = &m_proms[0];
 	int i;
 
 	for (i = 0; i < 0x100; i++)
@@ -1285,7 +1283,7 @@ PALETTE_INIT_MEMBER(tx1_state,buggyboy)
 		bit4 = BIT(color_prom[i + 0x300], 0);
 		b = 0x06 * bit4 + 0x0d * bit0 + 0x1e * bit1 + 0x41 * bit2 + 0x8a * bit3;
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -1301,13 +1299,12 @@ void tx1_state::buggyboy_draw_char(UINT8 *bitmap, bool wide)
 	UINT16 *buggyboy_vram = m_vram;
 	INT32 x, y;
 	UINT32 scroll_x, scroll_y;
-	UINT8 *chars, *gfx2;
 	UINT32 total_width;
 	UINT32 x_mask;
 
 	/* 2bpp characters */
-	chars = memregion("char_tiles")->base();
-	gfx2 = memregion("char_tiles")->base() + 0x4000;
+	const UINT8 *const chars = &m_char_tiles[0];
+	const UINT8 *const gfx2 = &m_char_tiles[0x4000];
 
 	/* X/Y scroll values are the last word in char RAM */
 	if (wide)
@@ -1438,8 +1435,7 @@ void tx1_state::buggyboy_draw_char(UINT8 *bitmap, bool wide)
 ***************************************************************************/
 
 void tx1_state::buggyboy_get_roadpix(int screen, int ls161, UINT8 rva0_6, UINT8 sld, UINT32 *_rorev,
-									UINT8 *rc0, UINT8 *rc1, UINT8 *rc2, UINT8 *rc3,
-									const UINT8 *rom, const UINT8 *prom0, const UINT8 *prom1, const UINT8 *prom2)
+									UINT8 *rc0, UINT8 *rc1, UINT8 *rc2, UINT8 *rc3)
 {
 	/* Counter Q10-7 are added to 384 */
 	UINT16 ls283_159 = (ls161 & 0x780) + 128 + (256 * screen);
@@ -1448,6 +1444,12 @@ void tx1_state::buggyboy_get_roadpix(int screen, int ls161, UINT8 rva0_6, UINT8 
 	UINT32 rom_en = !(ls283_159 & 0x400) && !(ls283_159_co ^ (ls161 & 0x800));
 	UINT8 d0 = 0;
 	UINT8 d1 = 0;
+
+	/* ROM/PROM lookup tables */
+	const UINT8 *const rom   = &m_road_rom[0];
+	const UINT8 *const prom0 = &m_road_rom[0x4000];
+	const UINT8 *const prom1 = &m_road_rom[0x4200];
+	const UINT8 *const prom2 = &m_road_rom[0x4400];
 
 	/* Latch road reverse bit */
 	*_rorev = !( (rom_en && rom_flip) || (!rom_en && (ls161 & 0x4000)) );
@@ -1538,12 +1540,8 @@ void tx1_state::buggyboy_draw_road(UINT8 *bitmap)
 	UINT32 rva20_6;
 
 	/* ROM/PROM lookup tables */
-	const UINT8 *rcols = (UINT8*)(memregion("proms")->base() + 0x1500);
-	const UINT8 *rom   = memregion("road")->base();
-	const UINT8 *prom0 = rom + 0x4000;
-	const UINT8 *prom1 = rom + 0x4200;
-	const UINT8 *prom2 = rom + 0x4400;
-	const UINT8 *vprom = rom + 0x4600;
+	const UINT8 *const rcols = &m_proms[0x1500];
+	const UINT8 *const vprom = &m_road_rom[0x4600];
 
 	/* Extract constant values */
 	tcmd     = ((vregs.scol & 0xc000) >> 12) | ((vregs.scol & 0x00c0) >> 6);
@@ -1667,9 +1665,9 @@ void tx1_state::buggyboy_draw_road(UINT8 *bitmap)
 		/* Have we crossed a road gfx strip boundary? */
 		if (ls161 & 7)
 		{
-			buggyboy_get_roadpix(0, ls161, rva0_6, sld, &_rorevls, &rc0[0], &rc1[0], &rc2[0], &rc3[0], rom, prom0, prom1, prom2);
-			buggyboy_get_roadpix(1, ls161, rva0_6, sld, &_rorevcs, &rc0[1], &rc1[1], &rc2[1], &rc3[1], rom, prom0, prom1, prom2);
-			buggyboy_get_roadpix(2, ls161, rva0_6, sld, &_rorevrs, &rc0[2], &rc1[2], &rc2[2], &rc3[2], rom, prom0, prom1, prom2);
+			buggyboy_get_roadpix(0, ls161, rva0_6, sld, &_rorevls, &rc0[0], &rc1[0], &rc2[0], &rc3[0]);
+			buggyboy_get_roadpix(1, ls161, rva0_6, sld, &_rorevcs, &rc0[1], &rc1[1], &rc2[1], &rc3[1]);
+			buggyboy_get_roadpix(2, ls161, rva0_6, sld, &_rorevrs, &rc0[2], &rc1[2], &rc2[2], &rc3[2]);
 		}
 
 		/* We can evaluate some of the pixel logic outside of the x-loop */
@@ -1749,9 +1747,9 @@ void tx1_state::buggyboy_draw_road(UINT8 *bitmap)
 			/* Load in a new road gfx strip? */
 			if (!(ls161 & 7))
 			{
-				buggyboy_get_roadpix(0, ls161, rva0_6, sld, &_rorevls, &rc0[0], &rc1[0], &rc2[0], &rc3[0], rom, prom0, prom1, prom2);
-				buggyboy_get_roadpix(1, ls161, rva0_6, sld, &_rorevcs, &rc0[1], &rc1[1], &rc2[1], &rc3[1], rom, prom0, prom1, prom2);
-				buggyboy_get_roadpix(2, ls161, rva0_6, sld, &_rorevrs, &rc0[2], &rc1[2], &rc2[2], &rc3[2], rom, prom0, prom1, prom2);
+				buggyboy_get_roadpix(0, ls161, rva0_6, sld, &_rorevls, &rc0[0], &rc1[0], &rc2[0], &rc3[0]);
+				buggyboy_get_roadpix(1, ls161, rva0_6, sld, &_rorevcs, &rc0[1], &rc1[1], &rc2[1], &rc3[1]);
+				buggyboy_get_roadpix(2, ls161, rva0_6, sld, &_rorevrs, &rc0[2], &rc1[2], &rc2[2], &rc3[2]);
 			}
 
 			/* Road camber/banking */
@@ -2169,12 +2167,8 @@ void tx1_state::buggybjr_draw_road(UINT8 *bitmap)
 	UINT32 rva20_6;
 
 	/* ROM/PROM lookup tables */
-	const UINT8 *rcols = (UINT8*)(memregion("proms")->base() + 0x1500);
-	const UINT8 *rom   = memregion("road")->base();
-	const UINT8 *prom0 = rom + 0x4000;
-	const UINT8 *prom1 = rom + 0x4200;
-	const UINT8 *prom2 = rom + 0x4400;
-	const UINT8 *vprom = rom + 0x4600;
+	const UINT8 *const rcols = &m_proms[0x1500];
+	const UINT8 *const vprom = &m_road_rom[0x4600];
 
 	/* Extract constant values */
 	tcmd     = ((vregs.scol & 0xc000) >> 12) | ((vregs.scol & 0x00c0) >> 6);
@@ -2296,7 +2290,7 @@ void tx1_state::buggybjr_draw_road(UINT8 *bitmap)
 
 		/* Have we crossed a road gfx strip boundary? */
 		if (ls161 & 7)
-			buggyboy_get_roadpix(1, ls161, rva0_6, sld, &_rorevcs, &rc0, &rc1, &rc2, &rc3, rom, prom0, prom1, prom2);
+			buggyboy_get_roadpix(1, ls161, rva0_6, sld, &_rorevcs, &rc0, &rc1, &rc2, &rc3);
 
 		for (x = 0; x < 256; ++x)
 		{
@@ -2331,7 +2325,7 @@ void tx1_state::buggybjr_draw_road(UINT8 *bitmap)
 
 			/* Load in a new road gfx strip? */
 			if (!(ls161 & 7))
-				buggyboy_get_roadpix(1, ls161, rva0_6, sld, &_rorevcs, &rc0, &rc1, &rc2, &rc3, rom, prom0, prom1, prom2);
+				buggyboy_get_roadpix(1, ls161, rva0_6, sld, &_rorevcs, &rc0, &rc1, &rc2, &rc3);
 
 			/* Road camber */
 			if (vregs.bank_mode == 0)
@@ -2580,17 +2574,17 @@ void tx1_state::buggyboy_draw_objs(UINT8 *bitmap, bool wide)
 	UINT32 x_stride;
 
 	/* The many lookup table ROMs */
-	const UINT8 *const bug13  = (UINT8*)memregion("obj_luts")->base();
-	const UINT8 *const bug18s = bug13 + 0x2000;
-	const UINT8 *const bb8    = (UINT8*)memregion("proms")->base() + 0x1600;
+	const UINT8 *const bug13  = &m_obj_luts[0];
+	const UINT8 *const bug18s = &m_obj_luts[0x2000];
+	const UINT8 *const bb8    = &m_proms[0x1600];
 
-	const UINT8 *const bug16s = (UINT8*)memregion("obj_map")->base();
-	const UINT8 *const bug17s = bug16s + 0x8000;
+	const UINT8 *const bug16s = &m_obj_map[0];
+	const UINT8 *const bug17s = &m_obj_map[0x8000];
 
-	const UINT8 *const bb9o = (UINT8*)memregion("proms")->base() + 0x500;
-	const UINT8 *const bb9e = bb9o + 0x800;
+	const UINT8 *const bb9o = &m_proms[0x500];
+	const UINT8 *const bb9e = &m_proms[0xd00];
 
-	const UINT8 *const pixdata_rgn = (UINT8*)memregion("obj_tiles")->base();
+	const UINT8 *const pixdata_rgn = &m_obj_tiles[0];
 
 	if (wide)
 	{
@@ -2930,7 +2924,7 @@ WRITE16_MEMBER(tx1_state::buggyboy_scolst_w)
 
 void tx1_state::bb_combine_layers(bitmap_ind16 &bitmap, int screen)
 {
-	UINT8 *chr_pal = memregion("proms")->base() + 0x400;
+	UINT8 *chr_pal = &m_proms[0x400];
 	UINT32 bmp_stride;
 	UINT32 x_offset;
 	UINT32 y;
@@ -3006,7 +3000,7 @@ VIDEO_START_MEMBER(tx1_state,buggyboy)
 	m_interrupt_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(tx1_state::interrupt_callback),this));
 
 	/* /CUDISP CRTC interrupt */
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(CURSOR_YPOS, CURSOR_XPOS));
+	m_interrupt_timer->adjust(m_screen->time_until_pos(CURSOR_YPOS, CURSOR_XPOS));
 }
 
 VIDEO_START_MEMBER(tx1_state,buggybjr)
@@ -3020,7 +3014,7 @@ VIDEO_START_MEMBER(tx1_state,buggybjr)
 	m_interrupt_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(tx1_state::interrupt_callback),this));
 
 	/* /CUDISP CRTC interrupt */
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(CURSOR_YPOS, CURSOR_XPOS));
+	m_interrupt_timer->adjust(m_screen->time_until_pos(CURSOR_YPOS, CURSOR_XPOS));
 }
 
 void tx1_state::screen_eof_buggyboy(screen_device &screen, bool state)

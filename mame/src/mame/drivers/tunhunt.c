@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino, David Haywood
 /***************************************************************************
 
     Atari Tunnel Hunt hardware
@@ -55,7 +57,7 @@
  *
  *************************************/
 
-WRITE8_MEMBER(tunhunt_state::tunhunt_control_w)
+WRITE8_MEMBER(tunhunt_state::control_w)
 {
 	/*
 	    0x01    coin counter#2  "right counter"
@@ -81,7 +83,7 @@ WRITE8_MEMBER(tunhunt_state::tunhunt_control_w)
  *
  *************************************/
 
-READ8_MEMBER(tunhunt_state::tunhunt_button_r)
+READ8_MEMBER(tunhunt_state::button_r)
 {
 	int data = ioport("IN0")->read();
 	return ((data>>offset)&1)?0x00:0x80;
@@ -135,11 +137,11 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, tunhunt_state )
 	AM_RANGE(0x1800, 0x1800) AM_WRITEONLY   /* SHEL0H */
 	AM_RANGE(0x1a00, 0x1a00) AM_WRITEONLY   /* SHEL1H */
 	AM_RANGE(0x1c00, 0x1c00) AM_WRITEONLY   /* MOBJV */
-	AM_RANGE(0x1e00, 0x1eff) AM_WRITE(tunhunt_videoram_w) AM_SHARE("videoram")  /* ALPHA */
+	AM_RANGE(0x1e00, 0x1eff) AM_WRITE(videoram_w) AM_SHARE("videoram")  /* ALPHA */
 	AM_RANGE(0x2000, 0x2000) AM_WRITENOP    /* watchdog */
-	AM_RANGE(0x2000, 0x2007) AM_READ(tunhunt_button_r)
+	AM_RANGE(0x2000, 0x2007) AM_READ(button_r)
 	AM_RANGE(0x2400, 0x2400) AM_WRITENOP    /* INT ACK */
-	AM_RANGE(0x2800, 0x2800) AM_WRITE(tunhunt_control_w)
+	AM_RANGE(0x2800, 0x2800) AM_WRITE(control_w)
 	AM_RANGE(0x2c00, 0x2fff) AM_WRITEONLY AM_SHARE("spriteram")
 	AM_RANGE(0x3000, 0x300f) AM_DEVREADWRITE("pokey1", pokey_device, read, write)
 	AM_RANGE(0x4000, 0x400f) AM_DEVREADWRITE("pokey2", pokey_device, read, write)
@@ -258,34 +260,6 @@ static GFXDECODE_START( tunhunt )
 GFXDECODE_END
 
 
-
-/*************************************
- *
- *  Sound interfaces
- *
- *************************************/
-
-static const pokey_interface pokey_interface_1 =
-{
-	{ DEVCB_NULL },
-	DEVCB_INPUT_PORT("DSW")
-};
-
-static const pokey_interface pokey_interface_2 =
-{
-	{
-		DEVCB_INPUT_PORT("IN1"),
-		DEVCB_INPUT_PORT("IN2"),
-		DEVCB_DRIVER_MEMBER(tunhunt_state,dsw2_0r),
-		DEVCB_DRIVER_MEMBER(tunhunt_state,dsw2_1r),
-		DEVCB_DRIVER_MEMBER(tunhunt_state,dsw2_2r),
-		DEVCB_DRIVER_MEMBER(tunhunt_state,dsw2_3r),
-		DEVCB_DRIVER_MEMBER(tunhunt_state,dsw2_4r)
-	}
-};
-
-
-
 /*************************************
  *
  *  Machine driver
@@ -305,22 +279,30 @@ static MACHINE_CONFIG_START( tunhunt, tunhunt_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(256, 256-16)
 	MCFG_SCREEN_VISIBLE_AREA(0, 255, 0, 255-16)
-	MCFG_SCREEN_UPDATE_DRIVER(tunhunt_state, screen_update_tunhunt)
+	MCFG_SCREEN_UPDATE_DRIVER(tunhunt_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(tunhunt)
-	MCFG_PALETTE_LENGTH(0x1a)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tunhunt)
+	MCFG_PALETTE_ADD("palette", 0x1a)
+	MCFG_PALETTE_INDIRECT_ENTRIES(16)
+	MCFG_PALETTE_INIT_OWNER(tunhunt_state, tunhunt)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_POKEY_ADD("pokey1", XTAL_12_096MHz/10)
-	MCFG_POKEY_CONFIG(pokey_interface_1)
+	MCFG_SOUND_ADD("pokey1", POKEY, XTAL_12_096MHz/10)
+	MCFG_POKEY_ALLPOT_R_CB(IOPORT("DSW"))
 	MCFG_POKEY_OUTPUT_RC(RES_K(1), CAP_U(0.047), 5.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
-	MCFG_POKEY_ADD("pokey2", XTAL_12_096MHz/10)
-	MCFG_POKEY_CONFIG(pokey_interface_2)
+	MCFG_SOUND_ADD("pokey2", POKEY, XTAL_12_096MHz/10)
+	MCFG_POKEY_POT0_R_CB(IOPORT("IN1"))
+	MCFG_POKEY_POT1_R_CB(IOPORT("IN2"))
+	MCFG_POKEY_POT2_R_CB(READ8(tunhunt_state, dsw2_0r))
+	MCFG_POKEY_POT3_R_CB(READ8(tunhunt_state, dsw2_1r))
+	MCFG_POKEY_POT4_R_CB(READ8(tunhunt_state, dsw2_2r))
+	MCFG_POKEY_POT5_R_CB(READ8(tunhunt_state, dsw2_3r))
+	MCFG_POKEY_POT6_R_CB(READ8(tunhunt_state, dsw2_4r))
 	MCFG_POKEY_OUTPUT_RC(RES_K(1), CAP_U(0.047), 5.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
@@ -410,5 +392,5 @@ ROM_END
  *************************************/
 
 /*         rom   parent  machine    inp         init */
-GAME( 1979,tunhunt,  0,       tunhunt,   tunhunt, driver_device,    0,  ORIENTATION_SWAP_XY, "Atari", "Tunnel Hunt", 0 )
-GAME( 1981,tunhuntc, tunhunt, tunhunt,   tunhunt, driver_device,    0,  ORIENTATION_SWAP_XY, "Atari (Centuri license)", "Tunnel Hunt (Centuri)", 0 )
+GAME( 1979,tunhunt,  0,       tunhunt,   tunhunt, driver_device,    0,  ORIENTATION_SWAP_XY, "Atari", "Tunnel Hunt", GAME_SUPPORTS_SAVE )
+GAME( 1981,tunhuntc, tunhunt, tunhunt,   tunhunt, driver_device,    0,  ORIENTATION_SWAP_XY, "Atari (Centuri license)", "Tunnel Hunt (Centuri)", GAME_SUPPORTS_SAVE )

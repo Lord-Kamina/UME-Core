@@ -1,8 +1,10 @@
+// license:GPL-2.0+
+// copyright-holders:Juergen Buchmueller, Krzysztof Strzecha, Robbbert
 /*********************************************************************
 
     zx81_p.h
 
-    Format code for ZX-81 casette files
+    Format code for ZX-81 cassette files
 
 *********************************************************************/
 

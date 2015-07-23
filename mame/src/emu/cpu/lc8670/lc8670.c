@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /******************************************************************************
 
     Sanyo LC8670 "Potato" CPU core
@@ -169,7 +171,7 @@ ADDRESS_MAP_END
 //-------------------------------------------------
 
 lc8670_cpu_device::lc8670_cpu_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: cpu_device(mconfig, LC8670, "Sanyo LC8670", tag, owner, clock),
+	: cpu_device(mconfig, LC8670, "Sanyo LC8670", tag, owner, clock, "lc8670", __FILE__),
 		m_program_config("program", ENDIANNESS_BIG, 8, 16, 0),
 		m_data_config("data", ENDIANNESS_BIG, 8, 9, 0, ADDRESS_MAP_NAME(lc8670_internal_map)),
 		m_io_config("io", ENDIANNESS_BIG, 8, 8, 0),
@@ -177,6 +179,9 @@ lc8670_cpu_device::lc8670_cpu_device(const machine_config &mconfig, const char *
 		m_ppc(0),
 		m_bankswitch_func(*this)
 {
+	memset(m_sfr, 0x00, sizeof(m_sfr));
+	memset(m_timer0, 0x00, sizeof(m_timer0));
+	memset(m_timer1, 0x00, sizeof(m_timer1));
 }
 
 //-------------------------------------------------
@@ -201,12 +206,6 @@ void lc8670_cpu_device::device_start()
 	m_basetimer = timer_alloc(BASE_TIMER);
 	m_basetimer->adjust(attotime::from_hz(m_clocks[LC8670_SUB_CLOCK]), 0, attotime::from_hz(m_clocks[LC8670_SUB_CLOCK]));
 	m_clocktimer = timer_alloc(CLOCK_TIMER);
-
-	// alloc internal RAM
-	m_sfr = auto_alloc_array(machine(), UINT8, 0x80);
-	m_mram = auto_alloc_array(machine(), UINT8, 0x200);
-	m_xram = auto_alloc_array(machine(), UINT8, 0xc6);
-	m_vtrbf = auto_alloc_array(machine(), UINT8, 0x200);
 
 	// register state for debugger
 	state_add(LC8670_PC  , "PC"  , m_pc).callimport().callexport().formatstr("%04X");
@@ -370,12 +369,12 @@ void lc8670_cpu_device::state_import(const device_state_entry &entry)
 //  for the debugger
 //-------------------------------------------------
 
-void lc8670_cpu_device::state_string_export(const device_state_entry &entry, astring &string)
+void lc8670_cpu_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case STATE_GENFLAGS:
-			string.printf("%s%s%s%s",
+			strprintf(str, "%s%s%s%s",
 				GET_CY ? "CY" : "..",
 				GET_AC ? "AC" : "..",
 				GET_OV ? "OV" : "..",
@@ -1072,7 +1071,7 @@ WRITE8_MEMBER(lc8670_cpu_device::regs_w)
 
 inline UINT8 lc8670_cpu_device::fetch()
 {
-	UINT8 data = m_direct->read_decrypted_byte(m_pc);
+	UINT8 data = m_direct->read_byte(m_pc);
 
 	set_pc(m_pc + 1);
 

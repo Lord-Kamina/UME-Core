@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Tim Schuerewegen
 /*
 
     Atmel Serial DataFlash
@@ -29,6 +31,9 @@
 #define MCFG_AT45DB161_ADD(_tag) \
 	MCFG_DEVICE_ADD(_tag, AT45DB161, 0)
 
+#define MCFG_AT45DBXXX_SO_CALLBACK(_cb) \
+	devcb = &at45db041_device::set_so_cb(*device, DEVCB_##_cb);
+
 
 // ======================> at45db041_device
 
@@ -37,14 +42,17 @@ class at45db041_device : public device_t,
 {
 public:
 	at45db041_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	at45db041_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	at45db041_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 
 	DECLARE_WRITE_LINE_MEMBER(cs_w);
 	DECLARE_WRITE_LINE_MEMBER(sck_w);
 	DECLARE_WRITE_LINE_MEMBER(si_w);
 	DECLARE_READ_LINE_MEMBER(so_r);
 
-	UINT8 *get_ptr() {  return m_data;  }
+	UINT8 *get_ptr() {  return &m_data[0];  }
+
+	template<class _Object> static devcb_base &set_so_cb(device_t &device, _Object object) { return downcast<at45db041_device &>(device).write_so.set_callback(object); }
+	devcb_write_line write_so;
 
 protected:
 	// device-level overrides
@@ -68,12 +76,12 @@ protected:
 	void write_byte(UINT8 data);
 
 	// internal state
-	UINT8 *     m_data;
+	dynamic_buffer m_data;
 	UINT32      m_size;
 	UINT8       m_mode;
 	UINT8       m_status;
-	UINT8 *     m_buffer1;
-	//UINT8 *     m_buffer2;
+	dynamic_buffer m_buffer1;
+	//dynamic_buffer m_buffer2;
 	UINT8       m_si_byte;
 	UINT8       m_si_bits;
 	UINT8       m_so_byte;

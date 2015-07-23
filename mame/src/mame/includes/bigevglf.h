@@ -1,3 +1,6 @@
+// license:???
+// copyright-holders:Jarek Burczynski, Tomasz Slanina
+#include "sound/msm5232.h"
 
 class bigevglf_state : public driver_device
 {
@@ -9,7 +12,11 @@ public:
 		m_spriteram2(*this, "spriteram2"),
 		m_audiocpu(*this, "audiocpu"),
 		m_mcu(*this, "mcu"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_msm(*this, "msm"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_paletteram;
@@ -98,4 +105,8 @@ public:
 	TIMER_CALLBACK_MEMBER(deferred_ls74_w);
 	void draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect );
 	required_device<cpu_device> m_maincpu;
+	required_device<msm5232_device> m_msm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 };

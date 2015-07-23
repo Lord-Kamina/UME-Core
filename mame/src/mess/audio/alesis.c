@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /***************************************************************************
 
     Alesis HR-16 sound (DM3AG + PCM54) emulation
@@ -33,8 +35,9 @@ MACHINE_CONFIG_END
 //-------------------------------------------------
 
 alesis_dm3ag_device::alesis_dm3ag_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, ALESIS_DM3AG, "Alesis DM3AG", tag, owner, clock),
-		m_dac(*this, "dac")
+	: device_t(mconfig, ALESIS_DM3AG, "Alesis DM3AG", tag, owner, clock, "alesis_dm3ag", __FILE__),
+		m_dac(*this, "dac"),
+		m_samples(*this, DEVICE_SELF)
 {
 }
 
@@ -53,7 +56,6 @@ machine_config_constructor alesis_dm3ag_device::device_mconfig_additions() const
 
 void alesis_dm3ag_device::device_start()
 {
-	m_samples = (INT8*)(*region());
 	m_dac_update_timer = timer_alloc(TIMER_DAC_UPDATE);
 }
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /***************************************************************************
 
     CVICNY8080 - Practice-z80 - a homebrew from Czechoslavakia.

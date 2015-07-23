@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Motorola MCCS1850 Serial Real-Time Clock emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 *********************************************************************/
 
@@ -280,28 +279,33 @@ inline void mccs1850_device::advance_seconds()
 //  mccs1850_device - constructor
 //-------------------------------------------------
 
-mccs1850_device::mccs1850_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MCCS1850, "MCCS1850", tag, owner, clock),
-		device_rtc_interface(mconfig, *this),
-		device_nvram_interface(mconfig, *this),
-		m_pse(1),
-		m_counter(0),
-		m_ce(0),
-		m_sck(0),
-		m_sdo(1),
-		m_sdi(0),
-		m_state(STATE_ADDRESS),
-		m_bits(0)
+mccs1850_device::mccs1850_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
+	device_t(mconfig, MCCS1850, "MCCS1850", tag, owner, clock, "mccs1850", __FILE__),
+	device_rtc_interface(mconfig, *this),
+	device_nvram_interface(mconfig, *this),
+	int_cb(*this),
+	pse_cb(*this),
+	nuc_cb(*this),
+	m_pse(1),
+	m_counter(0),
+	m_ce(0),
+	m_sck(0),
+	m_sdo(1),
+	m_sdi(0),
+	m_state(STATE_ADDRESS),
+	m_bits(0)
 {
 }
 
-void mccs1850_device::set_cb(line_cb_t _int_cb, line_cb_t _pse_cb, line_cb_t _nuc_cb)
-{
-	int_cb = _int_cb;
-	pse_cb = _pse_cb;
-	nuc_cb = _nuc_cb;
-}
 
+//-------------------------------------------------
+//  set_counter - set the counter at startup time
+//-------------------------------------------------
+
+void mccs1850_device::set_counter(UINT32 value)
+{
+	m_counter = value;
+}
 
 //-------------------------------------------------
 //  device_start - device-specific startup
@@ -309,6 +313,11 @@ void mccs1850_device::set_cb(line_cb_t _int_cb, line_cb_t _pse_cb, line_cb_t _nu
 
 void mccs1850_device::device_start()
 {
+	// resolve callbacks
+	int_cb.resolve();
+	pse_cb.resolve();
+	nuc_cb.resolve();
+
 	// allocate timers
 	m_clock_timer = timer_alloc(TIMER_CLOCK);
 	m_clock_timer->adjust(attotime::from_hz(clock() / 32768), 0, attotime::from_hz(clock() / 32768));
@@ -333,7 +342,10 @@ void mccs1850_device::device_start()
 
 void mccs1850_device::device_reset()
 {
-	m_ram[REGISTER_STATUS] = 0x80 | STATUS_FTU;
+	if(!m_counter)
+		m_ram[REGISTER_STATUS] = 0x80 | STATUS_FTU;
+	else
+		m_ram[REGISTER_STATUS] = 0x80;
 	m_ram[REGISTER_CONTROL] = 0x00;
 }
 
@@ -462,7 +474,7 @@ WRITE_LINE_MEMBER( mccs1850_device::sck_w )
 
 				// increment address counter
 				m_address++;
-				m_address &= 0x7f;
+				m_address |= 0x80;
 			}
 		}
 		else if (!BIT(m_address, 7) && !m_sck && state)
@@ -480,6 +492,7 @@ WRITE_LINE_MEMBER( mccs1850_device::sck_w )
 				m_address++;
 				m_address &= 0x7f;
 				m_shift = read_register(m_address & 0x7f);
+				if (LOG) logerror("MCCS1850 '%s' Data Out %02x\n", tag(), m_shift);
 			}
 		}
 		break;

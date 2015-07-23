@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Dream Ball
 
 PCB DE-0386-2
@@ -25,30 +27,37 @@ lamps?
 #include "sound/okim6295.h"
 #include "video/deco16ic.h"
 #include "video/decospr.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
+#include "machine/deco104.h"
 
 class dreambal_state : public driver_device
 {
 public:
 	dreambal_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-		m_eeprom(*this, "eeprom"),
 		m_maincpu(*this, "maincpu"),
-		m_deco_tilegen1(*this, "tilegen1")
+		m_deco104(*this, "ioprot104"),
+		m_deco_tilegen1(*this, "tilegen1"),
+		m_eeprom(*this, "eeprom")
 	{ }
-
-	required_device<eeprom_device> m_eeprom;
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
+	optional_device<deco104_device> m_deco104;
 	required_device<deco16ic_device> m_deco_tilegen1;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
 
 	DECLARE_DRIVER_INIT(dreambal);
 	virtual void machine_start();
 	virtual void machine_reset();
-	UINT32 screen_update_dreambal(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 
-	DECLARE_WRITE16_HANDLER( dreambal_eeprom_w )
+	UINT32 screen_update_dreambal(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+	DECO16IC_BANK_CB_MEMBER(bank_callback);
+
+	DECLARE_READ16_MEMBER( dreambal_protection_region_0_104_r );
+	DECLARE_WRITE16_MEMBER( dreambal_protection_region_0_104_w );
+
+	DECLARE_WRITE16_MEMBER( dreambal_eeprom_w )
 	{
 		if (data&0xfff8)
 		{
@@ -57,9 +66,9 @@ public:
 
 		if (mem_mask&0x00ff)
 		{
-			m_eeprom->set_clock_line(data &0x2 ? ASSERT_LINE : CLEAR_LINE);
-			m_eeprom->write_bit(data &0x1);
-			m_eeprom->set_cs_line(data&0x4 ? CLEAR_LINE : ASSERT_LINE);
+			m_eeprom->clk_write(data &0x2 ? ASSERT_LINE : CLEAR_LINE);
+			m_eeprom->di_write(data &0x1);
+			m_eeprom->cs_write(data&0x4 ? ASSERT_LINE : CLEAR_LINE);
 		}
 	}
 };
@@ -68,35 +77,50 @@ public:
 UINT32 dreambal_state::screen_update_dreambal(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	address_space &space = generic_space();
-	UINT16 flip = deco16ic_pf_control_r(m_deco_tilegen1, space, 0, 0xffff);
+	UINT16 flip = m_deco_tilegen1->pf_control_r(space, 0, 0xffff);
 
 	flip_screen_set(BIT(flip, 7));
-	deco16ic_pf_update(m_deco_tilegen1, NULL, NULL);
+	m_deco_tilegen1->pf_update(NULL, NULL);
 
 	bitmap.fill(0, cliprect); /* not Confirmed */
-	machine().priority_bitmap.fill(0);
+	screen.priority().fill(0);
 
-	deco16ic_tilemap_2_draw(m_deco_tilegen1, bitmap, cliprect, 0, 2);
-	deco16ic_tilemap_1_draw(m_deco_tilegen1, bitmap, cliprect, 0, 4);
+	m_deco_tilegen1->tilemap_2_draw(screen, bitmap, cliprect, 0, 2);
+	m_deco_tilegen1->tilemap_1_draw(screen, bitmap, cliprect, 0, 4);
 	return 0;
 }
 
 
+READ16_MEMBER( dreambal_state::dreambal_protection_region_0_104_r )
+{
+	int real_address = 0 + (offset *2);
+	int deco146_addr = BITSWAP32(real_address, /* NC */31,30,29,28,27,26,25,24,23,22,21,20,19,18, 13,12,11,/**/      17,16,15,14,    10,9,8, 7,6,5,4, 3,2,1,0) & 0x7fff;
+	UINT8 cs = 0;
+	UINT16 data = m_deco104->read_data( deco146_addr, mem_mask, cs );
+	return data;
+}
+
+WRITE16_MEMBER( dreambal_state::dreambal_protection_region_0_104_w )
+{
+	int real_address = 0 + (offset *2);
+	int deco146_addr = BITSWAP32(real_address, /* NC */31,30,29,28,27,26,25,24,23,22,21,20,19,18, 13,12,11,/**/      17,16,15,14,    10,9,8, 7,6,5,4, 3,2,1,0) & 0x7fff;
+	UINT8 cs = 0;
+	m_deco104->write_data( space, deco146_addr, data, mem_mask, cs );
+}
+
 static ADDRESS_MAP_START( dreambal_map, AS_PROGRAM, 16, dreambal_state )
 //ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x000000, 0x07ffff) AM_ROM
-	AM_RANGE(0x100000, 0x100fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf1_data_r, deco16ic_pf1_data_w)
+	AM_RANGE(0x100000, 0x100fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf1_data_r, pf1_data_w)
 	AM_RANGE(0x101000, 0x101fff) AM_RAM
-	AM_RANGE(0x102000, 0x102fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf2_data_r, deco16ic_pf2_data_w)
+	AM_RANGE(0x102000, 0x102fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf2_data_r, pf2_data_w)
 	AM_RANGE(0x103000, 0x103fff) AM_RAM
 
 	AM_RANGE(0x120000, 0x123fff) AM_RAM
-	AM_RANGE(0x140000, 0x1403ff) AM_RAM_WRITE(paletteram_xxxxBBBBGGGGRRRR_word_w) AM_SHARE("paletteram")
-	AM_RANGE(0x161000, 0x16100f) AM_DEVWRITE_LEGACY("tilegen1", deco16ic_pf_control_w)
+	AM_RANGE(0x140000, 0x1403ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
+	AM_RANGE(0x161000, 0x16100f) AM_DEVWRITE("tilegen1", deco16ic_device, pf_control_w)
 
-	AM_RANGE(0x160088, 0x160089) AM_READ_PORT("INP")
-	AM_RANGE(0x160292, 0x160293) AM_READ_PORT("SYS")
-	AM_RANGE(0x16036C, 0x16036D) AM_READ_PORT("COIN")
+	AM_RANGE(0x160000, 0x163fff) AM_READWRITE(dreambal_protection_region_0_104_r,dreambal_protection_region_0_104_w)AM_SHARE("prot16ram") /* Protection device */
 
 
 	AM_RANGE(0x180000, 0x180001) AM_DEVREADWRITE8("oki", okim6295_device, read, write, 0x00ff)
@@ -108,8 +132,7 @@ static ADDRESS_MAP_START( dreambal_map, AS_PROGRAM, 16, dreambal_state )
 	AM_RANGE(0x165000, 0x165001) AM_WRITE( dreambal_eeprom_w ) // EEP Write?
 
 	AM_RANGE(0x16c002, 0x16c00d) AM_WRITENOP // writes 0000 to 0005 on startup
-	AM_RANGE(0x1a0000, 0x1a0001) AM_WRITENOP // writes 33 and 1a on startup
-
+	AM_RANGE(0x1a0000, 0x1a0003) AM_WRITENOP // RS-232C status / data ports (byte access)
 ADDRESS_MAP_END
 
 
@@ -142,7 +165,7 @@ static GFXDECODE_START( dreambal )
 GFXDECODE_END
 
 static INPUT_PORTS_START( dreambal )
-	PORT_START("INP")
+	PORT_START("INPUTS")
 	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_GAMBLE_TAKE )
 	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_GAMBLE_PAYOUT ) // currently causes hopper error
 	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_POKER_CANCEL ) // fold?
@@ -170,8 +193,8 @@ static INPUT_PORTS_START( dreambal )
 	PORT_DIPSETTING(      0x8000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
 
-	PORT_START("SYS")
-	PORT_BIT( 0x0001, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)
+	PORT_START("DSW")
+	PORT_BIT( 0x0001, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)
 	PORT_DIPNAME( 0x0002, 0x0002, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(      0x0002, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
@@ -218,7 +241,7 @@ static INPUT_PORTS_START( dreambal )
 	PORT_DIPSETTING(      0x8000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
 
-	PORT_START("COIN")
+	PORT_START("SYSTEM")
 	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_COIN1 )
 	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_COIN2 )
 	PORT_DIPNAME( 0x0004, 0x0004, "3" ) // freeze / vbl?
@@ -265,22 +288,10 @@ static INPUT_PORTS_START( dreambal )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
 INPUT_PORTS_END
 
-static int dreambal_bank_callback( const int bank )
+DECO16IC_BANK_CB_MEMBER(dreambal_state::bank_callback)
 {
 	return ((bank >> 4) & 0x7) * 0x1000;
 }
-
-static const deco16ic_interface dreambal_deco16ic_tilegen1_intf =
-{
-	"screen",
-	0, 1,
-	0x0f, 0x0f,     /* trans masks (default values) */
-	0, 16, /* color base (default values) */
-	0x0f, 0x0f, /* color masks (default values) */
-	dreambal_bank_callback,
-	dreambal_bank_callback,
-	0,1,
-};
 
 void dreambal_state::machine_start()
 {
@@ -305,13 +316,31 @@ static MACHINE_CONFIG_START( dreambal, dreambal_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(dreambal_state, screen_update_dreambal)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x400/2)
-	MCFG_GFXDECODE(dreambal)
+	MCFG_PALETTE_ADD("palette", 0x400/2)
+	MCFG_PALETTE_FORMAT(xxxxBBBBGGGGRRRR)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", dreambal)
 
-	MCFG_EEPROM_93C46_ADD("eeprom")  // 93lc46b
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")  // 93lc46b
 
-	MCFG_DECO16IC_ADD("tilegen1", dreambal_deco16ic_tilegen1_intf)
+	MCFG_DECO104_ADD("ioprot104")
+
+	MCFG_DEVICE_ADD("tilegen1", DECO16IC, 0)
+	MCFG_DECO16IC_SPLIT(0)
+	MCFG_DECO16IC_WIDTH12(1)
+	MCFG_DECO16IC_PF1_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF2_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF1_COL_BANK(0x00)
+	MCFG_DECO16IC_PF2_COL_BANK(0x10)
+	MCFG_DECO16IC_PF1_COL_MASK(0x0f)
+	MCFG_DECO16IC_PF2_COL_MASK(0x0f)
+	MCFG_DECO16IC_BANK1_CB(dreambal_state, bank_callback)
+	MCFG_DECO16IC_BANK2_CB(dreambal_state, bank_callback)
+	MCFG_DECO16IC_PF12_8X8_BANK(0)
+	MCFG_DECO16IC_PF12_16X16_BANK(1)
+	MCFG_DECO16IC_GFXDECODE("gfxdecode")
+	MCFG_DECO16IC_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -340,4 +369,4 @@ DRIVER_INIT_MEMBER(dreambal_state,dreambal)
 }
 
 // Ver 2.4 JPN 93.12.02
-GAME( 1993, dreambal, 0,     dreambal, dreambal, dreambal_state,  dreambal,  ROT0, "NDK / Data East", "Dream Ball (Japan V2.4)", 0 ) // copyright shows NDK, board is Data East, code seems Data East-like too
+GAME( 1993, dreambal, 0,     dreambal, dreambal, dreambal_state,  dreambal,  ROT0, "NDK / Data East", "Dream Ball (Japan V2.4)", GAME_SUPPORTS_SAVE ) // copyright shows NDK, board is Data East, code seems Data East-like too

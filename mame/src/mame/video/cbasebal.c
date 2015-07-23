@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #include "emu.h"
 #include "includes/cbasebal.h"
 
@@ -11,8 +13,7 @@
 TILE_GET_INFO_MEMBER(cbasebal_state::get_bg_tile_info)
 {
 	UINT8 attr = m_scrollram[2 * tile_index + 1];
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			m_scrollram[2 * tile_index] + ((attr & 0x07) << 8) + 0x800 * m_tilebank,
 			(attr & 0xf0) >> 4,
 			(attr & 0x08) ? TILE_FLIPX : 0);
@@ -21,8 +22,7 @@ TILE_GET_INFO_MEMBER(cbasebal_state::get_bg_tile_info)
 TILE_GET_INFO_MEMBER(cbasebal_state::get_fg_tile_info)
 {
 	UINT8 attr = m_textram[tile_index + 0x800];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			m_textram[tile_index] + ((attr & 0xf0) << 4),
 			attr & 0x07,
 			(attr & 0x08) ? TILE_FLIPX : 0);
@@ -41,8 +41,8 @@ void cbasebal_state::video_start()
 	m_textram = auto_alloc_array(machine(), UINT8, 0x1000);
 	m_scrollram = auto_alloc_array(machine(), UINT8, 0x1000);
 
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(cbasebal_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(cbasebal_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(cbasebal_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(cbasebal_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
 
 	m_fg_tilemap->set_transparent_pen(3);
 
@@ -155,7 +155,7 @@ void cbasebal_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			flipx = !flipx;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+		m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 				code,
 				color,
 				flipx,m_flipscreen,
@@ -166,7 +166,7 @@ void cbasebal_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 UINT32 cbasebal_state::screen_update_cbasebal(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	if (m_bg_on)
-		m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	else
 		bitmap.fill(768, cliprect);
 
@@ -174,6 +174,6 @@ UINT32 cbasebal_state::screen_update_cbasebal(screen_device &screen, bitmap_ind1
 		draw_sprites(bitmap, cliprect);
 
 	if (m_text_on)
-		m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

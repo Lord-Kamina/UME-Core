@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Videa Gridlee hardware
@@ -18,14 +20,14 @@
  *
  *************************************/
 
-void gridlee_state::palette_init()
+PALETTE_INIT_MEMBER(gridlee_state, gridlee)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
-		palette_set_color_rgb(machine(),i,pal4bit(color_prom[0x0000]),pal4bit(color_prom[0x0800]),pal4bit(color_prom[0x1000]));
+		palette.set_pen_color(i,pal4bit(color_prom[0x0000]),pal4bit(color_prom[0x0800]),pal4bit(color_prom[0x1000]));
 		color_prom++;
 	}
 }
@@ -66,6 +68,7 @@ void gridlee_state::video_start()
 	/* reset the palette */
 	m_palettebank_vis = 0;
 
+	save_pointer(NAME(m_local_videoram), 256 * 256);
 	save_item(NAME(m_cocktail_flip));
 	save_item(NAME(m_palettebank_vis));
 	machine().save().register_postload(save_prepost_delegate(FUNC(gridlee_state::expand_pixels), this));
@@ -113,7 +116,7 @@ WRITE8_MEMBER(gridlee_state::gridlee_videoram_w)
 WRITE8_MEMBER(gridlee_state::gridlee_palette_select_w)
 {
 	/* update the scanline palette */
-	machine().primary_screen->update_partial(machine().primary_screen->vpos() - 1 + GRIDLEE_VBEND);
+	m_screen->update_partial(m_screen->vpos() - 1 + GRIDLEE_VBEND);
 	m_palettebank_vis = data & 0x3f;
 }
 
@@ -130,7 +133,7 @@ WRITE8_MEMBER(gridlee_state::gridlee_palette_select_w)
 
 UINT32 gridlee_state::screen_update_gridlee(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	const pen_t *pens = &machine().pens[m_palettebank_vis * 32];
+	const pen_t *pens = &m_palette->pen(m_palettebank_vis * 32);
 	UINT8 *gfx;
 	int x, y, i;
 

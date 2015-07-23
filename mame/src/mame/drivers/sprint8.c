@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
 Atari Sprint 8 driver
@@ -463,11 +465,12 @@ static MACHINE_CONFIG_START( sprint8, sprint8_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 495, 0, 231)
 	MCFG_SCREEN_UPDATE_DRIVER(sprint8_state, screen_update_sprint8)
 	MCFG_SCREEN_VBLANK_DRIVER(sprint8_state, screen_eof_sprint8)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(sprint8)
-	MCFG_PALETTE_LENGTH(36)
-
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", sprint8)
+	MCFG_PALETTE_ADD("palette", 36)
+	MCFG_PALETTE_INDIRECT_ENTRIES(18)
+	MCFG_PALETTE_INIT_OWNER(sprint8_state, sprint8)
 
 	/* sound hardware */
 	/* the proper way is to hook up 4 speakers, but they are not really
@@ -478,7 +481,7 @@ static MACHINE_CONFIG_START( sprint8, sprint8_state )
 	MCFG_SPEAKER_ADD("speaker_4_8", 0.2, 0.0, 1.0)      /* right */
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(sprint8)
+	MCFG_DISCRETE_INTF(sprint8)
 	MCFG_SOUND_ROUTE(0, "speaker_1_2", 1.0)
 	/* volumes on other channels defaulted to off, */
 	/* user can turn them up if needed. */

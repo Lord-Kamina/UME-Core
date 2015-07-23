@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Block Out
@@ -35,7 +37,7 @@ void blockout_state::setcolor( int color, int rgb )
 	bit3 = (rgb >> 11) & 0x01;
 	b = 0x0e * bit0 + 0x1f * bit1 + 0x43 * bit2 + 0x8f * bit3;
 
-	palette_set_color(machine(), color, MAKE_RGB(r,g,b));
+	m_palette->set_pen_color(color, rgb_t(r,g,b));
 }
 
 WRITE16_MEMBER(blockout_state::blockout_paletteram_w)
@@ -60,7 +62,7 @@ WRITE16_MEMBER(blockout_state::blockout_frontcolor_w)
 void blockout_state::video_start()
 {
 	/* Allocate temporary bitmaps */
-	machine().primary_screen->register_screen_bitmap(m_tmpbitmap);
+	m_screen->register_screen_bitmap(m_tmpbitmap);
 	save_item(NAME(m_tmpbitmap));
 }
 
@@ -68,7 +70,7 @@ void blockout_state::update_pixels( int x, int y )
 {
 	UINT16 front, back;
 	int color;
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	if (!visarea.contains(x, y))
 		return;

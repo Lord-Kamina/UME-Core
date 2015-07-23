@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, Raphael Nabet, Miodrag Milanovic
 /*********************************************************************
 
     Code to interface the image code with harddisk core.
@@ -37,10 +39,27 @@ const device_type HARDDISK = &device_creator<harddisk_image_device>;
 //-------------------------------------------------
 
 harddisk_image_device::harddisk_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, HARDDISK, "Harddisk", tag, owner, clock),
+	: device_t(mconfig, HARDDISK, "Harddisk", tag, owner, clock, "harddisk_image", __FILE__),
 		device_image_interface(mconfig, *this),
 		m_chd(NULL),
-		m_hard_disk_handle(NULL)
+		m_hard_disk_handle(NULL),
+		m_device_image_load(device_image_load_delegate()),
+		m_device_image_unload(device_image_func_delegate()),
+		m_interface(NULL)
+{
+}
+
+//-------------------------------------------------
+//  harddisk_image_device - constructor for subclasses
+//-------------------------------------------------
+harddisk_image_device::harddisk_image_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source)
+	: device_t(mconfig, type, name, tag, owner, clock, shortname, source),
+		device_image_interface(mconfig, *this),
+		m_chd(NULL),
+		m_hard_disk_handle(NULL),
+		m_device_image_load(device_image_load_delegate()),
+		m_device_image_unload(device_image_func_delegate()),
+		m_interface(NULL)
 {
 }
 
@@ -60,29 +79,7 @@ harddisk_image_device::~harddisk_image_device()
 
 void harddisk_image_device::device_config_complete()
 {
-	// inherit a copy of the static data
-	const harddisk_interface *intf = reinterpret_cast<const harddisk_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<harddisk_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_device_image_load,   0, sizeof(m_device_image_load));
-		memset(&m_device_image_unload, 0, sizeof(m_device_image_unload));
-		memset(&m_interface, 0, sizeof(m_interface));
-		memset(&m_device_displayinfo, 0, sizeof(m_device_displayinfo));
-	}
-
-	image_device_format *format = global_alloc_clear(image_device_format);;
-	format->m_index       = 0;
-	format->m_name        = "chd";
-	format->m_description = "CHD Hard drive";
-	format->m_extensions  = "chd,hd";
-	format->m_optspec     = hd_option_spec;
-	format->m_next        = NULL;
-
-	m_formatlist = format;
+	m_formatlist.append(*global_alloc(image_device_format("chd", "CHD Hard drive", "chd,hd", hd_option_spec)));
 
 	// set brief and instance name
 	update_names();
@@ -102,7 +99,7 @@ void harddisk_image_device::device_start()
 	m_chd = NULL;
 
 	// try to locate the CHD from a DISK_REGION
-	chd_file *handle = get_disk_handle(machine(), owner()->tag());
+	chd_file *handle = get_disk_handle(machine(), tag());
 	if (handle != NULL)
 	{
 		m_hard_disk_handle = hard_disk_open(handle);
@@ -126,7 +123,7 @@ bool harddisk_image_device::call_load()
 	our_result = internal_load_hd();
 
 	/* Check if there is an image_load callback defined */
-	if ( m_device_image_load )
+	if (!m_device_image_load.isnull())
 	{
 		/* Let the override do some additional work/checks */
 		our_result = m_device_image_load(*this);
@@ -140,7 +137,7 @@ bool harddisk_image_device::call_create(int create_format, option_resolution *cr
 	int err;
 	UINT32 sectorsize, hunksize;
 	UINT32 cylinders, heads, sectors, totalsectors;
-	astring metadata;
+	std::string metadata;
 
 	cylinders   = option_resolution_lookup_int(create_args, 'C');
 	heads       = option_resolution_lookup_int(create_args, 'H');
@@ -157,7 +154,7 @@ bool harddisk_image_device::call_create(int create_format, option_resolution *cr
 		goto error;
 
 	/* if we created the image and hence, have metadata to set, set the metadata */
-	metadata.format(HARD_DISK_METADATA_FORMAT, cylinders, heads, sectors, sectorsize);
+	strprintf(metadata, HARD_DISK_METADATA_FORMAT, cylinders, heads, sectors, sectorsize);
 	err = m_origchd.write_metadata(HARD_DISK_METADATA_TAG, 0, metadata);
 	m_origchd.close();
 
@@ -173,7 +170,7 @@ error:
 void harddisk_image_device::call_unload()
 {
 	/* Check if there is an image_unload callback defined */
-	if ( m_device_image_unload )
+	if ( !m_device_image_unload.isnull() )
 	{
 		m_device_image_unload(*this);
 	}
@@ -195,34 +192,34 @@ void harddisk_image_device::call_unload()
 
 static chd_error open_disk_diff(emu_options &options, const char *name, chd_file &source, chd_file &diff_chd)
 {
-	astring fname(name, ".dif");
+	std::string fname = std::string(name).append(".dif");
 
 	/* try to open the diff */
-	//printf("Opening differencing image file: %s\n", fname.cstr());
+	//printf("Opening differencing image file: %s\n", fname.c_str());
 	emu_file diff_file(options.diff_directory(), OPEN_FLAG_READ | OPEN_FLAG_WRITE);
-	file_error filerr = diff_file.open(fname);
+	file_error filerr = diff_file.open(fname.c_str());
 	if (filerr == FILERR_NONE)
 	{
-		astring fullpath(diff_file.fullpath());
+		std::string fullpath(diff_file.fullpath());
 		diff_file.close();
 
-		//printf("Opening differencing image file: %s\n", fullpath.cstr());
-		return diff_chd.open(fullpath, true, &source);
+		//printf("Opening differencing image file: %s\n", fullpath.c_str());
+		return diff_chd.open(fullpath.c_str(), true, &source);
 	}
 
 	/* didn't work; try creating it instead */
-	//printf("Creating differencing image: %s\n", fname.cstr());
+	//printf("Creating differencing image: %s\n", fname.c_str());
 	diff_file.set_openflags(OPEN_FLAG_READ | OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS);
-	filerr = diff_file.open(fname);
+	filerr = diff_file.open(fname.c_str());
 	if (filerr == FILERR_NONE)
 	{
-		astring fullpath(diff_file.fullpath());
+		std::string fullpath(diff_file.fullpath());
 		diff_file.close();
 
 		/* create the CHD */
-		//printf("Creating differencing image file: %s\n", fullpath.cstr());
+		//printf("Creating differencing image file: %s\n", fupointllpath.c_str());
 		chd_codec_type compression[4] = { CHD_CODEC_NONE };
-		chd_error err = diff_chd.create(fullpath, source.logical_bytes(), source.hunk_bytes(), compression, source);
+		chd_error err = diff_chd.create(fullpath.c_str(), source.logical_bytes(), source.hunk_bytes(), compression, source);
 		if (err != CHDERR_NONE)
 			return err;
 
@@ -234,7 +231,6 @@ static chd_error open_disk_diff(emu_options &options, const char *name, chd_file
 
 int harddisk_image_device::internal_load_hd()
 {
-	astring tempstring;
 	chd_error err = CHDERR_NONE;
 
 	m_chd = NULL;
@@ -245,7 +241,7 @@ int harddisk_image_device::internal_load_hd()
 	/* open the CHD file */
 	if (software_entry() != NULL)
 	{
-		m_chd  = get_disk_handle(device().machine(), device().subtag(tempstring,"harddriv"));
+		m_chd = get_disk_handle(device().machine(), device().subtag("harddriv").c_str());
 	}
 	else
 	{

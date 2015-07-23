@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Allard van der Bas
 /***************************************************************************
                 Wiping
                 (C) 1982 Nichibutsu
@@ -39,6 +41,13 @@ dip: 6.7 7.7
 #include "includes/wiping.h"
 
 
+void wiping_state::machine_start()
+{
+	save_item(NAME(m_flipscreen));
+	save_item(NAME(m_main_irq_mask));
+	save_item(NAME(m_sound_irq_mask));
+}
+
 /* input ports are rotated 90 degrees */
 READ8_MEMBER(wiping_state::ports_r)
 {
@@ -76,7 +85,7 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, wiping_state )
 	AM_RANGE(0x9000, 0x93ff) AM_RAM AM_SHARE("share1")
 	AM_RANGE(0x9800, 0x9bff) AM_RAM AM_SHARE("share2")
 	AM_RANGE(0xa000, 0xa000) AM_WRITE(main_irq_mask_w)
-	AM_RANGE(0xa002, 0xa002) AM_WRITE(wiping_flipscreen_w)
+	AM_RANGE(0xa002, 0xa002) AM_WRITE(flipscreen_w)
 	AM_RANGE(0xa003, 0xa003) AM_WRITE(subcpu_reset_w)
 	AM_RANGE(0xa800, 0xa807) AM_READ(ports_r)
 	AM_RANGE(0xb000, 0xb7ff) AM_RAM
@@ -85,7 +94,7 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, wiping_state )
 	AM_RANGE(0x0000, 0x1fff) AM_ROM
-	AM_RANGE(0x4000, 0x7fff) AM_DEVWRITE_LEGACY("wiping", wiping_sound_w)
+	AM_RANGE(0x4000, 0x7fff) AM_DEVWRITE("wiping", wiping_sound_device, sound_w)
 	AM_RANGE(0x9000, 0x93ff) AM_RAM AM_SHARE("share1")
 	AM_RANGE(0x9800, 0x9bff) AM_RAM AM_SHARE("share2")
 	AM_RANGE(0xa001, 0xa001) AM_WRITE(sound_irq_mask_w)
@@ -291,11 +300,13 @@ static MACHINE_CONFIG_START( wiping, wiping_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(36*8, 28*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 36*8-1, 0*8, 28*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(wiping_state, screen_update_wiping)
+	MCFG_SCREEN_UPDATE_DRIVER(wiping_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(wiping)
-	MCFG_PALETTE_LENGTH(64*4+64*4)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", wiping)
+	MCFG_PALETTE_ADD("palette", 64*4+64*4)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(wiping_state, wiping)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -372,5 +383,5 @@ ROM_END
 
 
 
-GAME( 1982, wiping,  0,      wiping, wiping, driver_device,  0, ROT90, "Nichibutsu", "Wiping", 0 )
-GAME( 1983, rugrats, wiping, wiping, rugrats, driver_device, 0, ROT90, "Nichibutsu", "Rug Rats", 0 )
+GAME( 1982, wiping,  0,      wiping, wiping, driver_device,  0, ROT90, "Nichibutsu", "Wiping", GAME_SUPPORTS_SAVE )
+GAME( 1983, rugrats, wiping, wiping, rugrats, driver_device, 0, ROT90, "Nichibutsu", "Rug Rats", GAME_SUPPORTS_SAVE )

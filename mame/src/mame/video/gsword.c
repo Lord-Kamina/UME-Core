@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Steve Ellenoff,Jarek Parchanski
 /***************************************************************************
   Great Swordsman
 
@@ -14,9 +16,6 @@ PALETTE_INIT_MEMBER(gsword_state,josvolly)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
-
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x100; i++)
 	{
@@ -24,7 +23,7 @@ PALETTE_INIT_MEMBER(gsword_state,josvolly)
 		int g = pal4bit(color_prom[i + 0x100]);
 		int b = pal4bit(color_prom[i + 0x200]);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* color_prom now points to the beginning of the lookup table */
@@ -32,13 +31,13 @@ PALETTE_INIT_MEMBER(gsword_state,josvolly)
 
 	/* characters */
 	for (i = 0; i < 0x100; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_pen_indirect(i, i);
 
 	/* sprites */
 	for (i = 0x100; i < 0x200; i++)
 	{
 		UINT8 ctabentry = (BITSWAP8(color_prom[i - 0x100],7,6,5,4,0,1,2,3) & 0x0f) | 0x80;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 }
 
@@ -47,9 +46,6 @@ PALETTE_INIT_MEMBER(gsword_state,gsword)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
-
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
 
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x100; i++)
@@ -75,7 +71,7 @@ PALETTE_INIT_MEMBER(gsword_state,gsword)
 		bit2 = (color_prom[i + 0x000] >> 3) & 1;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* color_prom now points to the beginning of the lookup table */
@@ -83,24 +79,23 @@ PALETTE_INIT_MEMBER(gsword_state,gsword)
 
 	/* characters */
 	for (i = 0; i < 0x100; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_pen_indirect(i, i);
 
 	/* sprites */
 	for (i = 0x100; i < 0x200; i++)
 	{
 		UINT8 ctabentry = (BITSWAP8(color_prom[i - 0x100],7,6,5,4,0,1,2,3) & 0x0f) | 0x80;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 }
 
-WRITE8_MEMBER(gsword_state::gsword_videoram_w)
+WRITE8_MEMBER(gsword_state::videoram_w)
 {
-	UINT8 *videoram = m_videoram;
-	videoram[offset] = data;
+	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(gsword_state::gsword_charbank_w)
+WRITE8_MEMBER(gsword_state::charbank_w)
 {
 	if (m_charbank != data)
 	{
@@ -109,7 +104,7 @@ WRITE8_MEMBER(gsword_state::gsword_charbank_w)
 	}
 }
 
-WRITE8_MEMBER(gsword_state::gsword_videoctrl_w)
+WRITE8_MEMBER(gsword_state::videoctrl_w)
 {
 	if (data & 0x8f)
 	{
@@ -137,15 +132,14 @@ WRITE8_MEMBER(gsword_state::gsword_videoctrl_w)
 	/* other bits unused */
 }
 
-WRITE8_MEMBER(gsword_state::gsword_scroll_w)
+WRITE8_MEMBER(gsword_state::scroll_w)
 {
 	m_bg_tilemap->set_scrolly(0, data);
 }
 
 TILE_GET_INFO_MEMBER(gsword_state::get_bg_tile_info)
 {
-	UINT8 *videoram = m_videoram;
-	int code = videoram[tile_index] + ((m_charbank & 0x03) << 8);
+	int code = m_videoram[tile_index] + ((m_charbank & 0x03) << 8);
 	int color = ((code & 0x3c0) >> 6) + 16 * m_charpalbank;
 	int flags = m_flipscreen ? (TILE_FLIPX | TILE_FLIPY) : 0;
 
@@ -154,15 +148,17 @@ TILE_GET_INFO_MEMBER(gsword_state::get_bg_tile_info)
 
 void gsword_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(gsword_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(gsword_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
 			8, 8, 32, 64);
+
+	save_item(NAME(m_charbank));
+	save_item(NAME(m_charpalbank));
+	save_item(NAME(m_flipscreen));
 }
 
 void gsword_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	int offs;
-
-	for (offs = 0; offs < m_spritexy_ram.bytes() - 1; offs+=2)
+	for (int offs = 0; offs < m_spritexy_ram.bytes() - 1; offs+=2)
 	{
 		int sx,sy,flipx,flipy,spritebank,tile,color;
 
@@ -191,19 +187,19 @@ void gsword_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 				flipx = !flipx;
 				flipy = !flipy;
 			}
-			drawgfx_transmask(bitmap,cliprect,machine().gfx[1+spritebank],
+			m_gfxdecode->gfx(1+spritebank)->transmask(bitmap,cliprect,
 					tile,
 					color,
 					flipx,flipy,
 					sx,sy,
-					colortable_get_transpen_mask(machine().colortable, machine().gfx[1+spritebank], color, 0x8f));
+					m_palette->transpen_mask(*m_gfxdecode->gfx(1+spritebank), color, 0x8f));
 		}
 	}
 }
 
 UINT32 gsword_state::screen_update_gsword(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }

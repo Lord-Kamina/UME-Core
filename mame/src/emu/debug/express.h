@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     express.h
 
     Generic expressions engine.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -149,7 +120,7 @@ protected:
 public:
 	// getters
 	symbol_entry *next() const { return m_next; }
-	const char *name() const { return m_name; }
+	const char *name() const { return m_name.c_str(); }
 
 	// type checking
 	bool is_function() const { return (m_type == SMT_FUNCTION); }
@@ -164,7 +135,7 @@ protected:
 	symbol_entry *  m_next;                     // link to next entry
 	symbol_table &  m_table;                    // pointer back to the owning table
 	symbol_type     m_type;                     // type of symbol
-	astring         m_name;                     // name of the symbol
+	std::string     m_name;                     // name of the symbol
 	void *          m_ref;                      // internal reference
 };
 
@@ -250,7 +221,7 @@ public:
 
 	// getters
 	bool is_empty() const { return (m_tokenlist.count() == 0); }
-	const char *original_string() const { return m_original_string; }
+	const char *original_string() const { return m_original_string.c_str(); }
 	symbol_table *symbols() const { return m_symtable; }
 
 	// setters
@@ -364,13 +335,13 @@ private:
 				m_string(string, (length == 0) ? strlen(string) : length) { }
 
 		// operators
-		operator const char *() { return m_string; }
-		operator const char *() const { return m_string; }
+		operator const char *() { return m_string.c_str(); }
+		operator const char *() const { return m_string.c_str(); }
 
 	private:
 		// internal state
 		expression_string * m_next;                     // next string in list
-		astring             m_string;                   // copy of the string
+		std::string         m_string;                   // copy of the string
 	};
 
 	// internal helpers
@@ -402,7 +373,7 @@ private:
 
 	// internal state
 	symbol_table *      m_symtable;                     // symbol table
-	astring             m_original_string;              // original string (prior to parsing)
+	std::string         m_original_string;              // original string (prior to parsing)
 	simple_list<parse_token> m_tokenlist;               // token list
 	simple_list<expression_string> m_stringlist;        // string list
 	int                 m_token_stack_ptr;              // stack pointer (used during execution)

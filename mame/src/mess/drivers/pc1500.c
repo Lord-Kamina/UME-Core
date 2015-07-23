@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /***************************************************************************
 
         Sharp pocket computers 1500
@@ -24,12 +26,17 @@ public:
 		: driver_device(mconfig, type, tag),
 			m_maincpu(*this, "maincpu"),
 			m_rtc(*this, "upd1990a"),
-			m_lcd_data(*this, "lcd_data") { }
+			m_lcd_data(*this, "lcd_data"),
+			m_keyboard(*this, "KEY"),
+			m_io_on(*this, "ON") { }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<upd1990a_device> m_rtc;
 
 	required_shared_ptr<UINT8> m_lcd_data;
+	required_ioport_array<8> m_keyboard;
+	required_ioport m_io_on;
+
 	UINT8 m_kb_matrix;
 
 	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
@@ -40,8 +47,8 @@ public:
 	DECLARE_READ8_MEMBER( port_b_r );
 	DECLARE_WRITE8_MEMBER( port_c_w );
 
-	static UINT8 pc1500_kb_r(device_t *device);
-	virtual void palette_init();
+	DECLARE_READ8_MEMBER( pc1500_kb_r );
+	DECLARE_PALETTE_INIT(pc1500);
 };
 
 static ADDRESS_MAP_START( pc1500_mem , AS_PROGRAM, 8, pc1500_state)
@@ -60,29 +67,17 @@ static ADDRESS_MAP_START( pc1500_mem_io , AS_IO, 8, pc1500_state)
 	AM_RANGE( 0xf000, 0xf00f) AM_DEVREADWRITE("lh5810", lh5810_device, data_r, data_w)
 ADDRESS_MAP_END
 
-UINT8 pc1500_state::pc1500_kb_r(device_t *device)
+READ8_MEMBER( pc1500_state::pc1500_kb_r )
 {
-	pc1500_state *state = device->machine().driver_data<pc1500_state>();
 	UINT8 data = 0xff;
 
-	if (!device->started()) return 0;
+	if (!started()) return 0;
 
-	if (!(state->m_kb_matrix & 0x01))
-		data &= state->ioport("KEY0")->read();
-	if (!(state->m_kb_matrix & 0x02))
-		data &= state->ioport("KEY1")->read();
-	if (!(state->m_kb_matrix & 0x04))
-		data &= state->ioport("KEY2")->read();
-	if (!(state->m_kb_matrix & 0x08))
-		data &= state->ioport("KEY3")->read();
-	if (!(state->m_kb_matrix & 0x10))
-		data &= state->ioport("KEY4")->read();
-	if (!(state->m_kb_matrix & 0x20))
-		data &= state->ioport("KEY5")->read();
-	if (!(state->m_kb_matrix & 0x40))
-		data &= state->ioport("KEY6")->read();
-	if (!(state->m_kb_matrix & 0x80))
-		data &= state->ioport("KEY7")->read();
+	for (int i = 0; i < 8; i++)
+	{
+		if (!BIT(m_kb_matrix, i))
+			data &= m_keyboard[i]->read();
+	}
 
 	return data;
 }
@@ -133,7 +128,7 @@ static INPUT_PORTS_START( pc1500 )
 	PORT_START("ON")
 		PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_CODE(KEYCODE_F10)
 
-	PORT_START("KEY0")
+	PORT_START("KEY.0")
 		PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("2") PORT_CODE(KEYCODE_2)
 		PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("5") PORT_CODE(KEYCODE_5)
 		PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("8") PORT_CODE(KEYCODE_8)
@@ -143,7 +138,7 @@ static INPUT_PORTS_START( pc1500 )
 		PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("N") PORT_CODE(KEYCODE_N)
 		PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("UP") PORT_CODE(KEYCODE_UP)
 
-	PORT_START("KEY1")
+	PORT_START("KEY.1")
 		PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME(".") PORT_CODE(KEYCODE_STOP)
 		PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("-") PORT_CODE(KEYCODE_MINUS)
 		PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("OFF") PORT_CODE(KEYCODE_F11)
@@ -153,7 +148,7 @@ static INPUT_PORTS_START( pc1500 )
 		PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Y") PORT_CODE(KEYCODE_X)
 		PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("ST") PORT_CODE(KEYCODE_F8)
 
-	PORT_START("KEY2")
+	PORT_START("KEY.2")
 		PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("1") PORT_CODE(KEYCODE_1)
 		PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("4") PORT_CODE(KEYCODE_4)
 		PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("7") PORT_CODE(KEYCODE_7)
@@ -163,7 +158,7 @@ static INPUT_PORTS_START( pc1500 )
 		PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("M") PORT_CODE(KEYCODE_M)
 		PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("0") PORT_CODE(KEYCODE_0)
 
-	PORT_START("KEY3")
+	PORT_START("KEY.3")
 		PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME(")") PORT_CODE(KEYCODE_CLOSEBRACE)
 		PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("L") PORT_CODE(KEYCODE_L)
 		PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("O") PORT_CODE(KEYCODE_O)
@@ -173,7 +168,7 @@ static INPUT_PORTS_START( pc1500 )
 		PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("(") PORT_CODE(KEYCODE_OPENBRACE)
 		PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("ENTER") PORT_CODE(KEYCODE_ENTER)
 
-	PORT_START("KEY4")
+	PORT_START("KEY.4")
 		PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("+") PORT_CODE(KEYCODE_PLUS_PAD)
 		PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("*") PORT_CODE(KEYCODE_ASTERISK)
 		PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("/") PORT_CODE(KEYCODE_SLASH_PAD)
@@ -183,7 +178,7 @@ static INPUT_PORTS_START( pc1500 )
 		PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("C") PORT_CODE(KEYCODE_C)
 		PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("RCL") PORT_CODE(KEYCODE_F7)
 
-	PORT_START("KEY5")
+	PORT_START("KEY.5")
 		PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("-") PORT_CODE(KEYCODE_EQUALS)
 		PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("LEFT") PORT_CODE(KEYCODE_LEFT)
 		PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("P") PORT_CODE(KEYCODE_P)
@@ -193,7 +188,7 @@ static INPUT_PORTS_START( pc1500 )
 		PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("V") PORT_CODE(KEYCODE_V)
 		PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("SPACE") PORT_CODE(KEYCODE_SPACE)
 
-	PORT_START("KEY6")
+	PORT_START("KEY.6")
 		PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("RIGHT") PORT_CODE(KEYCODE_RIGHT)
 		PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("MODE") PORT_CODE(KEYCODE_HOME)
 		PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("CL") PORT_CODE(KEYCODE_DEL)
@@ -203,7 +198,7 @@ static INPUT_PORTS_START( pc1500 )
 		PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("Z") PORT_CODE(KEYCODE_Z)
 		PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("SML") PORT_CODE(KEYCODE_PGDN)
 
-	PORT_START("KEY7")
+	PORT_START("KEY.7")
 		PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("3") PORT_CODE(KEYCODE_3)
 		PORT_BIT(0x02, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("6") PORT_CODE(KEYCODE_6)
 		PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_KEYBOARD) PORT_NAME("9") PORT_CODE(KEYCODE_9)
@@ -247,7 +242,7 @@ READ8_MEMBER( pc1500_state::port_b_r )
 
 	data |= (m_rtc->tp_r()<<5);
 	data |= (m_rtc->data_out_r()<<6);
-	data |= (ioport("ON")->read()<<7);
+	data |= (m_io_on->read()<<7);
 
 	return data;
 }
@@ -257,32 +252,17 @@ READ8_MEMBER( pc1500_state::port_a_r )
 	return 0xff;
 }
 
-void pc1500_state::palette_init()
+PALETTE_INIT_MEMBER(pc1500_state, pc1500)
 {
-	palette_set_color(machine(), 0, MAKE_RGB(138, 146, 148));
-	palette_set_color(machine(), 1, MAKE_RGB(92, 83, 88));
+	palette.set_pen_color(0, rgb_t(138, 146, 148));
+	palette.set_pen_color(1, rgb_t(92, 83, 88));
 }
-
-static const lh5801_cpu_core lh5801_pc1500_config =
-{
-	pc1500_state::pc1500_kb_r
-};
-
-static const lh5810_interface lh5810_pc1500_config =
-{
-	DEVCB_DRIVER_MEMBER(pc1500_state, port_a_r),        //port A read
-	DEVCB_DRIVER_MEMBER(pc1500_state, kb_matrix_w),     //port A write
-	DEVCB_DRIVER_MEMBER(pc1500_state, port_b_r),        //port B read
-	DEVCB_NULL,                                         //port B write
-	DEVCB_DRIVER_MEMBER(pc1500_state, port_c_w),        //port C write
-	DEVCB_CPU_INPUT_LINE("maincpu", LH5801_LINE_MI)     //IRQ callback
-};
 
 static MACHINE_CONFIG_START( pc1500, pc1500_state )
 	MCFG_CPU_ADD("maincpu", LH5801, 1300000)            //1.3 MHz
 	MCFG_CPU_PROGRAM_MAP( pc1500_mem )
 	MCFG_CPU_IO_MAP( pc1500_mem_io )
-	MCFG_CPU_CONFIG( lh5801_pc1500_config )
+	MCFG_LH5801_IN(READ8(pc1500_state,pc1500_kb_r))
 
 	MCFG_SCREEN_ADD("screen", LCD)
 	MCFG_SCREEN_REFRESH_RATE(50)
@@ -290,10 +270,18 @@ static MACHINE_CONFIG_START( pc1500, pc1500_state )
 	MCFG_SCREEN_UPDATE_DRIVER(pc1500_state, screen_update)
 	MCFG_SCREEN_SIZE(156, 8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 156-1, 0, 7-1)
-	MCFG_DEFAULT_LAYOUT(layout_pc1500)
-	MCFG_PALETTE_LENGTH(2)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_LH5810_ADD("lh5810", lh5810_pc1500_config)
+	MCFG_DEFAULT_LAYOUT(layout_pc1500)
+	MCFG_PALETTE_ADD("palette", 2)
+	MCFG_PALETTE_INIT_OWNER(pc1500_state, pc1500)
+
+	MCFG_DEVICE_ADD("lh5810", LH5810, 0)
+	MCFG_LH5810_PORTA_R_CB(READ8(pc1500_state, port_a_r))
+	MCFG_LH5810_PORTA_W_CB(WRITE8(pc1500_state, kb_matrix_w))
+	MCFG_LH5810_PORTB_R_CB(READ8(pc1500_state, port_b_r))
+	MCFG_LH5810_PORTC_W_CB(WRITE8(pc1500_state, port_c_w))
+	MCFG_LH5810_OUT_INT_CB(INPUTLINE("maincpu", LH5801_LINE_MI))
 
 	MCFG_UPD1990A_ADD("upd1990a", XTAL_32_768kHz, NULL, NULL)
 MACHINE_CONFIG_END

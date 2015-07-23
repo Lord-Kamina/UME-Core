@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Sean Young
 /*********************************************************************
 
     svi_cas.h
 
-    Format code for SVI casette files
+    Format code for SVI cassette files
 
 *********************************************************************/
 

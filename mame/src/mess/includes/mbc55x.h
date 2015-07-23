@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phill Harvey-Smith
 /*
     mbc55x.h
     Includes for the Sanyo MBC-550, MBC-555.
@@ -9,11 +11,11 @@
 #include "emu.h"
 #include "cpu/i86/i86.h"
 #include "machine/ram.h"
-#include "machine/ctronics.h"
+#include "bus/centronics/ctronics.h"
 #include "machine/i8255.h"
 #include "machine/pit8253.h"
 #include "machine/pic8259.h"
-#include "machine/wd17xx.h"
+#include "machine/wd_fdc.h"
 #include "machine/i8251.h"
 #include "sound/speaker.h"
 #include "video/mc6845.h"
@@ -89,16 +91,24 @@ class mbc55x_state : public driver_device
 public:
 	mbc55x_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-	m_maincpu(*this, MAINCPU_TAG),
-	m_crtc(*this, VID_MC6845_NAME),
-	m_kb_uart(*this, I8251A_KB_TAG),
-	m_pit(*this, PIT8253_TAG),
-	m_ppi(*this, PPI8255_TAG),
-	m_pic(*this, PIC8259_TAG),
-	m_fdc(*this, FDC_TAG),
-	m_speaker(*this, "speaker"),
-	m_ram(*this, RAM_TAG)
-	{ }
+		m_maincpu(*this, MAINCPU_TAG),
+		m_crtc(*this, VID_MC6845_NAME),
+		m_kb_uart(*this, I8251A_KB_TAG),
+		m_pit(*this, PIT8253_TAG),
+		m_ppi(*this, PPI8255_TAG),
+		m_pic(*this, PIC8259_TAG),
+		m_fdc(*this, FDC_TAG),
+		m_floppy0(*this, FDC_TAG ":0"),
+		m_floppy1(*this, FDC_TAG ":1"),
+		m_floppy2(*this, FDC_TAG ":2"),
+		m_floppy3(*this, FDC_TAG ":3"),
+		m_speaker(*this, "speaker"),
+		m_ram(*this, RAM_TAG),
+		m_palette(*this, "palette")
+	{
+	}
+
+	DECLARE_FLOPPY_FORMATS(floppy_formats);
 
 	required_device<cpu_device> m_maincpu;
 	required_device<mc6845_device> m_crtc;
@@ -106,9 +116,14 @@ public:
 	required_device<pit8253_device> m_pit;
 	required_device<i8255_device> m_ppi;
 	required_device<pic8259_device> m_pic;
-	required_device<fd1793_device> m_fdc;
+	required_device<fd1793_t> m_fdc;
+	required_device<floppy_connector> m_floppy0;
+	required_device<floppy_connector> m_floppy1;
+	required_device<floppy_connector> m_floppy2;
+	required_device<floppy_connector> m_floppy3;
 	required_device<speaker_sound_device> m_speaker;
 	required_device<ram_device> m_ram;
+	required_device<palette_device> m_palette;
 	//DECLARE_READ8_MEMBER(pic8259_r);
 	//DECLARE_WRITE8_MEMBER(pic8259_w);
 	//DECLARE_READ8_MEMBER(mbc55x_disk_r);
@@ -134,8 +149,7 @@ public:
 	DECLARE_WRITE_LINE_MEMBER(vid_hsync_changed);
 	DECLARE_WRITE_LINE_MEMBER(vid_vsync_changed);
 	DECLARE_WRITE_LINE_MEMBER(pit8253_t2);
-	DECLARE_WRITE_LINE_MEMBER(mbc55x_fdc_intrq_w);
-	DECLARE_WRITE_LINE_MEMBER(mbc55x_fdc_drq_w);
+
 	UINT32      m_debug_machine;
 	UINT32      m_debug_video;
 	UINT8       m_video_mem[VIDEO_MEM_SIZE];
@@ -151,14 +165,14 @@ public:
 	DECLARE_READ8_MEMBER(mbc55x_kb_usart_r);
 	DECLARE_WRITE8_MEMBER(mbc55x_kb_usart_w);
 	DECLARE_DRIVER_INIT(mbc55x);
+	MC6845_UPDATE_ROW(crtc_update_row);
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
 	virtual void video_reset();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(mbc55x);
 	void screen_eof_mbc55x(screen_device &screen, bool state);
 	TIMER_CALLBACK_MEMBER(keyscan_callback);
-	IRQ_CALLBACK_MEMBER(mbc55x_irq_callback);
 	void keyboard_reset();
 	void scan_keyboard();
 	void set_ram_size();
@@ -170,12 +184,6 @@ extern const unsigned char mbc55x_palette[SCREEN_NO_COLOURS][3];
 
 
 /*----------- defined in machine/mbc55x.c -----------*/
-
-extern const struct pit8253_interface mbc55x_pit8253_config;
-extern const i8255_interface mbc55x_ppi8255_interface;
-extern const i8251_interface mbc55x_i8251a_interface;
-extern const i8251_interface mbc55x_i8251b_interface;
-
 
 /* Memory controller */
 #define RAM_BANK00_TAG  "bank0"
@@ -201,13 +209,8 @@ extern const i8251_interface mbc55x_i8251b_interface;
 
 #define FDC_PAUSE               10000
 
-extern const wd17xx_interface mbc55x_wd17xx_interface;
-
 
 /*----------- defined in video/mbc55x.c -----------*/
-
-extern const mc6845_interface mb55x_mc6845_intf;
-
 
 #define RED                     0
 #define GREEN                   1

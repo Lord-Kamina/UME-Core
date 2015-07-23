@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles,Nathan Woods,Angelo Salese, Robbbert
 /*************************************************************************
 
     Atari Jaguar hardware
@@ -7,9 +9,11 @@
 #include "cpu/jaguar/jaguar.h"
 #include "machine/nvram.h"
 #include "sound/dac.h"
-#include "machine/eeprom.h"
-#include "machine/idectrl.h"
+#include "machine/eepromser.h"
+#include "machine/vt83c461.h"
 #include "imagedev/snapquik.h"
+#include "cdrom.h"
+#include "imagedev/chd_cd.h"
 
 #ifndef ENABLE_SPEEDUP_HACKS
 #define ENABLE_SPEEDUP_HACKS 1
@@ -30,6 +34,7 @@ public:
 			m_dsp(*this, "dsp"),
 			m_dac1(*this, "dac1"),
 			m_dac2(*this, "dac2"),
+			m_cdrom(*this, "cdrom"),
 			m_nvram(*this, "nvram"),
 			m_rom_base(*this, "rom"),
 			m_cart_base(*this, "cart"),
@@ -56,16 +61,18 @@ public:
 			m_eeprom_bit_count(0),
 			m_protection_check(0) ,
 		m_eeprom(*this, "eeprom"),
-		m_ide(*this, "ide")
+		m_ide(*this, "ide"),
+		m_screen(*this, "screen")
 	{
 	}
 
 	// devices
 	required_device<cpu_device> m_maincpu;
-	required_device<jaguargpu_device> m_gpu;
-	required_device<jaguardsp_device> m_dsp;
+	required_device<jaguargpu_cpu_device> m_gpu;
+	required_device<jaguardsp_cpu_device> m_dsp;
 	required_device<dac_device> m_dac1;
 	required_device<dac_device> m_dac2;
+	optional_device<cdrom_image_device> m_cdrom;
 
 	// memory
 	optional_shared_ptr<UINT32> m_nvram;        // not used on console
@@ -83,6 +90,7 @@ public:
 	bool m_hacks_enabled;
 	int m_pixel_clock;
 	bool m_using_cart;
+	bool m_is_jagcd;
 
 	UINT32 m_misc_control_data;
 	bool m_eeprom_enable;
@@ -116,6 +124,12 @@ public:
 	pen_t m_pen_table[65536];
 	UINT8 m_blend_y[65536];
 	UINT8 m_blend_cc[65536];
+	UINT32 m_butch_regs[0x40/4];
+	UINT32 m_butch_cmd_response[0x102];
+	UINT8 m_butch_cmd_index;
+	UINT8 m_butch_cmd_size;
+	cdrom_file  *m_cd_file;
+	const cdrom_toc*    m_toc;
 
 	static void (jaguar_state::*const bitmap4[8])(UINT16 *, INT32, INT32, UINT32 *, INT32, UINT16 *);
 	static void (jaguar_state::*const bitmap8[8])(UINT16 *, INT32, INT32, UINT32 *, INT32, UINT16 *);
@@ -184,7 +198,12 @@ public:
 	DECLARE_WRITE16_MEMBER(gpu_clut_w16);
 	DECLARE_READ16_MEMBER(gpu_ram_r16);
 	DECLARE_WRITE16_MEMBER(gpu_ram_w16);
+	DECLARE_READ16_MEMBER(butch_regs_r16);
+	DECLARE_WRITE16_MEMBER(butch_regs_w16);
+	DECLARE_READ32_MEMBER(butch_regs_r);
+	DECLARE_WRITE32_MEMBER(butch_regs_w);
 	DECLARE_DRIVER_INIT(jaguar);
+	DECLARE_DRIVER_INIT(jaguarcd);
 	DECLARE_DRIVER_INIT(area51mx);
 	DECLARE_DRIVER_INIT(maxforce);
 	DECLARE_DRIVER_INIT(freezeat);
@@ -211,13 +230,11 @@ public:
 	DECLARE_WRITE32_MEMBER( blitter_w );
 	DECLARE_READ16_MEMBER( tom_regs_r );
 	DECLARE_WRITE16_MEMBER( tom_regs_w );
-	DECLARE_READ32_MEMBER( vt83c461_r );
-	DECLARE_WRITE32_MEMBER( vt83c461_w );
 	DECLARE_READ32_MEMBER( cojag_gun_input_r );
 	UINT32 screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 
-	static void gpu_cpu_int(device_t *device);
-	static void dsp_cpu_int(device_t *device);
+	DECLARE_WRITE_LINE_MEMBER( gpu_cpu_int );
+	DECLARE_WRITE_LINE_MEMBER( dsp_cpu_int );
 	DECLARE_WRITE_LINE_MEMBER( external_int );
 
 	int quickload(device_image_interface &image, const char *file_type, int quickload_size);
@@ -324,6 +341,7 @@ protected:
 	emu_file *jaguar_nvram_fopen( UINT32 openflags);
 	void jaguar_nvram_load();
 	void jaguar_nvram_save();
-	optional_device<eeprom_device> m_eeprom;
-	optional_device<ide_controller_device> m_ide;
+	optional_device<eeprom_serial_93cxx_device> m_eeprom;
+	optional_device<vt83c461_device> m_ide;
+	required_device<screen_device> m_screen;
 };

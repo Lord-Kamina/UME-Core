@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Roberto Fresca, Grull Osgo
 /******************************************************************************
 
 
@@ -9,9 +11,9 @@
 
   Games running on this hardware:
 
-  * Five Clown (english, set 1), 1993, IGS.
-  * Five Clown (english, set 2), 1993, IGS.
-  * Five Clown (spanish hack),   1993, IGS.
+  * Five Clown (English, set 1), 1993, IGS.
+  * Five Clown (English, set 2), 1993, IGS.
+  * Five Clown (Spanish, hack),  1993, IGS.
 
 
   This hardware seems to be based on Bonanza's Golden Poker, but on steroids...
@@ -456,22 +458,32 @@ class _5clown_state : public driver_device
 public:
 	_5clown_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-		m_videoram(*this, "videoram"),
-		m_colorram(*this, "colorram"),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
-		m_ay8910(*this, "ay8910")
+		m_ay8910(*this, "ay8910"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
+		m_videoram(*this, "videoram"),
+		m_colorram(*this, "colorram")
 	{
 	}
+
+	required_device<cpu_device> m_maincpu;
+	required_device<cpu_device> m_audiocpu;
+	required_device<ay8910_device> m_ay8910;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
+	required_shared_ptr<UINT8> m_videoram;
+	required_shared_ptr<UINT8> m_colorram;
 
 	UINT8 m_main_latch_d800;
 	UINT8 m_snd_latch_0800;
 	UINT8 m_snd_latch_0a02;
 	UINT8 m_ay8910_addr;
-	required_shared_ptr<UINT8> m_videoram;
-	required_shared_ptr<UINT8> m_colorram;
 	tilemap_t *m_bg_tilemap;
 	int m_mux_data;
+
 	DECLARE_WRITE8_MEMBER(fclown_videoram_w);
 	DECLARE_WRITE8_MEMBER(fclown_colorram_w);
 	DECLARE_WRITE8_MEMBER(cpu_c048_w);
@@ -488,16 +500,22 @@ public:
 	DECLARE_WRITE8_MEMBER(fclown_ay8910_w);
 	DECLARE_DRIVER_INIT(fclown);
 	TILE_GET_INFO_MEMBER(get_fclown_tile_info);
+	virtual void machine_start();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(_5clown);
 	UINT32 screen_update_fclown(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_audiocpu;
-	required_device<ay8910_device> m_ay8910;
 };
 
+void _5clown_state::machine_start()
+{
+	m_main_latch_d800 = m_snd_latch_0800 = m_snd_latch_0a02 = m_ay8910_addr = m_mux_data = 0;
 
-
+	save_item(NAME(m_main_latch_d800));
+	save_item(NAME(m_snd_latch_0800));
+	save_item(NAME(m_snd_latch_0a02));
+	save_item(NAME(m_ay8910_addr));
+	save_item(NAME(m_mux_data));
+}
 
 /*************************
 *     Video Hardware     *
@@ -540,17 +558,17 @@ TILE_GET_INFO_MEMBER(_5clown_state::get_fclown_tile_info)
 
 void _5clown_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(_5clown_state::get_fclown_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(_5clown_state::get_fclown_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 }
 
 
 UINT32 _5clown_state::screen_update_fclown(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
-void _5clown_state::palette_init()
+PALETTE_INIT_MEMBER(_5clown_state, _5clown)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 /*
@@ -567,7 +585,7 @@ void _5clown_state::palette_init()
 
 	if (color_prom == 0) return;
 
-	for (i = 0;i < machine().total_colors();i++)
+	for (i = 0;i < m_palette->entries();i++)
 	{
 		int bit0, bit1, bit2, bit3, r, g, b, bk;
 
@@ -587,7 +605,7 @@ void _5clown_state::palette_init()
 		bit2 = (color_prom[i] >> 2) & 0x01;
 		b = bk * (bit2 * 0xff);
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		m_palette->set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -990,79 +1008,6 @@ static GFXDECODE_START( fclown )
 	GFXDECODE_ENTRY( "gfx2", 0, tilelayout, 0, 16 )
 GFXDECODE_END
 
-
-/***********************
-*    CRTC Interface    *
-***********************/
-
-static MC6845_INTERFACE( mc6845_intf )
-{
-	"screen",   /* screen we are acting on */
-	false,      /* show border area */
-	8,          /* number of pixels per video memory address */
-	NULL,       /* before pixel update callback */
-	NULL,       /* row update callback */
-	NULL,       /* after pixel update callback */
-	DEVCB_NULL, /* callback for display state changes */
-	DEVCB_NULL, /* callback for cursor state changes */
-	DEVCB_NULL, /* HSYNC callback */
-	DEVCB_NULL, /* VSYNC callback */
-	NULL        /* update address callback */
-};
-
-
-/***********************
-*    PIA Interfaces    *
-***********************/
-
-static const pia6821_interface fclown_pia0_intf =
-{
-	DEVCB_DRIVER_MEMBER(_5clown_state,mux_port_r),  /* Port A IN        Multiplexed Ports read */
-	DEVCB_DRIVER_MEMBER(_5clown_state,pia0_b_r),    /* Port B IN        unknown (used) */
-	DEVCB_NULL,                 /* Line CA1 IN */
-	DEVCB_NULL,                 /* Line CB1 IN */
-	DEVCB_NULL,                 /* Line CA2 IN */
-	DEVCB_NULL,                 /* Line CA2 IN */
-	DEVCB_NULL,                 /* Port A OUT       NULL */
-	DEVCB_DRIVER_MEMBER(_5clown_state,counters_w),  /* Port B OUT       Counters */
-	DEVCB_NULL,                 /* Line CA2 OUT */
-	DEVCB_NULL,                 /* Line CB2 OUT */
-	DEVCB_NULL,                 /* IRQA */
-	DEVCB_NULL                  /* IRQB */
-};
-
-static const pia6821_interface fclown_pia1_intf =
-{
-	DEVCB_INPUT_PORT("SW4"),    /* Port A IN        4th DIP Switchs bank */
-	DEVCB_DRIVER_MEMBER(_5clown_state,pia1_b_r),    /* Port B IN        Check bit 2 to allow key out system to work */
-	DEVCB_NULL,                 /* Line CA1 IN */
-	DEVCB_NULL,                 /* Line CB1 IN */
-	DEVCB_NULL,                 /* Line CA2 IN */
-	DEVCB_NULL,                 /* Line CB2 IN */
-	DEVCB_DRIVER_MEMBER(_5clown_state,trigsnd_w),   /* Port A OUT       Trigger the audio CPU interrupts */
-	DEVCB_DRIVER_MEMBER(_5clown_state,mux_w),       /* Port B OUT       Multiplexed Ports selector */
-	DEVCB_NULL,                 /* Line CA2 OUT */
-	DEVCB_NULL,                 /* Line CB2 OUT */
-	DEVCB_NULL,                 /* IRQA */
-	DEVCB_NULL                  /* IRQB */
-};
-
-
-/*************************
-*    Sound Interfaces    *
-*************************/
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
 /*************************
 *    Machine Drivers     *
 *************************/
@@ -1079,8 +1024,16 @@ static MACHINE_CONFIG_START( fclown, _5clown_state )
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
-	MCFG_PIA6821_ADD("pia0", fclown_pia0_intf)
-	MCFG_PIA6821_ADD("pia1", fclown_pia1_intf)
+	MCFG_DEVICE_ADD("pia0", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(_5clown_state, mux_port_r))
+	MCFG_PIA_READPB_HANDLER(READ8(_5clown_state, pia0_b_r))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(_5clown_state, counters_w))
+
+	MCFG_DEVICE_ADD("pia1", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(IOPORT("SW4"))
+	MCFG_PIA_READPB_HANDLER(READ8(_5clown_state, pia1_b_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(_5clown_state, trigsnd_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(_5clown_state, mux_w))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -1089,18 +1042,20 @@ static MACHINE_CONFIG_START( fclown, _5clown_state )
 	MCFG_SCREEN_SIZE((39+1)*8, (31+1)*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(_5clown_state, screen_update_fclown)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(fclown)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", fclown)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(_5clown_state, _5clown)
 
-
-	MCFG_MC6845_ADD("crtc", MC6845, MASTER_CLOCK/16, mc6845_intf) /* guess */
+	MCFG_MC6845_ADD("crtc", MC6845, "screen", MASTER_CLOCK/16) /* guess */
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ay8910", AY8910, MASTER_CLOCK/8)        /* guess, seems ok */
-	MCFG_SOUND_CONFIG(ay8910_config)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 
 	MCFG_OKIM6295_ADD("oki6295", MASTER_CLOCK/12, OKIM6295_PIN7_LOW)    /* guess, seems ok; pin7 guessed, seems ok */
@@ -1116,7 +1071,7 @@ MACHINE_CONFIG_END
 ROM_START( 5clown )
 	ROM_REGION( 0x10000, "maincpu", 0 )
 	ROM_LOAD( "4.u2",       0x2000, 0x8000, CRC(96e3e8ab) SHA1(fec20b9a8bde5306162f8288cdc9580f445cadf5) )
-	ROM_COPY( "maincpu",    0x2000, 0x8000, 0x8000 )
+	ROM_COPY( "maincpu",    0x8000, 0xe000, 0x2000 )
 
 
 	ROM_REGION( 0x8000,  "gfxbanks", 0 )
@@ -1179,7 +1134,7 @@ ROM_END
 ROM_START( 5clownsp )
 	ROM_REGION( 0x10000, "maincpu", 0 )
 	ROM_LOAD( "five_clown_sp.u2",   0x2000, 0x8000, CRC(fa18090d) SHA1(47feb5dbc77ae8621fc35b707c24d64a95227a39) )
-	ROM_COPY( "maincpu",            0x2000, 0x8000, 0x8000 )
+	ROM_COPY( "maincpu",    0x8000, 0xe000, 0x2000 )
 
 
 	ROM_REGION( 0x8000,  "gfxbanks", 0 )
@@ -1269,6 +1224,6 @@ DRIVER_INIT_MEMBER(_5clown_state,fclown)
 *************************/
 
 /*    YEAR  NAME      PARENT  MACHINE INPUT   INIT    ROT    COMPANY  FULLNAME                      FLAGS... */
-GAME( 1993, 5clown,   0,      fclown, fclown, _5clown_state, fclown, ROT0, "IGS",   "Five Clown (English, set 1)", GAME_IMPERFECT_SOUND )
-GAME( 1993, 5clowna,  5clown, fclown, fclown, _5clown_state, fclown, ROT0, "IGS",   "Five Clown (English, set 2)", GAME_IMPERFECT_SOUND )
-GAME( 1993, 5clownsp, 5clown, fclown, fclown, _5clown_state, fclown, ROT0, "IGS",   "Five Clown (Spanish hack)",   GAME_IMPERFECT_SOUND )
+GAME( 1993, 5clown,   0,      fclown, fclown, _5clown_state, fclown, ROT0, "IGS",   "Five Clown (English, set 1)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1993, 5clowna,  5clown, fclown, fclown, _5clown_state, fclown, ROT0, "IGS",   "Five Clown (English, set 2)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1993, 5clownsp, 5clown, fclown, fclown, _5clown_state, fclown, ROT0, "IGS",   "Five Clown (Spanish hack)",   GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 /*
  * PlayStation Root Counter emulator
  *
@@ -25,7 +27,7 @@ INLINE void ATTR_PRINTF(3,4) verboselog( running_machine& machine, int n_level, 
 const device_type PSX_RCNT = &device_creator<psxrcnt_device>;
 
 psxrcnt_device::psxrcnt_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
-	device_t(mconfig, PSX_RCNT, "PSX RCNT", tag, owner, clock),
+	device_t(mconfig, PSX_RCNT, "Sony PSX RCNT", tag, owner, clock, "psxrcnt", __FILE__),
 	m_irq0_handler(*this),
 	m_irq1_handler(*this),
 	m_irq2_handler(*this)
@@ -56,10 +58,10 @@ void psxrcnt_device::device_start()
 	for( n = 0; n < 3; n++ )
 	{
 		root_counter[ n ].timer = timer_alloc(n);
-		state_save_register_item( machine(), "psxroot", NULL, n, root_counter[ n ].n_count );
-		state_save_register_item( machine(), "psxroot", NULL, n, root_counter[ n ].n_mode );
-		state_save_register_item( machine(), "psxroot", NULL, n, root_counter[ n ].n_target );
-		state_save_register_item( machine(), "psxroot", NULL, n, root_counter[ n ].n_start );
+		save_item(NAME(root_counter[ n ].n_count), n);
+		save_item(NAME(root_counter[ n ].n_mode), n);
+		save_item(NAME(root_counter[ n ].n_target), n);
+		save_item(NAME(root_counter[ n ].n_start), n);
 		root_counter[ n ].n_count = 0;
 		root_counter[ n ].n_mode = 0;
 		root_counter[ n ].n_target = 0;
@@ -97,7 +99,7 @@ WRITE32_MEMBER( psxrcnt_device::write )
 			( ( data & 0x0100 ) != 0 && n_counter != 0 && n_counter != 1 ) ||
 			( ( data & 0x0200 ) != 0 && n_counter != 2 ) )
 		{
-			mame_printf_debug( "mode %d 0x%04x\n", n_counter, data & 0xfca6 );
+			osd_printf_debug( "mode %d 0x%04x\n", n_counter, data & 0xfca6 );
 		}
 #endif
 		break;
@@ -140,7 +142,7 @@ READ32_MEMBER( psxrcnt_device::read )
 UINT64 psxrcnt_device::gettotalcycles( void )
 {
 	/* TODO: should return the start of the current tick. */
-	return machine().firstcpu->total_cycles() * 2;
+	return ((cpu_device *)owner())->total_cycles() * 2;
 }
 
 int psxrcnt_device::root_divider( int n_counter )
@@ -219,6 +221,7 @@ void psxrcnt_device::root_timer_adjust( int n_counter )
 
 		n_duration *= root_divider( n_counter );
 
+		// TODO: figure out if this should be calculated from the cpu clock for 50mhz boards?
 		root->timer->adjust( attotime::from_hz(33868800) * n_duration, n_counter);
 	}
 }

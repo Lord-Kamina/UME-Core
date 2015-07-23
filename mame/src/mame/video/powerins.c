@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                           -= Power Instinct =-
@@ -12,7 +14,7 @@ Note:   if MAME_DEBUG is defined, pressing Z with:
         W           shows layer 2
         A           shows the sprites
 
-        Keys can be used togheter!
+        Keys can be used together!
 
         [ 2 Scrolling Layers ]
 
@@ -48,45 +50,18 @@ Note:   if MAME_DEBUG is defined, pressing Z with:
 ***************************************************************************/
 
 
-WRITE16_MEMBER(powerins_state::powerins_flipscreen_w)
+WRITE8_MEMBER(powerins_state::flipscreen_w)
 {
-	if (ACCESSING_BITS_0_7) flip_screen_set(data & 1 );
+	flip_screen_set(data & 1 );
 }
 
-WRITE16_MEMBER(powerins_state::powerins_tilebank_w)
+WRITE8_MEMBER(powerins_state::tilebank_w)
 {
-	if (ACCESSING_BITS_0_7)
+	if (data != m_tile_bank)
 	{
-		if (data != m_tile_bank)
-		{
-			m_tile_bank = data;     // Tiles Bank (VRAM 0)
-			m_tilemap_0->mark_all_dirty();
-		}
+		m_tile_bank = data;     // Tiles Bank (VRAM 0)
+		m_tilemap_0->mark_all_dirty();
 	}
-}
-
-
-
-/***************************************************************************
-
-                                    Palette
-
-***************************************************************************/
-
-
-WRITE16_MEMBER(powerins_state::powerins_paletteram16_w)
-{
-	/*  byte 0    byte 1    */
-	/*  RRRR GGGG BBBB RGBx */
-	/*  4321 4321 4321 000x */
-
-	UINT16 newword = COMBINE_DATA(&m_generic_paletteram_16[offset]);
-
-	int r = ((newword >> 11) & 0x1E ) | ((newword >> 3) & 0x01);
-	int g = ((newword >>  7) & 0x1E ) | ((newword >> 2) & 0x01);
-	int b = ((newword >>  3) & 0x1E ) | ((newword >> 1) & 0x01);
-
-	palette_set_color_rgb( machine(),offset, pal5bit(r),pal5bit(g),pal5bit(b) );
 }
 
 
@@ -121,20 +96,19 @@ Offset:
 TILE_GET_INFO_MEMBER(powerins_state::get_tile_info_0)
 {
 	UINT16 code = m_vram_0[tile_index];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			(code & 0x07ff) + (m_tile_bank*0x800),
 			((code & 0xf000) >> (16-4)) + ((code & 0x0800) >> (11-4)),
 			0);
 }
 
-WRITE16_MEMBER(powerins_state::powerins_vram_0_w)
+WRITE16_MEMBER(powerins_state::vram_0_w)
 {
 	COMBINE_DATA(&m_vram_0[offset]);
 	m_tilemap_0->mark_tile_dirty(offset);
 }
 
-TILEMAP_MAPPER_MEMBER(powerins_state::powerins_get_memory_offset_0)
+TILEMAP_MAPPER_MEMBER(powerins_state::get_memory_offset_0)
 {
 	return  (col * TILES_PER_PAGE_Y) +
 
@@ -161,14 +135,13 @@ Offset:
 TILE_GET_INFO_MEMBER(powerins_state::get_tile_info_1)
 {
 	UINT16 code = m_vram_1[tile_index];
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code & 0x0fff,
 			(code & 0xf000) >> (16-4),
 			0);
 }
 
-WRITE16_MEMBER(powerins_state::powerins_vram_1_w)
+WRITE16_MEMBER(powerins_state::vram_1_w)
 {
 	COMBINE_DATA(&m_vram_1[offset]);
 	m_tilemap_1->mark_tile_dirty(offset);
@@ -181,15 +154,15 @@ WRITE16_MEMBER(powerins_state::powerins_vram_1_w)
 /***************************************************************************
 
 
-                                Vh_Start
+                                video_start
 
 
 ***************************************************************************/
 
 void powerins_state::video_start()
 {
-	m_tilemap_0 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(powerins_state::get_tile_info_0),this),tilemap_mapper_delegate(FUNC(powerins_state::powerins_get_memory_offset_0),this),16,16,DIM_NX_0, DIM_NY_0 );
-	m_tilemap_1 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(powerins_state::get_tile_info_1),this),TILEMAP_SCAN_COLS,8,8,DIM_NX_1, DIM_NY_1 );
+	m_tilemap_0 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(powerins_state::get_tile_info_0),this),tilemap_mapper_delegate(FUNC(powerins_state::get_memory_offset_0),this),16,16,DIM_NX_0, DIM_NY_0 );
+	m_tilemap_1 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(powerins_state::get_tile_info_1),this),TILEMAP_SCAN_COLS,8,8,DIM_NX_1, DIM_NY_1 );
 
 	m_tilemap_0->set_scroll_rows(1);
 	m_tilemap_0->set_scroll_cols(1);
@@ -197,11 +170,9 @@ void powerins_state::video_start()
 	m_tilemap_1->set_scroll_rows(1);
 	m_tilemap_1->set_scroll_cols(1);
 	m_tilemap_1->set_transparent_pen(15);
+
+	save_item(NAME(m_tile_bank));
 }
-
-
-
-
 
 
 /***************************************************************************
@@ -253,8 +224,8 @@ void powerins_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect
 	UINT16 *source = m_spriteram + 0x8000/2;
 	UINT16 *finish = m_spriteram + 0x9000/2;
 
-	int screen_w = machine().primary_screen->width();
-	int screen_h = machine().primary_screen->height();
+	int screen_w = m_screen->width();
+	int screen_h = m_screen->height();
 
 	for ( ; source < finish; source += 16/2 )
 	{
@@ -297,7 +268,7 @@ void powerins_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect
 		{
 			for (y = 0 ; y < dimy ; y++)
 			{
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+				m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 						code,
 						color,
 						flipx, flipy,
@@ -324,7 +295,7 @@ void powerins_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect
 ***************************************************************************/
 
 
-UINT32 powerins_state::screen_update_powerins(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 powerins_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int layers_ctrl = -1;
 
@@ -350,9 +321,9 @@ if (machine().input().code_pressed(KEYCODE_Z))
 }
 #endif
 
-	if (layers_ctrl&1)      m_tilemap_0->draw(bitmap, cliprect, 0, 0);
+	if (layers_ctrl&1)      m_tilemap_0->draw(screen, bitmap, cliprect, 0, 0);
 	else                    bitmap.fill(0, cliprect);
 	if (layers_ctrl&8)      draw_sprites(bitmap,cliprect);
-	if (layers_ctrl&2)      m_tilemap_1->draw(bitmap, cliprect, 0, 0);
+	if (layers_ctrl&2)      m_tilemap_1->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

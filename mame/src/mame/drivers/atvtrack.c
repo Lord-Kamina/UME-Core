@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese, Samuele Zannoli
 /*
   ATV Track
   (c)2002 Gaelco
@@ -41,7 +43,7 @@ REF. 020419
 Notes:
       SH4       - Hitachi HD6417750S SH4 CPU (BGA)
       K4S643232 - Samsung K4S643232E-TC70 64M x 32-bit SDRAM (TSSOP86)
-      GFX       - Unknown BGA graphics chip (heatsinked)
+      GFX       - NEC PowerVR Neon 250
       FLASH.IC* - Samsung K9F2808U0B 128MBit (16M + 512k Spare x 8-bit) FlashROM (TSOP48)
       EPF10K50  - Altera Flex EPF10K50EQC240-3 FPGA (QFP240)
       EPC1PC8   - Altera EPC1PC8 FPGA Configuration Device (DIP8)
@@ -53,6 +55,36 @@ Notes:
       CN1       - Multi-pin connector for filter board (input, video, power & controls connectors etc)
       DB9       - Probably used for cabinet linking
       SW3       - Push button switch
+
+*/
+
+/*
+
+notes from DEMUL team
+
+Smashing Drive needs a working SH4 MMU emulation, ATV Track does not.
+
+Audio - is a simple buffered DAC.
+frequency is 32kHz
+data written by CPU to buffer have such meaning:
+offs 0 - s16 bass channel 0
+offs 2 - s16 bass channel 1
+offs 4 - s16 left channel
+offs 6 - s16 right channel
+and so on
+
+buffer is 2x32bytes
+then it becomes (I suppose half) empty - SH4 IRL5 IRQ generated
+
+
+"control registers" (Smashing Drive)
+0 - read - various statuses, returning -1 is OK
+write - enable slave CPU, gpu, etc most of bits is unclear
+4 - r/w - communication port (for cabinet linking), returning 0 is OK
+also there some bits on SH4 PDTRA port, I'll hook it later by myself
+
+about clocks - SH4s is clocked at 33000000*6
+but unlike to DC/AW/Naomi SH4 'peripheral clock' (at which works TMU timers and other internal stuff) is 1/6 from CPU clock, not 1/4
 
 */
 
@@ -71,8 +103,8 @@ public:
 		m_maincpu(*this, "maincpu"),
 		m_subcpu(*this, "subcpu") { }
 
-	DECLARE_READ64_MEMBER(area1_r);
-	DECLARE_WRITE64_MEMBER(area1_w);
+	DECLARE_READ64_MEMBER(control_r);
+	DECLARE_WRITE64_MEMBER(control_w);
 	DECLARE_READ64_MEMBER(area2_r);
 	DECLARE_WRITE64_MEMBER(area2_w);
 	DECLARE_READ64_MEMBER(area3_r);
@@ -92,8 +124,21 @@ public:
 	int m_nandcommand[4], m_nandoffset[4], m_nandaddressstep, m_nandaddress[4];
 	UINT32 m_area1_data[4];
 
-	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_subcpu;
+	required_device<sh4_device> m_maincpu;
+	required_device<sh4_device> m_subcpu;
+protected:
+	bool m_slaverun;
+};
+
+
+class smashdrv_state : public atvtrack_state
+{
+public:
+	smashdrv_state(const machine_config &mconfig, device_type type, const char *tag)
+		: atvtrack_state(mconfig, type, tag) { }
+
+	virtual void machine_start();
+	virtual void machine_reset();
 };
 
 void atvtrack_state::logbinary(UINT32 data,int high=31,int low=0)
@@ -126,7 +171,7 @@ inline UINT32 atvtrack_state::decode64_32(offs_t offset64, UINT64 data, UINT64 m
 	return 0;
 }
 
-READ64_MEMBER(atvtrack_state::area1_r)
+READ64_MEMBER(atvtrack_state::control_r)
 {
 	UINT32 addr;
 
@@ -139,7 +184,7 @@ READ64_MEMBER(atvtrack_state::area1_r)
 	return -1;
 }
 
-WRITE64_MEMBER(atvtrack_state::area1_w)
+WRITE64_MEMBER(atvtrack_state::control_w)
 {
 	UINT32 addr, dat; //, old;
 
@@ -148,9 +193,10 @@ WRITE64_MEMBER(atvtrack_state::area1_w)
 //  old = m_area1_data[addr];
 	m_area1_data[addr] = dat;
 	if (addr == (0x00020000-0x00020000)/4) {
-		if (data & 4) {
+		if ((data & 4) && m_slaverun)
 			m_subcpu->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
-		}
+		else
+			m_subcpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 	}
 	logerror("Write %08x at %08x ",dat, 0x20000+addr*4+0);
 	logbinary(dat);
@@ -175,8 +221,9 @@ READ64_MEMBER(atvtrack_state::area2_r)
 				dat = (dat << 8) | 0xc0;
 		}
 		return dat;
-	} else
-		;
+	} else {
+		/* nothing */
+	}
 	return 0;
 }
 
@@ -234,8 +281,9 @@ WRITE64_MEMBER(atvtrack_state::area3_w)
 			data=data >> 8;
 		}
 		m_nandaddressstep = 0;
-	} else
-		;
+	} else {
+		/* nothing */
+	}
 }
 
 READ64_MEMBER(atvtrack_state::area4_r)
@@ -270,8 +318,9 @@ WRITE64_MEMBER(atvtrack_state::area4_w)
 			data = data >> 8;
 		}
 		m_nandaddressstep++;
-	} else
-		;
+	} else {
+		/* nothing */
+	}
 }
 
 READ64_MEMBER(atvtrack_state::ioport_r)
@@ -299,6 +348,10 @@ WRITE64_MEMBER(atvtrack_state::ioport_w)
 #endif
 
 	if (offset == SH4_IOPORT_16/8) {
+		if ((data & 0xf000) == 0x7000) {
+			if (data & 0x0100)
+				m_slaverun = true;
+		}
 		logerror("SH4 16bit i/o port write ");
 		logbinary((UINT32)data,15,0);
 		logerror("\n");
@@ -354,26 +407,62 @@ void atvtrack_state::machine_reset()
 	// set cpu PC register to 0x0c7f0000
 	m_maincpu->set_pc(0x0c7f0000);
 	// set BCR2 to 1
-	sh4_internal_w(as, 0x3001, 1, 0xffffffff);
+	m_maincpu->sh4_internal_w(as, 0x3001, 1, 0xffffffff);
 	m_subcpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 }
 
+
+void smashdrv_state::machine_start()
+{
+}
+
+void smashdrv_state::machine_reset()
+{
+	m_slaverun = false;
+	m_subcpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+}
+
+// ATV Track
+
 static ADDRESS_MAP_START( atvtrack_main_map, AS_PROGRAM, 64, atvtrack_state )
 	AM_RANGE(0x00000000, 0x000003ff) AM_RAM AM_SHARE("sharedmem")
-	AM_RANGE(0x00020000, 0x00020007) AM_READWRITE(area1_r, area1_w)
+	AM_RANGE(0x00020000, 0x00020007) AM_READWRITE(control_r, control_w) // control registers
+//  AM_RANGE(0x00020040, 0x0002007f) // audio DAC buffer
 	AM_RANGE(0x14000000, 0x14000007) AM_READWRITE(area2_r, area2_w) // data
 	AM_RANGE(0x14100000, 0x14100007) AM_READWRITE(area3_r, area3_w) // command
 	AM_RANGE(0x14200000, 0x14200007) AM_READWRITE(area4_r, area4_w) // address
-	AM_RANGE(0x0c000000, 0x0cffffff) AM_RAM
+	AM_RANGE(0x0c000000, 0x0c7fffff) AM_RAM
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( atvtrack_main_port, AS_IO, 64, atvtrack_state )
 	AM_RANGE(0x00, 0x1f) AM_READWRITE(ioport_r, ioport_w)
 ADDRESS_MAP_END
 
+// Smashing Drive
+
+static ADDRESS_MAP_START( smashdrv_main_map, AS_PROGRAM, 64, smashdrv_state )
+	AM_RANGE(0x00000000, 0x03ffffff) AM_ROM
+	AM_RANGE(0x0c000000, 0x0c7fffff) AM_RAM
+	AM_RANGE(0x10000000, 0x100003ff) AM_RAM AM_SHARE("sharedmem")
+	AM_RANGE(0x10000400, 0x10000407) AM_READWRITE(control_r, control_w) // control registers
+
+// 0x10000400 - 0x1000043F control registers
+// 0x10000440 - 0x1000047F Audio DAC buffer
+	AM_RANGE(0x14000000, 0x143fffff) AM_ROM AM_REGION("data", 0)
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( smashdrv_main_port, AS_IO, 64, smashdrv_state )
+	AM_RANGE(0x00, 0x1f) AM_READWRITE(ioport_r, ioport_w)
+ADDRESS_MAP_END
+
+// Sub CPU (same for both games)
+
 static ADDRESS_MAP_START( atvtrack_sub_map, AS_PROGRAM, 64, atvtrack_state )
 	AM_RANGE(0x00000000, 0x000003ff) AM_RAM AM_SHARE("sharedmem")
 	AM_RANGE(0x0c000000, 0x0cffffff) AM_RAM
+// 0x14000000 - 0x1400xxxx GPU registers
+	AM_RANGE(0x18000000, 0x19ffffff) AM_RAM
+// 0x18000000 - 0x19FFFFFF GPU RAM (32MB)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( atvtrack_sub_port, AS_IO, 64, atvtrack_state )
@@ -387,17 +476,34 @@ INPUT_PORTS_END
 // ?
 #define ATV_CPU_CLOCK 200000000
 // ?
-static const struct sh4_config sh4cpu_config = {  1,  0,  1,  0,  0,  0,  1,  1,  0, ATV_CPU_CLOCK };
 
 static MACHINE_CONFIG_START( atvtrack, atvtrack_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", SH4LE, ATV_CPU_CLOCK)
-	MCFG_CPU_CONFIG(sh4cpu_config)
+	MCFG_SH4_MD0(1)
+	MCFG_SH4_MD1(0)
+	MCFG_SH4_MD2(1)
+	MCFG_SH4_MD3(0)
+	MCFG_SH4_MD4(0)
+	MCFG_SH4_MD5(1)
+	MCFG_SH4_MD6(0)
+	MCFG_SH4_MD7(1)
+	MCFG_SH4_MD8(0)
+	MCFG_SH4_CLOCK(ATV_CPU_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(atvtrack_main_map)
 	MCFG_CPU_IO_MAP(atvtrack_main_port)
 
 	MCFG_CPU_ADD("subcpu", SH4LE, ATV_CPU_CLOCK)
-	MCFG_CPU_CONFIG(sh4cpu_config)
+	MCFG_SH4_MD0(1)
+	MCFG_SH4_MD1(0)
+	MCFG_SH4_MD2(1)
+	MCFG_SH4_MD3(0)
+	MCFG_SH4_MD4(0)
+	MCFG_SH4_MD5(1)
+	MCFG_SH4_MD6(0)
+	MCFG_SH4_MD7(1)
+	MCFG_SH4_MD8(0)
+	MCFG_SH4_CLOCK(ATV_CPU_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(atvtrack_sub_map)
 	MCFG_CPU_IO_MAP(atvtrack_sub_port)
 
@@ -409,9 +515,16 @@ static MACHINE_CONFIG_START( atvtrack, atvtrack_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 480-1)
 	MCFG_SCREEN_UPDATE_DRIVER(atvtrack_state, screen_update_atvtrack)
 
-	MCFG_PALETTE_LENGTH(0x1000)
+	MCFG_PALETTE_ADD("palette", 0x1000)
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED_CLASS( smashdrv, atvtrack, smashdrv_state )
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_PROGRAM_MAP(smashdrv_main_map)
+	MCFG_CPU_IO_MAP(smashdrv_main_port)
 
 MACHINE_CONFIG_END
+
 
 ROM_START( atvtrack )
 	ROM_REGION( 0x4200000, "maincpu", ROMREGION_ERASEFF) // NAND roms, contain additional data hence the sizes
@@ -432,5 +545,58 @@ ROM_START( atvtracka )
 	ROM_LOAD32_BYTE("k9f2808u0b.ic19", 0x0000003, 0x1080000, CRC(856c1e6a) SHA1(a6b2839120d61811c36cc6b4095de9cefceb394b) )
 ROM_END
 
+/*
+
+Smashing Drive
+Gaelco 2000
+
+PCB Layout
+----------
+
+REF 010131
+|----------------------------------------------|
+|                                              |
+|                              K4S643232C      |
+|        |------|SDRB.IC14                     |
+|        |SH4   |                              |-|
+|        |      |                              | |DB9
+|        |      |SDRA.IC15  SDRC.IC20  PRG.IC23|-|
+|        |------|             |----------|     |
+|                             |ALTERA    |     |
+|                             |FLEX0K50  |     |
+|        |------|  K4S643232C |EPF10K50  |     |
+|        |SH4   |  K4S643232C |EQC240-3  |     |
+|        |      |             |          |     |
+|        |      |             |          |     |
+|        |------|             |----------|     |
+|                                              |
+|         33MHz                 |--------|     |
+|                    K4S643232C |NEC     |     |
+|                    K4S643232C |POWERVR |     |
+|                               |250     |     |
+|                    K4S643232C |        |     |-|
+|                    K4S643232C |        |     | |DB9
+|                               |--------|     |-|
+|                                              |
+|  TL074C   TL074C                14.31818MHz  |
+|  TDA1543  TDA1543                            |
+|----------------------------------------------|
+
+*/
+
+ROM_START( smashdrv )
+	ROM_REGION64_LE( 0x0400000, "data", ROMREGION_ERASEFF)
+	ROM_LOAD("prg.ic23", 0x0000000, 0x0400000, CRC(5cc6d3ac) SHA1(0c8426774212d891796b59c95b8c70f64db5b67a) )
+
+	ROM_REGION( 0x4000000, "maincpu", ROMREGION_ERASEFF)
+	ROM_LOAD32_WORD("sdra.ic15",    0x00000000, 0x01000000, CRC(cf702287) SHA1(84cd83c339831deff15fe5fcc353e0b596667500) )
+	ROM_LOAD32_WORD("sdrb.ic14",    0x00000002, 0x01000000, CRC(39b76f0e) SHA1(529943b6075925e5f72c6e966796e04b2c33686c) )
+	ROM_LOAD32_WORD("sdrc.ic20",    0x02000000, 0x01000000, CRC(c9021dd7) SHA1(1d08aab433614810af858a0fc5d7f03c7b782237) )
+	// ic21 unpopulated
+ROM_END
+
 GAME( 2002, atvtrack,  0,          atvtrack,    atvtrack, driver_device,    0, ROT0, "Gaelco", "ATV Track (set 1)", GAME_NOT_WORKING | GAME_NO_SOUND )
 GAME( 2002, atvtracka, atvtrack,   atvtrack,    atvtrack, driver_device,    0, ROT0, "Gaelco", "ATV Track (set 2)", GAME_NOT_WORKING | GAME_NO_SOUND )
+
+// almost identical PCB, FlashROM mapping and master registers addresses different
+GAME( 2000, smashdrv, 0,           smashdrv,    atvtrack, driver_device,    0, ROT0, "Gaelco", "Smashing Drive", GAME_NOT_WORKING | GAME_NO_SOUND )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont,byuu
 /***************************************************************************
 
     upd7725.c
@@ -22,57 +24,39 @@
 const device_type UPD7725 = &device_creator<upd7725_device>;
 const device_type UPD96050 = &device_creator<upd96050_device>;
 
-necdsp_device::necdsp_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, UINT32 clock, UINT32 abits, UINT32 dbits, const char *name)
-	: cpu_device(mconfig, type, name, tag, owner, clock),
+necdsp_device::necdsp_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, UINT32 clock, UINT32 abits, UINT32 dbits, const char *name, const char *shortname, const char *source)
+	: cpu_device(mconfig, type, name, tag, owner, clock, shortname, source),
 		m_program_config("program", ENDIANNESS_BIG, 32, abits, -2), // data bus width, address bus width, -2 means DWORD-addressable
 		m_data_config("data", ENDIANNESS_BIG, 16, dbits, -1),   // -1 for WORD-addressable
-	m_irq(0),
-	m_program(NULL),
-	m_data(NULL),
-	m_direct(NULL)
+		m_irq(0),
+		m_program(NULL),
+		m_data(NULL),
+		m_direct(NULL),
+		m_in_int_cb(*this),
+		//m_in_si_cb(*this),
+		//m_in_sck_cb(*this),
+		//m_in_sien_cb(*this),
+		//m_in_soen_cb(*this),
+		//m_in_dack_cb(*this),
+		m_out_p0_cb(*this),
+		m_out_p1_cb(*this)
+		//m_out_so_cb(*this),
+		//m_out_sorq_cb(*this),
+		//m_out_drq_cb(*this)
 {
 }
 
 
 upd7725_device::upd7725_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: necdsp_device(mconfig, UPD7725, tag, owner, clock, 11, 11, "uPD7725")
+	: necdsp_device(mconfig, UPD7725, tag, owner, clock, 11, 11, "uPD7725", "upd7725", __FILE__)
 {
 }
 
 upd96050_device::upd96050_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: necdsp_device(mconfig, UPD96050, tag, owner, clock, 14, 12, "uPD96050")
+	: necdsp_device(mconfig, UPD96050, tag, owner, clock, 14, 12, "uPD96050", "upd96050", __FILE__)
 {
 }
 
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void necdsp_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const necdsp_interface *intf = reinterpret_cast<const necdsp_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<necdsp_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_in_int_cb, 0, sizeof(m_in_int_cb));
-		//memset(&m_in_si_cb, 0, sizeof(m_in_si_cb));
-		//memset(&m_in_sck_cb, 0, sizeof(m_in_sck_cb));
-		//memset(&m_in_sien_cb, 0, sizeof(m_in_sien_cb));
-		//memset(&m_in_soen_cb, 0, sizeof(m_in_soen_cb));
-		//memset(&m_in_dack_cb, 0, sizeof(m_in_dack_cb));
-		memset(&m_out_p0_cb, 0, sizeof(m_out_p0_cb));
-		memset(&m_out_p1_cb, 0, sizeof(m_out_p1_cb));
-		//memset(&m_out_so_cb, 0, sizeof(m_out_so_cb));
-		//memset(&m_out_sorq_cb, 0, sizeof(m_out_sorq_cb));
-		//memset(&m_out_drq_cb, 0, sizeof(m_out_drq_cb));
-	}
-}
 //-------------------------------------------------
 //  device_start - start up the device
 //-------------------------------------------------
@@ -85,7 +69,7 @@ void necdsp_device::device_start()
 	m_direct = &m_program->direct();
 
 	// register our state for the debugger
-	astring tempstr;
+	std::string tempstr;
 	state_add(STATE_GENPC, "GENPC", regs.pc).noshow();
 	state_add(UPD7725_PC, "PC", regs.pc);
 	state_add(UPD7725_RP, "RP", regs.rp);
@@ -105,17 +89,17 @@ void necdsp_device::device_start()
 	state_add(UPD7725_IDB, "IDB", regs.idb);
 
 	// resolve callbacks
-	m_in_int_func.resolve(m_in_int_cb, *this);
-	//m_in_si_func.resolve(m_in_si_cb, *this);
-	//m_in_sck_func.resolve(m_in_sck_cb, *this);
-	//m_in_sien_func.resolve(m_in_sien_cb, *this);
-	//m_in_soen_func.resolve(m_in_soen_cb, *this);
-	//m_in_dack_func.resolve(m_in_dack_cb, *this);
-	m_out_p0_func.resolve(m_out_p0_cb, *this);
-	m_out_p1_func.resolve(m_out_p1_cb, *this);
-	//m_out_so_func.resolve(m_out_so_cb, *this);
-	//m_out_sorq_func.resolve(m_out_sorq_cb, *this);
-	//m_out_drq_func.resolve(m_out_drq_cb, *this);
+	m_in_int_cb.resolve_safe(0);
+	//m_in_si_cb.resolve_safe(0);
+	//m_in_sck_cb.resolve_safe(0);
+	//m_in_sien_cb.resolve_safe(0);
+	//m_in_soen_cb.resolve_safe(0);
+	//m_in_dack_cb.resolve_safe(0);
+	m_out_p0_cb.resolve_safe();
+	m_out_p1_cb.resolve_safe();
+	//m_out_so_cb.resolve_safe();
+	//m_out_sorq_cb.resolve_safe();
+	//m_out_drq_cb.resolve_safe();
 
 	// save state registrations
 	save_item(NAME(regs.pc));
@@ -219,16 +203,16 @@ void necdsp_device::state_export(const device_state_entry &entry)
 //  for the debugger
 //-------------------------------------------------
 
-void necdsp_device::state_string_export(const device_state_entry &entry, astring &string)
+void necdsp_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case UPD7725_FLAGA:
-			string.printf("%s %s %c%c %s %s %s %s",
+			strprintf(str, "%s %s %c%c %s %s %s %s",
 							regs.flaga.s1 ? "S1" : "s1",
 							regs.flaga.s0 ? "S0" : "s0",
-							regs.flaga.c ? "C" : "c",
-							regs.flaga.z ? "Z" : "z",
+							regs.flaga.c ? 'C' : 'c',
+							regs.flaga.z ? 'Z' : 'z',
 							regs.flaga.ov1 ? "OV1" : "ov1",
 							regs.flaga.ov0 ? "OV0" : "ov0",
 							regs.flaga.ov0p ? "OV0P" : "ov0p",
@@ -236,11 +220,11 @@ void necdsp_device::state_string_export(const device_state_entry &entry, astring
 			break;
 
 		case UPD7725_FLAGB:
-			string.printf("%s %s %c%c %s %s %s %s",
+			strprintf(str, "%s %s %c%c %s %s %s %s",
 							regs.flagb.s1 ? "S1" : "s1",
 							regs.flagb.s0 ? "S0" : "s0",
-							regs.flagb.c ? "C" : "c",
-							regs.flagb.z ? "Z" : "z",
+							regs.flagb.c ? 'C' : 'c',
+							regs.flagb.z ? 'Z' : 'z',
 							regs.flagb.ov1 ? "OV1" : "ov1",
 							regs.flagb.ov0 ? "OV0" : "ov0",
 							regs.flagb.ov0p ? "OV0P" : "ov0p",
@@ -342,7 +326,7 @@ void necdsp_device::execute_run()
 			debugger_instruction_hook(this, regs.pc);
 		}
 
-		opcode = m_direct->read_decrypted_dword(regs.pc<<2)>>8;
+		opcode = m_direct->read_dword(regs.pc<<2)>>8;
 		regs.pc++;
 		switch(opcode >> 22)
 		{
@@ -568,8 +552,8 @@ void necdsp_device::exec_ld(UINT32 opcode) {
 	case  5: regs.rp = id; break;
 	case  6: regs.dr = id; regs.sr.rqm = 1; break;
 	case  7: regs.sr = (regs.sr & 0x907c) | (id & ~0x907c);
-				m_out_p0_func(regs.sr&0x1);
-				m_out_p1_func((regs.sr&0x2)>>1);
+				m_out_p0_cb(regs.sr&0x1);
+				m_out_p1_cb((regs.sr&0x2)>>1);
 				break;
 	case  8: regs.so = id; break;  //LSB
 	case  9: regs.so = id; break;  //MSB

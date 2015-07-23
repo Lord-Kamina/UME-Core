@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Alex Pasadyn,Zsolt Vasvari,Aaron Giles
 /****************************************************************************
 
     Gottlieb Exterminator hardware
@@ -78,13 +80,13 @@
 
 WRITE16_MEMBER(exterm_state::exterm_host_data_w)
 {
-	tms34010_host_w(m_slave, offset / TOWORD(0x00100000), data);
+	m_slave->host_w(space,offset / TOWORD(0x00100000), data, 0xffff);
 }
 
 
 READ16_MEMBER(exterm_state::exterm_host_data_r)
 {
-	return tms34010_host_r(m_slave, offset / TOWORD(0x00100000));
+	return m_slave->host_r(space,offset / TOWORD(0x00100000), 0xffff);
 }
 
 
@@ -95,43 +97,42 @@ READ16_MEMBER(exterm_state::exterm_host_data_r)
  *
  *************************************/
 
-static UINT16 exterm_trackball_port_r(address_space &space, int which, UINT16 mem_mask)
+UINT16 exterm_state::exterm_trackball_port_r(int which, UINT16 mem_mask)
 {
-	exterm_state *state = space.machine().driver_data<exterm_state>();
 	UINT16 port;
 
 	/* Read the fake input port */
-	UINT8 trackball_pos = state->ioport(which ? "DIAL1" : "DIAL0")->read();
+	UINT8 trackball_pos = ioport(which ? "DIAL1" : "DIAL0")->read();
 
 	/* Calculate the change from the last position. */
-	UINT8 trackball_diff = state->m_trackball_old[which] - trackball_pos;
+	UINT8 trackball_diff = m_trackball_old[which] - trackball_pos;
 
 	/* Store the new position for the next comparision. */
-	state->m_trackball_old[which] = trackball_pos;
+	m_trackball_old[which] = trackball_pos;
 
 	/* Move the sign bit to the high bit of the 6-bit trackball count. */
 	if (trackball_diff & 0x80)
 		trackball_diff |= 0x20;
 
 	/* Keep adding the changes.  The counters will be reset later by a hardware write. */
-	state->m_aimpos[which] = (state->m_aimpos[which] + trackball_diff) & 0x3f;
+	m_aimpos[which] = (m_aimpos[which] + trackball_diff) & 0x3f;
 
 	/* Combine it with the standard input bits */
-	port = state->ioport(which ? "P2" : "P1")->read();
+	port = ioport(which ? "P2" : "P1")->read();
 
-	return (port & 0xc0ff) | (state->m_aimpos[which] << 8);
+	return (port & 0xc0ff) | (m_aimpos[which] << 8);
 }
 
 
 READ16_MEMBER(exterm_state::exterm_input_port_0_r)
 {
-	return exterm_trackball_port_r(space, 0, mem_mask);
+	return exterm_trackball_port_r(0, mem_mask);
 }
 
 
 READ16_MEMBER(exterm_state::exterm_input_port_1_r)
 {
-	return exterm_trackball_port_r(space, 1, mem_mask);
+	return exterm_trackball_port_r(1, mem_mask);
 }
 
 
@@ -273,7 +274,7 @@ WRITE8_MEMBER(exterm_state::sound_control_w)
  *************************************/
 
 static ADDRESS_MAP_START( master_map, AS_PROGRAM, 16, exterm_state )
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("maincpu", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0x00000000, 0x000fffff) AM_MIRROR(0xfc700000) AM_RAM AM_SHARE("master_videoram")
 	AM_RANGE(0x00800000, 0x00bfffff) AM_MIRROR(0xfc400000) AM_RAM
 	AM_RANGE(0x01000000, 0x013fffff) AM_MIRROR(0xfc000000) AM_READWRITE(exterm_host_data_r, exterm_host_data_w)
@@ -283,14 +284,14 @@ static ADDRESS_MAP_START( master_map, AS_PROGRAM, 16, exterm_state )
 	AM_RANGE(0x01500000, 0x0153ffff) AM_MIRROR(0xfc000000) AM_WRITE(exterm_output_port_0_w)
 	AM_RANGE(0x01580000, 0x015bffff) AM_MIRROR(0xfc000000) AM_WRITE(sound_latch_w)
 	AM_RANGE(0x015c0000, 0x015fffff) AM_MIRROR(0xfc000000) AM_WRITE(watchdog_reset16_w)
-	AM_RANGE(0x01800000, 0x01807fff) AM_MIRROR(0xfc7f8000) AM_RAM_WRITE(paletteram_xRRRRRGGGGGBBBBB_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x01800000, 0x01807fff) AM_MIRROR(0xfc7f8000) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x02800000, 0x02807fff) AM_MIRROR(0xfc7f8000) AM_RAM AM_SHARE("nvram")
 	AM_RANGE(0x03000000, 0x03ffffff) AM_MIRROR(0xfc000000) AM_ROM AM_REGION("user1", 0)
 ADDRESS_MAP_END
 
 
 static ADDRESS_MAP_START( slave_map, AS_PROGRAM, 16, exterm_state )
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("slave", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0x00000000, 0x000fffff) AM_MIRROR(0xfbf00000) AM_RAM AM_SHARE("slave_videoram")
 	AM_RANGE(0x04000000, 0x047fffff) AM_MIRROR(0xfb800000) AM_RAM
 ADDRESS_MAP_END
@@ -393,41 +394,6 @@ static INPUT_PORTS_START( exterm )
 INPUT_PORTS_END
 
 
-
-/*************************************
- *
- *  34010 configurations
- *
- *************************************/
-
-static const tms34010_config master_config =
-{
-	FALSE,                      /* halt on reset */
-	"screen",                   /* the screen operated on */
-	40000000/8,                 /* pixel clock */
-	1,                          /* pixels per clock */
-	exterm_scanline_update,     /* scanline updater (indexed16) */
-	NULL,                       /* scanline updater (rgb32) */
-	NULL,                       /* generate interrupt */
-	exterm_to_shiftreg_master,  /* write to shiftreg function */
-	exterm_from_shiftreg_master /* read from shiftreg function */
-};
-
-static const tms34010_config slave_config =
-{
-	TRUE,                       /* halt on reset */
-	"screen",                   /* the screen operated on */
-	40000000/8,                 /* pixel clock */
-	1,                          /* pixels per clock */
-	NULL,                       /* scanline updater (indexed16) */
-	NULL,                       /* scanline updater (rgb32) */
-	NULL,                       /* generate interrupt */
-	exterm_to_shiftreg_slave,   /* write to shiftreg function */
-	exterm_from_shiftreg_slave  /* read from shiftreg function */
-};
-
-
-
 /*************************************
  *
  *  Machine drivers
@@ -438,12 +404,21 @@ static MACHINE_CONFIG_START( exterm, exterm_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", TMS34010, 40000000)
-	MCFG_CPU_CONFIG(master_config)
 	MCFG_CPU_PROGRAM_MAP(master_map)
+	MCFG_TMS340X0_HALT_ON_RESET(FALSE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(40000000/8) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(1) /* pixels per clock */
+	MCFG_TMS340X0_SCANLINE_IND16_CB(exterm_state, scanline_update)     /* scanline updater (indexed16) */
+	MCFG_TMS340X0_TO_SHIFTREG_CB(exterm_state, to_shiftreg_master)  /* write to shiftreg function */
+	MCFG_TMS340X0_FROM_SHIFTREG_CB(exterm_state, from_shiftreg_master) /* read from shiftreg function */
 
 	MCFG_CPU_ADD("slave", TMS34010, 40000000)
-	MCFG_CPU_CONFIG(slave_config)
 	MCFG_CPU_PROGRAM_MAP(slave_map)
+	MCFG_TMS340X0_HALT_ON_RESET(TRUE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(40000000/8) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(1) /* pixels per clock */
+	MCFG_TMS340X0_TO_SHIFTREG_CB(exterm_state, to_shiftreg_slave)   /* write to shiftreg function */
+	MCFG_TMS340X0_FROM_SHIFTREG_CB(exterm_state, from_shiftreg_slave)  /* read from shiftreg function */
 
 	MCFG_CPU_ADD("audiocpu", M6502, 2000000)
 	MCFG_CPU_PROGRAM_MAP(sound_master_map)
@@ -458,11 +433,14 @@ static MACHINE_CONFIG_START( exterm, exterm_state )
 	MCFG_TIMER_DRIVER_ADD("snd_nmi_timer", exterm_state, master_sound_nmi_callback)
 
 	/* video hardware */
-	MCFG_PALETTE_LENGTH(2048+32768)
+	MCFG_PALETTE_ADD("palette", 2048+32768)
+	MCFG_PALETTE_FORMAT(xRRRRRGGGGGBBBBB)
+	MCFG_PALETTE_INIT_OWNER(exterm_state, exterm)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(40000000/8, 318, 0, 256, 264, 0, 240)
-	MCFG_SCREEN_UPDATE_STATIC(tms340x0_ind16)
+	MCFG_SCREEN_UPDATE_DEVICE("maincpu", tms34010_device, tms340x0_ind16)
+	MCFG_SCREEN_PALETTE("palette")
 
 
 	/* sound hardware */

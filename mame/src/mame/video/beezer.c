@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mathis Rosenhauer
 #include "emu.h"
 #include "cpu/m6809/m6809.h"
 #include "machine/6522via.h"
@@ -63,11 +65,11 @@ WRITE8_MEMBER(beezer_state::beezer_map_w)
 	bit1 = (data >> 7) & 0x01;
 	b = 0x5f * bit0 + 0xa0 * bit1;
 
-	palette_set_color(machine(), offset, MAKE_RGB(r, g, b));
+	m_palette->set_pen_color(offset, rgb_t(r, g, b));
 }
 
 READ8_MEMBER(beezer_state::beezer_line_r)
 {
-	return machine().primary_screen->vpos();
+	return m_screen->vpos();
 //  Note: was (m_scanline & 0xfe) << 1; with scanline % 128
 }

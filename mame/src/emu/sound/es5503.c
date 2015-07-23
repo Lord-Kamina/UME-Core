@@ -1,15 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /*
 
   ES5503 - Ensoniq ES5503 "DOC" emulator v2.1.1
   By R. Belmont.
 
   Copyright R. Belmont.
-
-  This software is dual-licensed: it may be used in MAME and properly licensed
-  MAME derivatives under the terms of the MAME license.  For use outside of
-  MAME and properly licensed derivatives, it is available under the
-  terms of the GNU Lesser General Public License (LGPL), version 2.1.
-  You may read the LGPL at http://www.gnu.org/licenses/lgpl.html
 
   History: the ES5503 was the next design after the famous C64 "SID" by Bob Yannes.
   It powered the legendary Mirage sampler (the first affordable pro sampler) as well
@@ -62,12 +58,12 @@ ADDRESS_MAP_END
 //-------------------------------------------------
 
 es5503_device::es5503_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, ES5503, "Ensoniq ES5503", tag, owner, clock),
+	: device_t(mconfig, ES5503, "Ensoniq ES5503", tag, owner, clock, "es5503", __FILE__),
 		device_sound_interface(mconfig, *this),
 		device_memory_interface(mconfig, *this),
 		m_space_config("es5503_samples", ENDIANNESS_LITTLE, 8, 17, 0, NULL, *ADDRESS_MAP_NAME(es5503)),
-		m_irq_func(NULL),
-		m_adc_func(NULL)
+		m_irq_func(*this),
+		m_adc_func(*this)
 {
 }
 
@@ -90,18 +86,6 @@ void es5503_device::static_set_channels(device_t &device, int channels)
 {
 	es5503_device &es5503 = downcast<es5503_device &>(device);
 	es5503.output_channels = channels;
-}
-
-void es5503_device::static_set_irqf(device_t &device, void (*irqf)(device_t *device, int state))
-{
-	es5503_device &es5503 = downcast<es5503_device &>(device);
-	es5503.m_irq_func = irqf;
-}
-
-void es5503_device::static_set_adcf(device_t &device, UINT8 (*adcf)(device_t *device))
-{
-	es5503_device &es5503 = downcast<es5503_device &>(device);
-	es5503.m_adc_func = adcf;
 }
 
 //-------------------------------------------------
@@ -144,9 +128,10 @@ void es5503_device::halt_osc(int onum, int type, UINT32 *accumulator, int resshi
 
 		*accumulator = altram << resshift;
 	}
+	int omode = (pPartner->control>>1) & 3;
 
 	// if swap mode, start the partner
-	if (mode == MODE_SWAP)
+	if ((mode == MODE_SWAP) || (omode == MODE_SWAP))
 	{
 		pPartner->control &= ~1;    // clear the halt bit
 		pPartner->accumulator = 0;  // and make sure it starts from the top (does this also need phase preservation?)
@@ -157,10 +142,7 @@ void es5503_device::halt_osc(int onum, int type, UINT32 *accumulator, int resshi
 	{
 		pOsc->irqpend = 1;
 
-		if (m_irq_func)
-		{
-			m_irq_func(this, 1);
-		}
+		m_irq_func(1);
 	}
 }
 
@@ -202,9 +184,9 @@ void es5503_device::sound_stream_update(sound_stream &stream, stream_sample_t **
 
 					// channel strobe is always valid when reading; this allows potentially banking per voice
 					m_channel_strobe = (ctrl>>4) & 0xf;
-					data = (INT32)m_direct->read_raw_byte(ramptr + wtptr) ^ 0x80;
+					data = (INT32)m_direct->read_byte(ramptr + wtptr) ^ 0x80;
 
-					if (m_direct->read_raw_byte(ramptr + wtptr) == 0x00)
+					if (m_direct->read_byte(ramptr + wtptr) == 0x00)
 					{
 						halt_osc(osc, 1, &acc, resshift);
 					}
@@ -248,6 +230,9 @@ void es5503_device::device_start()
 	// find our direct access
 	m_direct = &space().direct();
 
+	m_irq_func.resolve_safe();
+	m_adc_func.resolve_safe(0);
+
 	rege0 = 0xff;
 
 	for (osc = 0; osc < 32; osc++)
@@ -265,7 +250,7 @@ void es5503_device::device_start()
 	}
 
 	output_rate = (clock()/8)/34;   // (input clock / 8) / # of oscs. enabled + 2
-	m_stream = machine().sound().stream_alloc(*this, 0, output_channels, output_rate, this);
+	m_stream = machine().sound().stream_alloc(*this, 0, output_channels, output_rate);
 
 	m_timer = timer_alloc(0, NULL);
 	m_timer->adjust(attotime::from_hz(output_rate), 0, attotime::from_hz(output_rate));
@@ -346,10 +331,7 @@ READ8_MEMBER( es5503_device::read )
 			case 0xe0:  // interrupt status
 				retval = rege0;
 
-				if (m_irq_func)
-				{
-					m_irq_func(this, 0);
-				}
+				m_irq_func(0);
 
 				// scan all oscillators
 				for (i = 0; i < oscsenabled+1; i++)
@@ -372,10 +354,7 @@ READ8_MEMBER( es5503_device::read )
 				{
 					if (oscillators[i].irqpend)
 					{
-						if (m_irq_func)
-						{
-							m_irq_func(this, 1);
-						}
+						m_irq_func(1);
 						break;
 					}
 				}
@@ -386,11 +365,7 @@ READ8_MEMBER( es5503_device::read )
 				return oscsenabled<<1;
 
 			case 0xe2:  // A/D converter
-				if (m_adc_func)
-				{
-					return m_adc_func(this);
-				}
-				break;
+				return m_adc_func();
 		}
 	}
 

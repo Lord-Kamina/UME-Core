@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 
 
 #include "includes/kaypro.h"
@@ -13,9 +15,9 @@
 
 ************************************************************/
 
-WRITE_LINE_MEMBER(kaypro_state::kaypro_interrupt)
+WRITE_LINE_MEMBER( kaypro_state::write_centronics_busy )
 {
-	m_maincpu->set_input_line(0, state);
+	m_centronics_busy = state;
 }
 
 READ8_MEMBER( kaypro_state::pio_system_r )
@@ -23,7 +25,7 @@ READ8_MEMBER( kaypro_state::pio_system_r )
 	UINT8 data = 0;
 
 	/* centronics busy */
-	data |= m_centronics->not_busy_r() << 3;
+	data |= m_centronics_busy << 3;
 
 	/* PA7 is pulled high */
 	data |= 0x80;
@@ -31,7 +33,7 @@ READ8_MEMBER( kaypro_state::pio_system_r )
 	return data;
 }
 
-WRITE8_MEMBER( kaypro_state::common_pio_system_w )
+WRITE8_MEMBER( kaypro_state::kayproii_pio_system_w )
 {
 /*  d7 bank select
     d6 disk drive motors - (0=on)
@@ -41,93 +43,41 @@ WRITE8_MEMBER( kaypro_state::common_pio_system_w )
     d1 drive B
     d0 drive A */
 
-	/* get address space */
-	address_space &mem = m_maincpu->space(AS_PROGRAM);
+	membank("bankr0")->set_entry(BIT(data, 7));
+	membank("bank3")->set_entry(BIT(data, 7));
+	m_is_motor_off = BIT(data, 6);
 
-	if (data & 0x80)
-	{
-		mem.unmap_readwrite (0x0000, 0x3fff);
-		mem.install_read_bank (0x0000, 0x0fff, "bank1");
-		membank("bank1")->set_base(memregion("maincpu")->base());
-		mem.install_readwrite_handler (0x3000, 0x3fff, read8_delegate(FUNC(kaypro_state::kaypro_videoram_r), this), write8_delegate(FUNC(kaypro_state::kaypro_videoram_w), this));
-	}
-	else
-	{
-		mem.unmap_readwrite(0x0000, 0x3fff);
-		mem.install_read_bank (0x0000, 0x3fff, "bank2");
-		mem.install_write_bank (0x0000, 0x3fff, "bank3");
-		membank("bank2")->set_base(memregion("rambank")->base());
-		membank("bank3")->set_base(memregion("rambank")->base());
-	}
-
-	wd17xx_dden_w(m_fdc, BIT(data, 5));
-
-	m_centronics->strobe_w(BIT(data, 4));
-
+	m_floppy = NULL;
 	if (BIT(data, 0))
-		wd17xx_set_drive(m_fdc, 0);
-
+		m_floppy = m_floppy0->get_device();
+	else
 	if (BIT(data, 1))
-		wd17xx_set_drive(m_fdc, 1);
+		m_floppy = m_floppy1->get_device();
+
+	m_fdc->set_floppy(m_floppy);
+	m_fdc->dden_w(BIT(data, 5));
+
+	if (m_floppy)
+	{
+		m_floppy->mon_w(BIT(data, 6)); // motor on
+		m_floppy->ss_w(!BIT(data, 2)); // signal exists even though drives are single sided
+	}
 
 	output_set_value("ledA", BIT(data, 0));     /* LEDs in artwork */
 	output_set_value("ledB", BIT(data, 1));
 
-	/* CLEAR_LINE means to turn motors on */
-	floppy_mon_w(floppy_get_device(machine(), 0), BIT(data, 6) ? ASSERT_LINE : CLEAR_LINE);
-	floppy_mon_w(floppy_get_device(machine(), 1), BIT(data, 6) ? ASSERT_LINE : CLEAR_LINE);
+	m_centronics->write_strobe(BIT(data, 4));
 
 	m_system_port = data;
 }
 
-WRITE8_MEMBER( kaypro_state::kayproii_pio_system_w )
-{
-	common_pio_system_w(space, offset, data);
-
-	/* side select */
-	wd17xx_set_side(m_fdc, !BIT(data, 2));
-}
-
 WRITE8_MEMBER( kaypro_state::kaypro4_pio_system_w )
 {
-	common_pio_system_w(space, offset, data);
+	kayproii_pio_system_w(space, offset, data);
 
 	/* side select */
-	wd17xx_set_side(m_fdc, BIT(data, 2));
+	m_floppy->ss_w(BIT(data, 2));
 }
-
-const z80pio_interface kayproii_pio_g_intf =
-{
-	DEVCB_CPU_INPUT_LINE("maincpu", INPUT_LINE_IRQ0),
-	DEVCB_NULL,
-	DEVCB_DEVICE_MEMBER("centronics", centronics_device, write),
-	DEVCB_NULL,         /* portA ready active callback */
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL          /* portB ready active callback */
-};
-
-const z80pio_interface kayproii_pio_s_intf =
-{
-	DEVCB_CPU_INPUT_LINE("maincpu", INPUT_LINE_IRQ0),
-	DEVCB_DRIVER_MEMBER(kaypro_state, pio_system_r),    /* read printer status */
-	DEVCB_DRIVER_MEMBER(kaypro_state, kayproii_pio_system_w),   /* activate various internal devices */
-	DEVCB_NULL,         /* portA ready active callback */
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL          /* portB ready active callback */
-};
-
-const z80pio_interface kaypro4_pio_s_intf =
-{
-	DEVCB_CPU_INPUT_LINE("maincpu", INPUT_LINE_IRQ0),
-	DEVCB_DRIVER_MEMBER(kaypro_state, pio_system_r),    /* read printer status */
-	DEVCB_DRIVER_MEMBER(kaypro_state, kaypro4_pio_system_w),    /* activate various internal devices */
-	DEVCB_NULL,         /* portA ready active callback */
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL          /* portB ready active callback */
-};
 
 /***********************************************************
 
@@ -139,7 +89,7 @@ const z80pio_interface kaypro4_pio_s_intf =
 
 READ8_MEMBER( kaypro_state::kaypro2x_system_port_r )
 {
-	UINT8 data = m_centronics->busy_r() << 6;
+	UINT8 data = m_centronics_busy << 6;
 	return (m_system_port & 0xbf) | data;
 }
 
@@ -154,46 +104,33 @@ WRITE8_MEMBER( kaypro_state::kaypro2x_system_port_w )
     d1 drive B
     d0 drive A */
 
-	/* get address space */
-	address_space &mem = m_maincpu->space(AS_PROGRAM);
+	membank("bankr0")->set_entry(BIT(data, 7));
+	membank("bank3")->set_entry(BIT(data, 7));
+	m_is_motor_off = !BIT(data, 4);
 
-	if (BIT(data, 7))
-	{
-		mem.unmap_readwrite (0x0000, 0x3fff);
-		mem.install_read_bank (0x0000, 0x1fff, "bank1");
-		membank("bank1")->set_base(memregion("maincpu")->base());
-	}
+	m_floppy = NULL;
+	if (!BIT(data, 0))
+		m_floppy = m_floppy0->get_device();
 	else
+	if (m_floppy1 && (!BIT(data, 1)))
+		m_floppy = m_floppy1->get_device();
+
+	m_fdc->set_floppy(m_floppy);
+	m_fdc->dden_w(BIT(data, 5));
+
+	if (m_floppy)
 	{
-		mem.unmap_readwrite (0x0000, 0x3fff);
-		mem.install_read_bank (0x0000, 0x3fff, "bank2");
-		mem.install_write_bank (0x0000, 0x3fff, "bank3");
-		membank("bank2")->set_base(memregion("rambank")->base());
-		membank("bank3")->set_base(memregion("rambank")->base());
+		m_floppy->mon_w(!BIT(data, 4)); // motor on
+		m_floppy->ss_w(!BIT(data, 2));
 	}
-
-	wd17xx_dden_w(m_fdc, BIT(data, 5));
-
-	m_centronics->strobe_w(BIT(data, 3));
-
-	if (BIT(data, 0))
-		wd17xx_set_drive(m_fdc, 0);
-	else
-	if (BIT(data, 1))
-		wd17xx_set_drive(m_fdc, 1);
-
-	wd17xx_set_side(m_fdc, BIT(data, 2) ? 0 : 1);
 
 	output_set_value("ledA", BIT(data, 0));     /* LEDs in artwork */
 	output_set_value("ledB", BIT(data, 1));
 
-	/* CLEAR_LINE means to turn motors on */
-	floppy_mon_w(floppy_get_device(machine(), 0), BIT(data, 4) ? CLEAR_LINE : ASSERT_LINE);
-	floppy_mon_w(floppy_get_device(machine(), 1), BIT(data, 4) ? CLEAR_LINE : ASSERT_LINE);
+	m_centronics->write_strobe(BIT(data, 3));
 
 	m_system_port = data;
 }
-
 
 
 /***********************************************************************
@@ -225,45 +162,23 @@ WRITE8_MEMBER( kaypro_state::kaypro2x_system_port_w )
     FFh    19200 */
 
 
-const z80sio_interface kaypro_sio_intf =
-{
-	DEVCB_DRIVER_LINE_MEMBER(kaypro_state,kaypro_interrupt),    /* interrupt handler */
-	DEVCB_NULL,         /* DTR changed handler */
-	DEVCB_NULL,         /* RTS changed handler */
-	DEVCB_NULL,         /* BREAK changed handler */
-	DEVCB_NULL,         /* transmit handler - which channel is this for? */
-	DEVCB_NULL          /* receive handler - which channel is this for? */
-};
-
 READ8_MEMBER(kaypro_state::kaypro_sio_r)
 {
-	if (!offset)
-		return dynamic_cast<z80sio_device*>(machine().device("z80sio"))->data_read(0);
-	else
 	if (offset == 1)
-//      return z80sio_d_r(machine().device("z80sio"), 1);
 		return kay_kbd_d_r(machine());
 	else
-	if (offset == 2)
-		return dynamic_cast<z80sio_device*>(machine().device("z80sio"))->control_read(0);
-	else
-//      return z80sio_c_r(machine().device("z80sio"), 1);
+	if (offset == 3)
 		return kay_kbd_c_r(machine());
+	else
+		return m_sio->cd_ba_r(space, offset);
 }
 
 WRITE8_MEMBER(kaypro_state::kaypro_sio_w)
 {
-	if (!offset)
-		dynamic_cast<z80sio_device*>(machine().device("z80sio"))->data_write(0, data);
-	else
 	if (offset == 1)
-//      z80sio_d_w(machine().device("z80sio"), 1, data);
 		kay_kbd_d_w(machine(), data);
 	else
-	if (offset == 2)
-		dynamic_cast<z80sio_device*>(machine().device("z80sio"))->control_write(0, data);
-	else
-		dynamic_cast<z80sio_device*>(machine().device("z80sio"))->control_write(1, data);
+		m_sio->cd_ba_w(space, offset, data);
 }
 
 
@@ -280,41 +195,44 @@ WRITE8_MEMBER(kaypro_state::kaypro_sio_w)
 
 void kaypro_state::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
 {
+	bool halt;
 	switch (id)
 	{
 	case TIMER_FLOPPY:
-		if (m_maincpu->state_int(Z80_HALT))
+		halt = (bool)m_maincpu->state_int(Z80_HALT);
+		if (m_is_motor_off)
+		{
+			timer_set(attotime::from_hz(10), TIMER_FLOPPY);
+			break;
+		}
+		if ((halt) && (m_fdc_rq & 3) && (m_fdc_rq < 0x80))
+		{
 			m_maincpu->set_input_line(INPUT_LINE_NMI, ASSERT_LINE);
+			m_fdc_rq |= 0x80;
+		}
+		else
+		if ((m_fdc_rq == 0x80) || ((!halt) && BIT(m_fdc_rq, 7)))
+		{
+			m_maincpu->set_input_line(INPUT_LINE_NMI, CLEAR_LINE);
+			m_fdc_rq &= 0x7f;
+		}
+		timer_set(attotime::from_hz(1e5), TIMER_FLOPPY);
+
 		break;
 	default:
 		assert_always(FALSE, "Unknown id in kaypro_state::device_timer");
 	}
 }
 
-WRITE_LINE_MEMBER( kaypro_state::kaypro_fdc_intrq_w )
+WRITE_LINE_MEMBER( kaypro_state::fdc_intrq_w )
 {
-	if (state)
-		timer_set(attotime::from_usec(25), TIMER_FLOPPY);
-	else
-		m_maincpu->set_input_line(INPUT_LINE_NMI, CLEAR_LINE);
+	m_fdc_rq = (m_fdc_rq & 0x82) | state;
 }
 
-WRITE_LINE_MEMBER( kaypro_state::kaypro_fdc_drq_w )
+WRITE_LINE_MEMBER( kaypro_state::fdc_drq_w )
 {
-	if (state)
-		timer_set(attotime::from_usec(25), TIMER_FLOPPY);
-	else
-		m_maincpu->set_input_line(INPUT_LINE_NMI, CLEAR_LINE);
-
+	m_fdc_rq = (m_fdc_rq & 0x81) | (state << 1);
 }
-
-const wd17xx_interface kaypro_wd1793_interface =
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(kaypro_state, kaypro_fdc_intrq_w),
-	DEVCB_DRIVER_LINE_MEMBER(kaypro_state, kaypro_fdc_drq_w),
-	{FLOPPY_0, FLOPPY_1, NULL, NULL}
-};
 
 
 /***********************************************************
@@ -322,22 +240,23 @@ const wd17xx_interface kaypro_wd1793_interface =
     Machine
 
 ************************************************************/
-MACHINE_START_MEMBER(kaypro_state,kayproii)
+MACHINE_START_MEMBER( kaypro_state,kayproii )
 {
 	m_pio_s->strobe_a(0);
 }
 
-MACHINE_RESET_MEMBER(kaypro_state,kayproii)
+MACHINE_RESET_MEMBER( kaypro_state,kaypro )
 {
 	MACHINE_RESET_CALL_MEMBER(kay_kbd);
+	membank("bankr0")->set_entry(1); // point at rom
+	membank("bankw0")->set_entry(0); // always write to ram
+	membank("bank3")->set_entry(1); // point at video ram
+	m_system_port = 0x80;
+	m_fdc_rq = 0;
+	m_maincpu->reset();
+	timer_set(attotime::from_hz(1), TIMER_FLOPPY);   /* kick-start the nmi timer */
 }
 
-MACHINE_RESET_MEMBER(kaypro_state,kaypro2x)
-{
-	address_space &space = m_maincpu->space(AS_PROGRAM);
-	kaypro2x_system_port_w(space, 0, 0x80);
-	MACHINE_RESET_CALL_MEMBER(kay_kbd);
-}
 
 /***********************************************************
 
@@ -350,9 +269,8 @@ MACHINE_RESET_MEMBER(kaypro_state,kaypro2x)
 
 ************************************************************/
 
-QUICKLOAD_LOAD_MEMBER( kaypro_state, kayproii )
+QUICKLOAD_LOAD_MEMBER( kaypro_state, kaypro )
 {
-	address_space &space = m_maincpu->space(AS_PROGRAM);
 	UINT8 *RAM = memregion("rambank")->base();
 	UINT16 i;
 	UINT8 data;
@@ -365,30 +283,10 @@ QUICKLOAD_LOAD_MEMBER( kaypro_state, kayproii )
 		RAM[i+0x100] = data;
 	}
 
-	common_pio_system_w(space, 0, m_system_port & 0x7f);  // switch TPA in
+	membank("bankr0")->set_entry(0);
+	membank("bank3")->set_entry(0);
 	RAM[0x80]=0;                            // clear out command tail
 	RAM[0x81]=0;
 	m_maincpu->set_pc(0x100);                // start program
-	return IMAGE_INIT_PASS;
-}
-
-QUICKLOAD_LOAD_MEMBER( kaypro_state, kaypro2x )
-{
-	address_space &space = m_maincpu->space(AS_PROGRAM);
-	UINT8 *RAM = memregion("rambank")->base();
-	UINT16 i;
-	UINT8 data;
-
-	for (i = 0; i < quickload_size; i++)
-	{
-		if (image.fread( &data, 1) != 1) return IMAGE_INIT_FAIL;
-
-		RAM[i+0x100] = data;
-	}
-
-	kaypro2x_system_port_w(space, 0, m_system_port & 0x7f);
-	RAM[0x80]=0;
-	RAM[0x81]=0;
-	m_maincpu->set_pc(0x100);
 	return IMAGE_INIT_PASS;
 }

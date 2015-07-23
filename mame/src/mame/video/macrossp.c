@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* video/macrossp.c */
 
 #include "emu.h"
@@ -138,20 +140,20 @@ void macrossp_state::video_start()
 	m_spriteram_old = auto_alloc_array_clear(machine(), UINT32, m_spriteram.bytes() / 4);
 	m_spriteram_old2 = auto_alloc_array_clear(machine(), UINT32, m_spriteram.bytes() / 4);
 
-	m_text_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(macrossp_state::get_macrossp_text_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
-	m_scra_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(macrossp_state::get_macrossp_scra_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
-	m_scrb_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(macrossp_state::get_macrossp_scrb_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
-	m_scrc_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(macrossp_state::get_macrossp_scrc_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_text_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(macrossp_state::get_macrossp_text_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_scra_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(macrossp_state::get_macrossp_scra_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_scrb_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(macrossp_state::get_macrossp_scrb_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_scrc_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(macrossp_state::get_macrossp_scrc_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
 
 	m_text_tilemap->set_transparent_pen(0);
 	m_scra_tilemap->set_transparent_pen(0);
 	m_scrb_tilemap->set_transparent_pen(0);
 	m_scrc_tilemap->set_transparent_pen(0);
 
-	machine().gfx[0]->set_granularity(64);
-	machine().gfx[1]->set_granularity(64);
-	machine().gfx[2]->set_granularity(64);
-	machine().gfx[3]->set_granularity(64);
+	m_gfxdecode->gfx(0)->set_granularity(64);
+	m_gfxdecode->gfx(1)->set_granularity(64);
+	m_gfxdecode->gfx(2)->set_granularity(64);
+	m_gfxdecode->gfx(3)->set_granularity(64);
 
 	save_pointer(NAME(m_spriteram_old), m_spriteram.bytes() / 4);
 	save_pointer(NAME(m_spriteram_old2), m_spriteram.bytes() / 4);
@@ -161,7 +163,7 @@ void macrossp_state::video_start()
 
 void macrossp_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprect, int priority )
 {
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 	//  UINT32 *source = m_spriteram;
 	UINT32 *source = m_spriteram_old2; /* buffers by two frames */
 	UINT32 *finish = source + m_spriteram.bytes() / 4;
@@ -235,7 +237,7 @@ void macrossp_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprec
 						xoffset = 0;
 						for (xcnt = 0; xcnt <= wide; xcnt++)
 						{
-							drawgfxzoom_alpha(bitmap,cliprect,gfx,tileno+loopno,col,flipx,flipy,xpos+xoffset,ypos+yoffset,xzoom*0x100,yzoom*0x100,0,alpha);
+							gfx->zoom_alpha(bitmap,cliprect,tileno+loopno,col,flipx,flipy,xpos+xoffset,ypos+yoffset,xzoom*0x100,yzoom*0x100,0,alpha);
 
 							xoffset += ((xzoom*16 + (1<<7)) >> 8);
 							loopno++;
@@ -252,7 +254,7 @@ void macrossp_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprec
 						xoffset = 0;
 						for (xcnt = 0; xcnt <= wide; xcnt++)
 						{
-							drawgfxzoom_alpha(bitmap,cliprect,gfx,tileno+loopno,col,flipx,flipy,xpos+xoffset,ypos+yoffset,xzoom*0x100,yzoom*0x100,0,alpha);
+							gfx->zoom_alpha(bitmap,cliprect,tileno+loopno,col,flipx,flipy,xpos+xoffset,ypos+yoffset,xzoom*0x100,yzoom*0x100,0,alpha);
 
 							xoffset += ((xzoom * 16 + (1 << 7)) >> 8);
 							loopno++;
@@ -272,7 +274,7 @@ void macrossp_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprec
 						xoffset = ((wide*xzoom*16) >> 8);
 						for (xcnt = wide; xcnt >= 0; xcnt--)
 						{
-							drawgfxzoom_alpha(bitmap,cliprect,gfx,tileno+loopno,col,flipx,flipy,xpos+xoffset,ypos+yoffset,xzoom*0x100,yzoom*0x100,0,alpha);
+							gfx->zoom_alpha(bitmap,cliprect,tileno+loopno,col,flipx,flipy,xpos+xoffset,ypos+yoffset,xzoom*0x100,yzoom*0x100,0,alpha);
 
 							xoffset -= ((xzoom * 16 + (1 << 7)) >> 8);
 							loopno++;
@@ -289,7 +291,7 @@ void macrossp_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprec
 						xoffset = ((wide * xzoom * 16) >> 8);
 						for (xcnt = wide; xcnt >=0 ; xcnt--)
 						{
-							drawgfxzoom_alpha(bitmap,cliprect,gfx,tileno+loopno,col,flipx,flipy,xpos+xoffset,ypos+yoffset,xzoom*0x100,yzoom*0x100,0,alpha);
+							gfx->zoom_alpha(bitmap,cliprect,tileno+loopno,col,flipx,flipy,xpos+xoffset,ypos+yoffset,xzoom*0x100,yzoom*0x100,0,alpha);
 
 							xoffset -= ((xzoom * 16 + (1 << 7)) >> 8);
 							loopno++;
@@ -304,10 +306,11 @@ void macrossp_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprec
 }
 
 
-void macrossp_state::draw_layer( bitmap_rgb32 &bitmap, const rectangle &cliprect, int layer )
+void macrossp_state::draw_layer( screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect, int layer, int line )
 {
 	tilemap_t *tm;
 	UINT32 *vr;
+	UINT32 *lr;
 
 	switch (layer)
 	{
@@ -315,34 +318,45 @@ void macrossp_state::draw_layer( bitmap_rgb32 &bitmap, const rectangle &cliprect
 		default:
 			tm = m_scra_tilemap;
 			vr = m_scra_videoregs;
+			lr = m_scra_linezoom;
 			break;
 
 		case 1:
 			tm = m_scrb_tilemap;
 			vr = m_scrb_videoregs;
+			lr = m_scrb_linezoom;
 			break;
 
 		case 2:
 			tm = m_scrc_tilemap;
 			vr = m_scrc_videoregs;
+			lr = m_scrc_linezoom;
 			break;
 	}
 
 	if ((vr[2] & 0xf0000000) == 0xe0000000) /* zoom enable (guess, surely wrong) */
 	{
-		int startx, starty, inc;
+		int startx, starty, inc, linc;
 
 		startx = (vr[1] & 0x0000ffff) << 16;
 		starty = (vr[1] & 0xffff0000) >> 0;
-		inc = (vr[2] & 0x00ff0000) >> 6,
+		inc = (vr[2] & 0x00ff0000) >> 6;
+
+		if (line&1)
+			linc = (lr[line/2] & 0x0000ffff)>>0;
+		else
+			linc = (lr[line/2] & 0xffff0000)>>16;
+
+
+		linc <<= 10;
 
 		/* WRONG! */
 		/* scroll register contain position relative to the center of the screen, so adjust */
-		startx -= (368/2) * inc;
+		startx -= (368/2) * linc;
 		starty -= (240/2) * inc;
 
-		tm->draw_roz(bitmap, cliprect,
-				startx,starty,inc,0,0,inc,
+		tm->draw_roz(screen, bitmap, cliprect,
+				startx,starty,linc,0,0,inc,
 				1,  /* wraparound */
 				0,0);
 	}
@@ -350,7 +364,7 @@ void macrossp_state::draw_layer( bitmap_rgb32 &bitmap, const rectangle &cliprect
 	{
 		tm->set_scrollx(0, ((vr[0] & 0x000003ff) >> 0 ) );
 		tm->set_scrolly(0, ((vr[0] & 0x03ff0000) >> 16) );
-		tm->draw(bitmap, cliprect, 0, 0);
+		tm->draw(screen, bitmap, cliprect, 0, 0);
 	}
 }
 
@@ -374,7 +388,7 @@ UINT32 macrossp_state::screen_update_macrossp(screen_device &screen, bitmap_rgb3
 {
 	int layers[3],layerpri[3];
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	layers[0] = 0;
 	layerpri[0] = (m_scra_videoregs[0] & 0x0000c000) >> 14;
@@ -385,14 +399,37 @@ UINT32 macrossp_state::screen_update_macrossp(screen_device &screen, bitmap_rgb3
 
 	sortlayers(layers, layerpri);
 
-	draw_layer(bitmap, cliprect, layers[0]);
+	rectangle clip;
+	const rectangle &visarea = screen.visible_area();
+	clip = visarea;
+
+	for (int y=0;y<240;y++)
+	{
+		clip.min_y = clip.max_y = y;
+		draw_layer(screen, bitmap, clip, layers[0], y);
+	}
+
 	draw_sprites(bitmap, cliprect, 0);
-	draw_layer(bitmap, cliprect, layers[1]);
+
+	for (int y=0;y<240;y++)
+	{
+		clip.min_y = clip.max_y = y;
+		draw_layer(screen, bitmap, clip, layers[1], y);
+	}
+
+
 	draw_sprites(bitmap, cliprect, 1);
-	draw_layer(bitmap, cliprect, layers[2]);
+
+	for (int y=0;y<240;y++)
+	{
+		clip.min_y = clip.max_y = y;
+		draw_layer(screen, bitmap, clip, layers[2], y);
+	}
+
+
 	draw_sprites(bitmap, cliprect, 2);
 	draw_sprites(bitmap, cliprect, 3);
-	m_text_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_text_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 #if 0
 popmessage  ("scra - %08x %08x %08x\nscrb - %08x %08x %08x\nscrc - %08x %08x %08x",

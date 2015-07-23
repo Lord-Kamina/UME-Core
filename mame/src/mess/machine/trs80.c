@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert and unknown others
 /***************************************************************************
 
   machine.c
@@ -488,8 +490,6 @@ WRITE8_MEMBER( trs80_state::trs80m4_ec_w )
 	m_port_ec = data & 0x7e;
 }
 
-WRITE8_MEMBER( trs80_state::trs80m4_f4_w )
-{
 /* Selection of drive and parameters - d6..d5 not emulated.
  A write also causes the selected drive motor to turn on for about 3 seconds.
  When the motor turns off, the drive is deselected.
@@ -501,36 +501,24 @@ WRITE8_MEMBER( trs80_state::trs80m4_f4_w )
     d2 1=select drive 2
     d1 1=select drive 1
     d0 1=select drive 0 */
+WRITE8_MEMBER( trs80_state::trs80m4_f4_w )
+{
+	floppy_image_device *floppy = NULL;
 
-	UINT8 drive = 255;
+	if (BIT(data, 0)) floppy = m_floppy0->get_device();
+	if (BIT(data, 1)) floppy = m_floppy1->get_device();
+	if (BIT(data, 2)) floppy = m_floppy2->get_device();
+	if (BIT(data, 3)) floppy = m_floppy3->get_device();
 
-	if (data & 1)
-		drive = 0;
-	else
-	if (data & 2)
-		drive = 1;
-	else
-	if (data & 4)
-		drive = 2;
-	else
-	if (data & 8)
-		drive = 3;
+	m_fdc->set_floppy(floppy);
 
-	m_head = (data & 16) ? 1 : 0;
-
-	if (drive < 4)
+	if (floppy)
 	{
-		wd17xx_set_drive(m_fdc,drive);
-		wd17xx_set_side(m_fdc,m_head);
+		floppy->mon_w(0);
+		floppy->ss_w(BIT(data, 4));
 	}
 
-	wd17xx_dden_w(m_fdc, !BIT(data, 7));
-
-	/* CLEAR_LINE means to turn motors on */
-	floppy_mon_w(floppy_get_device(machine(), 0), (data & 0x0f) ? CLEAR_LINE : ASSERT_LINE);
-	floppy_mon_w(floppy_get_device(machine(), 1), (data & 0x0f) ? CLEAR_LINE : ASSERT_LINE);
-	floppy_mon_w(floppy_get_device(machine(), 2), (data & 0x0f) ? CLEAR_LINE : ASSERT_LINE);
-	floppy_mon_w(floppy_get_device(machine(), 3), (data & 0x0f) ? CLEAR_LINE : ASSERT_LINE);
+	m_fdc->dden_w(!BIT(data, 7));
 }
 
 WRITE8_MEMBER( trs80_state::sys80_f8_w )
@@ -576,10 +564,10 @@ WRITE8_MEMBER( trs80_state::lnw80_fe_w )
 		mem.install_readwrite_handler (0x37e0, 0x37e3, read8_delegate(FUNC(trs80_state::trs80_irq_status_r), this), write8_delegate(FUNC(trs80_state::trs80_motor_w), this));
 		mem.install_readwrite_handler (0x37e8, 0x37eb, read8_delegate(FUNC(trs80_state::trs80_printer_r), this), write8_delegate(FUNC(trs80_state::trs80_printer_w), this));
 		mem.install_read_handler (0x37ec, 0x37ec, read8_delegate(FUNC(trs80_state::trs80_wd179x_r), this));
-		mem.install_legacy_write_handler (*m_fdc, 0x37ec, 0x37ec, FUNC(wd17xx_command_w));
-		mem.install_legacy_readwrite_handler (*m_fdc, 0x37ed, 0x37ed, FUNC(wd17xx_track_r), FUNC(wd17xx_track_w));
-		mem.install_legacy_readwrite_handler (*m_fdc, 0x37ee, 0x37ee, FUNC(wd17xx_sector_r), FUNC(wd17xx_sector_w));
-		mem.install_legacy_readwrite_handler (*m_fdc, 0x37ef, 0x37ef, FUNC(wd17xx_data_r), FUNC(wd17xx_data_w));
+		mem.install_write_handler (0x37ec, 0x37ec, write8_delegate(FUNC(fd1793_t::cmd_w),(fd1793_t*)m_fdc));
+		mem.install_readwrite_handler (0x37ed, 0x37ed, read8_delegate(FUNC(fd1793_t::track_r),(fd1793_t*)m_fdc), write8_delegate(FUNC(fd1793_t::track_w),(fd1793_t*)m_fdc));
+		mem.install_readwrite_handler (0x37ee, 0x37ee, read8_delegate(FUNC(fd1793_t::sector_r),(fd1793_t*)m_fdc), write8_delegate(FUNC(fd1793_t::sector_w),(fd1793_t*)m_fdc));
+		mem.install_readwrite_handler (0x37ef, 0x37ef, read8_delegate(FUNC(fd1793_t::data_r),(fd1793_t*)m_fdc),write8_delegate( FUNC(fd1793_t::data_w),(fd1793_t*)m_fdc));
 		mem.install_read_handler (0x3800, 0x38ff, 0, 0x0300, read8_delegate(FUNC(trs80_state::trs80_keyboard_r), this));
 		mem.install_readwrite_handler (0x3c00, 0x3fff, read8_delegate(FUNC(trs80_state::trs80_videoram_r), this), write8_delegate(FUNC(trs80_state::trs80_videoram_w), this));
 	}
@@ -593,6 +581,7 @@ WRITE8_MEMBER( trs80_state::trs80_ff_w )
     d1, d0 Cassette output */
 
 	static const double levels[4] = { 0.0, -1.0, 0.0, 1.0 };
+	static int init = 0;
 
 	m_cassette->change_state(( data & 4 ) ? CASSETTE_MOTOR_ENABLED : CASSETTE_MOTOR_DISABLED,CASSETTE_MASK_MOTOR );
 	m_cassette->output(levels[data & 3]);
@@ -600,6 +589,13 @@ WRITE8_MEMBER( trs80_state::trs80_ff_w )
 
 	m_mode = (m_mode & 0xfe) | ((data & 8) >> 3);
 
+	if (!init)
+	{
+		init = 1;
+		static INT16 speaker_levels[4] = { 0, -32768, 0, 32767 };
+		m_speaker->static_set_levels(*m_speaker, 4, speaker_levels);
+
+	}
 	/* Speaker for System-80 MK II - only sounds if relay is off */
 	if (~data & 4)
 		m_speaker->level_w(data & 3);
@@ -680,14 +676,6 @@ WRITE_LINE_MEMBER(trs80_state::trs80_fdc_intrq_w)
 	}
 }
 
-const wd17xx_interface trs80_wd17xx_interface =
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(trs80_state,trs80_fdc_intrq_w),
-	DEVCB_NULL,
-	{FLOPPY_0, FLOPPY_1, FLOPPY_2, FLOPPY_3}
-};
-
 
 /*************************************
  *                                   *
@@ -699,33 +687,21 @@ READ8_MEMBER( trs80_state::trs80_wd179x_r )
 {
 	UINT8 data = 0xff;
 	if (BIT(m_io_config->read(), 7))
-		data = wd17xx_status_r(m_fdc, space, offset);
+		data = m_fdc->status_r(space, offset);
 
 	return data;
 }
 
 READ8_MEMBER( trs80_state::trs80_printer_r )
 {
-	/* Bit 7 - 1 = Busy; 0 = Not Busy
-	   Bit 6 - 1 = Out of Paper; 0 = Paper
-	   Bit 5 - 1 = Printer selected; 0 = Printer not selected
-	   Bit 4 - 1 = No Fault; 0 = Fault
-	   Bits 3..0 - Not used */
-
-	UINT8 data = 0;
-	data |= m_printer->busy_r() << 7;
-	data |= m_printer->pe_r() << 6;
-	data |= m_printer->vcc_r() << 5;
-	data |= m_printer->fault_r() << 4;
-
-	return data;
+	return m_cent_status_in->read();
 }
 
 WRITE8_MEMBER( trs80_state::trs80_printer_w )
 {
-	m_printer->strobe_w(1);
-	m_printer->write(space, 0, data);
-	m_printer->strobe_w(0);
+	m_cent_data_out->write(space, 0, data);
+	m_centronics->write_strobe(0);
+	m_centronics->write_strobe(1);
 }
 
 WRITE8_MEMBER( trs80_state::trs80_cassunit_w )
@@ -755,59 +731,23 @@ READ8_MEMBER( trs80_state::trs80_irq_status_r )
 
 WRITE8_MEMBER( trs80_state::trs80_motor_w )
 {
-	UINT8 drive = 255;
+	floppy_image_device *floppy = NULL;
 
-	switch (data)
+	if (BIT(data, 0)) floppy = m_floppy0->get_device();
+	if (BIT(data, 1)) floppy = m_floppy1->get_device();
+	if (BIT(data, 2)) floppy = m_floppy2->get_device();
+	if (BIT(data, 3)) floppy = m_floppy3->get_device();
+
+	m_fdc->set_floppy(floppy);
+
+	if (floppy)
 	{
-	case 1:
-		drive = 0;
-		m_head = 0;
-		break;
-	case 2:
-		drive = 1;
-		m_head = 0;
-		break;
-	case 4:
-		drive = 2;
-		m_head = 0;
-		break;
-	case 8:
-		drive = 3;
-		m_head = 0;
-		break;
-	/* These 3 combinations aren't official. Some manufacturers of double-sided disks
-	    used drive select 4 to indicate the other side. */
-	case 9:
-		drive = 0;
-		m_head = 1;
-		break;
-	case 10:
-		drive = 1;
-		m_head = 1;
-		break;
-	case 12:
-		drive = 2;
-		m_head = 1;
-		break;
+		floppy->mon_w(0);
+		floppy->ss_w(BIT(data, 4));
 	}
 
-	if (drive > 3)
-	{   /* Turn motors off */
-		floppy_mon_w(floppy_get_device(machine(), 0), ASSERT_LINE);
-		floppy_mon_w(floppy_get_device(machine(), 1), ASSERT_LINE);
-		floppy_mon_w(floppy_get_device(machine(), 2), ASSERT_LINE);
-		floppy_mon_w(floppy_get_device(machine(), 3), ASSERT_LINE);
-		return;
-	}
-
-	wd17xx_set_drive(m_fdc,drive);
-	wd17xx_set_side(m_fdc,m_head);
-
-	/* Turn motors on */
-	floppy_mon_w(floppy_get_device(machine(), 0), CLEAR_LINE);
-	floppy_mon_w(floppy_get_device(machine(), 1), CLEAR_LINE);
-	floppy_mon_w(floppy_get_device(machine(), 2), CLEAR_LINE);
-	floppy_mon_w(floppy_get_device(machine(), 3), CLEAR_LINE);
+	// switch to fm
+	m_fdc->dden_w(1);
 }
 
 /*************************************

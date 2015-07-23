@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mathis Rosenhauer
 /***************************************************************************
 
     Cinematronics Cosmic Chasm hardware
@@ -5,7 +7,6 @@
 ***************************************************************************/
 
 #include "emu.h"
-#include "video/vector.h"
 #include "includes/cchasm.h"
 
 #define HALT   0
@@ -31,7 +32,7 @@ void cchasm_state::device_timer(emu_timer &timer, device_timer_id id, int param,
 }
 
 
-void cchasm_state::cchasm_refresh ()
+void cchasm_state::refresh ()
 {
 	int pc = 0;
 	int done = 0;
@@ -42,7 +43,7 @@ void cchasm_state::cchasm_refresh ()
 	int total_length = 1;   /* length of all lines drawn in a frame */
 	int move = 0;
 
-	vector_clear_list();
+	m_vector->clear_list();
 
 	while (!done)
 	{
@@ -83,7 +84,7 @@ void cchasm_state::cchasm_refresh ()
 		case LENGTH:
 			if (move)
 			{
-				vector_add_point (machine(), currentx, currenty, 0, 0);
+				m_vector->add_point (currentx, currenty, 0, 0);
 				move = 0;
 			}
 
@@ -93,7 +94,7 @@ void cchasm_state::cchasm_refresh ()
 			total_length += abs(data);
 
 			if (color)
-				vector_add_point (machine(), currentx, currenty, color, 0xff);
+				m_vector->add_point (currentx, currenty, color, 0xff);
 			else
 				move = 1;
 			break;
@@ -104,18 +105,18 @@ void cchasm_state::cchasm_refresh ()
 		}
 	}
 	/* Refresh processor runs with 6 MHz */
-	timer_set(attotime::from_hz(6000000) * total_length, TIMER_REFRESH_END);
+	m_refresh_end_timer->adjust(attotime::from_hz(6000000) * total_length);
 }
 
 
-WRITE16_MEMBER(cchasm_state::cchasm_refresh_control_w)
+WRITE16_MEMBER(cchasm_state::refresh_control_w)
 {
 	if (ACCESSING_BITS_8_15)
 	{
 		switch (data >> 8)
 		{
 		case 0x37:
-			cchasm_refresh();
+			refresh();
 			break;
 		case 0xf7:
 			m_maincpu->set_input_line(2, CLEAR_LINE);
@@ -126,10 +127,10 @@ WRITE16_MEMBER(cchasm_state::cchasm_refresh_control_w)
 
 void cchasm_state::video_start()
 {
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	m_xcenter=visarea.xcenter() << 16;
 	m_ycenter=visarea.ycenter() << 16;
 
-	VIDEO_START_CALL_LEGACY(vector);
+	m_refresh_end_timer = timer_alloc(TIMER_REFRESH_END);
 }

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Atari "Round" hardware
@@ -22,7 +24,6 @@
 #include "machine/atarigen.h"
 #include "sound/okim6295.h"
 #include "sound/2413intf.h"
-#include "video/atarimo.h"
 #include "includes/relief.h"
 
 
@@ -41,25 +42,6 @@ void relief_state::update_interrupts()
 
 /*************************************
  *
- *  Video controller access
- *
- *************************************/
-
-READ16_MEMBER(relief_state::relief_atarivc_r)
-{
-	return atarivc_r(*machine().primary_screen, offset);
-}
-
-
-WRITE16_MEMBER(relief_state::relief_atarivc_w)
-{
-	atarivc_w(*machine().primary_screen, offset, data, mem_mask);
-}
-
-
-
-/*************************************
- *
  *  Initialization
  *
  *************************************/
@@ -67,12 +49,11 @@ WRITE16_MEMBER(relief_state::relief_atarivc_w)
 MACHINE_RESET_MEMBER(relief_state,relief)
 {
 	atarigen_state::machine_reset();
-	atarivc_reset(*machine().primary_screen, m_atarivc_eof_data, 2);
 
-	m_oki->set_bank_base(0);
+	m_adpcm_bank = 0;
+	m_okibank->set_entry(m_adpcm_bank);
 	m_ym2413_volume = 15;
 	m_overall_volume = 127;
-	m_adpcm_bank_base = 0;
 }
 
 
@@ -86,8 +67,7 @@ MACHINE_RESET_MEMBER(relief_state,relief)
 READ16_MEMBER(relief_state::special_port2_r)
 {
 	int result = ioport("260010")->read();
-	if (m_cpu_to_sound_ready) result ^= 0x0020;
-	if (!(result & 0x0080) || get_hblank(*machine().primary_screen)) result ^= 0x0001;
+	if (!(result & 0x0080) || get_hblank(*m_screen)) result ^= 0x0001;
 	return result;
 }
 
@@ -105,12 +85,12 @@ WRITE16_MEMBER(relief_state::audio_control_w)
 	{
 		m_ym2413_volume = (data >> 1) & 15;
 		set_ym2413_volume((m_ym2413_volume * m_overall_volume * 100) / (127 * 15));
-		m_adpcm_bank_base = (0x040000 * ((data >> 6) & 3)) | (m_adpcm_bank_base & 0x100000);
+		m_adpcm_bank = ((data >> 6) & 3) | (m_adpcm_bank & 4);
 	}
 	if (ACCESSING_BITS_8_15)
-		m_adpcm_bank_base = (0x100000 * ((data >> 8) & 1)) | (m_adpcm_bank_base & 0x0c0000);
+		m_adpcm_bank = (((data >> 8) & 1)<<2) | (m_adpcm_bank & 3);
 
-	m_oki->set_bank_base(m_adpcm_bank_base);
+	m_okibank->set_entry(m_adpcm_bank);
 }
 
 
@@ -124,6 +104,10 @@ WRITE16_MEMBER(relief_state::audio_volume_w)
 	}
 }
 
+static ADDRESS_MAP_START( oki_map, AS_0, 8, relief_state )
+	AM_RANGE(0x00000, 0x1ffff) AM_ROMBANK("okibank")
+	AM_RANGE(0x20000, 0x3ffff) AM_ROM
+ADDRESS_MAP_END
 
 
 /*************************************
@@ -140,22 +124,22 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 16, relief_state )
 	AM_RANGE(0x140010, 0x140011) AM_DEVREADWRITE8("oki", okim6295_device, read, write, 0x00ff)
 	AM_RANGE(0x140020, 0x140021) AM_WRITE(audio_volume_w)
 	AM_RANGE(0x140030, 0x140031) AM_WRITE(audio_control_w)
-	AM_RANGE(0x180000, 0x180fff) AM_READWRITE(eeprom_r, eeprom_w) AM_SHARE("eeprom")
-	AM_RANGE(0x1c0030, 0x1c0031) AM_WRITE(eeprom_enable_w)
+	AM_RANGE(0x180000, 0x180fff) AM_DEVREADWRITE8("eeprom", atari_eeprom_device, read, write, 0xff00)
+	AM_RANGE(0x1c0030, 0x1c0031) AM_DEVWRITE("eeprom", atari_eeprom_device, unlock_write)
 	AM_RANGE(0x260000, 0x260001) AM_READ_PORT("260000")
 	AM_RANGE(0x260002, 0x260003) AM_READ_PORT("260002")
 	AM_RANGE(0x260010, 0x260011) AM_READ(special_port2_r)
 	AM_RANGE(0x260012, 0x260013) AM_READ_PORT("260012")
 	AM_RANGE(0x2a0000, 0x2a0001) AM_WRITE(watchdog_reset16_w)
-	AM_RANGE(0x3e0000, 0x3e0fff) AM_RAM_WRITE(paletteram_666_w) AM_SHARE("paletteram")
-	AM_RANGE(0x3effc0, 0x3effff) AM_READWRITE(relief_atarivc_r, relief_atarivc_w) AM_SHARE("atarivc_data")
-	AM_RANGE(0x3f0000, 0x3f1fff) AM_RAM_WRITE(playfield2_latched_msb_w) AM_SHARE("playfield2")
-	AM_RANGE(0x3f2000, 0x3f3fff) AM_RAM_WRITE(playfield_latched_lsb_w) AM_SHARE("playfield")
-	AM_RANGE(0x3f4000, 0x3f5fff) AM_RAM_WRITE(playfield_dual_upper_w) AM_SHARE("playfield_up")
-	AM_RANGE(0x3f6000, 0x3f67ff) AM_READWRITE_LEGACY(atarimo_0_spriteram_r, atarimo_0_spriteram_w)
+	AM_RANGE(0x3e0000, 0x3e0fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
+	AM_RANGE(0x3effc0, 0x3effff) AM_DEVREADWRITE("vad", atari_vad_device, control_read, control_write)
+	AM_RANGE(0x3f0000, 0x3f1fff) AM_RAM_DEVWRITE("vad", atari_vad_device, playfield2_latched_msb_w) AM_SHARE("vad:playfield2")
+	AM_RANGE(0x3f2000, 0x3f3fff) AM_RAM_DEVWRITE("vad", atari_vad_device, playfield_latched_lsb_w) AM_SHARE("vad:playfield")
+	AM_RANGE(0x3f4000, 0x3f5fff) AM_RAM_DEVWRITE("vad", atari_vad_device, playfield_upper_w) AM_SHARE("vad:playfield_ext")
+	AM_RANGE(0x3f6000, 0x3f67ff) AM_RAM AM_SHARE("vad:mob")
 	AM_RANGE(0x3f6800, 0x3f8eff) AM_RAM
-	AM_RANGE(0x3f8f00, 0x3f8f7f) AM_RAM AM_SHARE("atarivc_eof")
-	AM_RANGE(0x3f8f80, 0x3f8fff) AM_READWRITE_LEGACY(atarimo_0_slipram_r, atarimo_0_slipram_w)
+	AM_RANGE(0x3f8f00, 0x3f8f7f) AM_RAM AM_SHARE("vad:eof")
+	AM_RANGE(0x3f8f80, 0x3f8fff) AM_SHARE("vad:mob:slip")
 	AM_RANGE(0x3f9000, 0x3fffff) AM_RAM
 ADDRESS_MAP_END
 
@@ -222,7 +206,7 @@ static INPUT_PORTS_START( relief )
 
 	PORT_START("260010")    /* 260010 */
 	PORT_BIT( 0x001f, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_UNUSED )   /* tested before writing to 260040 */
+	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_SERVICE( 0x0040, IP_ACTIVE_LOW )
 	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_CUSTOM ) PORT_VBLANK("screen")
 	PORT_BIT( 0xff00, IP_ACTIVE_LOW, IPT_UNUSED )
@@ -287,18 +271,26 @@ static MACHINE_CONFIG_START( relief, relief_state )
 	MCFG_CPU_PROGRAM_MAP(main_map)
 
 	MCFG_MACHINE_RESET_OVERRIDE(relief_state,relief)
-	MCFG_NVRAM_ADD_1FILL("eeprom")
+
+	MCFG_ATARI_EEPROM_2816_ADD("eeprom")
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
-	MCFG_GFXDECODE(relief)
-	MCFG_PALETTE_LENGTH(2048)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", relief)
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_FORMAT(IRRRRRGGGGGBBBBB)
+
+	MCFG_ATARI_VAD_ADD("vad", "screen", WRITELINE(atarigen_state, scanline_int_write_line))
+	MCFG_ATARI_VAD_PLAYFIELD(relief_state, "gfxdecode", get_playfield_tile_info)
+	MCFG_ATARI_VAD_PLAYFIELD2(relief_state, "gfxdecode", get_playfield2_tile_info)
+	MCFG_ATARI_VAD_MOB(relief_state::s_mob_config, "gfxdecode")
 
 	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
 	/* note: these parameters are from published specs, not derived */
 	/* the board uses a VAD chip to generate video signals */
 	MCFG_SCREEN_RAW_PARAMS(ATARI_CLOCK_14MHz/2, 456, 0, 336, 262, 0, 240)
 	MCFG_SCREEN_UPDATE_DRIVER(relief_state, screen_update_relief)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(relief_state,relief)
 
@@ -307,6 +299,7 @@ static MACHINE_CONFIG_START( relief, relief_state )
 
 	MCFG_OKIM6295_ADD("oki", ATARI_CLOCK_14MHz/4/3, OKIM6295_PIN7_LOW)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
+	MCFG_DEVICE_ADDRESS_MAP(AS_0, oki_map)
 
 	MCFG_SOUND_ADD("ymsnd", YM2413, ATARI_CLOCK_14MHz/4)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
@@ -336,12 +329,12 @@ ROM_START( relief )
 	ROM_LOAD( "136093-0028a.10d",       0x180000, 0x80000, CRC(55fb9111) SHA1(a95508f0831842fa79ca2fc168cfadc8c6d3fbd4) )
 	ROM_LOAD16_BYTE( "136093-0029a.4d", 0x200001, 0x40000, CRC(e4593ff4) SHA1(7360ec7a65aabc90aa787dc30f39992e342495dd) )
 
-	ROM_REGION( 0x200000, "oki", 0 )    /* 2MB for ADPCM data */
-	ROM_LOAD( "136093-0030a.9b",  0x100000, 0x80000, CRC(f4c567f5) SHA1(7e8c1d54d918b0b41625eacbaf6dcb5bd99d1949) )
-	ROM_LOAD( "136093-0031a.10b", 0x180000, 0x80000, CRC(ba908d73) SHA1(a83afd86f4c39394cf624b728a87b8d8b6de1944) )
+	ROM_REGION( 0x100000, "oki", 0 )    /* 2MB for ADPCM data */
+	ROM_LOAD( "136093-0030a.9b",  0x000000, 0x80000, CRC(f4c567f5) SHA1(7e8c1d54d918b0b41625eacbaf6dcb5bd99d1949) )
+	ROM_LOAD( "136093-0031a.10b", 0x080000, 0x80000, CRC(ba908d73) SHA1(a83afd86f4c39394cf624b728a87b8d8b6de1944) )
 
-	ROM_REGION( 0x1000, "eeprom", 0 )
-	ROM_LOAD( "relief-eeprom.bin", 0x0000, 0x1000, CRC(71090711) SHA1(fc516dd84635e544c5f89640f77645e4a7d5bcc0) )
+	ROM_REGION( 0x800, "eeprom:eeprom", 0 )
+	ROM_LOAD( "relief-eeprom.bin", 0x0000, 0x800, CRC(66069f60) SHA1(fac3797888f7ffe972f642aca44c6ca7d208c814) )
 
 	ROM_REGION( 0x001000, "plds", 0 )
 	ROM_LOAD( "gal16v8a-136093-0002.15f", 0x0000, 0x0117, CRC(b111d5f2) SHA1(0fe5b4ca786e839e6927a485109d33fe31c737a2) )
@@ -371,13 +364,12 @@ ROM_START( relief2 )
 	ROM_LOAD( "136093-0028a.10d",      0x180000, 0x80000, CRC(55fb9111) SHA1(a95508f0831842fa79ca2fc168cfadc8c6d3fbd4) )
 	ROM_LOAD16_BYTE( "136093-0029.4d", 0x200001, 0x40000, CRC(e4593ff4) SHA1(7360ec7a65aabc90aa787dc30f39992e342495dd) )
 
-	ROM_REGION( 0x200000, "oki", 0 )    /* 2MB for ADPCM data */
-	ROM_LOAD( "136093-0030a.9b",  0x100000, 0x80000, CRC(f4c567f5) SHA1(7e8c1d54d918b0b41625eacbaf6dcb5bd99d1949) )
-	ROM_LOAD( "136093-0031a.10b", 0x180000, 0x80000, CRC(ba908d73) SHA1(a83afd86f4c39394cf624b728a87b8d8b6de1944) )
+	ROM_REGION( 0x100000, "oki", 0 )    /* 2MB for ADPCM data */
+	ROM_LOAD( "136093-0030a.9b",  0x000000, 0x80000, CRC(f4c567f5) SHA1(7e8c1d54d918b0b41625eacbaf6dcb5bd99d1949) )
+	ROM_LOAD( "136093-0031a.10b", 0x080000, 0x80000, CRC(ba908d73) SHA1(a83afd86f4c39394cf624b728a87b8d8b6de1944) )
 
-	ROM_REGION( 0x1000, "eeprom", ROMREGION_ERASEFF )
-	/* todo */
-//  ROM_LOAD( "relief_26apr-eeprom.bin", 0x0000, 0x1000, CRC(6cd70719) SHA1(1bbc52924931b68a546c85f689419200a4b6547b) )
+	ROM_REGION( 0x800, "eeprom:eeprom", 0 )
+	ROM_LOAD( "relief2-eeprom.bin", 0x0000, 0x800, CRC(2131fc40) SHA1(72a9f5f6647fbc74e645b6639db2fdbfbe6456e2) )
 
 	ROM_REGION( 0x001000, "plds", 0 )
 	ROM_LOAD( "gal16v8a-136093-0002.15f", 0x0000, 0x0117, CRC(b111d5f2) SHA1(0fe5b4ca786e839e6927a485109d33fe31c737a2) )
@@ -406,12 +398,12 @@ ROM_START( relief3 )
 	ROM_LOAD( "136093-0028a.10d",      0x180000, 0x80000, CRC(55fb9111) SHA1(a95508f0831842fa79ca2fc168cfadc8c6d3fbd4) )
 	ROM_LOAD16_BYTE( "136093-0029.4d", 0x200001, 0x40000, CRC(e4593ff4) SHA1(7360ec7a65aabc90aa787dc30f39992e342495dd) )
 
-	ROM_REGION( 0x200000, "oki", 0 )    /* 2MB for ADPCM data */
-	ROM_LOAD( "136093-0030a.9b",  0x100000, 0x80000, CRC(f4c567f5) SHA1(7e8c1d54d918b0b41625eacbaf6dcb5bd99d1949) )
-	ROM_LOAD( "136093-0031a.10b", 0x180000, 0x80000, CRC(ba908d73) SHA1(a83afd86f4c39394cf624b728a87b8d8b6de1944) )
+	ROM_REGION( 0x100000, "oki", 0 )    /* 2MB for ADPCM data */
+	ROM_LOAD( "136093-0030a.9b",  0x000000, 0x80000, CRC(f4c567f5) SHA1(7e8c1d54d918b0b41625eacbaf6dcb5bd99d1949) )
+	ROM_LOAD( "136093-0031a.10b", 0x080000, 0x80000, CRC(ba908d73) SHA1(a83afd86f4c39394cf624b728a87b8d8b6de1944) )
 
-	ROM_REGION( 0x1000, "eeprom", 0 )
-	ROM_LOAD( "relief2-eeprom.bin", 0x0000, 0x1000, CRC(6cd70719) SHA1(1bbc52924931b68a546c85f689419200a4b6547b) )
+	ROM_REGION( 0x800, "eeprom:eeprom", 0 )
+	ROM_LOAD( "relief3-eeprom.bin", 0x0000, 0x800, CRC(2131fc40) SHA1(72a9f5f6647fbc74e645b6639db2fdbfbe6456e2) )
 
 	ROM_REGION( 0x001000, "plds", 0 )
 	ROM_LOAD( "gal16v8a-136093-0002.15f", 0x0000, 0x0117, CRC(b111d5f2) SHA1(0fe5b4ca786e839e6927a485109d33fe31c737a2) )
@@ -424,6 +416,8 @@ ROM_START( relief3 )
 	ROM_LOAD( "gal16v8a-136093-0010.15a", 0x0e00, 0x0117, CRC(5f49c736) SHA1(91ff18e4780ee6c904735fc0f0e73ffb5a80b49a) )
 ROM_END
 
+
+
 /*************************************
  *
  *  Driver initialization
@@ -432,27 +426,10 @@ ROM_END
 
 DRIVER_INIT_MEMBER(relief_state,relief)
 {
-	UINT8 *sound_base = memregion("oki")->base();
-
-	/* expand the ADPCM data to avoid lots of memcpy's during gameplay */
-	/* the upper 128k is fixed, the lower 128k is bankswitched */
-	memcpy(&sound_base[0x000000], &sound_base[0x100000], 0x20000);
-	memcpy(&sound_base[0x040000], &sound_base[0x100000], 0x20000);
-	memcpy(&sound_base[0x080000], &sound_base[0x140000], 0x20000);
-	memcpy(&sound_base[0x0c0000], &sound_base[0x160000], 0x20000);
-	memcpy(&sound_base[0x100000], &sound_base[0x180000], 0x20000);
-	memcpy(&sound_base[0x140000], &sound_base[0x1a0000], 0x20000);
-	memcpy(&sound_base[0x180000], &sound_base[0x1c0000], 0x20000);
-	memcpy(&sound_base[0x1c0000], &sound_base[0x1e0000], 0x20000);
-
-	memcpy(&sound_base[0x020000], &sound_base[0x120000], 0x20000);
-	memcpy(&sound_base[0x060000], &sound_base[0x120000], 0x20000);
-	memcpy(&sound_base[0x0a0000], &sound_base[0x120000], 0x20000);
-	memcpy(&sound_base[0x0e0000], &sound_base[0x120000], 0x20000);
-	memcpy(&sound_base[0x160000], &sound_base[0x120000], 0x20000);
-	memcpy(&sound_base[0x1a0000], &sound_base[0x120000], 0x20000);
-	memcpy(&sound_base[0x1e0000], &sound_base[0x120000], 0x20000);
+	m_okibank->configure_entries(0, 8, memregion("oki")->base(), 0x20000);
+	m_okibank->set_entry(0);
 }
+
 
 
 

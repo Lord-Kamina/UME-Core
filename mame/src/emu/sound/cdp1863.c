@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     RCA CDP1863 CMOS 8-Bit Programmable Frequency Generator emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -48,7 +47,7 @@ const device_type CDP1863 = &device_creator<cdp1863_device>;
 //-------------------------------------------------
 
 cdp1863_device::cdp1863_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, CDP1863, "CDP1863", tag, owner, clock),
+	: device_t(mconfig, CDP1863, "CDP1863", tag, owner, clock, "cdp1863", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_stream(NULL),
 		m_clock1(clock),
@@ -58,10 +57,10 @@ cdp1863_device::cdp1863_device(const machine_config &mconfig, const char *tag, d
 
 
 //-------------------------------------------------
-//  static_set_config - configuration helper
+//  static_set_clock2 - configuration helper
 //-------------------------------------------------
 
-void cdp1863_device::static_set_config(device_t &device, int clock2)
+void cdp1863_device::static_set_clock2(device_t &device, int clock2)
 {
 	cdp1863_device &cdp1863 = downcast<cdp1863_device &>(device);
 

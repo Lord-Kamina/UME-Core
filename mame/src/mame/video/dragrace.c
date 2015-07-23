@@ -1,6 +1,8 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
-Atari Drag Race video emulation
+    Atari Drag Race video emulation
 
 ***************************************************************************/
 
@@ -21,18 +23,18 @@ TILE_GET_INFO_MEMBER(dragrace_state::get_tile_info)
 
 	switch (code & 0xA0)
 	{
-	case 0x00:
-		col = 0;
-		break;
-	case 0x20:
-		col = 1;
-		break;
-	case 0x80:
-		col = (code & 0x40) ? 1 : 0;
-		break;
-	case 0xA0:
-		col = (code & 0x40) ? 3 : 2;
-		break;
+		case 0x00:
+			col = 0;
+			break;
+		case 0x20:
+			col = 1;
+			break;
+		case 0x80:
+			col = (code & 0x40) ? 1 : 0;
+			break;
+		case 0xA0:
+			col = (code & 0x40) ? 3 : 2;
+			break;
 	}
 
 	SET_TILE_INFO_MEMBER(((code & 0xA0) == 0x80) ? 1 : 0, num, col, 0);
@@ -41,17 +43,15 @@ TILE_GET_INFO_MEMBER(dragrace_state::get_tile_info)
 
 void dragrace_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(dragrace_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 16, 16);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(dragrace_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 16, 16);
 }
 
 
 UINT32 dragrace_state::screen_update_dragrace(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	int y;
-
 	m_bg_tilemap->mark_all_dirty();
 
-	for (y = 0; y < 256; y += 4)
+	for (int y = 0; y < 256; y += 4)
 	{
 		rectangle rect = cliprect;
 
@@ -66,7 +66,8 @@ UINT32 dragrace_state::screen_update_dragrace(screen_device &screen, bitmap_ind1
 		if (rect.min_y < y + 0) rect.min_y = y + 0;
 		if (rect.max_y > y + 3) rect.max_y = y + 3;
 
-		m_bg_tilemap->draw(bitmap, rect, 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, rect, 0, 0);
 	}
+
 	return 0;
 }

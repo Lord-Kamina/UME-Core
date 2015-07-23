@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Victor Trucco, Mike Balfour, Phil Stroffolino
 /******************************************************************
 
 Shark Attack
@@ -58,35 +60,35 @@ enum
 	kTalkTrack, kCrashTrack
 };
 
-void thief_state::tape_set_audio( samples_device *samples, int track, int bOn )
+void thief_state::tape_set_audio( int track, int bOn )
 {
-	samples->set_volume(track, bOn ? 1.0 : 0.0 );
+	m_samples->set_volume(track, bOn ? 1.0 : 0.0 );
 }
 
-void thief_state::tape_set_motor( samples_device *samples, int bOn )
+void thief_state::tape_set_motor( int bOn )
 {
 	if( bOn )
 	{
 		/* If talk track is not playing, start it. */
-		if (! samples->playing( kTalkTrack ))
-			samples->start( 0, kTalkTrack, true );
+		if (! m_samples->playing( kTalkTrack ))
+			m_samples->start( 0, kTalkTrack, true );
 
 		/* Resume playback of talk track. */
-		samples->pause( kTalkTrack, false);
+		m_samples->pause( kTalkTrack, false);
 
 
 		/* If crash track is not playing, start it. */
-		if (! samples->playing( kCrashTrack ))
-			samples->start( 1, kCrashTrack, true );
+		if (! m_samples->playing( kCrashTrack ))
+			m_samples->start( 1, kCrashTrack, true );
 
 		/* Resume playback of crash track. */
-		samples->pause( kCrashTrack, false);
+		m_samples->pause( kCrashTrack, false);
 	}
 	else
 	{
 		/* Pause both the talk and crash tracks. */
-		samples->pause( kTalkTrack, true );
-		samples->pause( kCrashTrack, true );
+		m_samples->pause( kTalkTrack, true );
+		m_samples->pause( kCrashTrack, true );
 	}
 }
 
@@ -111,27 +113,27 @@ WRITE8_MEMBER(thief_state::tape_control_w)
 		break;
 
 	case 0x08: /* talk track on */
-		tape_set_audio( m_samples, kTalkTrack, 1 );
+		tape_set_audio( kTalkTrack, 1 );
 		break;
 
 	case 0x09: /* talk track off */
-		tape_set_audio( m_samples, kTalkTrack, 0 );
+		tape_set_audio( kTalkTrack, 0 );
 		break;
 
 	case 0x0a: /* motor on */
-		tape_set_motor( m_samples, 1 );
+		tape_set_motor( 1 );
 		break;
 
 	case 0x0b: /* motor off */
-		tape_set_motor( m_samples, 0 );
+		tape_set_motor( 0 );
 		break;
 
 	case 0x0c: /* crash track on */
-		tape_set_audio( m_samples, kCrashTrack, 1 );
+		tape_set_audio( kCrashTrack, 1 );
 		break;
 
 	case 0x0d: /* crash track off */
-		tape_set_audio( m_samples, kCrashTrack, 0 );
+		tape_set_audio( kCrashTrack, 0 );
 		break;
 	}
 }
@@ -386,12 +388,6 @@ static const char *const sharkatt_sample_names[] =
 	0   /* end of array */
 };
 
-static const samples_interface sharkatt_samples_interface =
-{
-	2,  /* number of channels */
-	sharkatt_sample_names
-};
-
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 static const char *const thief_sample_names[] =
@@ -402,12 +398,6 @@ static const char *const thief_sample_names[] =
 	0   /* end of array */
 };
 
-static const samples_interface thief_samples_interface =
-{
-	2,  /* number of channels */
-	thief_sample_names
-};
-
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 static const char *const natodef_sample_names[] =
@@ -416,19 +406,6 @@ static const char *const natodef_sample_names[] =
 	"talk",
 	"crash",
 	0   /* end of array */
-};
-
-static const samples_interface natodef_samples_interface =
-{
-	2,  /* number of channels */
-	natodef_sample_names
-};
-
-static const tms9927_interface tms9927_intf =
-{
-	"screen",
-	8,
-	NULL
 };
 
 
@@ -447,11 +424,12 @@ static MACHINE_CONFIG_START( sharkatt, thief_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 24*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(thief_state, screen_update_thief)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_TMS9927_ADD("tms", MASTER_CLOCK/4, tms9927_intf)
+	MCFG_DEVICE_ADD("tms", TMS9927, MASTER_CLOCK/4)
+	MCFG_TMS9927_CHAR_WIDTH(8)
 
-	MCFG_PALETTE_LENGTH(16)
-
+	MCFG_PALETTE_ADD("palette", 16)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -462,7 +440,9 @@ static MACHINE_CONFIG_START( sharkatt, thief_state )
 	MCFG_SOUND_ADD("ay2", AY8910, 4000000/4)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
-	MCFG_SAMPLES_ADD("samples", sharkatt_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(2)
+	MCFG_SAMPLES_NAMES(sharkatt_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 
@@ -482,11 +462,12 @@ static MACHINE_CONFIG_START( thief, thief_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(thief_state, screen_update_thief)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_TMS9927_ADD("tms", MASTER_CLOCK/4, tms9927_intf)
+	MCFG_DEVICE_ADD("tms", TMS9927, MASTER_CLOCK/4)
+	MCFG_TMS9927_CHAR_WIDTH(8)
 
-	MCFG_PALETTE_LENGTH(16)
-
+	MCFG_PALETTE_ADD("palette", 16)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -497,7 +478,9 @@ static MACHINE_CONFIG_START( thief, thief_state )
 	MCFG_SOUND_ADD("ay2", AY8910, 4000000/4)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
-	MCFG_SAMPLES_ADD("samples", thief_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(2)
+	MCFG_SAMPLES_NAMES(thief_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 
@@ -517,11 +500,12 @@ static MACHINE_CONFIG_START( natodef, thief_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(thief_state, screen_update_thief)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_TMS9927_ADD("tms", MASTER_CLOCK/4, tms9927_intf)
+	MCFG_DEVICE_ADD("tms", TMS9927, MASTER_CLOCK/4)
+	MCFG_TMS9927_CHAR_WIDTH(8)
 
-	MCFG_PALETTE_LENGTH(16)
-
+	MCFG_PALETTE_ADD("palette", 16)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -532,7 +516,9 @@ static MACHINE_CONFIG_START( natodef, thief_state )
 	MCFG_SOUND_ADD("ay2", AY8910, 4000000/4)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
-	MCFG_SAMPLES_ADD("samples", natodef_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(2)
+	MCFG_SAMPLES_NAMES(natodef_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 

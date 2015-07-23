@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
 /****************************************************************************
 
     Irem M57 hardware
@@ -69,7 +71,7 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, m57_state )
 	AM_RANGE(0x8000, 0x87ff) AM_RAM_WRITE(m57_videoram_w) AM_SHARE("videoram")
 	AM_RANGE(0x9000, 0x91ff) AM_RAM AM_SHARE("scrollram")
 	AM_RANGE(0xc820, 0xc8ff) AM_WRITEONLY AM_SHARE("spriteram")
-	AM_RANGE(0xd000, 0xd000) AM_WRITE_LEGACY(irem_sound_cmd_w)
+	AM_RANGE(0xd000, 0xd000) AM_DEVWRITE("irem_audio", irem_audio_device, cmd_w)
 	AM_RANGE(0xd001, 0xd001) AM_WRITE(m57_flipscreen_w) /* + coin counters */
 	AM_RANGE(0xd000, 0xd000) AM_READ_PORT("IN0")
 	AM_RANGE(0xd001, 0xd001) AM_READ_PORT("IN1")
@@ -239,10 +241,12 @@ static MACHINE_CONFIG_START( m57, m57_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(1*8, 31*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(m57_state, screen_update_m57)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(m57)
-	MCFG_PALETTE_LENGTH(32*8+32*8)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", m57)
+	MCFG_PALETTE_ADD("palette", 32*8+32*8)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256+16)
+	MCFG_PALETTE_INIT_OWNER(m57_state, m57)
 
 	/* sound hardware */
 	MCFG_FRAGMENT_ADD(m52_sound_c_audio)

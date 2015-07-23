@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     samples.h
 
     Sound device for sample playback.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -47,48 +18,36 @@
 //  INTERFACE CONFIGURATION MACROS
 //**************************************************************************
 
-#define MCFG_SAMPLES_ADD(_tag, _interface) \
-	MCFG_DEVICE_ADD(_tag, SAMPLES, 0) \
-	samples_device::static_set_interface(*device, _interface);
+#define MCFG_SAMPLES_CHANNELS(_channels) \
+	samples_device::static_set_channels(*device, _channels);
 
-#define MCFG_SAMPLES_REPLACE(_tag, _interface) \
-	MCFG_DEVICE_REPLACE(_tag, SAMPLES, 0) \
-	samples_device::static_set_interface(*device, _interface);
+#define MCFG_SAMPLES_NAMES(_names) \
+	samples_device::static_set_samples_names(*device, _names);
 
+typedef device_delegate<void ()> samples_start_cb_delegate;
 
-#define SAMPLES_START(name) void name(samples_device &device)
+#define SAMPLES_START_CB_MEMBER(_name) void _name()
 
-
+#define MCFG_SAMPLES_START_CB(_class, _method) \
+	samples_device::set_samples_start_callback(*device, samples_start_cb_delegate(&_class::_method, #_class "::" #_method, downcast<_class *>(owner)));
 
 //**************************************************************************
 //  TYPE DEFINITIONS
 //**************************************************************************
 
-class samples_device;
-
-
-// ======================> samples_interface sample
-
-struct samples_interface
-{
-	UINT8       m_channels;         // number of discrete audio channels needed
-	const char *const *m_names;     // array of sample names
-	void        (*m_start)(samples_device &device); // optional callback
-};
-
-
 // ======================> samples_device
 
 class samples_device :  public device_t,
-						public device_sound_interface,
-						public samples_interface
+						public device_sound_interface
 {
 public:
 	// construction/destruction
 	samples_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
 	// static configuration helpers
-	static void static_set_interface(device_t &device, const samples_interface &interface);
+	static void static_set_channels(device_t &device, UINT8 channels) { downcast<samples_device &>(device).m_channels = channels; }
+	static void static_set_samples_names(device_t &device, const char *const *names) { downcast<samples_device &>(device).m_names = names; }
+	static void set_samples_start_callback(device_t &device, samples_start_cb_delegate callback) { downcast<samples_device &>(device).m_samples_start_cb = callback; }
 
 	// getters
 	bool playing(UINT8 channel) const;
@@ -112,13 +71,18 @@ public:
 		sample_t &operator=(const sample_t &rhs) { assert(false); return *this; }
 
 		UINT32          frequency;      // frequency of the sample
-		dynamic_array<INT16> data;      // 16-bit signed data
+		std::vector<INT16> data;      // 16-bit signed data
 	};
 	static bool read_sample(emu_file &file, sample_t &sample);
 
+	// interface
+	UINT8       m_channels;         // number of discrete audio channels needed
+	const char *const *m_names;     // array of sample names
+	samples_start_cb_delegate m_samples_start_cb; // optional callback
+
 protected:
 	// subclasses can do it this way
-	samples_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	samples_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 
 	// device-level overrides
 	virtual void device_start();
@@ -150,8 +114,8 @@ private:
 	void load_samples();
 
 	// internal state
-	dynamic_array<channel_t>    m_channel;
-	dynamic_array<sample_t>     m_sample;
+	std::vector<channel_t>    m_channel;
+	std::vector<sample_t>     m_sample;
 
 	// internal constants
 	static const UINT8 FRAC_BITS = 24;
@@ -169,29 +133,29 @@ class samples_iterator
 {
 public:
 	// construction/destruction
-	samples_iterator(samples_interface &intf)
-		: m_intf(intf),
+	samples_iterator(samples_device &device)
+		: m_samples(device),
 			m_current(-1) { }
 
 	// getters
-	const char *altbasename() const { return (m_intf.m_names != NULL && m_intf.m_names[0] != NULL && m_intf.m_names[0][0] == '*') ? &m_intf.m_names[0][1] : NULL; }
+	const char *altbasename() const { return (m_samples.m_names != NULL && m_samples.m_names[0] != NULL && m_samples.m_names[0][0] == '*') ? &m_samples.m_names[0][1] : NULL; }
 
 	// iteration
 	const char *first()
 	{
-		if (m_intf.m_names == NULL || m_intf.m_names[0] == NULL)
+		if (m_samples.m_names == NULL || m_samples.m_names[0] == NULL)
 			return NULL;
 		m_current = 0;
-		if (m_intf.m_names[0][0] == '*')
+		if (m_samples.m_names[0][0] == '*')
 			m_current++;
-		return m_intf.m_names[m_current++];
+		return m_samples.m_names[m_current++];
 	}
 
 	const char *next()
 	{
-		if (m_current == -1 || m_intf.m_names[m_current] == NULL)
+		if (m_current == -1 || m_samples.m_names[m_current] == NULL)
 			return NULL;
-		return m_intf.m_names[m_current++];
+		return m_samples.m_names[m_current++];
 	}
 
 	// counting
@@ -207,7 +171,7 @@ public:
 
 private:
 	// internal state
-	samples_interface &     m_intf;
+	samples_device &m_samples;
 	int                     m_current;
 };
 

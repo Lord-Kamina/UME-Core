@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders: Couriersud
 
 
 
@@ -7,27 +9,6 @@
 
 #include "includes/bwidow.h"
 
-
-/*************************************
- *
- *  Sound interfaces
- *
- *************************************/
-
-/* C/D3 */
-static const pokey_interface pokey_interface_1 =
-{
-	{ DEVCB_NULL },
-	DEVCB_INPUT_PORT("DSW0")
-};
-
-
-/* B3 */
-static const pokey_interface pokey_interface_2 =
-{
-	{ DEVCB_NULL },
-	DEVCB_INPUT_PORT("DSW1")
-};
 
 /*************************************
  *
@@ -169,18 +150,18 @@ MACHINE_CONFIG_FRAGMENT( bwidow_audio )
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_POKEY_ADD("pokey1", MASTER_CLOCK / 8)
-	MCFG_POKEY_CONFIG(pokey_interface_1)
+	MCFG_SOUND_ADD("pokey1", POKEY, MASTER_CLOCK / 8) /* C/D3 */
+	MCFG_POKEY_ALLPOT_R_CB(IOPORT("DSW0"))
 	MCFG_POKEY_OUTPUT_OPAMP(BW_R51, BW_C31, 5.0)
 	MCFG_SOUND_ROUTE_EX(0, "discrete", 1.0, 0)
 
-	MCFG_POKEY_ADD("pokey2", MASTER_CLOCK / 8)
-	MCFG_POKEY_CONFIG(pokey_interface_2)
+	MCFG_SOUND_ADD("pokey2", POKEY, MASTER_CLOCK / 8) /* B3 */
+	MCFG_POKEY_ALLPOT_R_CB(IOPORT("DSW1"))
 	MCFG_POKEY_OUTPUT_OPAMP(BW_R47, BW_C32, 5.0)
 	MCFG_SOUND_ROUTE_EX(0, "discrete", 1.0, 1)
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(bwidow)
+	MCFG_DISCRETE_INTF(bwidow)
 
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
@@ -193,5 +174,5 @@ MACHINE_CONFIG_FRAGMENT( gravitar_audio )
 	MCFG_POKEY_OUTPUT_OPAMP_LOW_PASS(BW_R51, GRAV_C34, 5.0) /* BW_C31 ignored */
 
 	MCFG_SOUND_MODIFY("discrete")
-	MCFG_SOUND_CONFIG_DISCRETE(gravitar)
+	MCFG_DISCRETE_INTF(gravitar)
 MACHINE_CONFIG_END

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ville Linde
 /* 'Aleck64' and similar boards */
 /* N64 based hardware */
 /*
@@ -30,7 +32,7 @@ PCB Layout
           Seta E92 Mother PCB
          |---------------------------------------------|
        --|     VOL_POT                                 |
-       |R|TA8139S                                      |
+       |R|TA8139S                                      |-
   RCA  --|  TA8201         BU9480                      |
  AUDIO   |                                             |
  PLUGS --|           AMP-NUS                           |
@@ -103,8 +105,6 @@ Magical Tetris Challenge
         JAPAN
 
 
-On bootup, they also mention 'T.L.S' (Temporary Landing System), which seems
-to be the hardware system, designed by Arika Co. Ltd.
 
 
 PCB Layout
@@ -180,17 +180,25 @@ class aleck64_state : public n64_state
 public:
 	aleck64_state(const machine_config &mconfig, device_type type, const char *tag)
 		: n64_state(mconfig, type, tag),
+			m_e90_vram(*this,"e90vram"),
+			m_e90_pal(*this,"e90pal"),
 			m_dip_read_offset(0) { }
 
+	optional_shared_ptr<UINT32> m_e90_vram;
+	optional_shared_ptr<UINT32> m_e90_pal;
 	DECLARE_DRIVER_INIT(aleck64);
 	DECLARE_WRITE32_MEMBER(aleck_dips_w);
 	DECLARE_READ32_MEMBER(aleck_dips_r);
+	DECLARE_READ16_MEMBER(e90_prot_r);
+	DECLARE_WRITE16_MEMBER(e90_prot_w);
+	UINT32 screen_update_e90(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
+
 private:
 	UINT32 m_dip_read_offset;
 };
 
 
-WRITE32_MEMBER(aleck64_state::aleck_dips_w )
+WRITE32_MEMBER(aleck64_state::aleck_dips_w)
 {
 	/*
 	    mtetrisc uses offset 0x1c and 0x03 a good bit in conjunction with reading INMJ.
@@ -210,44 +218,42 @@ WRITE32_MEMBER(aleck64_state::aleck_dips_w )
 	}
 }
 
-READ32_MEMBER(aleck64_state::aleck_dips_r )
+READ32_MEMBER(aleck64_state::aleck_dips_r)
 {
 	// srmvs uses 0x40, communications?
 
 	switch( offset )
 	{
-		case 0:
-			return (ioport("IN0")->read());   /* mtetrisc has regular inputs here */
-		case 1:
-			return (ioport("IN1")->read());
-		case 2:
+	case 0:
+		return (ioport("IN0")->read());   /* mtetrisc has regular inputs here */
+	case 1:
+		return (ioport("IN1")->read());
+	case 2:
 		{
-			UINT32 val = ioport("INMJ")->read();
+			UINT32 const val = ioport("INMJ")->read();
 
 			switch( m_dip_read_offset >> 8 & 0xff )
 			{
-				case 1:
-					return  val;
+			case 1:
+				return  val;
 
-				case 2:
-					return val << 8;
+			case 2:
+				return val << 8;
 
-				case 4:
-					return val << 16;
+			case 4:
+				return val << 16;
 
-				case 8:
-					return val >> 8;
+			case 8:
+				return val >> 8;
 
-				default:
-					logerror("Unexpected read from INMJ with no dip_read_offset set.\n");
-					return 0;
+			default:
+				logerror("Unexpected read from INMJ with no dip_read_offset set.\n");
+				return 0;
 			}
 		}
-		default:
-		{
-			logerror("Unknown aleck_dips_r(0x%08x, 0x%08x) @ 0x%08x PC=%08x\n", offset, 0xc0800000 + offset*4, mem_mask, space.device().safe_pc());
-			return 0;
-		}
+	default:
+		logerror("Unknown aleck_dips_r(0x%08x, 0x%08x) @ 0x%08x PC=%08x\n", offset, 0xc0800000 + offset*4, mem_mask, space.device().safe_pc());
+		return 0;
 	}
 }
 
@@ -299,8 +305,8 @@ static ADDRESS_MAP_START( n64_map, AS_PROGRAM, 32, aleck64_state )
 	AM_RANGE(0x03f00000, 0x03f00027) AM_DEVREADWRITE("rcp", n64_periphs, rdram_reg_r, rdram_reg_w)
 	AM_RANGE(0x04000000, 0x04000fff) AM_RAM AM_SHARE("rsp_dmem")                    // RSP DMEM
 	AM_RANGE(0x04001000, 0x04001fff) AM_RAM AM_SHARE("rsp_imem")                    // RSP IMEM
-	AM_RANGE(0x04040000, 0x040fffff) AM_DEVREADWRITE_LEGACY("rsp", n64_sp_reg_r, n64_sp_reg_w)  // RSP
-	AM_RANGE(0x04100000, 0x041fffff) AM_DEVREADWRITE_LEGACY("rsp", n64_dp_reg_r, n64_dp_reg_w)  // RDP
+	AM_RANGE(0x04040000, 0x040fffff) AM_DEVREADWRITE("rcp", n64_periphs, sp_reg_r, sp_reg_w)  // RSP
+	AM_RANGE(0x04100000, 0x041fffff) AM_DEVREADWRITE("rcp", n64_periphs, dp_reg_r, dp_reg_w)  // RDP
 	AM_RANGE(0x04300000, 0x043fffff) AM_DEVREADWRITE("rcp", n64_periphs, mi_reg_r, mi_reg_w)    // MIPS Interface
 	AM_RANGE(0x04400000, 0x044fffff) AM_DEVREADWRITE("rcp", n64_periphs, vi_reg_r, vi_reg_w)    // Video Interface
 	AM_RANGE(0x04500000, 0x045fffff) AM_DEVREADWRITE("rcp", n64_periphs, ai_reg_r, ai_reg_w)    // Audio Interface
@@ -311,15 +317,47 @@ static ADDRESS_MAP_START( n64_map, AS_PROGRAM, 32, aleck64_state )
 	AM_RANGE(0x1fc00000, 0x1fc007bf) AM_ROM AM_REGION("user1", 0)   // PIF ROM
 	AM_RANGE(0x1fc007c0, 0x1fc007ff) AM_DEVREADWRITE("rcp", n64_periphs, pif_ram_r, pif_ram_w)
 
-	/*
-	    Surely this should mirror main ram? srmvs crashes, and
-	    vivdolls overwrites it's memory test code if it does mirror
-	*/
-	AM_RANGE(0xc0000000, 0xc07fffff) AM_RAM
+	AM_RANGE(0xc0000000, 0xc07fffff) AM_RAM // SDRAM, Aleck 64 specific
 
 	AM_RANGE(0xc0800000, 0xc0800fff) AM_READWRITE(aleck_dips_r,aleck_dips_w)
-	AM_RANGE(0xd0000000, 0xd00fffff) AM_RAM // mtetrisc, write only, mirror?
+ADDRESS_MAP_END
 
+/*
+ E90 protection handlers
+*/
+
+READ16_MEMBER(aleck64_state::e90_prot_r)
+{
+// offset 0 $800 = status ready, active high
+	return 0;
+}
+
+WRITE16_MEMBER(aleck64_state::e90_prot_w)
+{
+	switch(offset*2)
+	{
+		case 0x16:
+			if(data != 6 && data != 7)
+				printf("! %04x %04x %08x\n",offset*2,data,mem_mask);
+
+			if(data & 1) // 0 -> 1 transition
+			{
+				//for(int i=0;i<0x1000;i+=4)
+				//  space.write_dword(0x007502f4+i,space.read_dword(0xd0000000+i));
+			}
+			break;
+		//0x1e bit 0 probably enables the chip
+		default:
+			printf("%04x %04x %08x\n",offset*2,data,mem_mask);
+			break;
+	}
+}
+
+static ADDRESS_MAP_START( e90_map, AS_PROGRAM, 32, aleck64_state )
+	AM_IMPORT_FROM( n64_map )
+	AM_RANGE(0xd0000000, 0xd0000fff) AM_RAM AM_SHARE("e90vram")// x/y offsets
+	AM_RANGE(0xd0010000, 0xd0010fff) AM_RAM AM_SHARE("e90pal")// RGB555 palette
+	AM_RANGE(0xd0030000, 0xd003001f) AM_READWRITE16(e90_prot_r, e90_prot_w,0xffffffff)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( rsp_map, AS_PROGRAM, 32, aleck64_state )
@@ -330,6 +368,9 @@ static ADDRESS_MAP_START( rsp_map, AS_PROGRAM, 32, aleck64_state )
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START( aleck64 )
+	PORT_START("input")
+	PORT_BIT( 0xff, 0x05, IPT_SPECIAL )                                     // Tell base driver to expect two gamepads
+
 	PORT_START("P1")
 	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(1)          // Button A
 	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER(1)          // Button B
@@ -351,7 +392,7 @@ static INPUT_PORTS_START( aleck64 )
 	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_X ) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(1)
 
 	PORT_START("P1_ANALOG_Y")
-	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0xff,0x00) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(1)
+	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(1) PORT_REVERSE
 
 	PORT_START("P2")
 	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(2)          // Button A
@@ -374,7 +415,7 @@ static INPUT_PORTS_START( aleck64 )
 	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_X ) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(2)
 
 	PORT_START("P2_ANALOG_Y")
-	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0xff,0x00) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(2)
+	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(2) PORT_REVERSE
 
 	PORT_START("IN0")
 	PORT_DIPNAME( 0x80000000, 0x80000000, "DIPSW1 #8" ) PORT_DIPLOCATION("SW1:8")
@@ -438,17 +479,9 @@ INPUT_PORTS_END
 static INPUT_PORTS_START( 11beat )
 	PORT_INCLUDE( aleck64 )
 
-	PORT_MODIFY("P1_ANALOG_Y")
-	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
-	PORT_MODIFY("P2_ANALOG_X")
-	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
-	PORT_MODIFY("P2_ANALOG_Y")
-	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
-	PORT_MODIFY("P1_ANALOG_X")
-	PORT_BIT( 0xff, IP_ACTIVE_HIGH, IPT_UNUSED )
-
 	PORT_MODIFY("P1")
 	PORT_BIT( 0x2000, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x0f00, IP_ACTIVE_LOW, IPT_UNUSED ) // "joystick type error" happens because game expects D-PADs to be unconnected
 	PORT_BIT( 0x0020, IP_ACTIVE_HIGH, IPT_UNUSED )
 	PORT_BIT( 0x0010, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_PLAYER(1)
 	PORT_BIT( 0x0008, IP_ACTIVE_HIGH, IPT_UNUSED )
@@ -458,23 +491,21 @@ static INPUT_PORTS_START( 11beat )
 
 	PORT_MODIFY("P2")
 	PORT_BIT( 0x2000, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x0f00, IP_ACTIVE_LOW, IPT_UNUSED ) // "joystick type error" happens because game expects D-PADs to be unconnected
 	PORT_BIT( 0x0020, IP_ACTIVE_HIGH, IPT_UNUSED )
 	PORT_BIT( 0x0010, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_PLAYER(2)
 	PORT_BIT( 0x0008, IP_ACTIVE_HIGH, IPT_UNUSED )
 	PORT_BIT( 0x0004, IP_ACTIVE_HIGH, IPT_UNUSED )
 	PORT_BIT( 0x0002, IP_ACTIVE_HIGH, IPT_UNUSED )
 	PORT_BIT( 0x0001, IP_ACTIVE_HIGH, IPT_BUTTON4 ) PORT_PLAYER(2)
-
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( mtetrisc )
+
 	// The basic N64 controls are unused in this game
-	PORT_START("P1")
-	PORT_START("P1_ANALOG_X")
-	PORT_START("P1_ANALOG_Y")
-	PORT_START("P2")
-	PORT_START("P2_ANALOG_X")
-	PORT_START("P2_ANALOG_Y")
+	PORT_START("input")
+	PORT_BIT( 0xff, 0x00, IPT_SPECIAL )
+
 	PORT_START("INMJ")
 
 	PORT_START("IN0")
@@ -505,6 +536,9 @@ static INPUT_PORTS_START( mtetrisc )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( starsldr )
+	PORT_START("input")
+	PORT_BIT( 0xff, 0x05, IPT_SPECIAL )                                     // Tell base driver to expect two gamepads
+
 	PORT_START("P1")
 	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(1)          // Button A
 	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER(1)          // Button B
@@ -607,13 +641,9 @@ static INPUT_PORTS_START( starsldr )
 	PORT_BIT( 0x00040000, IP_ACTIVE_LOW, IPT_COIN1 )
 INPUT_PORTS_END
 
-	static INPUT_PORTS_START( doncdoon )
-	PORT_START("P1")
-	PORT_START("P1_ANALOG_X")
-	PORT_START("P1_ANALOG_Y")
-	PORT_START("P2")
-	PORT_START("P2_ANALOG_X")
-	PORT_START("P2_ANALOG_Y")
+static INPUT_PORTS_START( doncdoon )
+	PORT_START("input")
+	PORT_BIT( 0xff, 0x00, IPT_SPECIAL ) // Disable standard N64 controls
 
 	PORT_START("IN0")
 	PORT_BIT(0xfcff8080, IP_ACTIVE_LOW, IPT_UNUSED )
@@ -656,12 +686,9 @@ static INPUT_PORTS_START( kurufev )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( twrshaft )
-	PORT_START("P1")
-	PORT_START("P1_ANALOG_X")
-	PORT_START("P1_ANALOG_Y")
-	PORT_START("P2")
-	PORT_START("P2_ANALOG_X")
-	PORT_START("P2_ANALOG_Y")
+	PORT_START("input")
+	PORT_BIT( 0xff, 0x00, IPT_SPECIAL ) // Disable standard N64 controls
+
 	PORT_START("INMJ")
 
 	PORT_START("IN0")
@@ -684,14 +711,10 @@ static INPUT_PORTS_START( twrshaft )
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( hipai )
-	PORT_START("P1")
-	PORT_START("P1_ANALOG_X")
-	PORT_START("P1_ANALOG_Y")
-	PORT_START("P2")
-	PORT_START("P2_ANALOG_X")
-	PORT_START("P2_ANALOG_Y")
+	PORT_START("input")
+	PORT_BIT( 0xff, 0x00, IPT_SPECIAL ) // Disable standard N64 controls
 
-PORT_START("INMJ")
+	PORT_START("INMJ")
 	PORT_BIT( 0xe1c1c0c1, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_START1 )
 	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_MAHJONG_A )
@@ -810,25 +833,23 @@ static INPUT_PORTS_START( srmvs )
 	PORT_DIPSETTING( 0x00000000, DEF_STR( On ) )
 INPUT_PORTS_END
 
-/* ?? */
-static const mips3_config vr4300_config =
-{
-	16384,              /* code cache size */
-	8192,               /* data cache size */
-	62500000            /* system clock */
-};
 
 static MACHINE_CONFIG_START( aleck64, aleck64_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", VR4300BE, 93750000)
-	MCFG_CPU_CONFIG(vr4300_config)
+	MCFG_MIPS3_ICACHE_SIZE(16384)
+	MCFG_MIPS3_DCACHE_SIZE(8192)
+	MCFG_MIPS3_SYSTEM_CLOCK(62500000)
 	MCFG_CPU_PROGRAM_MAP(n64_map)
 
 	MCFG_CPU_ADD("rsp", RSP, 62500000)
-	MCFG_CPU_CONFIG(n64_rsp_config)
+	MCFG_RSP_DP_REG_R_CB(DEVREAD32("rcp",n64_periphs, dp_reg_r))
+	MCFG_RSP_DP_REG_W_CB(DEVWRITE32("rcp",n64_periphs, dp_reg_w))
+	MCFG_RSP_SP_REG_R_CB(DEVREAD32("rcp",n64_periphs, sp_reg_r))
+	MCFG_RSP_SP_REG_W_CB(DEVWRITE32("rcp",n64_periphs, sp_reg_w))
+	MCFG_RSP_SP_SET_STATUS_CB(DEVWRITE32("rcp",n64_periphs, sp_set_status))
 	MCFG_CPU_PROGRAM_MAP(rsp_map)
-
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -836,9 +857,9 @@ static MACHINE_CONFIG_START( aleck64, aleck64_state )
 	MCFG_SCREEN_SIZE(640, 525)
 	MCFG_SCREEN_VISIBLE_AREA(0, 639, 0, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(aleck64_state, screen_update_n64)
+	MCFG_SCREEN_VBLANK_DRIVER(aleck64_state, screen_eof_n64)
 
-	MCFG_PALETTE_LENGTH(0x1000)
-
+	MCFG_PALETTE_ADD("palette", 0x1000)
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
@@ -848,6 +869,59 @@ static MACHINE_CONFIG_START( aleck64, aleck64_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 1.0)
 
 	MCFG_N64_PERIPHS_ADD("rcp");
+
+	MCFG_FORCE_NO_DRC()
+MACHINE_CONFIG_END
+
+UINT32 aleck64_state::screen_update_e90(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+{
+	bitmap.fill(0, cliprect);
+	screen_update_n64(screen,bitmap,cliprect);
+
+	for(int offs=0;offs<0x1000/4;offs+=2)
+	{
+		int xi,yi;
+		int r,g,b;
+		int pal_offs;
+		int pal_shift;
+		//UINT16 tile = m_e90_vram[offs] >> 16;
+		UINT16 pal = m_e90_vram[offs] & 0xff; // guess: 0x1000 entries / word / 4bpp = 0x7f, divided by two below (TODO: why?)
+		INT16 x = m_e90_vram[offs+1] >> 16;
+		INT16 y = m_e90_vram[offs+1] & 0xffff;
+		pal>>=1;
+		x>>=1;
+		pal_offs = (pal*0x20);
+		pal_offs+= 1; // edit this to get the other colors in the range
+		pal_shift = pal_offs & 1 ? 0 : 16;
+		r = m_e90_pal[pal_offs>>1] >> pal_shift;
+		g = (m_e90_pal[pal_offs>>1] >> (5+pal_shift));
+		b = (m_e90_pal[pal_offs>>1] >> (10+pal_shift));
+		r&=0x1f;
+		g&=0x1f;
+		b&=0x1f;
+		r = (r << 3) | (r >> 2);
+		g = (g << 3) | (g >> 2);
+		b = (b << 3) | (b >> 2);
+		for(yi=0;yi<8;yi++)
+			for(xi=0;xi<8;xi++)
+			{
+				int res_x,res_y;
+				res_x = x+xi + 4;
+				res_y = y+yi + 7;
+
+				if(cliprect.contains(res_x, res_y))
+					bitmap.pix32(res_y, res_x) = r << 16 | g << 8 | b;
+			}
+	}
+	return 0;
+}
+
+static MACHINE_CONFIG_DERIVED( a64_e90, aleck64 )
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_PROGRAM_MAP(e90_map)
+
+	MCFG_SCREEN_MODIFY("screen")
+	MCFG_SCREEN_UPDATE_DRIVER(aleck64_state, screen_update_e90)
 MACHINE_CONFIG_END
 
 DRIVER_INIT_MEMBER(aleck64_state,aleck64)
@@ -882,7 +956,7 @@ ROM_START( 11beat )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "nus-zhaj.u3", 0x000000, 0x0800000,  CRC(95258ba2) SHA1(0299b8fb9a8b1b24428d0f340f6bf1cfaf99c672) )
+	ROM_LOAD16_WORD_SWAP( "nus-zhaj.u3", 0x000000, 0x0800000, CRC(02faa8a7) SHA1(824911452639cedf6a8186c05cd046e61fc98896) )
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )
@@ -896,13 +970,12 @@ ROM_START( mtetrisc )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "nus-zcaj.u4", 0x000000, 0x1000000,  CRC(ec4563fc) SHA1(4d5a30873a5850cf4cd1c0bdbe24e1934f163cd0) )
-
+	ROM_LOAD16_WORD_SWAP( "nus-zcaj.u4", 0x000000, 0x1000000, CRC(c9de64db) SHA1(59932c70b43ff8e9264c670f37b3abbe939b7f95) )
 	ROM_REGION32_BE( 0x100000, "user3", 0 )
-	ROM_LOAD ( "tet-01m.u5", 0x000000, 0x100000,  CRC(f78f859b) SHA1(b07c85e0453869fe43792f42081f64a5327e58e6) )
+	ROM_LOAD ( "tet-01m.u5", 0x000000, 0x100000, CRC(f78f859b) SHA1(b07c85e0453869fe43792f42081f64a5327e58e6) )
 
 	ROM_REGION32_BE( 0x80, "user4", 0 )
-	ROM_LOAD ( "at24c01.u34", 0x000000, 0x80,  CRC(ba7e503f) SHA1(454aa4fdde7d8694d1affaf25cd750fa678686bb) )
+	ROM_LOAD ( "at24c01.u34", 0x000000, 0x80, CRC(ba7e503f) SHA1(454aa4fdde7d8694d1affaf25cd750fa678686bb) )
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )
@@ -925,7 +998,7 @@ ROM_START( starsldr )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "nus-zhbj-0.u3", 0x000000, 0xc00000,  CRC(a4edac93) SHA1(3794606c008fb69f5d16dcccece94d03da23bf8a) )
+	ROM_LOAD16_WORD_SWAP( "nus-zhbj-0.u3", 0x000000, 0xc00000, CRC(a4edac93) SHA1(3794606c008fb69f5d16dcccece94d03da23bf8a) )
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )
@@ -940,7 +1013,7 @@ ROM_START( srmvs )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "nus-zsej-0.u2", 0x000000, 0x2000000,  CRC(44f40102) SHA1(a78de955f2fcd99dda14e782984368b320eb5415) )
+	ROM_LOAD16_WORD_SWAP( "nus-zsej-0.u2", 0x000000, 0x2000000, CRC(44f40102) SHA1(a78de955f2fcd99dda14e782984368b320eb5415) )
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )
@@ -964,7 +1037,7 @@ ROM_START( vivdolls )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "nus-zsaj-0.u3", 0x000000, 0x800000,  CRC(f3220e29) SHA1(06d8b808cc19378b046803f4dc75c7d791b7767f) )
+	ROM_LOAD16_WORD_SWAP( "nus-zsaj-0.u3", 0x000000, 0x800000, CRC(f3220e29) SHA1(06d8b808cc19378b046803f4dc75c7d791b7767f) )
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )
@@ -992,10 +1065,10 @@ ROM_START( twrshaft )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "ua3012--all02.u3", 0x000000, 0x1000000,  CRC(904a91a7) SHA1(7dfa3447d2c489c0448c4004dc12d3037c05a0f3) )
+	ROM_LOAD16_WORD_SWAP( "ua3012--all02.u3", 0x000000, 0x1000000, CRC(904a91a7) SHA1(7dfa3447d2c489c0448c4004dc12d3037c05a0f3) )
 
 	ROM_REGION32_BE( 0x800000, "user3", 0 )
-	ROM_LOAD16_WORD_SWAP( "nus-zsij-0.u1", 0x000000, 0x800000,  CRC(2389576f) SHA1(dc22b2eab4d7a02cb918827a62e6c120b3a84e6c) )
+	ROM_LOAD16_WORD_SWAP( "nus-zsij-0.u1", 0x000000, 0x800000, CRC(2389576f) SHA1(dc22b2eab4d7a02cb918827a62e6c120b3a84e6c) )
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )
@@ -1010,11 +1083,11 @@ ROM_START( hipai )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "ua2011-all02.u3", 0x0000000, 0x1000000,  CRC(eb4b96d0) SHA1(e909ea5b71b81087da07821c4f57244576363678) )
-	ROM_LOAD16_WORD_SWAP( "ua2011-alh02.u4", 0x1000000, 0x1000000,  CRC(b8e35ddf) SHA1(7c3e59f6520dc3f0aa592e682fa82e30ffd1f4d0) )
+	ROM_LOAD16_WORD_SWAP( "ua2011-all02.u3", 0x0000000, 0x1000000, CRC(eb4b96d0) SHA1(e909ea5b71b81087da07821c4f57244576363678) )
+	ROM_LOAD16_WORD_SWAP( "ua2011-alh02.u4", 0x1000000, 0x1000000, CRC(b8e35ddf) SHA1(7c3e59f6520dc3f0aa592e682fa82e30ffd1f4d0) )
 
 	ROM_REGION32_BE( 0x800000, "user3", 0 )
-	ROM_LOAD16_WORD_SWAP( "nus-nsij-0.u1", 0x000000, 0x800000,  CRC(94cf9f8d) SHA1(cd624d1f5de2be3bec3ece06556a2e39bef66d77) )
+	ROM_LOAD16_WORD_SWAP( "nus-nsij-0.u1", 0x000000, 0x800000, CRC(94cf9f8d) SHA1(cd624d1f5de2be3bec3ece06556a2e39bef66d77) )
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )
@@ -1029,11 +1102,11 @@ ROM_START( kurufev )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "ua3088-all01.u3", 0x0000000, 0x1000000,  CRC(00db4dbc) SHA1(824fdce01fffdfcbcc9b1fbda4ab389a10b2b418) )
-	ROM_LOAD16_WORD_SWAP( "ua3088-alh04.u4", 0x1000000, 0x1000000,  CRC(c96bc7c0) SHA1(2b6ca1a769dee74e112c2b287dacd0bf46dda091) )
+	ROM_LOAD16_WORD_SWAP( "ua3088-all01.u3", 0x0000000, 0x1000000, CRC(00db4dbc) SHA1(824fdce01fffdfcbcc9b1fbda4ab389a10b2b418) )
+	ROM_LOAD16_WORD_SWAP( "ua3088-alh04.u4", 0x1000000, 0x1000000, CRC(c96bc7c0) SHA1(2b6ca1a769dee74e112c2b287dacd0bf46dda091) )
 
 	ROM_REGION32_BE( 0x800000, "user3", 0 )
-	ROM_LOAD16_WORD_SWAP( "nus-zsij-0.u1", 0x000000, 0x800000,   CRC(2389576f) SHA1(dc22b2eab4d7a02cb918827a62e6c120b3a84e6c) ) // same as tower & shaft
+	ROM_LOAD16_WORD_SWAP( "nus-zsij-0.u1", 0x000000, 0x800000, CRC(2389576f) SHA1(dc22b2eab4d7a02cb918827a62e6c120b3a84e6c) ) // same as tower & shaft
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )
@@ -1047,8 +1120,8 @@ ROM_START( doncdoon )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "ua3003-all01.u3", 0x0000000, 0x1000000,  CRC(f362fa82) SHA1(4f41ee23edc18110be1218ba333d1c58376ab175) )
-	ROM_LOAD16_WORD_SWAP( "ua3003-alh01.u4", 0x1000000, 0x1000000,  CRC(47c56387) SHA1(c8cc6c0a456b593aef711d0a75b2342ba2f8203f) )
+	ROM_LOAD16_WORD_SWAP( "ua3003-all01.u3", 0x0000000, 0x1000000, CRC(f362fa82) SHA1(4f41ee23edc18110be1218ba333d1c58376ab175) )
+	ROM_LOAD16_WORD_SWAP( "ua3003-alh01.u4", 0x1000000, 0x1000000, CRC(47c56387) SHA1(c8cc6c0a456b593aef711d0a75b2342ba2f8203f) )
 
 	ROM_REGION32_BE( 0x800000, "user3", 0 )
 	ROM_LOAD16_WORD_SWAP( "nus-zsij-0.u1", 0x000000, 0x800000, CRC(547d8122) SHA1(347f0785767265acb0f0c21646e06cbe6f561821) )
@@ -1060,13 +1133,20 @@ ROM_START( doncdoon )
 	ROM_LOAD( "normslp.rom", 0x00, 0x80, CRC(4f2ae525) SHA1(eab43f8cc52c8551d9cff6fced18ef80eaba6f05) )
 ROM_END
 
-
+/* Mayjinsen 3
+ * PCB marking: "SeTa // 3D Rom PCB-2A // SETA CORPORATION // MADE IN JAPAN"
+ * PCB has:
+ * U1 CIC-NUS; CIC-NUS-5101 security chip (Sharp SM5K3 MCU)
+ * U2 BU9850; BU9850 4k Serial EEPROM (Rohm, proprietary/custom part?)
+ * U3 NUS64M: "MXC991789M // MX23L6402-35A // NUS-ZSCJ-0 // 1Q4787A2" Macronix custom latchable self-addressable mask rom
+ * Internal checksum is verified to match rom dump
+ */
 ROM_START( mayjin3 )
 	ROM_REGION32_BE( 0x800, "user1", ROMREGION_ERASE00 )
 	PIF_BOOTROM
 
 	ROM_REGION32_BE( 0x4000000, "user2", 0 )
-	ROM_LOAD16_WORD_SWAP( "nus-zscj.u3", 0x000000, 0x800000,  CRC(8b36eb91) SHA1(179745625c16c6813d5f8d29bfd7628783d55806) )
+	ROM_LOAD16_WORD_SWAP( "nus-zscj-0.u3", 0x000000, 0x800000, CRC(52a37340) SHA1(b5834bfde5b8a7e20415b2593abd76ec95ab27c7) ) // U3 NUS64M
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )
@@ -1080,11 +1160,11 @@ ROM_END
 
 
 // BIOS
-GAME( 1998, aleck64,        0,  aleck64, aleck64, aleck64_state,  aleck64, ROT0, "Nintendo / Seta", "Aleck64 PIF BIOS", GAME_IS_BIOS_ROOT)
+GAME( 1998, aleck64,  0,        aleck64, aleck64, aleck64_state,  aleck64, ROT0, "Nintendo / Seta", "Aleck64 PIF BIOS", GAME_IS_BIOS_ROOT)
 
 // games
-GAME( 1998, 11beat,   aleck64,  aleck64, 11beat, aleck64_state,   aleck64, ROT0, "Hudson", "Eleven Beat", GAME_NOT_WORKING|GAME_NO_SOUND )
-GAME( 1998, mtetrisc, aleck64,  aleck64, mtetrisc, aleck64_state, aleck64, ROT0, "Capcom", "Magical Tetris Challenge (981009 Japan)", GAME_NOT_WORKING|GAME_IMPERFECT_GRAPHICS )
+GAME( 1998, 11beat,   aleck64,  aleck64, 11beat, aleck64_state,   aleck64, ROT0, "Hudson", "Eleven Beat", GAME_NOT_WORKING ) // crashes at kick off / during attract with DRC
+GAME( 1998, mtetrisc, aleck64,  a64_e90, mtetrisc, aleck64_state, aleck64, ROT0, "Capcom", "Magical Tetris Challenge (981009 Japan)", GAME_NOT_WORKING|GAME_IMPERFECT_GRAPHICS )
 GAME( 1998, starsldr, aleck64,  aleck64, starsldr, aleck64_state, aleck64, ROT0, "Hudson / Seta", "Star Soldier: Vanishing Earth", GAME_IMPERFECT_GRAPHICS )
 GAME( 1998, vivdolls, aleck64,  aleck64, aleck64, aleck64_state,  aleck64, ROT0, "Visco", "Vivid Dolls", GAME_IMPERFECT_GRAPHICS )
 GAME( 1999, srmvs,    aleck64,  aleck64, srmvs, aleck64_state,    aleck64, ROT0, "Seta", "Super Real Mahjong VS", GAME_NOT_WORKING|GAME_IMPERFECT_GRAPHICS )
@@ -1092,4 +1172,4 @@ GAME( 2003, twrshaft, aleck64,  aleck64, twrshaft, aleck64_state, aleck64, ROT0,
 GAME( 2003, hipai,    aleck64,  aleck64, hipai, aleck64_state,    aleck64, ROT0, "Aruze / Seta", "Hi Pai Paradise", GAME_NOT_WORKING|GAME_IMPERFECT_GRAPHICS )
 GAME( 2003, doncdoon, aleck64,  aleck64, doncdoon, aleck64_state, aleck64, ROT0, "Aruze", "Hanabi de Doon! - Don-chan Puzzle", GAME_NOT_WORKING|GAME_IMPERFECT_GRAPHICS )
 GAME( 2003, kurufev,  aleck64,  aleck64, kurufev, aleck64_state,  aleck64, ROT0, "Aruze / Takumi", "Kurukuru Fever", GAME_NOT_WORKING|GAME_IMPERFECT_GRAPHICS )
-GAME( 2000, mayjin3,  aleck64,  aleck64, aleck64, aleck64_state,  aleck64, ROT0, "Seta / Able Corporation", "Mayjinsen 3", GAME_NOT_WORKING|GAME_NO_SOUND )
+GAME( 2000, mayjin3,  aleck64,  aleck64, aleck64, aleck64_state,  aleck64, ROT0, "Seta / Able Corporation", "Mayjinsen 3", GAME_NOT_WORKING|GAME_IMPERFECT_GRAPHICS )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*******************************************************************************
  WWF Superstars (C) 1989 Technos Japan  (video/wwfsstar.c)
 ********************************************************************************
@@ -15,13 +17,13 @@
  for writes to Video Ram
 *******************************************************************************/
 
-WRITE16_MEMBER(wwfsstar_state::wwfsstar_fg0_videoram_w)
+WRITE16_MEMBER(wwfsstar_state::fg0_videoram_w)
 {
 	COMBINE_DATA(&m_fg0_videoram[offset]);
 	m_fg0_tilemap->mark_tile_dirty(offset/2);
 }
 
-WRITE16_MEMBER(wwfsstar_state::wwfsstar_bg0_videoram_w)
+WRITE16_MEMBER(wwfsstar_state::bg0_videoram_w)
 {
 	COMBINE_DATA(&m_bg0_videoram[offset]);
 	m_bg0_tilemap->mark_tile_dirty(offset/2);
@@ -55,8 +57,7 @@ TILE_GET_INFO_MEMBER(wwfsstar_state::get_fg0_tile_info)
 	tilebase =  &m_fg0_videoram[tile_index*2];
 	tileno =  (tilebase[1] & 0x00ff) | ((tilebase[0] & 0x000f) << 8);
 	colbank = (tilebase[0] & 0x00f0) >> 4;
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tileno,
 			colbank,
 			0);
@@ -92,8 +93,7 @@ TILE_GET_INFO_MEMBER(wwfsstar_state::get_bg0_tile_info)
 	tileno =  (tilebase[1] & 0x00ff) | ((tilebase[0] & 0x000f) << 8);
 	colbank = (tilebase[0] & 0x0070) >> 4;
 	flipx   = (tilebase[0] & 0x0080) >> 7;
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			tileno,
 			colbank,
 			flipx ? TILE_FLIPX : 0);
@@ -128,7 +128,7 @@ void wwfsstar_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 
 	**- End of Comments -*/
 
-	gfx_element *gfx = machine().gfx[1];
+	gfx_element *gfx = m_gfxdecode->gfx(1);
 	UINT16 *source = m_spriteram;
 	UINT16 *finish = source + 0x3ff/2;
 
@@ -167,22 +167,22 @@ void wwfsstar_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 				{
 					if (!flipy)
 					{
-						drawgfx_transpen(bitmap,cliprect,gfx,number+count,colourbank,flipx,flipy,xpos,ypos+16*count,0);
+						gfx->transpen(bitmap,cliprect,number+count,colourbank,flipx,flipy,xpos,ypos+16*count,0);
 					}
 					else
 					{
-						drawgfx_transpen(bitmap,cliprect,gfx,number+count,colourbank,flipx,flipy,xpos,ypos+(16*(chain-1))-(16*count),0);
+						gfx->transpen(bitmap,cliprect,number+count,colourbank,flipx,flipy,xpos,ypos+(16*(chain-1))-(16*count),0);
 					}
 				}
 				else
 				{
 					if (!flipy)
 					{
-						drawgfx_transpen(bitmap,cliprect,gfx,number+count,colourbank,flipx,flipy,xpos,ypos-(16*(chain-1))+(16*count),0);
+						gfx->transpen(bitmap,cliprect,number+count,colourbank,flipx,flipy,xpos,ypos-(16*(chain-1))+(16*count),0);
 					}
 					else
 					{
-						drawgfx_transpen(bitmap,cliprect,gfx,number+count,colourbank,flipx,flipy,xpos,ypos-16*count,0);
+						gfx->transpen(bitmap,cliprect,number+count,colourbank,flipx,flipy,xpos,ypos-16*count,0);
 					}
 				}
 			}
@@ -204,21 +204,25 @@ void wwfsstar_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 
 void wwfsstar_state::video_start()
 {
-	m_fg0_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(wwfsstar_state::get_fg0_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8,32,32);
+	m_fg0_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(wwfsstar_state::get_fg0_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8,32,32);
 	m_fg0_tilemap->set_transparent_pen(0);
 
-	m_bg0_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(wwfsstar_state::get_bg0_tile_info),this),tilemap_mapper_delegate(FUNC(wwfsstar_state::bg0_scan),this), 16, 16,32,32);
+	m_bg0_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(wwfsstar_state::get_bg0_tile_info),this),tilemap_mapper_delegate(FUNC(wwfsstar_state::bg0_scan),this), 16, 16,32,32);
 	m_fg0_tilemap->set_transparent_pen(0);
+
+	save_item(NAME(m_vblank));
+	save_item(NAME(m_scrollx));
+	save_item(NAME(m_scrolly));
 }
 
-UINT32 wwfsstar_state::screen_update_wwfsstar(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 wwfsstar_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	m_bg0_tilemap->set_scrolly(0, m_scrolly  );
 	m_bg0_tilemap->set_scrollx(0, m_scrollx  );
 
-	m_bg0_tilemap->draw(bitmap, cliprect, 0,0);
+	m_bg0_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	draw_sprites(bitmap,cliprect );
-	m_fg0_tilemap->draw(bitmap, cliprect, 0,0);
+	m_fg0_tilemap->draw(screen, bitmap, cliprect, 0,0);
 
 	return 0;
 }

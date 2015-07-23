@@ -1,5 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #include "emu.h"
-#include "audio/m72.h"
 #include "includes/m72.h"
 
 /***************************************************************************
@@ -8,7 +9,7 @@
 
 ***************************************************************************/
 
-inline void m72_state::m72_get_tile_info(tile_data &tileinfo,int tile_index,const UINT16 *vram,int gfxnum)
+inline void m72_state::get_tile_info(tile_data &tileinfo,int tile_index,const UINT16 *vram,int gfxnum)
 {
 	int code,attr,color,pri;
 
@@ -23,8 +24,7 @@ inline void m72_state::m72_get_tile_info(tile_data &tileinfo,int tile_index,cons
 	else pri = 0;
 /* color & 0x10 is used in bchopper and hharry, more priority? */
 
-	SET_TILE_INFO_MEMBER(
-			gfxnum,
+	SET_TILE_INFO_MEMBER(gfxnum,
 			code + ((attr & 0x3f) << 8),
 			color & 0x0f,
 			TILE_FLIPYX((attr & 0xc0) >> 6));
@@ -48,8 +48,7 @@ inline void m72_state::rtype2_get_tile_info(tile_data &tileinfo,int tile_index,c
 /* (vram[tile_index+2] & 0x10) is used by majtitle on the green, but it's not clear for what */
 /* (vram[tile_index+3] & 0xfe) are used as well */
 
-	SET_TILE_INFO_MEMBER(
-			gfxnum,
+	SET_TILE_INFO_MEMBER(gfxnum,
 			code,
 			color & 0x0f,
 			TILE_FLIPYX((color & 0x60) >> 5));
@@ -57,19 +56,19 @@ inline void m72_state::rtype2_get_tile_info(tile_data &tileinfo,int tile_index,c
 }
 
 
-TILE_GET_INFO_MEMBER(m72_state::m72_get_bg_tile_info)
+TILE_GET_INFO_MEMBER(m72_state::get_bg_tile_info)
 {
-	m72_get_tile_info(tileinfo,tile_index,m_videoram2,2);
+	get_tile_info(tileinfo,tile_index,m_videoram2,2);
 }
 
-TILE_GET_INFO_MEMBER(m72_state::m72_get_fg_tile_info)
+TILE_GET_INFO_MEMBER(m72_state::get_fg_tile_info)
 {
-	m72_get_tile_info(tileinfo,tile_index,m_videoram1,1);
+	get_tile_info(tileinfo,tile_index,m_videoram1,1);
 }
 
 TILE_GET_INFO_MEMBER(m72_state::hharry_get_bg_tile_info)
 {
-	m72_get_tile_info(tileinfo,tile_index,m_videoram2,1);
+	get_tile_info(tileinfo,tile_index,m_videoram2,1);
 }
 
 TILE_GET_INFO_MEMBER(m72_state::rtype2_get_bg_tile_info)
@@ -110,8 +109,8 @@ void m72_state::register_savestate()
 
 VIDEO_START_MEMBER(m72_state,m72)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m72_state::m72_get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m72_state::m72_get_fg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m72_state::get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m72_state::get_fg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
 
 	m_buffered_spriteram = auto_alloc_array(machine(), UINT16, m_spriteram.bytes()/2);
 
@@ -149,8 +148,8 @@ VIDEO_START_MEMBER(m72_state,xmultipl)
 
 VIDEO_START_MEMBER(m72_state,rtype2)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_fg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_fg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
 
 	m_buffered_spriteram = auto_alloc_array(machine(), UINT16, m_spriteram.bytes()/2);
 
@@ -181,6 +180,9 @@ VIDEO_START_MEMBER(m72_state,poundfor)
 	m_bg_tilemap->set_scrolldx(6,0);
 	m_fg_tilemap->set_scrolldy(-128,-128);
 	m_bg_tilemap->set_scrolldy(-128,-128);
+
+	save_item(NAME(m_prev));
+	save_item(NAME(m_diff));
 }
 
 VIDEO_START_MEMBER(m72_state,hharryu)
@@ -198,9 +200,9 @@ VIDEO_START_MEMBER(m72_state,majtitle)
 {
 // The tilemap can be 256x64, but seems to be used at 128x64 (scroll wraparound).
 // The layout ramains 256x64, the right half is just not displayed.
-//  m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,256,64);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_bg_tile_info),this),tilemap_mapper_delegate(FUNC(m72_state::majtitle_scan_rows),this),8,8,128,64);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_fg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
+//  m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,256,64);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_bg_tile_info),this),tilemap_mapper_delegate(FUNC(m72_state::majtitle_scan_rows),this),8,8,128,64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m72_state::rtype2_get_fg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
 
 	m_buffered_spriteram = auto_alloc_array(machine(), UINT16, m_spriteram.bytes()/2);
 
@@ -221,12 +223,13 @@ VIDEO_START_MEMBER(m72_state,majtitle)
 	m_bg_tilemap->set_scrolldy(-128,-128);
 
 	register_savestate();
+	save_item(NAME(m_majtitle_rowscroll));
 }
 
 VIDEO_START_MEMBER(m72_state,hharry)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m72_state::hharry_get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m72_state::m72_get_fg_tile_info),this),   TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m72_state::hharry_get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m72_state::get_fg_tile_info),this),   TILEMAP_SCAN_ROWS,8,8,64,64);
 
 	m_buffered_spriteram = auto_alloc_array(machine(), UINT16, m_spriteram.bytes()/2);
 
@@ -256,7 +259,7 @@ VIDEO_START_MEMBER(m72_state,hharry)
 
 ***************************************************************************/
 
-READ16_MEMBER(m72_state::m72_palette1_r)
+READ16_MEMBER(m72_state::palette1_r)
 {
 	/* A9 isn't connected, so 0x200-0x3ff mirrors 0x000-0x1ff etc. */
 	offset &= ~0x100;
@@ -264,7 +267,7 @@ READ16_MEMBER(m72_state::m72_palette1_r)
 	return m_generic_paletteram_16[offset] | 0xffe0;    /* only D0-D4 are connected */
 }
 
-READ16_MEMBER(m72_state::m72_palette2_r)
+READ16_MEMBER(m72_state::palette2_r)
 {
 	/* A9 isn't connected, so 0x200-0x3ff mirrors 0x000-0x1ff etc. */
 	offset &= ~0x100;
@@ -274,10 +277,10 @@ READ16_MEMBER(m72_state::m72_palette2_r)
 
 inline void m72_state::changecolor(int color,int r,int g,int b)
 {
-	palette_set_color_rgb(machine(),color,pal5bit(r),pal5bit(g),pal5bit(b));
+	m_palette->set_pen_color(color,pal5bit(r),pal5bit(g),pal5bit(b));
 }
 
-WRITE16_MEMBER(m72_state::m72_palette1_w)
+WRITE16_MEMBER(m72_state::palette1_w)
 {
 	/* A9 isn't connected, so 0x200-0x3ff mirrors 0x000-0x1ff etc. */
 	offset &= ~0x100;
@@ -290,7 +293,7 @@ WRITE16_MEMBER(m72_state::m72_palette1_w)
 			m_generic_paletteram_16[offset + 0x400]);
 }
 
-WRITE16_MEMBER(m72_state::m72_palette2_w)
+WRITE16_MEMBER(m72_state::palette2_w)
 {
 	/* A9 isn't connected, so 0x200-0x3ff mirrors 0x000-0x1ff etc. */
 	offset &= ~0x100;
@@ -303,51 +306,51 @@ WRITE16_MEMBER(m72_state::m72_palette2_w)
 			m_generic_paletteram2_16[offset + 0x400]);
 }
 
-WRITE16_MEMBER(m72_state::m72_videoram1_w)
+WRITE16_MEMBER(m72_state::videoram1_w)
 {
 	COMBINE_DATA(&m_videoram1[offset]);
 	m_fg_tilemap->mark_tile_dirty(offset/2);
 }
 
-WRITE16_MEMBER(m72_state::m72_videoram2_w)
+WRITE16_MEMBER(m72_state::videoram2_w)
 {
 	COMBINE_DATA(&m_videoram2[offset]);
 	m_bg_tilemap->mark_tile_dirty(offset/2);
 }
 
-WRITE16_MEMBER(m72_state::m72_irq_line_w)
+WRITE16_MEMBER(m72_state::irq_line_w)
 {
 	COMBINE_DATA(&m_raster_irq_position);
 }
 
-WRITE16_MEMBER(m72_state::m72_scrollx1_w)
+WRITE16_MEMBER(m72_state::scrollx1_w)
 {
 	COMBINE_DATA(&m_scrollx1);
 }
 
-WRITE16_MEMBER(m72_state::m72_scrollx2_w)
+WRITE16_MEMBER(m72_state::scrollx2_w)
 {
 	COMBINE_DATA(&m_scrollx2);
 }
 
-WRITE16_MEMBER(m72_state::m72_scrolly1_w)
+WRITE16_MEMBER(m72_state::scrolly1_w)
 {
 	COMBINE_DATA(&m_scrolly1);
 }
 
-WRITE16_MEMBER(m72_state::m72_scrolly2_w)
+WRITE16_MEMBER(m72_state::scrolly2_w)
 {
 	COMBINE_DATA(&m_scrolly2);
 }
 
-WRITE16_MEMBER(m72_state::m72_dmaon_w)
+WRITE16_MEMBER(m72_state::dmaon_w)
 {
 	if (ACCESSING_BITS_0_7)
 		memcpy(m_buffered_spriteram, m_spriteram, m_spriteram.bytes());
 }
 
 
-WRITE16_MEMBER(m72_state::m72_port02_w)
+WRITE16_MEMBER(m72_state::port02_w)
 {
 	if (ACCESSING_BITS_0_7)
 	{
@@ -412,7 +415,7 @@ WRITE16_MEMBER(m72_state::majtitle_gfx_ctrl_w)
 
 ***************************************************************************/
 
-void m72_state::m72_draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
+void m72_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 {
 	UINT16 *spriteram = m_buffered_spriteram;
 	int offs;
@@ -453,7 +456,7 @@ void m72_state::m72_draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 				if (flipy) c += h-1-y;
 				else c += y;
 
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+				m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 						c,
 						color,
 						flipx,flipy,
@@ -505,7 +508,7 @@ void m72_state::majtitle_draw_sprites(bitmap_ind16 &bitmap,const rectangle &clip
 				if (flipy) c += h-1-y;
 				else c += y;
 
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+				m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 						c,
 						color,
 						flipx,flipy,
@@ -515,11 +518,11 @@ void m72_state::majtitle_draw_sprites(bitmap_ind16 &bitmap,const rectangle &clip
 	}
 }
 
-UINT32 m72_state::screen_update_m72(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 m72_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	if (m_video_off)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		return 0;
 	}
 
@@ -529,11 +532,11 @@ UINT32 m72_state::screen_update_m72(screen_device &screen, bitmap_ind16 &bitmap,
 	m_bg_tilemap->set_scrollx(0,m_scrollx2);
 	m_bg_tilemap->set_scrolly(0,m_scrolly2);
 
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
-	m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
-	m72_draw_sprites(bitmap,cliprect);
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
-	m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
+	draw_sprites(bitmap,cliprect);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
 	return 0;
 }
 
@@ -544,7 +547,7 @@ UINT32 m72_state::screen_update_majtitle(screen_device &screen, bitmap_ind16 &bi
 
 	if (m_video_off)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		return 0;
 	}
 
@@ -565,11 +568,11 @@ UINT32 m72_state::screen_update_majtitle(screen_device &screen, bitmap_ind16 &bi
 	}
 	m_bg_tilemap->set_scrolly(0,m_scrolly2);
 
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
-	m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
 	majtitle_draw_sprites(bitmap,cliprect);
-	m72_draw_sprites(bitmap,cliprect);
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
-	m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
+	draw_sprites(bitmap,cliprect);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
 	return 0;
 }

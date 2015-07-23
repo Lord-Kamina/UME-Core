@@ -1,14 +1,21 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
-Wiz/Stinger/Scion/Kung-Fu Taikun  memory map (preliminary)
+  Seibu Stinger/Wiz hardware
 
-Driver by Zsolt Vasvari
+  Driver by Zsolt Vasvari
 
+
+XTAL: 18.432MHz??
+2xZ80, 3xAY8910 (stinger/scion have 2xAY8910 + discrete sound)
 
 These boards are similar to a Galaxian board in the way it handles scrolling
 and sprites, but the similarities pretty much end there. The most notable
 difference is that there are 2 independently scrollable playfields.
 
+
+Wiz/Stinger/Scion/Kung-Fu Taikun memory map (preliminary)
 
 Main CPU:
 
@@ -66,25 +73,34 @@ I/O write:
 7000 NMI enable (Wiz)
 
 
+****************************************************************************
+
 TODO:
 
 - Verify sprite colors in stinger/scion
+- Global palette is wrong in stinger/scion compared to pcb, or could it be
+  due to gamma/hue?
+- cpu/video/interrupt frequency measurements
+- sprite-sprite priorities are not correct yet, eg:
+  * stinger popcorn enemies at beginning of the game should have higher priority
+    than that 'vacuum cleaner' enemy sphere,
+  * the cloud in kungfut should have higher prio than player char
+- Improve stinger/scion discrete sound, shot sound should include noise
+- stinger/scion audiocpu jumps to lalaland after receiving a soundlatch of 0x90,
+  basically resetting itself. I assume this is a game bug
+- scion insert-coin sound sometimes repeats or is silent due to soundlatch timing,
+  this could be a game bug as well
 - Background noise in scion (but not scionc). Note that the sound program is
   almost identical, except for three patches affecting noise period, noise
   channel C enable and channel C volume. So it looks just like a bug in the
   original (weird), or some strange form of protection.
-  Another possible assumption is that it has a nonstandard AY hookup, where
-  channel C is not directly mixed with channels A and B but is either
-  disconnected or gated by something else first or filtered. scionc on the
-  other hand is a 'normal' hookup.
-
-Wiz:
-- Possible sprite/char priority issues.
-- And the supplier of the screenshot says there still may be some wrong
-  colors. Just before the break on Level 2 there is a cresent moon,
+- Is wiz protection emulation complete?
+- Wiz: the supplier of the screenshot says there still may be some wrong
+  colors. Just before the break on Level 2 there is a crescent moon,
   the background should probably be black.
 
-2001-Jun-24 Fixed protection and added save states (SJ)
+
+****************************************************************************
 
 2002-Nov-30 Kung-Fu Taikun added
   2xZ80 , 3x AY8910
@@ -98,8 +114,8 @@ Notes:
   The microphone is for summoning clouds. The game falls back to use
   buttons if it's not functioning.
 
-2003-JUL-30 updated Scion/Stinger analogue sound framework (AT)
 
+****************************************************************************
 
 Stephh's notes (based on the games Z80 code and some tests) :
 
@@ -163,45 +179,115 @@ Stephh's notes (based on the games Z80 code and some tests) :
 #include "emu.h"
 #include "cpu/z80/z80.h"
 #include "sound/ay8910.h"
-#include "sound/discrete.h"
 #include "includes/wiz.h"
+
+
+/***************************************************************************
+
+  Stinger/Scion discrete sound
+
+***************************************************************************/
 
 #define STINGER_SHOT_EN1    NODE_01
 #define STINGER_SHOT_EN2    NODE_02
 #define STINGER_BOOM_EN1    NODE_03
 #define STINGER_BOOM_EN2    NODE_04
 
-
-WRITE8_MEMBER(wiz_state::sound_command_w)
+// cut-and-pasted from Asteroid
+static const discrete_lfsr_desc stinger_lfsr =
 {
-	switch (offset)
-	{
-		// 0x90 triggers a jump to non-existant address(development system?) and must be filtered
-		case 0x00:
-			if (data != 0x90) soundlatch_byte_w(space, 0, data);
-		break;
+	DISC_CLK_IS_FREQ,
+	16,         /* Bit Length */
+	0,          /* Reset Value */
+	6,          /* Use Bit 6 as XOR input 0 */
+	14,         /* Use Bit 14 as XOR input 1 */
+	DISC_LFSR_XNOR,     /* Feedback stage1 is XNOR */
+	DISC_LFSR_OR,       /* Feedback stage2 is just stage 1 output OR with external feed */
+	DISC_LFSR_REPLACE,  /* Feedback stage3 replaces the shifted register contents */
+	0x000001,       /* Everything is shifted into the first bit only */
+	0,          /* Output is already inverted by XNOR */
+	16          /* Output bit is feedback bit */
+};
 
-		// explosion sound trigger(analog?)
-		case 0x08:
-			discrete_sound_w(m_discrete, space, STINGER_BOOM_EN1, m_dsc1);
-			discrete_sound_w(m_discrete, space, STINGER_BOOM_EN2, m_dsc1^=1);
-		break;
+static DISCRETE_SOUND_START(stinger)
 
-		// player shot sound trigger(analog?)
-		case 0x0a:
-			discrete_sound_w(m_discrete, space, STINGER_SHOT_EN1, m_dsc0);
-			discrete_sound_w(m_discrete, space, STINGER_SHOT_EN2, m_dsc0^=1);
-		break;
-	}
+#define STINGER_SHOT_OUT    NODE_90
+#define STINGER_BOOM_OUT    NODE_91
+#define STINGER_FINAL_MIX   NODE_99
+
+	// triggers are interleaved to give each circuit sufficient time to reset
+	DISCRETE_INPUT_LOGIC    (STINGER_SHOT_EN1) // even-inteval shots
+	DISCRETE_INPUT_LOGIC    (STINGER_SHOT_EN2) // odd-inteval shots
+	DISCRETE_INPUT_LOGIC    (STINGER_BOOM_EN1) // even-inteval explosions
+	DISCRETE_INPUT_LOGIC    (STINGER_BOOM_EN2) // odd-inteval explosions
+
+	//---------------------------------------
+	// Sample Shot Sound Circuit
+
+	#define SHOT_IN1    NODE_11
+	#define SHOT_IN2    NODE_12
+	#define SHOT_MOD    NODE_13
+	#define SHOT_FRQ    NODE_14
+	#define SHOT_AMP    NODE_15
+
+	DISCRETE_RCDISC     (SHOT_IN1, STINGER_SHOT_EN1, 1.0, 0.2, 1.0)
+	DISCRETE_RCDISC     (SHOT_IN2, STINGER_SHOT_EN2, 1.0, 0.2, 1.0)
+	DISCRETE_SWITCH     (SHOT_MOD, 1, STINGER_SHOT_EN1, SHOT_IN2, SHOT_IN1)
+	DISCRETE_MULTIPLY   (SHOT_FRQ, SHOT_MOD, 2000)
+	DISCRETE_MULTIPLY   (SHOT_AMP, SHOT_MOD,  800)
+	DISCRETE_SQUAREWAVE (STINGER_SHOT_OUT, 1, SHOT_FRQ, SHOT_AMP, 50, 0, 0)
+
+	//---------------------------------------
+	// Sample Explosion Sound Circuit
+
+	#define BOOM_IN1    NODE_21
+	#define BOOM_IN2    NODE_22
+	#define BOOM_MOD    NODE_23
+	#define BOOM_AMP    NODE_24
+
+	DISCRETE_RCDISC     (BOOM_IN1, STINGER_BOOM_EN1, 1.0, 0.25, 1.0)
+	DISCRETE_RCDISC     (BOOM_IN2, STINGER_BOOM_EN2, 1.0, 0.25, 1.0)
+	DISCRETE_SWITCH     (BOOM_MOD, 1, STINGER_BOOM_EN1, BOOM_IN2, BOOM_IN1)
+	DISCRETE_MULTIPLY   (BOOM_AMP, BOOM_MOD, 1500)
+	DISCRETE_LFSR_NOISE (STINGER_BOOM_OUT, 1, 1, 1800, BOOM_AMP, 0, 0, &stinger_lfsr)
+
+	//---------------------------------------
+
+	DISCRETE_ADDER2 (STINGER_FINAL_MIX, 1, STINGER_SHOT_OUT, STINGER_BOOM_OUT)
+
+	DISCRETE_OUTPUT (STINGER_FINAL_MIX, 5)
+
+DISCRETE_SOUND_END
+
+WRITE8_MEMBER(wiz_state::stinger_explosion_w)
+{
+	// explosion sound trigger(analog?)
+	m_discrete->write(space, STINGER_BOOM_EN1, m_dsc1);
+	m_discrete->write(space, STINGER_BOOM_EN2, m_dsc1^=1);
 }
+
+WRITE8_MEMBER(wiz_state::stinger_shot_w)
+{
+	// player shot sound trigger(analog?)
+	m_discrete->write(space, STINGER_SHOT_EN1, m_dsc0);
+	m_discrete->write(space, STINGER_SHOT_EN2, m_dsc0^=1);
+}
+
+
+
+/***************************************************************************
+
+  I/O, Memory maps
+
+***************************************************************************/
 
 READ8_MEMBER(wiz_state::wiz_protection_r)
 {
 	switch (m_colorram2[0])
 	{
-	case 0x35: return 0x25; /* FIX: sudden player death + free play afterwards   */
-	case 0x8f: return 0x1f; /* FIX: early boss appearance with corrupt graphics  */
-	case 0xa0: return 0x00; /* FIX: executing junk code after defeating the boss */
+		case 0x35: return 0x25; /* FIX: sudden player death + free play afterwards   */
+		case 0x8f: return 0x1f; /* FIX: early boss appearance with corrupt graphics  */
+		case 0xa0: return 0x00; /* FIX: executing junk code after defeating the boss */
 	}
 
 	return m_colorram2[0];
@@ -209,7 +295,7 @@ READ8_MEMBER(wiz_state::wiz_protection_r)
 
 WRITE8_MEMBER(wiz_state::wiz_coin_counter_w)
 {
-	coin_counter_w(machine(), offset,data);
+	coin_counter_w(machine(), offset, data & 1);
 }
 
 WRITE8_MEMBER(wiz_state::wiz_main_nmi_mask_w)
@@ -217,35 +303,52 @@ WRITE8_MEMBER(wiz_state::wiz_main_nmi_mask_w)
 	m_main_nmi_mask = data & 1;
 }
 
-static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, wiz_state )
+
+static ADDRESS_MAP_START( kungfut_main_map, AS_PROGRAM, 8, wiz_state )
 	AM_RANGE(0x0000, 0xbfff) AM_ROM
 	AM_RANGE(0xc000, 0xc7ff) AM_RAM
-	AM_RANGE(0xc800, 0xc801) AM_WRITE(wiz_coin_counter_w)
-	AM_RANGE(0xd000, 0xd3ff) AM_SHARE("videoram2")                  /* Fallthrough */
-	AM_RANGE(0xd400, 0xd7ff) AM_SHARE("colorram2")
-	AM_RANGE(0xd800, 0xd83f) AM_SHARE("attributesram2")
-	AM_RANGE(0xd840, 0xd85f) AM_SHARE("spriteram2")
-	AM_RANGE(0xd000, 0xd85f) AM_RAM
-	AM_RANGE(0xe000, 0xe3ff) AM_SHARE("videoram")   /* Fallthrough */
-	AM_RANGE(0xe400, 0xe7ff) AM_RAM
-	AM_RANGE(0xe800, 0xe83f) AM_SHARE("attributesram")
-	AM_RANGE(0xe840, 0xe85f) AM_SHARE("spriteram")
-	AM_RANGE(0xe000, 0xe85f) AM_RAM
+	AM_RANGE(0xd000, 0xd3ff) AM_RAM AM_SHARE("videoram2")
+	AM_RANGE(0xd400, 0xd7ff) AM_RAM AM_SHARE("colorram2")
+	AM_RANGE(0xd800, 0xd83f) AM_RAM AM_SHARE("attrram2")
+	AM_RANGE(0xd840, 0xd85f) AM_RAM AM_SHARE("spriteram2")
+	AM_RANGE(0xe000, 0xe3ff) AM_RAM AM_SHARE("videoram")
+	AM_RANGE(0xe400, 0xe7ff) AM_RAM AM_SHARE("colorram")
+	AM_RANGE(0xe800, 0xe83f) AM_RAM AM_SHARE("attrram")
+	AM_RANGE(0xe840, 0xe85f) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0xf000, 0xf000) AM_READ_PORT("DSW0")
-	AM_RANGE(0xf000, 0xf000) AM_RAM AM_SHARE("sprite_bank")
 	AM_RANGE(0xf001, 0xf001) AM_WRITE(wiz_main_nmi_mask_w)
-	AM_RANGE(0xf002, 0xf003) AM_WRITE(wiz_palettebank_w)
-	AM_RANGE(0xf004, 0xf005) AM_WRITE(wiz_char_bank_select_w)
+	AM_RANGE(0xf002, 0xf003) AM_WRITE(wiz_palette_bank_w)
+	AM_RANGE(0xf004, 0xf005) AM_WRITE(wiz_char_bank_w)
 	AM_RANGE(0xf006, 0xf006) AM_WRITE(wiz_flipx_w)
 	AM_RANGE(0xf007, 0xf007) AM_WRITE(wiz_flipy_w)
 	AM_RANGE(0xf008, 0xf008) AM_READ_PORT("DSW1")
-	AM_RANGE(0xf008, 0xf00f) AM_WRITENOP            /* initialized by Stinger/Scion */
 	AM_RANGE(0xf010, 0xf010) AM_READ_PORT("IN0")
 	AM_RANGE(0xf018, 0xf018) AM_READ_PORT("IN1")
-	AM_RANGE(0xf800, 0xf800) AM_READ(watchdog_reset_r)
-	AM_RANGE(0xf800, 0xf80f) AM_WRITE(sound_command_w)  /* sound registers */
+	AM_RANGE(0xf800, 0xf800) AM_WRITE(soundlatch_byte_w)
 	AM_RANGE(0xf818, 0xf818) AM_WRITE(wiz_bgcolor_w)
 ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 8, wiz_state )
+	AM_RANGE(0x0000, 0xbfff) AM_ROM AM_SHARE("decrypted_opcodes")
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( wiz_main_map, AS_PROGRAM, 8, wiz_state )
+	AM_RANGE(0xc800, 0xc801) AM_WRITE(wiz_coin_counter_w)
+	AM_RANGE(0xd400, 0xd400) AM_READ(wiz_protection_r)
+	AM_RANGE(0xf000, 0xf000) AM_WRITE(wiz_sprite_bank_w)
+	AM_IMPORT_FROM( kungfut_main_map )
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( stinger_main_map, AS_PROGRAM, 8, wiz_state )
+//  AM_RANGE(0xf008, 0xf00f) AM_WRITENOP // ?
+	AM_RANGE(0xf800, 0xf800) AM_READ(watchdog_reset_r)
+	AM_RANGE(0xf808, 0xf808) AM_WRITE(stinger_explosion_w)
+	AM_RANGE(0xf80a, 0xf80a) AM_WRITE(stinger_shot_w)
+	AM_IMPORT_FROM( kungfut_main_map )
+ADDRESS_MAP_END
+
+
+/**************************************************************************/
 
 WRITE8_MEMBER(wiz_state::wiz_sound_nmi_mask_w)
 {
@@ -253,27 +356,34 @@ WRITE8_MEMBER(wiz_state::wiz_sound_nmi_mask_w)
 }
 
 
-/* TODO: clean this up! */
-static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, wiz_state )
+static ADDRESS_MAP_START( kungfut_sound_map, AS_PROGRAM, 8, wiz_state )
+	ADDRESS_MAP_GLOBAL_MASK(0x7fff)
 	AM_RANGE(0x0000, 0x1fff) AM_ROM
 	AM_RANGE(0x2000, 0x23ff) AM_RAM
-	AM_RANGE(0x3000, 0x3000) AM_READ(soundlatch_byte_r) AM_WRITE(wiz_sound_nmi_mask_w)  /* Stinger/Scion */
 	AM_RANGE(0x4000, 0x4001) AM_DEVWRITE("8910.3", ay8910_device, address_data_w)
 	AM_RANGE(0x5000, 0x5001) AM_DEVWRITE("8910.1", ay8910_device, address_data_w)
-	AM_RANGE(0x6000, 0x6001) AM_DEVWRITE("8910.2", ay8910_device, address_data_w)        /* Wiz only */
-	AM_RANGE(0x7000, 0x7000) AM_READ(soundlatch_byte_r) AM_WRITE(wiz_sound_nmi_mask_w)  /* Wiz */
+	AM_RANGE(0x6000, 0x6001) AM_DEVWRITE("8910.2", ay8910_device, address_data_w)
+	AM_RANGE(0x7000, 0x7000) AM_READWRITE(soundlatch_byte_r, wiz_sound_nmi_mask_w)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( stinger_sound_map, AS_PROGRAM, 8, wiz_state )
+	ADDRESS_MAP_GLOBAL_MASK(0x7fff)
 	AM_RANGE(0x0000, 0x1fff) AM_ROM
 	AM_RANGE(0x2000, 0x23ff) AM_RAM
-	AM_RANGE(0x3000, 0x3000) AM_READ(soundlatch_byte_r) AM_WRITE(wiz_sound_nmi_mask_w)  /* Stinger/Scion */
+	AM_RANGE(0x3000, 0x3000) AM_READWRITE(soundlatch_byte_r, wiz_sound_nmi_mask_w)
+	AM_RANGE(0x4000, 0x4000) AM_WRITENOP // ?
 	AM_RANGE(0x5000, 0x5001) AM_DEVWRITE("8910.1", ay8910_device, address_data_w)
-	AM_RANGE(0x6000, 0x6001) AM_DEVWRITE("8910.2", ay8910_device, address_data_w)        /* Wiz only */
-	AM_RANGE(0x7000, 0x7000) AM_READ(soundlatch_byte_r) AM_WRITE(wiz_sound_nmi_mask_w)  /* Wiz */
+	AM_RANGE(0x6000, 0x6001) AM_DEVWRITE("8910.2", ay8910_device, address_data_w)
+	AM_RANGE(0x5000, 0x7fff) AM_READNOP // prevent error.log spam, cpu jumps here by accident
 ADDRESS_MAP_END
 
 
+
+/***************************************************************************
+
+  Inputs
+
+***************************************************************************/
 
 static INPUT_PORTS_START( stinger )
 	PORT_START("IN0")
@@ -287,14 +397,14 @@ static INPUT_PORTS_START( stinger )
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_COCKTAIL
 
 	PORT_START("IN1")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_8WAY
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_8WAY
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_8WAY
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_8WAY
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_8WAY PORT_COCKTAIL
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT )  PORT_COCKTAIL
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_COCKTAIL
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP )    PORT_COCKTAIL
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN )  PORT_COCKTAIL
 
 	PORT_START("DSW0")
 	PORT_DIPNAME( 0x07, 0x07, DEF_STR( Coin_A ) )
@@ -375,10 +485,10 @@ static INPUT_PORTS_START( scion )
 	PORT_INCLUDE( stinger )
 
 	PORT_MODIFY("IN1")
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_8WAY PORT_COCKTAIL
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_COCKTAIL
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN )  PORT_COCKTAIL
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT )  PORT_COCKTAIL
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP )    PORT_COCKTAIL
 
 	PORT_MODIFY("DSW0")
 	PORT_DIPNAME( 0x01, 0x01, DEF_STR( Cabinet ) )
@@ -398,11 +508,11 @@ static INPUT_PORTS_START( scion )
 	PORT_DIPSETTING(    0x10, "20000 80000" )
 	PORT_DIPSETTING(    0x30, "30000 90000" )
 	PORT_DIPNAME( 0x40, 0x00, DEF_STR( Unused ) )
-	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x40, DEF_STR( On ) )
 	PORT_DIPNAME( 0x80, 0x00, DEF_STR( Unused ) )
-	PORT_DIPSETTING(    0x80, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x80, DEF_STR( On ) )
 
 	PORT_MODIFY("DSW1")
 	PORT_DIPNAME( 0x07, 0x00, DEF_STR( Coin_A ) )
@@ -434,19 +544,19 @@ static INPUT_PORTS_START( kungfut )
 	PORT_START("IN0")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_COIN1 )
 	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER(2)
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER(1)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_BUTTON2 )
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_START2 )
 	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_START1 )
 	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_COIN2 )
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(1)
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_BUTTON1 )
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(2)
 
 	PORT_START("IN1")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_2WAY PORT_PLAYER(1)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_2WAY PORT_PLAYER(1)
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_2WAY
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT )  PORT_2WAY
 	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_2WAY PORT_PLAYER(2)
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNKNOWN )
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME ("Microphone Input")
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_BUTTON3 ) PORT_NAME ("Microphone Input") // call up cloud
 	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_UNKNOWN )
 	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_2WAY PORT_PLAYER(2)
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_UNKNOWN )
@@ -501,7 +611,6 @@ static INPUT_PORTS_START( kungfut )
 	PORT_DIPSETTING(    0x80, DEF_STR( On ) )
 INPUT_PORTS_END
 
-/* Are button 1 & 2 actually inverted? */
 static INPUT_PORTS_START( wiz )
 	PORT_START("IN0")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_COIN1 )
@@ -514,14 +623,14 @@ static INPUT_PORTS_START( wiz )
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_COCKTAIL     // Magic
 
 	PORT_START("IN1")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_8WAY
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_8WAY
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_8WAY
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_8WAY
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_8WAY PORT_COCKTAIL
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_8WAY PORT_COCKTAIL
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_COCKTAIL
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT )  PORT_COCKTAIL
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP )    PORT_COCKTAIL
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN )  PORT_COCKTAIL
 
 	PORT_START("DSW0")
 	PORT_DIPNAME( 0x07, 0x00, DEF_STR( Coin_A ) )
@@ -572,6 +681,12 @@ INPUT_PORTS_END
 
 
 
+/***************************************************************************
+
+  Machine configs, misc. interface
+
+***************************************************************************/
+
 static const gfx_layout charlayout =
 {
 	8,8,    /* 8*8 characters */
@@ -582,7 +697,6 @@ static const gfx_layout charlayout =
 	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8 },
 	8*8 /* every char takes 8 consecutive bytes */
 };
-
 
 static const gfx_layout spritelayout =
 {
@@ -619,119 +733,75 @@ static GFXDECODE_START( stinger )
 	GFXDECODE_ENTRY( "gfx2", 0x0000, spritelayout, 0, 32 )
 GFXDECODE_END
 
-
-
-//* ANALOG SOUND STARTS
-
-// cut-and-pasted from Asteroid
-static const discrete_lfsr_desc stinger_lfsr =
-{
-	DISC_CLK_IS_FREQ,
-	16,         /* Bit Length */
-	0,          /* Reset Value */
-	6,          /* Use Bit 6 as XOR input 0 */
-	14,         /* Use Bit 14 as XOR input 1 */
-	DISC_LFSR_XNOR,     /* Feedback stage1 is XNOR */
-	DISC_LFSR_OR,       /* Feedback stage2 is just stage 1 output OR with external feed */
-	DISC_LFSR_REPLACE,  /* Feedback stage3 replaces the shifted register contents */
-	0x000001,       /* Everything is shifted into the first bit only */
-	0,          /* Output is already inverted by XNOR */
-	16          /* Output bit is feedback bit */
-};
-
-static DISCRETE_SOUND_START(stinger)
-
-#define STINGER_SHOT_OUT    NODE_90
-#define STINGER_BOOM_OUT    NODE_91
-#define STINGER_FINAL_MIX   NODE_99
-
-	// triggers are interleaved to give each circuit sufficient time to reset
-	DISCRETE_INPUT_LOGIC    (STINGER_SHOT_EN1) // even-inteval shots
-	DISCRETE_INPUT_LOGIC    (STINGER_SHOT_EN2) // odd-inteval shots
-	DISCRETE_INPUT_LOGIC    (STINGER_BOOM_EN1) // even-inteval explosions
-	DISCRETE_INPUT_LOGIC    (STINGER_BOOM_EN2) // odd-inteval explosions
-
-	//---------------------------------------
-	// Sample Shot Sound Circuit
-
-	#define SHOT_IN1    NODE_11
-	#define SHOT_IN2    NODE_12
-	#define SHOT_MOD    NODE_13
-	#define SHOT_FRQ    NODE_14
-	#define SHOT_AMP    NODE_15
-
-	DISCRETE_RCDISC     (SHOT_IN1, STINGER_SHOT_EN1, 1.0, 0.2, 1.0)
-	DISCRETE_RCDISC     (SHOT_IN2, STINGER_SHOT_EN2, 1.0, 0.2, 1.0)
-	DISCRETE_SWITCH     (SHOT_MOD, 1, STINGER_SHOT_EN1, SHOT_IN2, SHOT_IN1)
-	DISCRETE_MULTIPLY   (SHOT_FRQ, SHOT_MOD, 2000)
-	DISCRETE_MULTIPLY   (SHOT_AMP, SHOT_MOD,  800)
-	DISCRETE_SQUAREWAVE (STINGER_SHOT_OUT, 1, SHOT_FRQ, SHOT_AMP, 50, 0, 0)
-
-	//---------------------------------------
-	// Sample Explosion Sound Circuit
-
-	#define BOOM_IN1    NODE_21
-	#define BOOM_IN2    NODE_22
-	#define BOOM_MOD    NODE_23
-	#define BOOM_AMP    NODE_24
-
-	DISCRETE_RCDISC     (BOOM_IN1, STINGER_BOOM_EN1, 1.0, 0.25, 1.0)
-	DISCRETE_RCDISC     (BOOM_IN2, STINGER_BOOM_EN2, 1.0, 0.25, 1.0)
-	DISCRETE_SWITCH     (BOOM_MOD, 1, STINGER_BOOM_EN1, BOOM_IN2, BOOM_IN1)
-	DISCRETE_MULTIPLY   (BOOM_AMP, BOOM_MOD, 1500)
-	DISCRETE_LFSR_NOISE (STINGER_BOOM_OUT, 1, 1, 1800, BOOM_AMP, 0, 0, &stinger_lfsr)
-
-	//---------------------------------------
-
-	DISCRETE_ADDER2 (STINGER_FINAL_MIX, 1, STINGER_SHOT_OUT, STINGER_BOOM_OUT)
-
-	DISCRETE_OUTPUT (STINGER_FINAL_MIX, 5)
-
-DISCRETE_SOUND_END
-//* ANALOG SOUND ENDS
-
+/**************************************************************************/
 
 void wiz_state::machine_reset()
 {
+	m_main_nmi_mask = 0;
+	m_sound_nmi_mask = 0;
 	m_dsc0 = m_dsc1 = 1;
+
+	m_sprite_bank = 0;
+	m_charbank[0] = m_charbank[1] = 0;
+	m_palbank[0] = m_palbank[1] = 0;
+	m_flipx = 0;
+	m_flipy = 0;
+	m_bgcolor = 0;
 }
+
+void wiz_state::machine_start()
+{
+	// register for savestates
+	save_item(NAME(m_main_nmi_mask));
+	save_item(NAME(m_sound_nmi_mask));
+	save_item(NAME(m_dsc0));
+	save_item(NAME(m_dsc1));
+
+	save_item(NAME(m_sprite_bank));
+	save_item(NAME(m_charbank));
+	save_item(NAME(m_palbank));
+	save_item(NAME(m_flipx));
+	save_item(NAME(m_flipy));
+	save_item(NAME(m_bgcolor));
+}
+
+/**************************************************************************/
 
 INTERRUPT_GEN_MEMBER(wiz_state::wiz_vblank_interrupt)
 {
-	if(m_main_nmi_mask & 1)
+	if (m_main_nmi_mask & 1)
 		device.execute().set_input_line(INPUT_LINE_NMI, PULSE_LINE);
 }
 
 INTERRUPT_GEN_MEMBER(wiz_state::wiz_sound_interrupt)
 {
-	if(m_sound_nmi_mask & 1)
+	if (m_sound_nmi_mask & 1)
 		device.execute().set_input_line(INPUT_LINE_NMI, PULSE_LINE);
 }
 
-
-static MACHINE_CONFIG_START( wiz, wiz_state )
+static MACHINE_CONFIG_START( kungfut, wiz_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", Z80, 18432000/6)    /* 3.072 MHz ??? */
-	MCFG_CPU_PROGRAM_MAP(main_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", wiz_state,  wiz_vblank_interrupt)
+	MCFG_CPU_ADD("maincpu", Z80, 18432000/6) /* 3.072 MHz ??? */
+	MCFG_CPU_PROGRAM_MAP(kungfut_main_map)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", wiz_state, wiz_vblank_interrupt)
 
-	MCFG_CPU_ADD("audiocpu", Z80, 14318000/8)   /* ? */
-	MCFG_CPU_PROGRAM_MAP(sound_map)
-	MCFG_CPU_PERIODIC_INT_DRIVER(wiz_state, wiz_sound_interrupt, 4*60)  /* ??? */
-
+	MCFG_CPU_ADD("audiocpu", Z80, 18432000/6) /* 3.072 MHz ??? */
+	MCFG_CPU_PROGRAM_MAP(kungfut_sound_map)
+	MCFG_CPU_PERIODIC_INT_DRIVER(wiz_state, wiz_sound_interrupt, 4*60) /* ??? */
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */    /* frames per second, vblank duration */)
+	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */ )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(wiz_state, screen_update_wiz)
+	MCFG_SCREEN_UPDATE_DRIVER(wiz_state, screen_update_kungfut)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(wiz)
-	MCFG_PALETTE_LENGTH(256)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", stinger)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(wiz_state, wiz)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -746,16 +816,31 @@ static MACHINE_CONFIG_START( wiz, wiz_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 MACHINE_CONFIG_END
 
-
-static MACHINE_CONFIG_DERIVED( stinger, wiz )
+static MACHINE_CONFIG_DERIVED( wiz, kungfut )
 
 	/* basic machine hardware */
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_PROGRAM_MAP(wiz_main_map)
 
+	/* video hardware */
+	MCFG_GFXDECODE_MODIFY("gfxdecode", wiz)
+	MCFG_SCREEN_MODIFY("screen")
+	MCFG_SCREEN_UPDATE_DRIVER(wiz_state, screen_update_wiz)
+MACHINE_CONFIG_END
+
+
+static MACHINE_CONFIG_DERIVED( stinger, kungfut )
+
+	/* basic machine hardware */
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_PROGRAM_MAP(stinger_main_map)
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
+
+	/* basic machine hardware */
 	MCFG_CPU_MODIFY("audiocpu")
 	MCFG_CPU_PROGRAM_MAP(stinger_sound_map)
 
 	/* video hardware */
-	MCFG_GFXDECODE(stinger)
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(wiz_state, screen_update_stinger)
 
@@ -763,31 +848,18 @@ static MACHINE_CONFIG_DERIVED( stinger, wiz )
 	MCFG_DEVICE_REMOVE("8910.3")
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(stinger)
+	MCFG_DISCRETE_INTF(stinger)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.5)
 MACHINE_CONFIG_END
 
-
 static MACHINE_CONFIG_DERIVED( scion, stinger )
 
-	/* basic machine hardware */
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_DEVICE_REMOVE_ADDRESS_MAP(AS_DECRYPTED_OPCODES)
 
 	/* video hardware */
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_VISIBLE_AREA(2*8, 32*8-1, 2*8, 30*8-1)
-
-MACHINE_CONFIG_END
-
-
-static MACHINE_CONFIG_DERIVED( kungfut, wiz )
-
-	/* basic machine hardware */
-
-	/* video hardware */
-	MCFG_GFXDECODE(stinger)
-	MCFG_SCREEN_MODIFY("screen")
-	MCFG_SCREEN_UPDATE_DRIVER(wiz_state, screen_update_kungfut)
-
 MACHINE_CONFIG_END
 
 
@@ -799,12 +871,12 @@ MACHINE_CONFIG_END
 ***************************************************************************/
 
 ROM_START( kungfut )
-	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_REGION( 0xc000, "maincpu", 0 )
 	ROM_LOAD( "p1.bin",  0x0000, 0x4000, CRC(b1e56960) SHA1(993388bbb663412110d1012be9ffc00b06fce4d0) )
 	ROM_LOAD( "p3.bin",  0x4000, 0x4000, CRC(6fc346f8) SHA1(bd1663fa780e41eafd668bf502b40c9750270e55) )
 	ROM_LOAD( "p2.bin",  0x8000, 0x4000, CRC(042cc9c5) SHA1(09f87e240c2aaa19fe7b8cb548ded828ab67b18b) )
 
-	ROM_REGION( 0x10000, "audiocpu", 0 )
+	ROM_REGION( 0x2000, "audiocpu", 0 )
 	ROM_LOAD( "1.bin",  0x0000, 0x2000, CRC(68028a5d) SHA1(2fabf5e55e09a34cd090d123737d31970e4086e8) )
 
 	ROM_REGION( 0x6000,  "gfx1", 0 )
@@ -816,6 +888,7 @@ ROM_START( kungfut )
 	ROM_LOAD( "5.bin",  0x0000, 0x2000, CRC(763bb61a) SHA1(9bea4a929db5d2e8c925a847591b9e5b2ad5aaaa) )
 	ROM_LOAD( "6.bin",  0x2000, 0x2000, CRC(c9649fce) SHA1(f65e75355d2f7b0899ea3769146a55b187da37d3) )
 	ROM_LOAD( "7.bin",  0x4000, 0x2000, CRC(32f02c13) SHA1(85781f03cca622ce8ee66924a1e72758ce42bdfe) )
+
 	ROM_REGION( 0x0300,  "proms", 0 )
 	ROM_LOAD( "82s129.0", 0x0000, 0x0100, CRC(eb823177) SHA1(a28233dbf87744a9896fe675b76603557e7f596b) )
 	ROM_LOAD( "82s129.1", 0x0100, 0x0100, CRC(6eec5dd9) SHA1(e846209c167b2a7d790faacea082a7edc1338e47) )
@@ -823,12 +896,12 @@ ROM_START( kungfut )
 ROM_END
 
 ROM_START( kungfuta )
-	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_REGION( 0xc000, "maincpu", 0 )
 	ROM_LOAD( "kungfu.01",  0x0000, 0x4000, CRC(48dada70) SHA1(a90901d2aef73d4fa9d9c80769b82a3fead0a0f9) )
 	ROM_LOAD( "kungfu.02",  0x4000, 0x4000, CRC(c08c5152) SHA1(c5db3ee1ee165708d93d296b51a5bb43265ac75f) )
 	ROM_LOAD( "kungfu.03",  0x8000, 0x4000, CRC(09b8670c) SHA1(170e7cbf87727d940e959fa7a0328b4cc1aba195) )
 
-	ROM_REGION( 0x10000, "audiocpu", 0 )
+	ROM_REGION( 0x2000, "audiocpu", 0 )
 	ROM_LOAD( "kungfu.04",  0x0000, 0x2000,  CRC(352bff48) SHA1(87d2408d31e1326ec810debcb2c724d1f003ae7b) )
 
 	ROM_REGION( 0x6000,  "gfx1", 0 )
@@ -848,12 +921,12 @@ ROM_START( kungfuta )
 ROM_END
 
 ROM_START( wiz )
-	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_REGION( 0xc000, "maincpu", 0 )
 	ROM_LOAD( "ic07_01.bin",  0x0000, 0x4000, CRC(c05f2c78) SHA1(98b93234684a3a228552ef41a08512fef1befedd) )
 	ROM_LOAD( "ic05_03.bin",  0x4000, 0x4000, CRC(7978d879) SHA1(866efdff3c111793d5a3cc2fa0b03a2b4e371c49) )
 	ROM_LOAD( "ic06_02.bin",  0x8000, 0x4000, CRC(9c406ad2) SHA1(cd82c3dc622886b6ebb30ba565f3c34d5a4e229b) )
 
-	ROM_REGION( 0x10000, "audiocpu", 0 )
+	ROM_REGION( 0x2000, "audiocpu", 0 )
 	ROM_LOAD( "ic57_10.bin",  0x0000, 0x2000, CRC(8a7575bd) SHA1(5470c4c3a40139f45db7a9e260f40b5244f10123) )
 
 	ROM_REGION( 0x6000,  "gfx1", 0 )    /* sprites/chars */
@@ -876,12 +949,12 @@ ROM_START( wiz )
 ROM_END
 
 ROM_START( wizt )
-	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_REGION( 0xc000, "maincpu", 0 )
 	ROM_LOAD( "wiz1.bin",     0x0000, 0x4000, CRC(5a6d3c60) SHA1(faeb7e7ddeee9638ec046655e87f866d81fdbee0) )
 	ROM_LOAD( "ic05_03.bin",  0x4000, 0x4000, CRC(7978d879) SHA1(866efdff3c111793d5a3cc2fa0b03a2b4e371c49) )
 	ROM_LOAD( "ic06_02.bin",  0x8000, 0x4000, CRC(9c406ad2) SHA1(cd82c3dc622886b6ebb30ba565f3c34d5a4e229b) )
 
-	ROM_REGION( 0x10000, "audiocpu", 0 )
+	ROM_REGION( 0x2000, "audiocpu", 0 )
 	ROM_LOAD( "ic57_10.bin",  0x0000, 0x2000, CRC(8a7575bd) SHA1(5470c4c3a40139f45db7a9e260f40b5244f10123) )
 
 	ROM_REGION( 0x6000,  "gfx1", 0 )    /* sprites/chars */
@@ -891,11 +964,11 @@ ROM_START( wizt )
 
 	ROM_REGION( 0xc000,  "gfx2", 0 )    /* sprites/chars */
 	ROM_LOAD( "wiz7.bin",     0x0000, 0x2000, CRC(601f2f3f) SHA1(6c0cc7de5fd94628eaecca409c4faa155f684bdc) )
-	ROM_CONTINUE(             0x6000, 0x2000  )
+	ROM_CONTINUE(             0x6000, 0x2000 )
 	ROM_LOAD( "wiz8.bin",     0x2000, 0x2000, CRC(f5ab982d) SHA1(5e0e72ec702dd5f48814a15f1a92bcdd29c944d8) )
-	ROM_CONTINUE(             0x8000, 0x2000  )
+	ROM_CONTINUE(             0x8000, 0x2000 )
 	ROM_LOAD( "wiz9.bin",     0x4000, 0x2000, CRC(f6c662e2) SHA1(54e904d731ea30f532dfea60d47edf2da99f32eb) )
-	ROM_CONTINUE(             0xa000, 0x2000  )
+	ROM_CONTINUE(             0xa000, 0x2000 )
 
 	ROM_REGION( 0x0300, "proms", 0 )
 	ROM_LOAD( "ic23_3-1.bin", 0x0000, 0x0100, CRC(2dd52fb2) SHA1(61722aba7a370f4a97cafbd5df88ec7c6263c4ad) )    /* palette red component */
@@ -905,12 +978,12 @@ ROM_END
 
 /* was marked as Wiz Alt Sound */
 ROM_START( wizta )
-	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_REGION( 0xc000, "maincpu", 0 )
 	ROM_LOAD( "ic7",  0x0000, 0x4000, CRC(b2ec49ad) SHA1(f1624995e9d426dd69d6567a91713aa023e716ad) )
 	ROM_LOAD( "ic5",  0x4000, 0x4000, CRC(f7e8f792) SHA1(2c1f82e6f6b2573d8bf0a27fb344fe86f475ddef) )
 	ROM_LOAD( "ic6",  0x8000, 0x4000, CRC(9c406ad2) SHA1(cd82c3dc622886b6ebb30ba565f3c34d5a4e229b) )
 
-	ROM_REGION( 0x10000, "audiocpu", 0 )
+	ROM_REGION( 0x2000, "audiocpu", 0 )
 	ROM_LOAD( "ic57",  0x0000, 0x2000, CRC(8a7575bd) SHA1(5470c4c3a40139f45db7a9e260f40b5244f10123) )
 
 	ROM_REGION( 0x6000,  "gfx1", 0 )    /* sprites/chars */
@@ -919,12 +992,12 @@ ROM_START( wizta )
 	ROM_LOAD( "ic14",     0x4000, 0x2000, CRC(f6970b23) SHA1(82d1fe0fee6bf9c6c2f472ed3479c02da85d5f69) )
 
 	ROM_REGION( 0xc000,  "gfx2", 0 )    /* sprites/chars */
-	ROM_LOAD( "ic3",     0x0000, 0x2000, CRC(601f2f3f) SHA1(6c0cc7de5fd94628eaecca409c4faa155f684bdc) )
-	ROM_CONTINUE(             0x6000, 0x2000  )
-	ROM_LOAD( "ic2",     0x2000, 0x2000, CRC(f5ab982d) SHA1(5e0e72ec702dd5f48814a15f1a92bcdd29c944d8) )
-	ROM_CONTINUE(             0x8000, 0x2000  )
-	ROM_LOAD( "ic1",     0x4000, 0x2000, CRC(f6c662e2) SHA1(54e904d731ea30f532dfea60d47edf2da99f32eb) )
-	ROM_CONTINUE(             0xa000, 0x2000  )
+	ROM_LOAD( "ic3",      0x0000, 0x2000, CRC(601f2f3f) SHA1(6c0cc7de5fd94628eaecca409c4faa155f684bdc) )
+	ROM_CONTINUE(         0x6000, 0x2000 )
+	ROM_LOAD( "ic2",      0x2000, 0x2000, CRC(f5ab982d) SHA1(5e0e72ec702dd5f48814a15f1a92bcdd29c944d8) )
+	ROM_CONTINUE(         0x8000, 0x2000 )
+	ROM_LOAD( "ic1",      0x4000, 0x2000, CRC(f6c662e2) SHA1(54e904d731ea30f532dfea60d47edf2da99f32eb) )
+	ROM_CONTINUE(         0xa000, 0x2000 )
 
 	ROM_REGION( 0x0300, "proms", 0 )
 	ROM_LOAD( "ic23_3-1.bin", 0x0000, 0x0100, CRC(2dd52fb2) SHA1(61722aba7a370f4a97cafbd5df88ec7c6263c4ad) )    /* palette red component */
@@ -933,14 +1006,14 @@ ROM_START( wizta )
 ROM_END
 
 ROM_START( stinger )
-	ROM_REGION( 0x10000, "maincpu", 0 ) /* 64k for code + 64k for decrypted opcodes */
+	ROM_REGION( 0xc000, "maincpu", 0 )
 	ROM_LOAD( "1-5j.bin",     0x0000, 0x2000, CRC(1a2ca600) SHA1(473e89f2c49f6e6f38df5d6fc2267ffecf84c6c8) )    /* encrypted */
 	ROM_LOAD( "2-6j.bin",     0x2000, 0x2000, CRC(957cd39c) SHA1(38bb589b3bfd962415b31d1151adf4bdb661122f) )    /* encrypted */
 	ROM_LOAD( "3-8j.bin",     0x4000, 0x2000, CRC(404c932e) SHA1(c23eac49e06ff38564062c0e8c8cdadf877f1d6a) )    /* encrypted */
 	ROM_LOAD( "4-9j.bin",     0x6000, 0x2000, CRC(2d570f91) SHA1(31d54d9fd5254c33f07c605bd6112c7eb53c42a1) )    /* encrypted */
 	ROM_LOAD( "5-10j.bin",    0x8000, 0x2000, CRC(c841795c) SHA1(e03860813c03ca1c737935accc2b5fe87c6b624a) )    /* encrypted */
 
-	ROM_REGION( 0x10000, "audiocpu", 0 )
+	ROM_REGION( 0x2000, "audiocpu", 0 )
 	ROM_LOAD( "6-9f.bin",     0x0000, 0x2000, CRC(79757f0c) SHA1(71be938c32c6a84618763761786ecc5d7d47581a) )
 
 	ROM_REGION( 0x6000,  "gfx1", 0 )    /* sprites/chars */
@@ -960,14 +1033,14 @@ ROM_START( stinger )
 ROM_END
 
 ROM_START( stinger2 )
-	ROM_REGION( 0x10000, "maincpu", 0 ) /* 64k for code + 64k for decrypted opcodes */
+	ROM_REGION( 0xc000, "maincpu", 0 )
 	ROM_LOAD( "n1.bin",       0x0000, 0x2000, CRC(f2d2790c) SHA1(0e5e92ef45b5bc27b0818f83c89b3bda0e701403) )    /* encrypted */
 	ROM_LOAD( "n2.bin",       0x2000, 0x2000, CRC(8fd2d8d8) SHA1(d3318a81fddeb3fa50d01569c1e1145e26ce7277) )    /* encrypted */
 	ROM_LOAD( "n3.bin",       0x4000, 0x2000, CRC(f1794d36) SHA1(7954500f489c0bc58cda8e7ffc2e4474759fdc33) )    /* encrypted */
 	ROM_LOAD( "n4.bin",       0x6000, 0x2000, CRC(230ba682) SHA1(c419ffebd021d41b3f5021948007fb6bcdb1cdf7) )    /* encrypted */
 	ROM_LOAD( "n5.bin",       0x8000, 0x2000, CRC(a03a01da) SHA1(28fecac7a821ac4718242919840266a907160df0) )    /* encrypted */
 
-	ROM_REGION( 0x10000, "audiocpu", 0 )
+	ROM_REGION( 0x2000, "audiocpu", 0 )
 	ROM_LOAD( "6-9f.bin",     0x0000, 0x2000, CRC(79757f0c) SHA1(71be938c32c6a84618763761786ecc5d7d47581a) )
 
 	ROM_REGION( 0x6000,  "gfx1", 0 )    /* sprites/chars */
@@ -987,14 +1060,14 @@ ROM_START( stinger2 )
 ROM_END
 
 ROM_START( scion )
-	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_REGION( 0xc000, "maincpu", 0 )
 	ROM_LOAD( "sc1",          0x0000, 0x2000, CRC(8dcad575) SHA1(3f194ece25e730b1cbbf3f332bbdebc3a6a72b0f) )
 	ROM_LOAD( "sc2",          0x2000, 0x2000, CRC(f608e0ba) SHA1(e55b0ad4dc117339d45a999e13760f4ab3ca4ce0) )
 	ROM_LOAD( "sc3",          0x4000, 0x2000, CRC(915289b9) SHA1(b32b40f93de4501619486a8c5a8367d3b2e357a6) )
 	ROM_LOAD( "4.9j",         0x6000, 0x2000, CRC(0f40d002) SHA1(13b04f3902ebdda02670fcb667e181cf70594c37) )
 	ROM_LOAD( "5.10j",        0x8000, 0x2000, CRC(dc4923b7) SHA1(ec5c22ef1f9ba0fe4da3de62a63a44aa3ff850f4) )
 
-	ROM_REGION( 0x10000, "audiocpu", 0 )
+	ROM_REGION( 0x2000, "audiocpu", 0 )
 	ROM_LOAD( "sc6",          0x0000, 0x2000, CRC(09f5f9c1) SHA1(83e489f32597880fb1a13f0bafedd275facb21f7) )
 
 	ROM_REGION( 0x6000,  "gfx1", 0 )    /* sprites/chars */
@@ -1014,14 +1087,14 @@ ROM_START( scion )
 ROM_END
 
 ROM_START( scionc )
-	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_REGION( 0xc000, "maincpu", 0 )
 	ROM_LOAD( "1.5j",         0x0000, 0x2000, CRC(5aaf571e) SHA1(53becfad13e95012dce6597625c64dcba9ac4433) )
 	ROM_LOAD( "2.6j",         0x2000, 0x2000, CRC(d5a66ac9) SHA1(3192da12b2d6a07e203999ed97cdba16d4917a98) )
 	ROM_LOAD( "3.8j",         0x4000, 0x2000, CRC(6e616f28) SHA1(ea32add6173251152ca84426c098c92ace123878) )
 	ROM_LOAD( "4.9j",         0x6000, 0x2000, CRC(0f40d002) SHA1(13b04f3902ebdda02670fcb667e181cf70594c37) )
 	ROM_LOAD( "5.10j",        0x8000, 0x2000, CRC(dc4923b7) SHA1(ec5c22ef1f9ba0fe4da3de62a63a44aa3ff850f4) )
 
-	ROM_REGION( 0x10000, "audiocpu", 0 )
+	ROM_REGION( 0x2000, "audiocpu", 0 )
 	ROM_LOAD( "6.9f",         0x0000, 0x2000, CRC(a66a0ce6) SHA1(b2d6a8ded007c362c58496ead33d1561a982440a) )
 
 	ROM_REGION( 0x6000,  "gfx1", 0 )    /* sprites/chars */
@@ -1041,7 +1114,6 @@ ROM_START( scionc )
 ROM_END
 
 
-
 DRIVER_INIT_MEMBER(wiz_state,stinger)
 {
 	static const UINT8 swap_xor_table[4][4] =
@@ -1051,59 +1123,41 @@ DRIVER_INIT_MEMBER(wiz_state,stinger)
 		{ 5,3,7, 0x80 },
 		{ 5,7,3, 0x28 }
 	};
-	address_space &space = m_maincpu->space(AS_PROGRAM);
+
 	UINT8 *rom = memregion("maincpu")->base();
-	int size = memregion("maincpu")->bytes();
-	UINT8 *decrypt = auto_alloc_array(machine(), UINT8, size);
-	int A;
 	const UINT8 *tbl;
 
-	space.set_decrypted_region(0x0000, 0xffff, decrypt);
-
-	for (A = 0x0000;A < 0x10000;A++)
+	for (int a = 0x0000; a < 0xc000; a++)
 	{
 		int row;
 		UINT8 src;
 
-
-		if (A & 0x2040)
+		if (a & 0x2040)
 		{
 			/* not encrypted */
-			decrypt[A] = rom[A];
+			m_decrypted_opcodes[a] = rom[a];
 		}
 		else
 		{
-			src = rom[A];
+			src = rom[a];
 
 			/* pick the translation table from bits 3 and 5 of the address */
-			row = ((A >> 3) & 1) + (((A >> 5) & 1) << 1);
+			row = ((a >> 3) & 1) + (((a >> 5) & 1) << 1);
 
 			/* decode the opcodes */
 			tbl = swap_xor_table[row];
-			decrypt[A] = BITSWAP8(src,tbl[0],6,tbl[1],4,tbl[2],2,1,0) ^ tbl[3];
+			m_decrypted_opcodes[a] = BITSWAP8(src, tbl[0], 6, tbl[1], 4, tbl[2], 2, 1, 0) ^ tbl[3];
 		}
 	}
 }
 
 
-DRIVER_INIT_MEMBER(wiz_state,scion)
-{
-	m_audiocpu->space(AS_PROGRAM).nop_write(0x4000, 0x4001);
-}
-
-
-DRIVER_INIT_MEMBER(wiz_state,wiz)
-{
-	m_maincpu->space(AS_PROGRAM).install_read_handler(0xd400, 0xd400, read8_delegate(FUNC(wiz_state::wiz_protection_r),this));
-}
-
-
-GAME( 1983, stinger,  0,       stinger, stinger, wiz_state,  stinger, ROT90,  "Seibu Denshi", "Stinger", GAME_IMPERFECT_SOUND )
-GAME( 1983, stinger2, stinger, stinger, stinger2, wiz_state, stinger, ROT90,  "Seibu Denshi", "Stinger (prototype?)", GAME_IMPERFECT_SOUND )
-GAME( 1984, scion,    0,       scion,   scion, wiz_state,    scion,   ROT0,   "Seibu Denshi", "Scion", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_COLORS )
-GAME( 1984, scionc,   scion,   scion,   scion, wiz_state,    scion,   ROT0,   "Seibu Denshi (Cinematronics license)", "Scion (Cinematronics)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_COLORS )
-GAME( 1984, kungfut,  0,       kungfut, kungfut, driver_device,  0,       ROT0,   "Seibu Kaihatsu", "Kung-Fu Taikun (set 1)", 0 )
-GAME( 1984, kungfuta, kungfut, kungfut, kungfut, driver_device,  0,       ROT0,   "Seibu Kaihatsu", "Kung-Fu Taikun (set 2)" , 0) /* board was a bootleg but set might still be original */
-GAME( 1985, wiz,      0,       wiz,     wiz, wiz_state,      wiz,     ROT270, "Seibu Kaihatsu", "Wiz", 0 )
-GAME( 1985, wizt,     wiz,     wiz,     wiz, wiz_state,      wiz,     ROT270, "Seibu Kaihatsu (Taito license)", "Wiz (Taito, set 1)", 0 )
-GAME( 1985, wizta,    wiz,     wiz,     wiz, wiz_state,      wiz,     ROT270, "Seibu Kaihatsu (Taito license)", "Wiz (Taito, set 2)", 0 )
+GAME( 1983, stinger,  0,       stinger, stinger,  wiz_state,     stinger, ROT90,  "Seibu Denshi", "Stinger", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_COLORS | GAME_SUPPORTS_SAVE )
+GAME( 1983, stinger2, stinger, stinger, stinger2, wiz_state,     stinger, ROT90,  "Seibu Denshi", "Stinger (prototype?)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_COLORS | GAME_SUPPORTS_SAVE )
+GAME( 1984, scion,    0,       scion,   scion,    driver_device, 0,       ROT0,   "Seibu Denshi", "Scion", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_COLORS | GAME_SUPPORTS_SAVE )
+GAME( 1984, scionc,   scion,   scion,   scion,    driver_device, 0,       ROT0,   "Seibu Denshi (Cinematronics license)", "Scion (Cinematronics)", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_COLORS | GAME_SUPPORTS_SAVE )
+GAME( 1984, kungfut,  0,       kungfut, kungfut,  driver_device, 0,       ROT0,   "Seibu Kaihatsu", "Kung-Fu Taikun (set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1984, kungfuta, kungfut, kungfut, kungfut,  driver_device, 0,       ROT0,   "Seibu Kaihatsu", "Kung-Fu Taikun (set 2)", GAME_SUPPORTS_SAVE ) /* board was a bootleg but set might still be original */
+GAME( 1985, wiz,      0,       wiz,     wiz,      driver_device, 0,       ROT270, "Seibu Kaihatsu", "Wiz", GAME_SUPPORTS_SAVE )
+GAME( 1985, wizt,     wiz,     wiz,     wiz,      driver_device, 0,       ROT270, "Seibu Kaihatsu (Taito license)", "Wiz (Taito, set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1985, wizta,    wiz,     wiz,     wiz,      driver_device, 0,       ROT270, "Seibu Kaihatsu (Taito license)", "Wiz (Taito, set 2)", GAME_SUPPORTS_SAVE )

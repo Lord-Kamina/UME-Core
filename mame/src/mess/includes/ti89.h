@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /*****************************************************************************
  *
  * includes/ti89.h
@@ -16,6 +18,7 @@ public:
 		: driver_device(mconfig, type, tag),
 			m_maincpu(*this, "maincpu"),
 			m_flash(*this, "flash"),
+			m_rom_base(*this, "flash"),
 			m_io_bit0(*this, "BIT0"),
 			m_io_bit1(*this, "BIT1"),
 			m_io_bit2(*this, "BIT2"),
@@ -28,6 +31,7 @@ public:
 
 	required_device<cpu_device> m_maincpu;
 	required_device<sharp_unk128mbit_device> m_flash;
+	required_region_ptr<UINT16> m_rom_base;
 	required_ioport m_io_bit0;
 	required_ioport m_io_bit1;
 	required_ioport m_io_bit2;
@@ -44,8 +48,6 @@ public:
 	UINT8 m_hw_version;
 	bool m_flash_mem;
 	UINT32 m_initial_pc;
-
-	UINT16 *m_rom_base;
 
 	// keyboard
 	UINT16 m_kb_mask;
@@ -71,7 +73,7 @@ public:
 	virtual void machine_reset();
 	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 
-	UINT8 keypad_r (running_machine &machine);
+	UINT8 keypad_r();
 	DECLARE_WRITE16_MEMBER ( ti68k_io_w );
 	DECLARE_READ16_MEMBER ( ti68k_io_r );
 	DECLARE_WRITE16_MEMBER ( ti68k_io2_w );
@@ -79,7 +81,7 @@ public:
 	DECLARE_WRITE16_MEMBER ( flash_w );
 	DECLARE_READ16_MEMBER ( flash_r );
 	UINT64 m_timer;
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(ti68k);
 	DECLARE_INPUT_CHANGED_MEMBER(ti68k_on_key);
 	TIMER_DEVICE_CALLBACK_MEMBER(ti68k_timer_callback);
 };

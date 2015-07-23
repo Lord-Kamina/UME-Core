@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Balfour
 /***************************************************************************
 
     Atari Subs hardware
@@ -8,44 +10,40 @@
 #include "includes/subs.h"
 #include "sound/discrete.h"
 
-WRITE8_MEMBER(subs_state::subs_invert1_w)
+WRITE8_MEMBER(subs_state::invert1_w)
 {
 	if ((offset & 0x01) == 1)
 	{
-		palette_set_color(machine(), 0, MAKE_RGB(0x00, 0x00, 0x00));
-		palette_set_color(machine(), 1, MAKE_RGB(0xFF, 0xFF, 0xFF));
+		m_palette->set_pen_color(0, rgb_t(0x00, 0x00, 0x00));
+		m_palette->set_pen_color(1, rgb_t(0xFF, 0xFF, 0xFF));
 	}
 	else
 	{
-		palette_set_color(machine(), 1, MAKE_RGB(0x00, 0x00, 0x00));
-		palette_set_color(machine(), 0, MAKE_RGB(0xFF, 0xFF, 0xFF));
+		m_palette->set_pen_color(1, rgb_t(0x00, 0x00, 0x00));
+		m_palette->set_pen_color(0, rgb_t(0xFF, 0xFF, 0xFF));
 	}
 }
 
-WRITE8_MEMBER(subs_state::subs_invert2_w)
+WRITE8_MEMBER(subs_state::invert2_w)
 {
 	if ((offset & 0x01) == 1)
 	{
-		palette_set_color(machine(), 2, MAKE_RGB(0x00, 0x00, 0x00));
-		palette_set_color(machine(), 3, MAKE_RGB(0xFF, 0xFF, 0xFF));
+		m_palette->set_pen_color(2, rgb_t(0x00, 0x00, 0x00));
+		m_palette->set_pen_color(3, rgb_t(0xFF, 0xFF, 0xFF));
 	}
 	else
 	{
-		palette_set_color(machine(), 3, MAKE_RGB(0x00, 0x00, 0x00));
-		palette_set_color(machine(), 2, MAKE_RGB(0xFF, 0xFF, 0xFF));
+		m_palette->set_pen_color(3, rgb_t(0x00, 0x00, 0x00));
+		m_palette->set_pen_color(2, rgb_t(0xFF, 0xFF, 0xFF));
 	}
 }
 
 
-UINT32 subs_state::screen_update_subs_left(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 subs_state::screen_update_left(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	UINT8 *videoram = m_videoram;
-	UINT8 *spriteram = m_spriteram;
-	int offs;
-
 	/* for every character in the Video RAM, check if it has been modified */
 	/* since last time and update it accordingly. */
-	for (offs = 0x400 - 1; offs >= 0; offs--)
+	for (int offs = 0x400 - 1; offs >= 0; offs--)
 	{
 		int charcode;
 		int sx,sy;
@@ -55,7 +53,7 @@ UINT32 subs_state::screen_update_subs_left(screen_device &screen, bitmap_ind16 &
 		left_sonar_window = 0;
 		right_sonar_window = 0;
 
-		charcode = videoram[offs];
+		charcode = m_videoram[offs];
 
 		/* Which monitor is this for? */
 //      right_enable = charcode & 0x40;
@@ -74,28 +72,28 @@ UINT32 subs_state::screen_update_subs_left(screen_device &screen, bitmap_ind16 &
 
 		/* draw the left screen */
 		if ((left_enable || left_sonar_window) && (!right_sonar_window))
-			drawgfx_opaque(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect,
 					charcode, 1,
 					0,0,sx,sy);
 		else
-			drawgfx_opaque(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect,
 					0, 1,
 					0,0,sx,sy);
 	}
 
 	/* draw the motion objects */
-	for (offs = 0; offs < 4; offs++)
+	for (int offs = 0; offs < 4; offs++)
 	{
 		int sx,sy;
 		int charcode;
 		int prom_set;
 		int sub_enable;
 
-		sx = spriteram[0x00 + (offs * 2)] - 16;
-		sy = spriteram[0x08 + (offs * 2)] - 16;
-		charcode = spriteram[0x09 + (offs * 2)];
+		sx = m_spriteram[0x00 + (offs * 2)] - 16;
+		sy = m_spriteram[0x08 + (offs * 2)] - 16;
+		charcode = m_spriteram[0x09 + (offs * 2)];
 		if (offs < 2)
-			sub_enable = spriteram[0x01 + (offs * 2)] & 0x80;
+			sub_enable = m_spriteram[0x01 + (offs * 2)] & 0x80;
 		else
 			sub_enable = 1;
 
@@ -104,7 +102,7 @@ UINT32 subs_state::screen_update_subs_left(screen_device &screen, bitmap_ind16 &
 
 		/* left screen - special check for drawing right screen's sub */
 		if ((offs!=0) || (sub_enable))
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					charcode + 32 * prom_set,
 					0,
 					0,0,sx,sy,0);
@@ -112,20 +110,16 @@ UINT32 subs_state::screen_update_subs_left(screen_device &screen, bitmap_ind16 &
 
 	/* Update sound */
 	address_space &space = machine().driver_data()->generic_space();
-	discrete_sound_w(m_discrete, space, SUBS_LAUNCH_DATA, spriteram[5] & 0x0f);   // Launch data
-	discrete_sound_w(m_discrete, space, SUBS_CRASH_DATA, spriteram[5] >> 4);      // Crash/explode data
+	m_discrete->write(space, SUBS_LAUNCH_DATA, m_spriteram[5] & 0x0f);   // Launch data
+	m_discrete->write(space, SUBS_CRASH_DATA, m_spriteram[5] >> 4);      // Crash/explode data
 	return 0;
 }
 
-UINT32 subs_state::screen_update_subs_right(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 subs_state::screen_update_right(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	UINT8 *videoram = m_videoram;
-	UINT8 *spriteram = m_spriteram;
-	int offs;
-
 	/* for every character in the Video RAM, check if it has been modified */
 	/* since last time and update it accordingly. */
-	for (offs = 0x400 - 1; offs >= 0; offs--)
+	for (int offs = 0x400 - 1; offs >= 0; offs--)
 	{
 		int charcode;
 		int sx,sy;
@@ -135,7 +129,7 @@ UINT32 subs_state::screen_update_subs_right(screen_device &screen, bitmap_ind16 
 		left_sonar_window = 0;
 		right_sonar_window = 0;
 
-		charcode = videoram[offs];
+		charcode = m_videoram[offs];
 
 		/* Which monitor is this for? */
 		right_enable = charcode & 0x40;
@@ -154,28 +148,28 @@ UINT32 subs_state::screen_update_subs_right(screen_device &screen, bitmap_ind16 
 
 		/* draw the right screen */
 		if ((right_enable || right_sonar_window) && (!left_sonar_window))
-			drawgfx_opaque(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect,
 					charcode, 0,
 					0,0,sx,sy);
 		else
-			drawgfx_opaque(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect,
 					0, 0,
 					0,0,sx,sy);
 	}
 
 	/* draw the motion objects */
-	for (offs = 0; offs < 4; offs++)
+	for (int offs = 0; offs < 4; offs++)
 	{
 		int sx,sy;
 		int charcode;
 		int prom_set;
 		int sub_enable;
 
-		sx = spriteram[0x00 + (offs * 2)] - 16;
-		sy = spriteram[0x08 + (offs * 2)] - 16;
-		charcode = spriteram[0x09 + (offs * 2)];
+		sx = m_spriteram[0x00 + (offs * 2)] - 16;
+		sy = m_spriteram[0x08 + (offs * 2)] - 16;
+		charcode = m_spriteram[0x09 + (offs * 2)];
 		if (offs < 2)
-			sub_enable = spriteram[0x01 + (offs * 2)] & 0x80;
+			sub_enable = m_spriteram[0x01 + (offs * 2)] & 0x80;
 		else
 			sub_enable = 1;
 
@@ -183,7 +177,7 @@ UINT32 subs_state::screen_update_subs_right(screen_device &screen, bitmap_ind16 
 		charcode = (charcode >> 3) & 0x1F;
 
 		if ((offs!=1) || (sub_enable))
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					charcode + 32 * prom_set,
 					0,
 					0,0,sx,sy,0);

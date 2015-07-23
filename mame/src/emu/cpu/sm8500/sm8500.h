@@ -1,13 +1,15 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 #pragma once
 
 #ifndef __SM8500_H__
 #define __SM8500_H__
 
 #define MCFG_SM8500_DMA_CB(_devcb) \
-	sm8500_cpu_device::set_dma_cb(*device, DEVCB2_##_devcb);
+	sm8500_cpu_device::set_dma_cb(*device, DEVCB_##_devcb);
 
 #define MCFG_SM8500_TIMER_CB(_devcb) \
-	sm8500_cpu_device::set_timer_cb(*device, DEVCB2_##_devcb);
+	sm8500_cpu_device::set_timer_cb(*device, DEVCB_##_devcb);
 
 enum
 {
@@ -16,7 +18,7 @@ enum
 	SM8500_RR12, SM8500_RR14,
 	/* additional internal 8 bit registers */
 	SM8500_IE0, SM8500_IE1, SM8500_IR0, SM8500_IR1, SM8500_P0, SM8500_P1, SM8500_P2, SM8500_P3, SM8500_SYS, SM8500_CKC,
-	SM8500_SPH, SM8500_SPL, SM8500_PS0, SM8500_PS1, SM8500_P0C, SM8500_P1C, SM8500_P2C, SM8500_P3C,
+	SM8500_SPH, SM8500_SPL, SM8500_PS0, SM8500_PS1, SM8500_P0C, SM8500_P1C, SM8500_P2C, SM8500_P3C
 };
 
 
@@ -27,8 +29,8 @@ public:
 	sm8500_cpu_device(const machine_config &mconfig, const char *_tag, device_t *_owner, UINT32 _clock);
 
 	// static configuration helpers
-	template<class _Object> static devcb2_base &set_dma_cb(device_t &device, _Object object) { return downcast<sm8500_cpu_device &>(device).m_dma_func.set_callback(object); }
-	template<class _Object> static devcb2_base &set_timer_cb(device_t &device, _Object object) { return downcast<sm8500_cpu_device &>(device).m_timer_func.set_callback(object); }
+	template<class _Object> static devcb_base &set_dma_cb(device_t &device, _Object object) { return downcast<sm8500_cpu_device &>(device).m_dma_func.set_callback(object); }
+	template<class _Object> static devcb_base &set_timer_cb(device_t &device, _Object object) { return downcast<sm8500_cpu_device &>(device).m_timer_func.set_callback(object); }
 
 	/* interrupts */
 	static const int ILL_INT  = 0;
@@ -69,7 +71,7 @@ protected:
 	virtual const address_space_config *memory_space_config(address_spacenum spacenum = AS_0) const { return (spacenum == AS_PROGRAM) ? &m_program_config : NULL; }
 
 	// device_state_interface overrides
-	void state_string_export(const device_state_entry &entry, astring &string);
+	void state_string_export(const device_state_entry &entry, std::string &str);
 
 	// device_disasm_interface overrides
 	virtual UINT32 disasm_min_opcode_bytes() const { return 1; }
@@ -86,8 +88,8 @@ protected:
 
 	address_space_config m_program_config;
 
-	devcb2_write8 m_dma_func;
-	devcb2_write8 m_timer_func;
+	devcb_write8 m_dma_func;
+	devcb_write8 m_timer_func;
 
 	UINT16 m_PC;
 	UINT8 m_IE0;

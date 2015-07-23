@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Roberto Lavarone
 /******************************************************************************
     Nuova Elettronica Z80NE system driver
 
@@ -93,12 +95,8 @@
 #include "cpu/z80/z80.h"
 #include "includes/z80ne.h"
 #include "imagedev/flopdrv.h"
-#include "formats/z80ne_dsk.h"
+#include "formats/dmk_dsk.h"
 #include "machine/ram.h"
-
-/* peripheral chips */
-#include "machine/kr2376.h"
-#include "machine/wd17xx.h"
 
 /* Layout */
 #include "z80ne.lh"
@@ -379,91 +377,37 @@ INPUT_PORTS_END
 /******************************************************************************
  Machine Drivers
 ******************************************************************************/
-
+#if 0
 static const UINT32 lx388palette[] =
 {
-	MAKE_RGB(0x00, 0xff, 0x00), /* GREEN */
-	MAKE_RGB(0x00, 0xff, 0x00), /* YELLOW in original, here GREEN */
-	MAKE_RGB(0x00, 0x00, 0xff), /* BLUE */
-	MAKE_RGB(0xff, 0x00, 0x00), /* RED */
-	MAKE_RGB(0xff, 0xff, 0xff), /* BUFF */
-	MAKE_RGB(0x00, 0xff, 0xff), /* CYAN */
-	MAKE_RGB(0xff, 0x00, 0xff), /* MAGENTA */
-	MAKE_RGB(0xff, 0x80, 0x00), /* ORANGE */
+	rgb_t(0x00, 0xff, 0x00), /* GREEN */
+	rgb_t(0x00, 0xff, 0x00), /* YELLOW in original, here GREEN */
+	rgb_t(0x00, 0x00, 0xff), /* BLUE */
+	rgb_t(0xff, 0x00, 0x00), /* RED */
+	rgb_t(0xff, 0xff, 0xff), /* BUFF */
+	rgb_t(0x00, 0xff, 0xff), /* CYAN */
+	rgb_t(0xff, 0x00, 0xff), /* MAGENTA */
+	rgb_t(0xff, 0x80, 0x00), /* ORANGE */
 
-	MAKE_RGB(0x00, 0x20, 0x00), /* BLACK in original, here DARK green */
-	MAKE_RGB(0x00, 0xff, 0x00), /* GREEN */
-	MAKE_RGB(0x00, 0x00, 0x00), /* BLACK */
-	MAKE_RGB(0xff, 0xff, 0xff), /* BUFF */
+	rgb_t(0x00, 0x20, 0x00), /* BLACK in original, here DARK green */
+	rgb_t(0x00, 0xff, 0x00), /* GREEN */
+	rgb_t(0x00, 0x00, 0x00), /* BLACK */
+	rgb_t(0xff, 0xff, 0xff), /* BUFF */
 
-	MAKE_RGB(0x00, 0x20, 0x00), /* ALPHANUMERIC DARK GREEN */
-	MAKE_RGB(0x00, 0xff, 0x00), /* ALPHANUMERIC BRIGHT GREEN */
-	MAKE_RGB(0x40, 0x10, 0x00), /* ALPHANUMERIC DARK ORANGE */
-	MAKE_RGB(0xff, 0xc4, 0x18)      /* ALPHANUMERIC BRIGHT ORANGE */
+	rgb_t(0x00, 0x20, 0x00), /* ALPHANUMERIC DARK GREEN */
+	rgb_t(0x00, 0xff, 0x00), /* ALPHANUMERIC BRIGHT GREEN */
+	rgb_t(0x40, 0x10, 0x00), /* ALPHANUMERIC DARK ORANGE */
+	rgb_t(0xff, 0xc4, 0x18)      /* ALPHANUMERIC BRIGHT ORANGE */
 };
+#endif
 
-static const ay31015_config z80ne_ay31015_config =
-{
-	4800.0,
-	4800.0,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
+FLOPPY_FORMATS_MEMBER( z80ne_state::floppy_formats )
+	FLOPPY_DMK_FORMAT
+FLOPPY_FORMATS_END
 
-static const cassette_interface z80ne_cassettea_config =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED),
-	NULL,
-	NULL
-};
-
-static const cassette_interface z80ne_cassetteb_config =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED),
-	NULL,
-	NULL
-};
-
-static const kr2376_interface lx388_kr2376_interface =
-{
-	50000,
-	DEVCB_NULL
-};
-
-static const floppy_interface z80netf_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_DSHD,
-	LEGACY_FLOPPY_OPTIONS_NAME(z80ne),
-	NULL,
-	NULL
-};
-
-static const mc6847_interface z80net_mc6847_intf =
-{
-	"lx388",
-	DEVCB_DRIVER_MEMBER(z80ne_state, lx388_mc6847_videoram_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-
-	DEVCB_LINE_GND,             /* AG */
-	DEVCB_LINE_GND,             /* GM2 */
-	DEVCB_LINE_GND,             /* GM1 */
-	DEVCB_LINE_GND,             /* GM0 */
-	DEVCB_LINE_GND,             /* CSS */
-	DEVCB_NULL,                 /* AS */
-	DEVCB_NULL,                 /* INTEXT */
-	DEVCB_NULL,                 /* INV */
-};
+static SLOT_INTERFACE_START( z80ne_floppies )
+	SLOT_INTERFACE("sssd", FLOPPY_525_SSSD)
+SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_START( z80ne, z80ne_state )
 	/* basic machine hardware */
@@ -474,10 +418,15 @@ static MACHINE_CONFIG_START( z80ne, z80ne_state )
 	MCFG_MACHINE_START_OVERRIDE(z80ne_state,z80ne)
 	MCFG_MACHINE_RESET_OVERRIDE(z80ne_state,z80ne)
 
-	MCFG_AY31015_ADD( "ay_3_1015", z80ne_ay31015_config )
+	MCFG_DEVICE_ADD( "ay_3_1015", AY31015, 0 )
+	MCFG_AY31015_TX_CLOCK(4800.0)
+	MCFG_AY31015_RX_CLOCK(4800.0)
 
-	MCFG_CASSETTE_ADD( "cassette", z80ne_cassettea_config )
-	MCFG_CASSETTE_ADD( "cassette2", z80ne_cassetteb_config )
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
+
+	MCFG_CASSETTE_ADD( "cassette2" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
 
 	MCFG_DEFAULT_LAYOUT(layout_z80ne)
 
@@ -495,11 +444,15 @@ static MACHINE_CONFIG_DERIVED( z80net, z80ne )
 	MCFG_MACHINE_START_OVERRIDE(z80ne_state, z80net )
 	MCFG_MACHINE_RESET_OVERRIDE(z80ne_state, z80net )
 
-	MCFG_KR2376_ADD( "lx388_kr2376", lx388_kr2376_interface)
+	MCFG_DEVICE_ADD("lx388_kr2376", KR2376, 50000)
 
 	/* video hardware */
 	MCFG_SCREEN_MC6847_PAL_ADD("lx388", "mc6847")
-	MCFG_MC6847_ADD("mc6847", MC6847_PAL, XTAL_4_433619MHz, z80net_mc6847_intf)
+
+	MCFG_DEVICE_ADD("mc6847", MC6847_PAL, XTAL_4_433619MHz)
+	MCFG_MC6847_INPUT_CALLBACK(READ8(z80ne_state, lx388_mc6847_videoram_r))
+	// AG = GND, GM2 = GND, GM1 = GND, GM0 = GND, CSS = GND
+	// other lines not connected
 
 	MCFG_DEFAULT_LAYOUT(layout_z80net)
 
@@ -518,16 +471,25 @@ static MACHINE_CONFIG_START( z80netb, z80ne_state )
 	MCFG_MACHINE_START_OVERRIDE(z80ne_state,z80netb)
 	MCFG_MACHINE_RESET_OVERRIDE(z80ne_state,z80netb)
 
-	MCFG_AY31015_ADD( "ay_3_1015", z80ne_ay31015_config )
+	MCFG_DEVICE_ADD( "ay_3_1015", AY31015, 0 )
+	MCFG_AY31015_TX_CLOCK(4800.0)
+	MCFG_AY31015_RX_CLOCK(4800.0)
 
-	MCFG_CASSETTE_ADD( "cassette", z80ne_cassettea_config )
-	MCFG_CASSETTE_ADD( "cassette2", z80ne_cassetteb_config )
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
 
-	MCFG_KR2376_ADD( "lx388_kr2376", lx388_kr2376_interface)
+	MCFG_CASSETTE_ADD( "cassette2" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
+
+	MCFG_DEVICE_ADD("lx388_kr2376", KR2376, 50000)
 
 	/* video hardware */
 	MCFG_SCREEN_MC6847_PAL_ADD("lx388", "mc6847")
-	MCFG_MC6847_ADD("mc6847", MC6847_PAL, XTAL_4_433619MHz, z80net_mc6847_intf)
+
+	MCFG_DEVICE_ADD("mc6847", MC6847_PAL, XTAL_4_433619MHz)
+	MCFG_MC6847_INPUT_CALLBACK(READ8(z80ne_state, lx388_mc6847_videoram_r))
+	// AG = GND, GM2 = GND, GM1 = GND, GM0 = GND, CSS = GND
+	// other lines not connected
 
 	MCFG_DEFAULT_LAYOUT(layout_z80netb)
 
@@ -546,19 +508,31 @@ static MACHINE_CONFIG_START( z80netf, z80ne_state )
 	MCFG_MACHINE_START_OVERRIDE(z80ne_state,z80netf)
 	MCFG_MACHINE_RESET_OVERRIDE(z80ne_state,z80netf)
 
-	MCFG_AY31015_ADD( "ay_3_1015", z80ne_ay31015_config )
+	MCFG_DEVICE_ADD( "ay_3_1015", AY31015, 0 )
+	MCFG_AY31015_TX_CLOCK(4800.0)
+	MCFG_AY31015_RX_CLOCK(4800.0)
 
-	MCFG_CASSETTE_ADD( "cassette", z80ne_cassettea_config )
-	MCFG_CASSETTE_ADD( "cassette2", z80ne_cassetteb_config )
+	MCFG_CASSETTE_ADD( "cassette" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
 
-	MCFG_KR2376_ADD( "lx388_kr2376", lx388_kr2376_interface)
+	MCFG_CASSETTE_ADD( "cassette2" )
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
+
+	MCFG_DEVICE_ADD("lx388_kr2376", KR2376, 50000)
 
 	/* video hardware */
 	MCFG_SCREEN_MC6847_PAL_ADD("lx388", "mc6847")
-	MCFG_MC6847_ADD("mc6847", MC6847_PAL, XTAL_4_433619MHz, z80net_mc6847_intf)
 
-	MCFG_FD1771_ADD("wd1771", default_wd17xx_interface)
-	MCFG_LEGACY_FLOPPY_4_DRIVES_ADD(z80netf_floppy_interface)
+	MCFG_DEVICE_ADD("mc6847", MC6847_PAL, XTAL_4_433619MHz)
+	MCFG_MC6847_INPUT_CALLBACK(READ8(z80ne_state, lx388_mc6847_videoram_r))
+	// AG = GND, GM2 = GND, GM1 = GND, GM0 = GND, CSS = GND
+	// other lines not connected
+
+	MCFG_FD1771_ADD("wd1771", XTAL_2MHz / 2)
+	MCFG_FLOPPY_DRIVE_ADD("wd1771:0", z80ne_floppies, "sssd", z80ne_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("wd1771:1", z80ne_floppies, "sssd", z80ne_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("wd1771:2", z80ne_floppies, NULL,   z80ne_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("wd1771:3", z80ne_floppies, NULL,   z80ne_state::floppy_formats)
 
 	MCFG_DEFAULT_LAYOUT(layout_z80netf)
 
@@ -621,7 +595,7 @@ ROM_START( z80netf )
 ROM_END
 
 /*    YEAR  NAME      PARENT    COMPAT  MACHINE   INPUT     INIT     COMPANY               FULLNAME                      FLAGS */
-COMP( 1980, z80ne,    0,        0,      z80ne,    z80ne, z80ne_state,    z80ne,   "Nuova Elettronica",  "Z80NE",                      GAME_NO_SOUND)
-COMP( 1980, z80net,   z80ne,    0,      z80net,   z80net, z80ne_state,   z80net,  "Nuova Elettronica",  "Z80NE + LX.388",             GAME_NO_SOUND)
-COMP( 1980, z80netb,  z80ne,    0,      z80netb,  z80net, z80ne_state,   z80netb, "Nuova Elettronica",  "Z80NE + LX.388 + Basic 16k", GAME_NO_SOUND)
-COMP( 1980, z80netf,  z80ne,    0,      z80netf,  z80netf, z80ne_state,  z80netf, "Nuova Elettronica",  "Z80NE + LX.388 + LX.390",    GAME_NO_SOUND)
+COMP( 1980, z80ne,    0,        0,      z80ne,    z80ne, z80ne_state,    z80ne,   "Nuova Elettronica",  "Z80NE",                      GAME_NO_SOUND_HW)
+COMP( 1980, z80net,   z80ne,    0,      z80net,   z80net, z80ne_state,   z80net,  "Nuova Elettronica",  "Z80NE + LX.388",             GAME_NO_SOUND_HW)
+COMP( 1980, z80netb,  z80ne,    0,      z80netb,  z80net, z80ne_state,   z80netb, "Nuova Elettronica",  "Z80NE + LX.388 + Basic 16k", GAME_NO_SOUND_HW)
+COMP( 1980, z80netf,  z80ne,    0,      z80netf,  z80netf, z80ne_state,  z80netf, "Nuova Elettronica",  "Z80NE + LX.388 + LX.390",    GAME_NO_SOUND_HW)

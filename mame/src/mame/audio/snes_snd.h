@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:R. Belmont, Brad Martin
 /*****************************************************************************
  *
  * audio/snes_spc.h
@@ -7,7 +9,6 @@
 #ifndef __SNES_SPC_H__
 #define __SNES_SPC_H__
 
-#include "devcb.h"
 
 #define SNES_SPCRAM_SIZE      0x10000
 

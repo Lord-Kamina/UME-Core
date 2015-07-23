@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Dirk Best
 /*************************************************************************
 
     RAM device
@@ -28,10 +30,9 @@ const device_type RAM = &device_creator<ram_device>;
 //-------------------------------------------------
 
 ram_device::ram_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, RAM, "RAM", tag, owner, clock)
+	: device_t(mconfig, RAM, "RAM", tag, owner, clock, "ram", __FILE__)
 {
 	m_size = 0;
-	m_pointer = NULL;
 	m_default_size = NULL;
 	m_extra_options = NULL;
 	m_default_value = 0xCD;
@@ -59,14 +60,12 @@ void ram_device::device_start()
 		m_size = default_size();
 
 	/* allocate space for the ram */
-	m_pointer = auto_alloc_array(machine(), UINT8, m_size);
-
-	/* reset ram to the default value */
-	memset(m_pointer, m_default_value, m_size);
+	m_pointer.resize(m_size);
+	memset(&m_pointer[0], m_default_value, m_size);
 
 	/* register for state saving */
 	save_item(NAME(m_size));
-	save_pointer(NAME(m_pointer), m_size);
+	save_item(NAME(m_pointer));
 }
 
 
@@ -84,7 +83,7 @@ void ram_device::device_validity_check(validity_checker &valid) const
 
 	/* verify default ram value */
 	if (default_size() == 0)
-		mame_printf_error("Invalid default RAM option: %s\n", m_default_size);
+		osd_printf_error("Invalid default RAM option: %s\n", m_default_size);
 
 	/* command line options are only parsed for the device named RAM_TAG */
 	if (tag() != NULL && strcmp(tag(), ":" RAM_TAG) == 0)
@@ -98,7 +97,7 @@ void ram_device::device_validity_check(validity_checker &valid) const
 			specified_ram = parse_string(ramsize_string);
 
 			if (specified_ram == 0)
-				mame_printf_error("Cannot recognize the RAM option %s\n", ramsize_string);
+				osd_printf_error("Cannot recognize the RAM option %s\n", ramsize_string);
 
 			if (gamename_option != NULL && *gamename_option != 0 && strcmp(gamename_option, mconfig().gamedrv().name) == 0)
 			{
@@ -111,7 +110,7 @@ void ram_device::device_validity_check(validity_checker &valid) const
 				{
 					int j;
 					int size = strlen(m_extra_options);
-					char * const s = mame_strdup(m_extra_options);
+					char * const s = core_strdup(m_extra_options);
 					char * const e = s + size;
 					char *p = s;
 					for (j=0;j<size;j++) {
@@ -124,7 +123,7 @@ void ram_device::device_validity_check(validity_checker &valid) const
 						UINT32 option_ram_size = parse_string(p);
 
 						if (option_ram_size == 0)
-							mame_printf_error("Invalid RAM option: %s\n", p);
+							osd_printf_error("Invalid RAM option: %s\n", p);
 
 						if (option_ram_size == specified_ram)
 							is_valid = TRUE;
@@ -154,21 +153,21 @@ void ram_device::device_validity_check(validity_checker &valid) const
 
 	if (!is_valid)
 	{
-		astring output;
-		output.catprintf("Cannot recognize the RAM option %s", ramsize_string);
-		output.catprintf(" (valid options are %s", m_default_size);
+		std::string output;
+		strcatprintf(output, "Cannot recognize the RAM option %s", ramsize_string);
+		strcatprintf(output, " (valid options are %s", m_default_size);
 
 		if (m_extra_options != NULL)
-			output.catprintf(",%s).\n", m_extra_options);
+			strcatprintf(output, ",%s).\n", m_extra_options);
 		else
-			output.catprintf(").\n");
+			strcatprintf(output, ").\n");
 
-		mame_printf_error("%s", output.cstr());
+		osd_printf_error("%s", output.c_str());
 
-		mame_printf_warning("Setting value to default %s\n",m_default_size);
-		astring error;
+		osd_printf_warning("Setting value to default %s\n",m_default_size);
+		std::string error;
 		mconfig().options().set_value(OPTION_RAMSIZE, m_default_size, OPTION_PRIORITY_CMDLINE, error);
-		assert(!error);
+		assert(error.empty());
 	}
 }
 

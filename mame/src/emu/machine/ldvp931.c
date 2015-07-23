@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     ldvp931.c
 
     Philips 22VP931 laserdisc emulation.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 **************************************************************************
 
@@ -336,7 +307,7 @@ machine_config_constructor phillips_22vp931_device::device_mconfig_additions() c
 //  start of the blanking period
 //-------------------------------------------------
 
-void phillips_22vp931_device::player_vsync(const vbi_metadata &vbi, int fieldnum, attotime curtime)
+void phillips_22vp931_device::player_vsync(const vbi_metadata &vbi, int fieldnum, const attotime &curtime)
 {
 	// reset our command counter (debugging only)
 	m_cmdcount = 0;
@@ -352,7 +323,7 @@ void phillips_22vp931_device::player_vsync(const vbi_metadata &vbi, int fieldnum
 //  the first visible line of the frame
 //-------------------------------------------------
 
-INT32 phillips_22vp931_device::player_update(const vbi_metadata &vbi, int fieldnum, attotime curtime)
+INT32 phillips_22vp931_device::player_update(const vbi_metadata &vbi, int fieldnum, const attotime &curtime)
 {
 	// set the first VBI timer to go at the start of line 16
 	timer_set(screen().time_until_pos(16*2), TID_VBI_DATA_FETCH, LASERDISC_CODE_LINE16 << 2);
@@ -422,9 +393,9 @@ WRITE8_MEMBER( phillips_22vp931_device::i8049_output1_w )
 
 	if (LOG_PORTS && (m_i8049_out1 ^ data) & 0x08)
 	{
-		mame_printf_debug("%03X:out1:", space.device().safe_pc());
-		if (!(data & 0x08)) mame_printf_debug(" SMS");
-		mame_printf_debug("\n");
+		osd_printf_debug("%03X:out1:", space.device().safe_pc());
+		if (!(data & 0x08)) osd_printf_debug(" SMS");
+		osd_printf_debug("\n");
 		m_i8049_out1 = data;
 	}
 

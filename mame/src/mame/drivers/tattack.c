@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /****************************************************************************
     Time Attacker
 
@@ -29,7 +31,8 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_videoram(*this, "videoram"),
 		m_colorram(*this, "colorram"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode") { }
 
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_colorram;
@@ -37,9 +40,10 @@ public:
 	DECLARE_DRIVER_INIT(tattack);
 	TILE_GET_INFO_MEMBER(get_tile_info);
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(tattack);
 	UINT32 screen_update_tattack(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
 };
 
 
@@ -54,8 +58,7 @@ TILE_GET_INFO_MEMBER(tattack_state::get_tile_info)
 
 	color>>=1;
 
-	SET_TILE_INFO_MEMBER(
-		0,
+	SET_TILE_INFO_MEMBER(0,
 		code,
 		color,
 		0);
@@ -64,13 +67,13 @@ TILE_GET_INFO_MEMBER(tattack_state::get_tile_info)
 UINT32 tattack_state::screen_update_tattack(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	m_tmap->mark_all_dirty();
-	m_tmap->draw(bitmap, cliprect, 0,0);
+	m_tmap->draw(screen, bitmap, cliprect, 0,0);
 	return 0;
 }
 
 void tattack_state::video_start()
 {
-	m_tmap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tattack_state::get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,32,32 );
+	m_tmap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tattack_state::get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,32,32 );
 }
 
 static ADDRESS_MAP_START( mem, AS_PROGRAM, 8, tattack_state )
@@ -175,10 +178,10 @@ static const gfx_layout charlayout =
 
 
 static GFXDECODE_START( tattack )
-	GFXDECODE_ENTRY( "gfx1", 0     , charlayout,  0, 1 )
+	GFXDECODE_ENTRY( "gfx1", 0     , charlayout,  0, 8 )
 GFXDECODE_END
 
-void tattack_state::palette_init()
+PALETTE_INIT_MEMBER(tattack_state, tattack)
 {
 	int i,r,g,b;
 	for(i=0;i<8;i++)
@@ -192,8 +195,8 @@ void tattack_state::palette_init()
 		else
 			r=g=b=128;
 
-		palette_set_color(machine(),2*i,MAKE_RGB(0x00,0x00,0x00));
-		palette_set_color(machine(),2*i+1,MAKE_RGB(r,g,b));
+		palette.set_pen_color(2*i,rgb_t(0x00,0x00,0x00));
+		palette.set_pen_color(2*i+1,rgb_t(r,g,b));
 	}
 }
 
@@ -212,10 +215,11 @@ static MACHINE_CONFIG_START( tattack, tattack_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tattack_state, screen_update_tattack)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(tattack)
-	MCFG_PALETTE_LENGTH(16)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tattack)
+	MCFG_PALETTE_ADD("palette", 16)
+	MCFG_PALETTE_INIT_OWNER(tattack_state, tattack)
 
 	/* sound hardware */
 	/* Discrete ???? */

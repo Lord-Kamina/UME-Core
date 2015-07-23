@@ -1,5 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:David Graves
 #include "emu.h"
-#include "video/taitoic.h"
 #include "includes/othunder.h"
 
 
@@ -62,10 +63,10 @@ spriteram is being tested, take no notice of that.]
 ********************************************************/
 
 
-void othunder_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, const int *primasks, int y_offs )
+void othunder_state::draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, const int *primasks, int y_offs )
 {
 	UINT16 *spritemap = (UINT16 *)memregion("user1")->base();
-	UINT16 tile_mask = (machine().gfx[0]->elements()) - 1;
+	UINT16 tile_mask = (m_gfxdecode->gfx(0)->elements()) - 1;
 	UINT16 *spriteram16 = m_spriteram;
 	int offs, data, tilenum, color, flipx, flipy;
 	int x, y, priority, curx, cury;
@@ -165,7 +166,7 @@ void othunder_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			}
 			else
 			{
-				drawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+				m_gfxdecode->gfx(0)->zoom_transpen(bitmap,cliprect,
 						sprite_ptr->code,
 						sprite_ptr->color,
 						sprite_ptr->flipx,sprite_ptr->flipy,
@@ -183,13 +184,13 @@ logerror("Sprite number %04x had %02x invalid chunks\n",tilenum,bad_chunks);
 	{
 		sprite_ptr--;
 
-		pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 				sprite_ptr->code,
 				sprite_ptr->color,
 				sprite_ptr->flipx,sprite_ptr->flipy,
 				sprite_ptr->x,sprite_ptr->y,
 				sprite_ptr->zoomx,sprite_ptr->zoomy,
-				machine().priority_bitmap,sprite_ptr->primask,0);
+				screen.priority(),sprite_ptr->primask,0);
 	}
 }
 
@@ -202,25 +203,25 @@ UINT32 othunder_state::screen_update_othunder(screen_device &screen, bitmap_ind1
 {
 	int layer[3];
 
-	tc0100scn_tilemap_update(m_tc0100scn);
+	m_tc0100scn->tilemap_update();
 
-	layer[0] = tc0100scn_bottomlayer(m_tc0100scn);
+	layer[0] = m_tc0100scn->bottomlayer();
 	layer[1] = layer[0] ^ 1;
 	layer[2] = 2;
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* Ensure screen blanked even when bottom layer not drawn due to disable bit */
 	bitmap.fill(0, cliprect);
 
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 1);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[1], 0, 2);
-	tc0100scn_tilemap_draw(m_tc0100scn, bitmap, cliprect, layer[2], 0, 4);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 1);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 2);
+	m_tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 4);
 
 	/* Sprites can be under/over the layer below text layer */
 	{
 		static const int primasks[2] = {0xf0, 0xfc};
-		draw_sprites(bitmap, cliprect, primasks, 3);
+		draw_sprites(screen, bitmap, cliprect, primasks, 3);
 	}
 
 	return 0;

@@ -1,6 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese
 /*
- * Nec PC-6001 cassette format handling
+ * NEC PC-6001 cassette format handling
  */
+
+#include <assert.h>
 
 #include "p6001_cas.h"
 

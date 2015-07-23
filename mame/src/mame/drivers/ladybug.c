@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
 Universal 8106-A2 + 8106-B PCB set
@@ -118,7 +120,7 @@ WRITE8_MEMBER(ladybug_state::sraider_misc_w)
 			m_sraider_0x38 = data&0x3f;
 			break;
 		default:
-			mame_printf_debug("(%04X) write to %02X\n", space.device().safe_pc(), offset);
+			osd_printf_debug("(%04X) write to %02X\n", space.device().safe_pc(), offset);
 			break;
 	}
 }
@@ -138,6 +140,10 @@ static ADDRESS_MAP_START( ladybug_map, AS_PROGRAM, 8, ladybug_state )
 	AM_RANGE(0xd000, 0xd3ff) AM_RAM_WRITE(ladybug_videoram_w) AM_SHARE("videoram")
 	AM_RANGE(0xd400, 0xd7ff) AM_RAM_WRITE(ladybug_colorram_w) AM_SHARE("colorram")
 	AM_RANGE(0xe000, 0xe000) AM_READ_PORT("IN2")
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 8, ladybug_state )
+	AM_RANGE(0x0000, 0x5fff) AM_ROM AM_SHARE("decrypted_opcodes")
 ADDRESS_MAP_END
 
 
@@ -200,7 +206,7 @@ INPUT_CHANGED_MEMBER(ladybug_state::coin2_inserted)
 
 CUSTOM_INPUT_MEMBER(ladybug_state::ladybug_p1_control_r)
 {
-	return ioport(LADYBUG_P1_CONTROL_PORT_TAG)->read();
+	return m_p1_control->read();
 }
 
 CUSTOM_INPUT_MEMBER(ladybug_state::ladybug_p2_control_r)
@@ -208,10 +214,10 @@ CUSTOM_INPUT_MEMBER(ladybug_state::ladybug_p2_control_r)
 	UINT32 ret;
 
 	/* upright cabinet only uses a single set of controls */
-	if (ioport("DSW0")->read() & 0x20)
-		ret = ioport(LADYBUG_P2_CONTROL_PORT_TAG)->read();
+	if (m_port_dsw0->read() & 0x20)
+		ret = m_p2_control->read();
 	else
-		ret = ioport(LADYBUG_P1_CONTROL_PORT_TAG)->read();
+		ret = m_p1_control->read();
 
 	return ret;
 }
@@ -706,23 +712,6 @@ static GFXDECODE_START( sraider )
 GFXDECODE_END
 
 
-/*************************************
- *
- *  Sound interface
- *
- *************************************/
-
-
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
-
 MACHINE_START_MEMBER(ladybug_state,ladybug)
 {
 }
@@ -782,11 +771,13 @@ static MACHINE_CONFIG_START( ladybug, ladybug_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(1*8, 31*8-1, 4*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(ladybug_state, screen_update_ladybug)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(ladybug)
-	MCFG_PALETTE_LENGTH(4*8+4*16)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", ladybug)
+	MCFG_PALETTE_ADD("palette", 4*8+4*16)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(ladybug_state,ladybug)
 
-	MCFG_PALETTE_INIT_OVERRIDE(ladybug_state,ladybug)
 	MCFG_VIDEO_START_OVERRIDE(ladybug_state,ladybug)
 
 	/* sound hardware */
@@ -794,13 +785,15 @@ static MACHINE_CONFIG_START( ladybug, ladybug_state )
 
 	MCFG_SOUND_ADD("sn1", SN76489, 4000000)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("sn2", SN76489, 4000000)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 MACHINE_CONFIG_END
 
+static MACHINE_CONFIG_DERIVED( dorodon, ladybug )
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
+MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( sraider, ladybug_state )
 
@@ -825,11 +818,13 @@ static MACHINE_CONFIG_START( sraider, ladybug_state )
 	MCFG_SCREEN_VISIBLE_AREA(1*8, 31*8-1, 4*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(ladybug_state, screen_update_sraider)
 	MCFG_SCREEN_VBLANK_DRIVER(ladybug_state, screen_eof_sraider)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(sraider)
-	MCFG_PALETTE_LENGTH(4*8+4*16+32+2)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", sraider)
+	MCFG_PALETTE_ADD("palette", 4*8+4*16+32+2)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32+32+1)
+	MCFG_PALETTE_INIT_OWNER(ladybug_state,sraider)
 
-	MCFG_PALETTE_INIT_OVERRIDE(ladybug_state,sraider)
 	MCFG_VIDEO_START_OVERRIDE(ladybug_state,sraider)
 
 	/* sound hardware */
@@ -837,23 +832,18 @@ static MACHINE_CONFIG_START( sraider, ladybug_state )
 
 	MCFG_SOUND_ADD("sn1", SN76489, 4000000)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("sn2", SN76489, 4000000)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("sn3", SN76489, 4000000)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("sn4", SN76489, 4000000)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("sn5", SN76489, 4000000)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 MACHINE_CONFIG_END
 
 
@@ -1061,15 +1051,11 @@ DRIVER_INIT_MEMBER(ladybug_state,dorodon)
 	/* decode the opcodes */
 
 	offs_t i;
-	address_space &space = m_maincpu->space(AS_PROGRAM);
-	UINT8 *decrypted = auto_alloc_array(machine(), UINT8, 0x6000);
 	UINT8 *rom = memregion("maincpu")->base();
 	UINT8 *table = memregion("user1")->base();
 
-	space.set_decrypted_region(0x0000, 0x5fff, decrypted);
-
 	for (i = 0; i < 0x6000; i++)
-		decrypted[i] = table[rom[i]];
+		m_decrypted_opcodes[i] = table[rom[i]];
 }
 
 
@@ -1077,7 +1063,7 @@ GAME( 1981, cavenger, 0,       ladybug, cavenger, driver_device, 0,       ROT0, 
 GAME( 1981, ladybug,  0,       ladybug, ladybug, driver_device,  0,       ROT270, "Universal", "Lady Bug", GAME_SUPPORTS_SAVE )
 GAME( 1981, ladybugb, ladybug, ladybug, ladybug, driver_device,  0,       ROT270, "bootleg",   "Lady Bug (bootleg set 1)", GAME_SUPPORTS_SAVE )
 GAME( 1981, ladybgb2, ladybug, ladybug, ladybug, driver_device,  0,       ROT270, "bootleg",   "Lady Bug (bootleg set 2)", GAME_SUPPORTS_SAVE )
-GAME( 1982, dorodon,  0,       ladybug, dorodon, ladybug_state,  dorodon, ROT270, "UPL (Falcon license?)", "Dorodon (set 1)", GAME_SUPPORTS_SAVE ) // license or bootleg?
-GAME( 1982, dorodon2, dorodon, ladybug, dorodon, ladybug_state,  dorodon, ROT270, "UPL (Falcon license?)", "Dorodon (set 2)", GAME_SUPPORTS_SAVE ) // "
+GAME( 1982, dorodon,  0,       dorodon, dorodon, ladybug_state,  dorodon, ROT270, "UPL (Falcon license?)", "Dorodon (set 1)", GAME_SUPPORTS_SAVE ) // license or bootleg?
+GAME( 1982, dorodon2, dorodon, dorodon, dorodon, ladybug_state,  dorodon, ROT270, "UPL (Falcon license?)", "Dorodon (set 2)", GAME_SUPPORTS_SAVE ) // "
 GAME( 1982, snapjack, 0,       ladybug, snapjack, driver_device, 0,       ROT0,   "Universal", "Snap Jack", GAME_SUPPORTS_SAVE )
 GAME( 1982, sraider,  0,       sraider, sraider, driver_device,  0,       ROT270, "Universal", "Space Raider", GAME_SUPPORTS_SAVE )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Krzysztof Strzecha
 /***************************************************************************
 
   pmd85.c
@@ -18,12 +20,12 @@ const unsigned char pmd85_palette[3*3] =
 	0xff, 0xff, 0xff
 };
 
-void pmd85_state::palette_init()
+PALETTE_INIT_MEMBER(pmd85_state, pmd85)
 {
 	int i;
 
 	for ( i = 0; i < sizeof(pmd85_palette) / 3; i++ ) {
-		palette_set_color_rgb(machine(), i, pmd85_palette[i*3], pmd85_palette[i*3+1], pmd85_palette[i*3+2]);
+		m_palette->set_pen_color(i, pmd85_palette[i*3], pmd85_palette[i*3+1], pmd85_palette[i*3+2]);
 	}
 }
 

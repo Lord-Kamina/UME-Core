@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     uPD7227 Intelligent Dot-Matrix LCD Controller/Driver emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -43,7 +42,7 @@ ADDRESS_MAP_END
 //-------------------------------------------------
 
 upd7227_device::upd7227_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, UPD7227, "uPD7227", tag, owner, clock),
+	: device_t(mconfig, UPD7227, "uPD7227", tag, owner, clock, "upd7227", __FILE__),
 		device_memory_interface(mconfig, *this),
 		m_space_config("videoram", ENDIANNESS_BIG, 8, 7, 0, *ADDRESS_MAP_NAME(upd7227_map)),
 		m_cs(1),
@@ -56,10 +55,10 @@ upd7227_device::upd7227_device(const machine_config &mconfig, const char *tag, d
 
 
 //-------------------------------------------------
-//  static_set_config - configuration helper
+//  static_set_offsets - configuration helper
 //-------------------------------------------------
 
-void upd7227_device::static_set_config(device_t &device, int sx, int sy)
+void upd7227_device::static_set_offsets(device_t &device, int sx, int sy)
 {
 	upd7227_device &upd7227 = downcast<upd7227_device &>(device);
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         BK machine driver by Miodrag Milanovic
@@ -78,8 +80,6 @@ IRQ_CALLBACK_MEMBER(bk_state::bk0010_irq_callback)
 
 void bk_state::machine_reset()
 {
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(bk_state::bk0010_irq_callback),this));
-
 	m_kbd_state = 0;
 	m_scrool = 01330;
 }

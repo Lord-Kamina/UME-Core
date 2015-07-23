@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /*
 PCB Layout
 ----------
@@ -77,19 +79,28 @@ class pipeline_state : public driver_device
 public:
 	pipeline_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
 		m_vram1(*this, "vram1"),
-		m_vram2(*this, "vram2"),
-		m_maincpu(*this, "maincpu") { }
+		m_vram2(*this, "vram2") { }
+
+	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
+	required_shared_ptr<UINT8> m_vram1;
+	required_shared_ptr<UINT8> m_vram2;
 
 	tilemap_t *m_tilemap1;
 	tilemap_t *m_tilemap2;
-	required_shared_ptr<UINT8> m_vram1;
-	required_shared_ptr<UINT8> m_vram2;
+
 	UINT8 m_vidctrl;
 	UINT8 *m_palram;
 	UINT8 m_toMCU;
 	UINT8 m_fromMCU;
 	UINT8 m_ddrA;
+
 	DECLARE_WRITE8_MEMBER(vram2_w);
 	DECLARE_WRITE8_MEMBER(vram1_w);
 	DECLARE_WRITE8_MEMBER(mcu_portA_w);
@@ -98,21 +109,31 @@ public:
 	DECLARE_WRITE8_MEMBER(vidctrl_w);
 	DECLARE_READ8_MEMBER(protection_r);
 	DECLARE_WRITE8_MEMBER(protection_w);
+
 	TILE_GET_INFO_MEMBER(get_tile_info);
 	TILE_GET_INFO_MEMBER(get_tile_info2);
+
+	virtual void machine_start();
 	virtual void video_start();
-	virtual void palette_init();
-	UINT32 screen_update_pipeline(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+	DECLARE_PALETTE_INIT(pipeline);
+
+	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+
 	TIMER_CALLBACK_MEMBER(protection_deferred_w);
-	required_device<cpu_device> m_maincpu;
 };
 
+
+void pipeline_state::machine_start()
+{
+	save_item(NAME(m_toMCU));
+	save_item(NAME(m_fromMCU));
+	save_item(NAME(m_ddrA));
+}
 
 TILE_GET_INFO_MEMBER(pipeline_state::get_tile_info)
 {
 	int code = m_vram2[tile_index]+m_vram2[tile_index+0x800]*256;
-	SET_TILE_INFO_MEMBER(
-		0,
+	SET_TILE_INFO_MEMBER(0,
 		code,
 		0,
 		0);
@@ -122,27 +143,27 @@ TILE_GET_INFO_MEMBER(pipeline_state::get_tile_info2)
 {
 	int code =m_vram1[tile_index]+((m_vram1[tile_index+0x800]>>4))*256;
 	int color=((m_vram1[tile_index+0x800])&0xf);
-	SET_TILE_INFO_MEMBER
-	(
-		1,
+	SET_TILE_INFO_MEMBER(1,
 		code,
 		color,
-		0
-	);
+		0);
 }
 
 void pipeline_state::video_start()
 {
 	m_palram=auto_alloc_array(machine(), UINT8, 0x1000);
-	m_tilemap1 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(pipeline_state::get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,32 );
-	m_tilemap2 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(pipeline_state::get_tile_info2),this),TILEMAP_SCAN_ROWS,8,8,64,32 );
+	m_tilemap1 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(pipeline_state::get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,32 );
+	m_tilemap2 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(pipeline_state::get_tile_info2),this),TILEMAP_SCAN_ROWS,8,8,64,32 );
 	m_tilemap2->set_transparent_pen(0);
+
+	save_item(NAME(m_vidctrl));
+	save_pointer(NAME(m_palram), 0x1000);
 }
 
-UINT32 pipeline_state::screen_update_pipeline(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 pipeline_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_tilemap1->draw(bitmap, cliprect, 0,0);
-	m_tilemap2->draw(bitmap, cliprect, 0,0);
+	m_tilemap1->draw(screen, bitmap, cliprect, 0,0);
+	m_tilemap2->draw(screen, bitmap, cliprect, 0,0);
 	return 0;
 }
 
@@ -165,7 +186,7 @@ WRITE8_MEMBER(pipeline_state::vram2_w)
 			if(offset<0x300)
 			{
 			offset&=0xff;
-			palette_set_color_rgb(machine(), offset, pal6bit(m_palram[offset]), pal6bit(m_palram[offset+0x100]), pal6bit(m_palram[offset+0x200]));
+			m_palette->set_pen_color(offset, pal6bit(m_palram[offset]), pal6bit(m_palram[offset+0x100]), pal6bit(m_palram[offset+0x200]));
 			}
 	}
 }
@@ -315,58 +336,13 @@ static GFXDECODE_START( pipeline )
 	GFXDECODE_ENTRY( "gfx2", 0, layout_8x8x3, 0x100, 32 ) // 3bpp tiles
 GFXDECODE_END
 
-static Z80CTC_INTERFACE( ctc_intf )
-{
-	DEVCB_CPU_INPUT_LINE("audiocpu", INPUT_LINE_IRQ0),      // interrupt handler
-	DEVCB_NULL,                 // ZC/TO0 callback
-	DEVCB_NULL,                 // ZC/TO1 callback
-	DEVCB_NULL                  // ZC/TO2 callback
-};
-
 static const z80_daisy_config daisy_chain_sound[] =
 {
 	{ "ctc" },
 	{ NULL }
 };
 
-static I8255A_INTERFACE( ppi8255_0_intf )
-{
-	DEVCB_INPUT_PORT("P1"),             /* Port A read */
-	DEVCB_NULL,                         /* Port A write */
-	DEVCB_NULL,                         /* Port B read */
-	DEVCB_NULL,                         /* Port B write */  // related to sound/music : check code at 0x1c0a
-	DEVCB_NULL,                         /* Port C read */
-	DEVCB_DRIVER_MEMBER(pipeline_state,vidctrl_w)           /* Port C write */
-};
-
-static I8255A_INTERFACE( ppi8255_1_intf )
-{
-	DEVCB_INPUT_PORT("DSW1"),           /* Port A read */
-	DEVCB_NULL,                         /* Port A write */
-	DEVCB_INPUT_PORT("DSW2"),           /* Port B read */
-	DEVCB_NULL,                         /* Port B write */
-	DEVCB_DRIVER_MEMBER(pipeline_state,protection_r),       /* Port C read */
-	DEVCB_DRIVER_MEMBER(pipeline_state,protection_w)            /* Port C write */
-};
-
-static I8255A_INTERFACE( ppi8255_2_intf )
-{
-	DEVCB_NULL,                         /* Port A read */
-	DEVCB_NULL,                         /* Port A write */
-	DEVCB_NULL,                         /* Port B read */
-	DEVCB_NULL,                         /* Port B write */
-	DEVCB_NULL,                         /* Port C read */
-	DEVCB_NULL                          /* Port C write */
-};
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL
-};
-
-void pipeline_state::palette_init()
+PALETTE_INIT_MEMBER(pipeline_state, pipeline)
 {
 	int r,g,b,i,c;
 	UINT8 *prom1 = &memregion("proms")->base()[0x000];
@@ -381,7 +357,7 @@ void pipeline_state::palette_init()
 		r*=36;
 		g*=36;
 		b*=85;
-		palette_set_color(machine(), 0x100+i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(0x100+i, rgb_t(r, g, b));
 	}
 }
 
@@ -400,11 +376,21 @@ static MACHINE_CONFIG_START( pipeline, pipeline_state )
 	MCFG_CPU_ADD("mcu", M68705, 7372800/2)
 	MCFG_CPU_PROGRAM_MAP(mcu_mem)
 
-	MCFG_Z80CTC_ADD( "ctc", 7372800/2 /* same as "audiocpu" */, ctc_intf )
+	MCFG_DEVICE_ADD("ctc", Z80CTC, 7372800/2 /* same as "audiocpu" */)
+	MCFG_Z80CTC_INTR_CB(INPUTLINE("audiocpu", INPUT_LINE_IRQ0))
 
-	MCFG_I8255A_ADD( "ppi8255_0", ppi8255_0_intf )
-	MCFG_I8255A_ADD( "ppi8255_1", ppi8255_1_intf )
-	MCFG_I8255A_ADD( "ppi8255_2", ppi8255_2_intf )
+	MCFG_DEVICE_ADD("ppi8255_0", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(IOPORT("P1"))
+	// PORT B Write - related to sound/music : check code at 0x1c0a
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pipeline_state, vidctrl_w))
+
+	MCFG_DEVICE_ADD("ppi8255_1", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(IOPORT("DSW1"))
+	MCFG_I8255_IN_PORTB_CB(IOPORT("DSW2"))
+	MCFG_I8255_IN_PORTC_CB(READ8(pipeline_state, protection_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(pipeline_state, protection_w))
+
+	MCFG_DEVICE_ADD("ppi8255_2", I8255A, 0)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -412,20 +398,21 @@ static MACHINE_CONFIG_START( pipeline, pipeline_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(512, 512)
 	MCFG_SCREEN_VISIBLE_AREA(0, 319, 16, 239)
-	MCFG_SCREEN_UPDATE_DRIVER(pipeline_state, screen_update_pipeline)
+	MCFG_SCREEN_UPDATE_DRIVER(pipeline_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(pipeline)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pipeline)
 
-	MCFG_PALETTE_LENGTH(0x100+0x100)
-
+	MCFG_PALETTE_ADD("palette", 0x100+0x100)
+	MCFG_PALETTE_INIT_OWNER(pipeline_state, pipeline)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, 7372800/4)
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.60)
 
 MACHINE_CONFIG_END
+
 
 ROM_START( pipeline )
 	ROM_REGION( 0x10000, "maincpu", 0 )
@@ -458,4 +445,4 @@ ROM_START( pipeline )
 	ROM_LOAD( "82s123.u79", 0x00200, 0x00020,CRC(6df3f972) SHA1(0096a7f7452b70cac6c0752cb62e24b643015b5c) )
 ROM_END
 
-GAME( 1990, pipeline, 0, pipeline, pipeline, driver_device, 0, ROT0, "Daehyun Electronics", "Pipeline",GAME_NO_SOUND )
+GAME( 1990, pipeline, 0, pipeline, pipeline, driver_device, 0, ROT0, "Daehyun Electronics", "Pipeline", GAME_NO_SOUND | GAME_SUPPORTS_SAVE )

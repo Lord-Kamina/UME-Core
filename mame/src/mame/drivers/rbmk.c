@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina, David Haywood
 /*
 Real Battle Mahjong King by 'Game Men System Co. Ltd.'
 
@@ -54,7 +56,7 @@ Notes:
 #include "cpu/mcs51/mcs51.h"
 #include "sound/okim6295.h"
 #include "sound/2151intf.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 
 
 class rbmk_state : public driver_device
@@ -66,7 +68,9 @@ public:
 		m_gms_vidram(*this, "gms_vidram"),
 		m_maincpu(*this, "maincpu"),
 		m_mcu(*this, "mcu"),
-		m_eeprom(*this, "eeprom") { }
+		m_eeprom(*this, "eeprom"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	required_shared_ptr<UINT16> m_gms_vidram2;
 	required_shared_ptr<UINT16> m_gms_vidram;
@@ -85,7 +89,9 @@ public:
 	INTERRUPT_GEN_MEMBER(mcu_irq);
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_mcu;
-	required_device<eeprom_device> m_eeprom;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -113,10 +119,10 @@ WRITE16_MEMBER(rbmk_state::eeprom_w)
 	//bad ?
 	if( ACCESSING_BITS_0_7 )
 	{
-		m_eeprom->write_bit(data & 0x04);
-		m_eeprom->set_cs_line((data & 0x01) ? CLEAR_LINE:ASSERT_LINE );
+		m_eeprom->di_write((data & 0x04) >> 2);
+		m_eeprom->cs_write((data & 0x01) ? ASSERT_LINE : CLEAR_LINE );
 
-		m_eeprom->set_clock_line((data & 0x02) ? ASSERT_LINE : CLEAR_LINE );
+		m_eeprom->clk_write((data & 0x02) ? ASSERT_LINE : CLEAR_LINE );
 	}
 }
 
@@ -127,7 +133,7 @@ static ADDRESS_MAP_START( rbmk_mem, AS_PROGRAM, 16, rbmk_state )
 	AM_RANGE(0x500000, 0x50ffff) AM_RAM
 	AM_RANGE(0x940000, 0x940fff) AM_RAM AM_SHARE("gms_vidram2")
 	AM_RANGE(0x980300, 0x983fff) AM_RAM // 0x2048  words ???, byte access
-	AM_RANGE(0x900000, 0x900fff) AM_RAM_WRITE(paletteram_xBBBBBGGGGGRRRRR_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x900000, 0x900fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x9c0000, 0x9c0fff) AM_RAM AM_SHARE("gms_vidram")
 	AM_RANGE(0xb00000, 0xb00001) AM_WRITE(eeprom_w)
 	AM_RANGE(0xC00000, 0xC00001) AM_READ_PORT("IN0") AM_WRITE(gms_write1)
@@ -366,7 +372,7 @@ static INPUT_PORTS_START( rbmk )
 	PORT_DIPNAME( 0x4000, 0x4000, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(      0x4000, DEF_STR( Off ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
-	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)
+	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)
 
 	PORT_START("IN4")   /* 16bit */
 	PORT_DIPNAME( 0x0001, 0x0001, DEF_STR( Unknown ) )
@@ -513,7 +519,7 @@ UINT32 rbmk_state::screen_update_rbmk(screen_device &screen, bitmap_ind16 &bitma
 		for (x=0;x<64;x++)
 		{
 			int tile = m_gms_vidram2[count+0x600];
-			drawgfx_opaque(bitmap,cliprect,machine().gfx[0],(tile&0xfff)+((m_tilebank&0x10)>>4)*0x1000,tile>>12,0,0,x*8,y*32);
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect,(tile&0xfff)+((m_tilebank&0x10)>>4)*0x1000,tile>>12,0,0,x*8,y*32);
 			count++;
 		}
 	}
@@ -525,7 +531,7 @@ UINT32 rbmk_state::screen_update_rbmk(screen_device &screen, bitmap_ind16 &bitma
 		for (x=0;x<64;x++)
 		{
 			int tile = m_gms_vidram[count];
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[1],(tile&0xfff)+((m_tilebank>>1)&3)*0x1000,tile>>12,0,0,x*8,y*8,0);
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,(tile&0xfff)+((m_tilebank>>1)&3)*0x1000,tile>>12,0,0,x*8,y*8,0);
 			count++;
 		}
 	}
@@ -547,7 +553,7 @@ static MACHINE_CONFIG_START( rbmk, rbmk_state )
 	MCFG_CPU_IO_MAP(rbmk_mcu_io)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", rbmk_state,  mcu_irq)
 
-	MCFG_GFXDECODE(rbmk)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rbmk)
 
 
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -556,11 +562,12 @@ static MACHINE_CONFIG_START( rbmk, rbmk_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 64*8-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(rbmk_state, screen_update_rbmk)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x800)
+	MCFG_PALETTE_ADD("palette", 0x800)
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
 
-
-	MCFG_EEPROM_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -570,7 +577,6 @@ static MACHINE_CONFIG_START( rbmk, rbmk_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.47)
 
 	MCFG_YM2151_ADD("ymsnd", 22000000 / 8)
-//  MCFG_SOUND_CONFIG(ym2151_config)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 0.60)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 0.60)
 MACHINE_CONFIG_END

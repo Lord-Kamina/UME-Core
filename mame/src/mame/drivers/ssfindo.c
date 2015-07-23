@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /************************************************************************
 
  'RISC PC' hardware
@@ -217,49 +219,72 @@ class ssfindo_state : public driver_device
 public:
 	ssfindo_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-		m_vram(*this, "vram"),
 		m_maincpu(*this, "maincpu"),
-		m_region_user2(*this, "user2"),
+		m_palette(*this, "palette"),
+		m_vram(*this, "vram"),
+		m_flashrom(*this, "flash"),
 		m_io_ps7500(*this, "PS7500") { }
 
+	required_device<cpu_device> m_maincpu;
+	required_device<palette_device> m_palette;
+
+	required_shared_ptr<UINT32> m_vram;
+
+	required_region_ptr<UINT16> m_flashrom;
+
+	required_ioport m_io_ps7500;
+
+	// driver init configuration
+	UINT32 m_flashType;
+	int m_iocr_hack;
+
+	// common
 	UINT32 m_PS7500_IO[MAXIO];
 	UINT32 m_PS7500_FIFO[256];
-	required_shared_ptr<UINT32> m_vram;
+	emu_timer *m_PS7500timer0;
+	emu_timer *m_PS7500timer1;
+
+	// ssfindo and ppcar
 	UINT32 m_flashAdr;
 	UINT32 m_flashOffset;
 	UINT32 m_adrLatch;
-	UINT32 m_flashType;
 	UINT32 m_flashN;
-	emu_timer *m_PS7500timer0;
-	emu_timer *m_PS7500timer1;
-	int m_iocr_hack;
+
+	// common
 	DECLARE_WRITE32_MEMBER(FIFO_w);
 	DECLARE_READ32_MEMBER(PS7500_IO_r);
 	DECLARE_WRITE32_MEMBER(PS7500_IO_w);
+
+	// ssfindo and ppcar
 	DECLARE_READ32_MEMBER(io_r);
 	DECLARE_WRITE32_MEMBER(io_w);
+
+	// ssfindo
 	DECLARE_WRITE32_MEMBER(debug_w);
 	DECLARE_READ32_MEMBER(ff4_r);
 	DECLARE_READ32_MEMBER(SIMPLEIO_r);
+
+	// ppcar
 	DECLARE_READ32_MEMBER(randomized_r);
+
+	// tetfight
 	DECLARE_READ32_MEMBER(tetfight_unk_r);
 	DECLARE_WRITE32_MEMBER(tetfight_unk_w);
+
 	DECLARE_DRIVER_INIT(common);
 	DECLARE_DRIVER_INIT(ssfindo);
 	DECLARE_DRIVER_INIT(ppcar);
 	DECLARE_DRIVER_INIT(tetfight);
 	virtual void machine_reset();
-	UINT32 screen_update_ssfindo(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	INTERRUPT_GEN_MEMBER(ssfindo_interrupt);
+
+	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+
+	INTERRUPT_GEN_MEMBER(interrupt);
 	TIMER_CALLBACK_MEMBER(PS7500_Timer0_callback);
 	TIMER_CALLBACK_MEMBER(PS7500_Timer1_callback);
 
-	required_device<cpu_device> m_maincpu;
-	required_memory_region m_region_user2;
-	required_ioport m_io_ps7500;
-
-	typedef void (ssfindo_state::*ssfindo_speedup_func)(address_space &space);
-	ssfindo_speedup_func ssfindo_speedup;
+	typedef void (ssfindo_state::*speedup_func)(address_space &space);
+	speedup_func m_speedup;
 
 	void PS7500_startTimer0();
 	void PS7500_startTimer1();
@@ -269,7 +294,7 @@ public:
 };
 
 
-UINT32 ssfindo_state::screen_update_ssfindo(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 ssfindo_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int s,x,y;
 
@@ -300,7 +325,7 @@ WRITE32_MEMBER(ssfindo_state::FIFO_w)
 
 	if(!(data>>28))
 	{
-		palette_set_color_rgb(machine(), m_PS7500_FIFO[1]&0xff, data&0xff,(data>>8)&0xff,(data>>16)&0xff);
+		m_palette->set_pen_color(m_PS7500_FIFO[1]&0xff, data&0xff,(data>>8)&0xff,(data>>16)&0xff);
 		m_PS7500_FIFO[1]++; //autoinc
 	}
 }
@@ -341,7 +366,7 @@ void ssfindo_state::PS7500_startTimer1()
 		m_PS7500timer1->adjust(attotime::from_usec(val ), 0, attotime::from_usec(val ));
 }
 
-INTERRUPT_GEN_MEMBER(ssfindo_state::ssfindo_interrupt)
+INTERRUPT_GEN_MEMBER(ssfindo_state::interrupt)
 {
 	m_PS7500_IO[IRQSTA]|=0x08;
 		if(m_PS7500_IO[IRQMSKA]&0x08)
@@ -386,7 +411,7 @@ READ32_MEMBER(ssfindo_state::PS7500_IO_r)
 
 		case IOLINES: //TODO: eeprom  24c01
 #if 0
-		mame_printf_debug("IOLINESR %i @%x\n", offset, space.device().safe_pc());
+		osd_printf_debug("IOLINESR %i @%x\n", offset, space.device().safe_pc());
 #endif
 
 		if(m_flashType == 1)
@@ -401,7 +426,7 @@ READ32_MEMBER(ssfindo_state::PS7500_IO_r)
 			return (m_PS7500_IO[IRQSTA] & m_PS7500_IO[IRQMSKA]) | 0x80;
 
 		case IOCR: //TODO: nINT1, OD[n] p.81
-			if (ssfindo_speedup) (this->*ssfindo_speedup)(space);
+			if (m_speedup) (this->*m_speedup)(space);
 
 			if( m_iocr_hack)
 			{
@@ -497,8 +522,6 @@ WRITE32_MEMBER(ssfindo_state::PS7500_IO_w)
 
 READ32_MEMBER(ssfindo_state::io_r)
 {
-	UINT16 *FLASH = (UINT16 *)m_region_user2->base(); //16 bit - WORD access
-
 	int adr=m_flashAdr*0x200+(m_flashOffset);
 
 
@@ -517,7 +540,7 @@ READ32_MEMBER(ssfindo_state::io_r)
 	if(adr<0x400000*2)
 	{
 		m_flashOffset++;
-		return FLASH[adr];
+		return m_flashrom[adr];
 	}
 	return 0;
 }
@@ -544,7 +567,7 @@ WRITE32_MEMBER(ssfindo_state::io_w)
 WRITE32_MEMBER(ssfindo_state::debug_w)
 {
 #if 0
-	mame_printf_debug("%c",data&0xff); //debug texts - malloc (ie "64 KBytes allocated, elapsed : 378 KBytes, free : 2231 KBytes")
+	osd_printf_debug("%c",data&0xff); //debug texts - malloc (ie "64 KBytes allocated, elapsed : 378 KBytes, free : 2231 KBytes")
 #endif
 }
 
@@ -564,7 +587,7 @@ READ32_MEMBER(ssfindo_state::randomized_r)
 }
 
 static ADDRESS_MAP_START( ssfindo_map, AS_PROGRAM, 32, ssfindo_state )
-	AM_RANGE(0x00000000, 0x000fffff) AM_ROM AM_REGION("user1", 0)
+	AM_RANGE(0x00000000, 0x000fffff) AM_ROM
 	AM_RANGE(0x03200000, 0x032001ff) AM_READWRITE(PS7500_IO_r,PS7500_IO_w)
 	AM_RANGE(0x03012e60, 0x03012e67) AM_NOP
 	AM_RANGE(0x03012fe0, 0x03012fe3) AM_WRITE(debug_w)
@@ -582,7 +605,7 @@ static ADDRESS_MAP_START( ssfindo_map, AS_PROGRAM, 32, ssfindo_state )
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( ppcar_map, AS_PROGRAM, 32, ssfindo_state )
-	AM_RANGE(0x00000000, 0x000fffff) AM_ROM AM_REGION("user1", 0)
+	AM_RANGE(0x00000000, 0x000fffff) AM_ROM
 	AM_RANGE(0x03200000, 0x032001ff) AM_READWRITE(PS7500_IO_r,PS7500_IO_w)
 	AM_RANGE(0x03012b00, 0x03012bff) AM_READ(randomized_r) AM_WRITENOP
 	AM_RANGE(0x03012e60, 0x03012e67) AM_WRITENOP
@@ -608,7 +631,7 @@ WRITE32_MEMBER(ssfindo_state::tetfight_unk_w)
 }
 
 static ADDRESS_MAP_START( tetfight_map, AS_PROGRAM, 32, ssfindo_state )
-	AM_RANGE(0x00000000, 0x001fffff) AM_ROM AM_REGION("user1", 0)
+	AM_RANGE(0x00000000, 0x001fffff) AM_ROM
 	AM_RANGE(0x03200000, 0x032001ff) AM_READWRITE(PS7500_IO_r,PS7500_IO_w)
 	AM_RANGE(0x03400000, 0x03400003) AM_WRITE(FIFO_w)
 	AM_RANGE(0x03240000, 0x03240003) AM_READ_PORT("DSW")
@@ -764,7 +787,7 @@ static MACHINE_CONFIG_START( ssfindo, ssfindo_state )
 	MCFG_CPU_ADD("maincpu", ARM7, 54000000) // guess...
 	MCFG_CPU_PROGRAM_MAP(ssfindo_map)
 
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", ssfindo_state,  ssfindo_interrupt)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", ssfindo_state,  interrupt)
 
 
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -772,9 +795,10 @@ static MACHINE_CONFIG_START( ssfindo, ssfindo_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(320, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 319, 0, 239)
-	MCFG_SCREEN_UPDATE_DRIVER(ssfindo_state, screen_update_ssfindo)
+	MCFG_SCREEN_UPDATE_DRIVER(ssfindo_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_PALETTE_ADD("palette", 256)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ppcar, ssfindo )
@@ -792,18 +816,18 @@ static MACHINE_CONFIG_DERIVED( tetfight, ssfindo )
 MACHINE_CONFIG_END
 
 ROM_START( ssfindo )
-	ROM_REGION(0x100000, "user1", 0 ) /* ARM 32 bit code */
+	ROM_REGION(0x100000, "maincpu", 0 ) /* ARM 32 bit code */
 	ROM_LOAD16_BYTE( "a.u28",   0x000000, 0x80000, CRC(c93edbd3) SHA1(9c703cfef49b59ccd5d68bab9bd59344bd18d67e) )
 	ROM_LOAD16_BYTE( "b.u29",   0x000001, 0x80000, CRC(39ecb9e4) SHA1(9ebd3962d8014b97c68c364729248ed22f9298a4) )
 
-	ROM_REGION(0x1000000, "user2", 0 ) /* flash roms */
+	ROM_REGION16_LE(0x1000000, "flash", 0 ) /* flash roms */
 	ROM_LOAD16_BYTE( "du5",     0x000000, 0x400000, CRC(b32bd453) SHA1(6d5694bfcc67102256f857932b83b38f62ca2010) )
 	ROM_LOAD16_BYTE( "du6",     0x000001, 0x400000, CRC(00559591) SHA1(543aefddc02f6a521d3bd5e6e3d8e42127ff9baa) )
 
 	ROM_LOAD16_BYTE( "du3",     0x800000, 0x400000, CRC(d1e8afb2) SHA1(598dfcbba14435a1d0571dcefe0ec62fec657fca) )
 	ROM_LOAD16_BYTE( "du2",     0x800001, 0x400000, CRC(56998515) SHA1(9b71a44f56a545ff0c1170775c839d21bd01f545) )
 
-	ROM_REGION(0x80, "user3", 0 ) /* eeprom */
+	ROM_REGION(0x80, "eeprom", 0 ) /* eeprom */
 	ROM_LOAD( "24c01a.u36",     0x00, 0x80, CRC(b4f4849b) SHA1(f8f17dc94b2a305048693cfb78d14be57310ce56) )
 
 	ROM_REGION(0x10000, "user4", 0 ) /* qdsp code */
@@ -818,11 +842,11 @@ ROM_START( ssfindo )
 ROM_END
 
 ROM_START( ppcar )
-	ROM_REGION(0x100000, "user1", 0 ) /* ARM 32 bit code */
+	ROM_REGION(0x100000, "maincpu", 0 ) /* ARM 32 bit code */
 	ROM_LOAD16_BYTE( "fk0.u24", 0x000000, 0x80000, CRC(1940a483) SHA1(9456361fd25bf037b53bd2d04764a33b299d96dd) )
 	ROM_LOAD16_BYTE( "fk1.u25", 0x000001, 0x80000, CRC(75ad8679) SHA1(392288e56350e3cc49aaca82edf26f2a9e346f21) )
 
-	ROM_REGION(0x1000000, "user2", 0 ) /* flash roms */
+	ROM_REGION16_LE(0x1000000, "flash", 0 ) /* flash roms */
 	ROM_LOAD16_BYTE( "du5",     0x000000, 0x400000, CRC(d4b7374a) SHA1(54c93a4235f495ba3794aea511b19db821a8acb1) )
 	ROM_LOAD16_BYTE( "du6",     0x000001, 0x400000, CRC(e95a3a62) SHA1(2b1c889d208a749e3d7e4c75588c9c1f979e88d9) )
 
@@ -840,13 +864,13 @@ ROM_START( ppcar )
 ROM_END
 
 ROM_START( tetfight )
-	ROM_REGION(0x200000, "user1", 0 ) /* ARM 32 bit code */
+	ROM_REGION(0x200000, "maincpu", 0 ) /* ARM 32 bit code */
 	ROM_LOAD( "u42",        0x000000, 0x200000, CRC(9101c4d2) SHA1(39da953de734e687ebbf976c821bf1017830f36c) )
 
-	ROM_REGION(0x1000000, "user2", ROMREGION_ERASEFF ) /* flash roms */
+	ROM_REGION16_LE(0x1000000, "flash", ROMREGION_ERASEFF ) /* flash roms */
 	/* nothing? */
 
-	ROM_REGION(0x100, "user3", 0 ) /* eeprom */
+	ROM_REGION(0x100, "eeprom", 0 ) /* eeprom */
 	ROM_LOAD( "u1",     0x00, 0x100, CRC(dd207b40) SHA1(6689d9dfa980bdfbd4e4e6cef7973e22ebbfe22e) )
 
 	ROM_REGION(0x10000, "user4", 0 ) /* qdsp code */
@@ -863,26 +887,32 @@ ROM_END
 
 DRIVER_INIT_MEMBER(ssfindo_state,common)
 {
-	ssfindo_speedup = 0;
+	m_speedup = 0;
 	m_PS7500timer0 = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(ssfindo_state::PS7500_Timer0_callback),this));
 	m_PS7500timer1 = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(ssfindo_state::PS7500_Timer1_callback),this));
 
+	save_item(NAME(m_PS7500_IO));
+	save_item(NAME(m_PS7500_FIFO));
 }
 
 DRIVER_INIT_MEMBER(ssfindo_state,ssfindo)
 {
 	DRIVER_INIT_CALL(common);
 	m_flashType=0;
-	ssfindo_speedup = &ssfindo_state::ssfindo_speedups;
+	m_speedup = &ssfindo_state::ssfindo_speedups;
 	m_iocr_hack=0;
+
+	save_item(NAME(m_flashAdr));
+	save_item(NAME(m_flashOffset));
+	save_item(NAME(m_adrLatch));
+	save_item(NAME(m_flashN));
 }
 
 DRIVER_INIT_MEMBER(ssfindo_state,ppcar)
 {
-	DRIVER_INIT_CALL(common);
+	DRIVER_INIT_CALL(ssfindo);
 	m_flashType=1;
-	ssfindo_speedup = &ssfindo_state::ppcar_speedups;
-	m_iocr_hack=0;
+	m_speedup = &ssfindo_state::ppcar_speedups;
 }
 
 DRIVER_INIT_MEMBER(ssfindo_state,tetfight)
@@ -892,6 +922,6 @@ DRIVER_INIT_MEMBER(ssfindo_state,tetfight)
 	m_iocr_hack=1;
 }
 
-GAME( 1999, ssfindo, 0,        ssfindo,  ssfindo, ssfindo_state,  ssfindo,  ROT0, "Icarus", "See See Find Out", GAME_NO_SOUND )
-GAME( 1999, ppcar,   0,        ppcar,    ppcar, ssfindo_state,    ppcar,    ROT0, "Icarus", "Pang Pang Car", GAME_NO_SOUND )
-GAME( 2001, tetfight,0,        tetfight, tetfight, ssfindo_state,  tetfight,ROT0, "Sego", "Tetris Fighters", GAME_NO_SOUND|GAME_NOT_WORKING )
+GAME( 1999, ssfindo, 0,        ssfindo,  ssfindo, ssfindo_state,  ssfindo,  ROT0, "Icarus", "See See Find Out", GAME_NO_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1999, ppcar,   0,        ppcar,    ppcar, ssfindo_state,    ppcar,    ROT0, "Icarus", "Pang Pang Car", GAME_NO_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 2001, tetfight,0,        tetfight, tetfight, ssfindo_state,  tetfight,ROT0, "Sego", "Tetris Fighters", GAME_NO_SOUND | GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )

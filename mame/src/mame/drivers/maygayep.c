@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /************************************************************************************************************
 
     Maygay EPOCH hardware
@@ -31,7 +33,7 @@
 
 
 #include "emu.h"
-#include "cpu/h83002/h8.h"
+#include "cpu/h8/h83002.h"
 #include "sound/ymz280b.h"
 
 
@@ -50,7 +52,6 @@ protected:
 	required_device<cpu_device> m_maincpu;
 public:
 	DECLARE_DRIVER_INIT(maygayep);
-	DECLARE_WRITE_LINE_MEMBER(irqhandler);
 };
 
 // bp 29e58 in ep_simp reads the 'INITIALISE . . .' string
@@ -101,11 +102,6 @@ DRIVER_INIT_MEMBER(maygayep_state,maygayep)
 
 }
 
-WRITE_LINE_MEMBER(maygayep_state::irqhandler)
-{
-}
-
-
 static MACHINE_CONFIG_START( maygayep, maygayep_state )
 	MCFG_CPU_ADD("maincpu", H83002, 16000000 )
 	MCFG_CPU_PROGRAM_MAP( maygayep_map )
@@ -113,7 +109,6 @@ static MACHINE_CONFIG_START( maygayep, maygayep_state )
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymz", YMZ280B, 10000000 )
-	MCFG_YMZ280B_IRQ_HANDLER(WRITELINE(maygayep_state, irqhandler))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -4264,7 +4259,7 @@ ROM_END
 	*/
 
 #define EP_PHARO_HDD \
-	DISK_REGION( "ide" ) \
+	DISK_REGION( "ata:0:hdd:image" ) \
 	DISK_IMAGE( "ep_pharo", 0, SHA1(daf56705178bb2b6f3547418a98c361478702aed) )
 
 
@@ -7799,7 +7794,7 @@ GAME( 199?, ep_bvrcli,  ep_bvrcl,   maygayep,  maygayep, maygayep_state,  maygay
 GAME( 199?, ep_bvrclj,  ep_bvrcl,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Beaver Las Vegas Club (Global) (EPOCH) (set 11)",GAME_IS_SKELETON_MECHANICAL )
 GAME( 199?, ep_bvrclk,  ep_bvrcl,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Beaver Las Vegas Club (Global) (EPOCH) (set 12)",GAME_IS_SKELETON_MECHANICAL )
 
-GAME( 199?, ep_bjclb,   0,          maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Blackjack Club, The (Global) (EPOCH)",GAME_IS_SKELETON_MECHANICAL )
+GAME( 199?, ep_bjclb,   0,          maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Blackjack Club (Global) (EPOCH)",GAME_IS_SKELETON_MECHANICAL )
 
 
 GAME( 199?, ep_cbrcl,   0,          maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Cannonball Run Club (Global) (EPOCH) (set 1)",GAME_IS_SKELETON_MECHANICAL )
@@ -7900,13 +7895,13 @@ GAME( 199?, ep_kopclb,  ep_kopcl,   maygayep,  maygayep, maygayep_state,  maygay
 GAME( 199?, ep_ltt,     0,          maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Licence To Thrill (Global) (EPOCH) (set 1)",GAME_IS_SKELETON_MECHANICAL )
 GAME( 199?, ep_ltta,    ep_ltt,     maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Licence To Thrill (Global) (EPOCH) (set 2)",GAME_IS_SKELETON_MECHANICAL )
 
-GAME( 199?, ep_monrt,   0,          maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Money Returns Club, The (Global) (EPOCH) (set 1)",GAME_IS_SKELETON_MECHANICAL )
-GAME( 199?, ep_monrta,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Money Returns Club, The (Global) (EPOCH) (set 2)",GAME_IS_SKELETON_MECHANICAL )
-GAME( 199?, ep_monrtb,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Money Returns Club, The (Global) (EPOCH) (set 3)",GAME_IS_SKELETON_MECHANICAL )
-GAME( 199?, ep_monrtc,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Money Returns Club, The (Global) (EPOCH) (set 4)",GAME_IS_SKELETON_MECHANICAL )
-GAME( 199?, ep_monrtd,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Money Returns Club, The (Global) (EPOCH) (set 5)",GAME_IS_SKELETON_MECHANICAL )
-GAME( 199?, ep_monrte,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Money Returns Club, The (Global) (EPOCH) (set 6)",GAME_IS_SKELETON_MECHANICAL )
-GAME( 199?, ep_monrtf,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "Money Returns Club, The (Global) (EPOCH) (set 7)",GAME_IS_SKELETON_MECHANICAL )
+GAME( 199?, ep_monrt,   0,          maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Money Returns Club (Global) (EPOCH) (set 1)",GAME_IS_SKELETON_MECHANICAL )
+GAME( 199?, ep_monrta,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Money Returns Club (Global) (EPOCH) (set 2)",GAME_IS_SKELETON_MECHANICAL )
+GAME( 199?, ep_monrtb,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Money Returns Club (Global) (EPOCH) (set 3)",GAME_IS_SKELETON_MECHANICAL )
+GAME( 199?, ep_monrtc,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Money Returns Club (Global) (EPOCH) (set 4)",GAME_IS_SKELETON_MECHANICAL )
+GAME( 199?, ep_monrtd,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Money Returns Club (Global) (EPOCH) (set 5)",GAME_IS_SKELETON_MECHANICAL )
+GAME( 199?, ep_monrte,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Money Returns Club (Global) (EPOCH) (set 6)",GAME_IS_SKELETON_MECHANICAL )
+GAME( 199?, ep_monrtf,  ep_monrt,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Money Returns Club (Global) (EPOCH) (set 7)",GAME_IS_SKELETON_MECHANICAL )
 
 GAME( 199?, ep_monsh,   0,          maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Moonshine Club (Global) (EPOCH) (set 1)",GAME_IS_SKELETON_MECHANICAL )
 GAME( 199?, ep_monsha,  ep_monsh,   maygayep,  maygayep, maygayep_state,  maygayep, ROT0, "Global",        "The Moonshine Club (Global) (EPOCH) (set 2)",GAME_IS_SKELETON_MECHANICAL )

@@ -1,34 +1,14 @@
+// license:???
+// copyright-holders:insideoutboy, David Haywood, Stephh
 /* Flower Video Hardware */
 
 #include "emu.h"
 #include "includes/flower.h"
 
 
-void flower_state::palette_init()
-{
-	const UINT8 *color_prom = memregion("proms")->base();
-	int i;
-
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
-
-	/* create a lookup table for the palette */
-	for (i = 0; i < 0x100; i++)
-	{
-		int r = pal4bit(color_prom[i + 0x000]);
-		int g = pal4bit(color_prom[i + 0x100]);
-		int b = pal4bit(color_prom[i + 0x200]);
-
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
-	}
-
-	for (i = 0; i < 0x100; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
-}
-
 void flower_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	gfx_element *gfx = machine().gfx[1];
+	gfx_element *gfx = m_gfxdecode->gfx(1);
 	UINT8 *source = m_spriteram + 0x200;
 	UINT8 *finish = source - 0x200;
 
@@ -104,7 +84,7 @@ void flower_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect 
 				if (xblock) sxoffs+=xblocksizeinpixels;
 				if (yblock) syoffs+=yblocksizeinpixels;
 
-				drawgfxzoom_transpen(bitmap,cliprect,gfx,
+				gfx->zoom_transpen(bitmap,cliprect,
 						code+yoffs+xoffs,
 						color,
 						flipx,flipy,
@@ -146,10 +126,10 @@ TILE_GET_INFO_MEMBER(flower_state::get_text_tile_info)
 
 void flower_state::video_start()
 {
-	m_bg0_tilemap        = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(flower_state::get_bg0_tile_info),this), TILEMAP_SCAN_ROWS,16,16,16,16);
-	m_bg1_tilemap        = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(flower_state::get_bg1_tile_info),this), TILEMAP_SCAN_ROWS,16,16,16,16);
-	m_text_tilemap       = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(flower_state::get_text_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8,32,32);
-	m_text_right_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(flower_state::get_text_tile_info),this),TILEMAP_SCAN_COLS, 8, 8, 2,32);
+	m_bg0_tilemap        = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(flower_state::get_bg0_tile_info),this), TILEMAP_SCAN_ROWS,16,16,16,16);
+	m_bg1_tilemap        = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(flower_state::get_bg1_tile_info),this), TILEMAP_SCAN_ROWS,16,16,16,16);
+	m_text_tilemap       = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(flower_state::get_text_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8,32,32);
+	m_text_right_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(flower_state::get_text_tile_info),this),TILEMAP_SCAN_COLS, 8, 8, 2,32);
 
 	m_bg1_tilemap->set_transparent_pen(15);
 	m_text_tilemap->set_transparent_pen(3);
@@ -166,8 +146,8 @@ UINT32 flower_state::screen_update_flower(screen_device &screen, bitmap_ind16 &b
 	m_bg0_tilemap->set_scrolly(0, m_bg0_scroll[0]+16);
 	m_bg1_tilemap->set_scrolly(0, m_bg1_scroll[0]+16);
 
-	m_bg0_tilemap->draw(bitmap, cliprect, 0,0);
-	m_bg1_tilemap->draw(bitmap, cliprect, 0,0);
+	m_bg0_tilemap->draw(screen, bitmap, cliprect, 0,0);
+	m_bg1_tilemap->draw(screen, bitmap, cliprect, 0,0);
 
 	draw_sprites(bitmap,cliprect);
 
@@ -182,8 +162,8 @@ UINT32 flower_state::screen_update_flower(screen_device &screen, bitmap_ind16 &b
 		myclip.max_x = cliprect.max_x;
 	}
 
-	m_text_tilemap->draw(bitmap, cliprect, 0,0);
-	m_text_right_tilemap->draw(bitmap, myclip, 0,0);
+	m_text_tilemap->draw(screen, bitmap, cliprect, 0,0);
+	m_text_right_tilemap->draw(screen, bitmap, myclip, 0,0);
 	return 0;
 }
 

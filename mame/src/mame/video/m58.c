@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Lee Taylor, John Clegg
 /***************************************************************************
 
     Irem M58 hardware
@@ -19,7 +21,7 @@
  *
  *************************************/
 
-void m58_state::palette_init()
+PALETTE_INIT_MEMBER(m58_state, m58)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	const UINT8 *char_lopal = color_prom + 0x000;
@@ -32,8 +34,6 @@ void m58_state::palette_init()
 	static const int resistances_2[2]  = { 470, 220 };
 	double weights_r[3], weights_g[3], weights_b[3], scale;
 	int i;
-
-	machine().colortable = colortable_alloc(machine(), 256+256+16);
 
 	/* compute palette information for characters/radar */
 	scale = compute_resistor_weights(0, 255, -1.0,
@@ -49,7 +49,7 @@ void m58_state::palette_init()
 		int g = combine_3_weights(weights_g, BIT(promval,3), BIT(promval,4), BIT(promval,5));
 		int b = combine_3_weights(weights_b, BIT(promval,0), BIT(promval,1), BIT(promval,2));
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r,g,b));
+		palette.set_indirect_color(i, rgb_t(r,g,b));
 	}
 
 	/* radar palette */
@@ -60,7 +60,7 @@ void m58_state::palette_init()
 		int g = combine_3_weights(weights_g, BIT(promval,3), BIT(promval,4), BIT(promval,5));
 		int b = combine_3_weights(weights_b, BIT(promval,0), BIT(promval,1), BIT(promval,2));
 
-		colortable_palette_set_color(machine().colortable, 256+i, MAKE_RGB(r,g,b));
+		palette.set_indirect_color(256+i, rgb_t(r,g,b));
 	}
 
 	/* compute palette information for sprites */
@@ -77,22 +77,22 @@ void m58_state::palette_init()
 		int g = combine_3_weights(weights_g, BIT(promval,3), BIT(promval,4), BIT(promval,5));
 		int b = combine_3_weights(weights_b, BIT(promval,0), BIT(promval,1), BIT(promval,2));
 
-		colortable_palette_set_color(machine().colortable, 256+256+i, MAKE_RGB(r,g,b));
+		palette.set_indirect_color(256+256+i, rgb_t(r,g,b));
 	}
 
 	/* character lookup table */
 	for (i = 0; i < 256; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_pen_indirect(i, i);
 
 	/* radar lookup table */
 	for (i = 0; i < 256; i++)
-		colortable_entry_set_value(machine().colortable, 256+i, 256+i);
+		palette.set_pen_indirect(256+i, 256+i);
 
 	/* sprite lookup table */
 	for (i = 0; i < 256; i++)
 	{
 		UINT8 promval = sprite_table[i] & 0x0f;
-		colortable_entry_set_value(machine().colortable, 256+256+i, 256+256+promval);
+		palette.set_pen_indirect(256+256+i, 256+256+promval);
 	}
 }
 
@@ -104,14 +104,14 @@ void m58_state::palette_init()
  *
  *************************************/
 
-WRITE8_MEMBER(m58_state::yard_videoram_w)
+WRITE8_MEMBER(m58_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset / 2);
 }
 
 
-WRITE8_MEMBER(m58_state::yard_scroll_panel_w)
+WRITE8_MEMBER(m58_state::scroll_panel_w)
 {
 	int sx,sy,i;
 
@@ -130,7 +130,7 @@ WRITE8_MEMBER(m58_state::yard_scroll_panel_w)
 		col = (data >> i) & 0x11;
 		col = ((col >> 3) | col) & 3;
 
-		m_scroll_panel_bitmap->pix16(sy, sx + i) = RADAR_PALETTE_BASE + (sy & 0xfc) + col;
+		m_scroll_panel_bitmap.pix16(sy, sx + i) = RADAR_PALETTE_BASE + (sy & 0xfc) + col;
 	}
 }
 
@@ -142,7 +142,7 @@ WRITE8_MEMBER(m58_state::yard_scroll_panel_w)
  *
  *************************************/
 
-TILE_GET_INFO_MEMBER(m58_state::yard_get_bg_tile_info)
+TILE_GET_INFO_MEMBER(m58_state::get_bg_tile_info)
 {
 	int offs = tile_index * 2;
 	int attr = m_videoram[offs + 1];
@@ -154,7 +154,7 @@ TILE_GET_INFO_MEMBER(m58_state::yard_get_bg_tile_info)
 }
 
 
-TILEMAP_MAPPER_MEMBER(m58_state::yard_tilemap_scan_rows)
+TILEMAP_MAPPER_MEMBER(m58_state::tilemap_scan_rows)
 {
 	/* logical (col,row) -> memory offset */
 	if (col >= 32)
@@ -173,15 +173,17 @@ TILEMAP_MAPPER_MEMBER(m58_state::yard_tilemap_scan_rows)
 
 void m58_state::video_start()
 {
-	int width = machine().primary_screen->width();
-	int height = machine().primary_screen->height();
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	int width = m_screen->width();
+	int height = m_screen->height();
+	const rectangle &visarea = m_screen->visible_area();
 
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m58_state::yard_get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(m58_state::yard_tilemap_scan_rows),this),  8, 8, 64, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m58_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(m58_state::tilemap_scan_rows),this),  8, 8, 64, 32);
 	m_bg_tilemap->set_scrolldx(visarea.min_x, width - (visarea.max_x + 1));
 	m_bg_tilemap->set_scrolldy(visarea.min_y - 8, height + 16 - (visarea.max_y + 1));
 
-	m_scroll_panel_bitmap = auto_bitmap_ind16_alloc(machine(), SCROLL_PANEL_WIDTH, height);
+	//m_scroll_panel_bitmap = auto_bitmap_ind16_alloc(machine(), SCROLL_PANEL_WIDTH, height);
+	m_screen->register_screen_bitmap(m_scroll_panel_bitmap);
+	save_item(NAME(m_scroll_panel_bitmap));
 }
 
 
@@ -192,7 +194,7 @@ void m58_state::video_start()
  *
  *************************************/
 
-WRITE8_MEMBER(m58_state::yard_flipscreen_w)
+WRITE8_MEMBER(m58_state::flipscreen_w)
 {
 	/* screen flip is handled both by software and hardware */
 	flip_screen_set((data & 0x01) ^ (~ioport("DSW2")->read() & 0x01));
@@ -209,12 +211,12 @@ WRITE8_MEMBER(m58_state::yard_flipscreen_w)
  *
  *************************************/
 
-#define DRAW_SPRITE(code, sy) drawgfx_transmask(bitmap, cliprect, machine().gfx[1], code, color, flipx, flipy, sx, sy, colortable_get_transpen_mask(machine().colortable, machine().gfx[1], color, 512));
+#define DRAW_SPRITE(code, sy)  m_gfxdecode->gfx(1)->transmask(bitmap,cliprect, code, color, flipx, flipy, sx, sy, m_palette->transpen_mask(*m_gfxdecode->gfx(1), color, 512));
 
 void m58_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
 	int offs;
-	const rectangle &visarea = machine().primary_screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 
 	for (offs = m_spriteram.bytes() - 4; offs >= 0; offs -= 4)
 	{
@@ -267,12 +269,12 @@ void m58_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect )
 
 void m58_state::draw_panel( bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	if (!*m_yard_score_panel_disabled)
+	if (!*m_score_panel_disabled)
 	{
 		const rectangle clippanel(26*8, 32*8-1, 1*8, 31*8-1);
 		const rectangle clippanelflip(0*8, 6*8-1, 1*8, 31*8-1);
 		rectangle clip = flip_screen() ? clippanelflip : clippanel;
-		const rectangle &visarea = machine().primary_screen->visible_area();
+		const rectangle &visarea = m_screen->visible_area();
 		int sx = flip_screen() ? cliprect.min_x - 8 : cliprect.max_x + 1 - SCROLL_PANEL_WIDTH;
 		int yoffs = flip_screen() ? -40 : -16;
 
@@ -280,7 +282,7 @@ void m58_state::draw_panel( bitmap_ind16 &bitmap, const rectangle &cliprect )
 		clip.max_y += visarea.max_y + yoffs;
 		clip &= cliprect;
 
-		copybitmap(bitmap, *m_scroll_panel_bitmap, flip_screen(), flip_screen(),
+		copybitmap(bitmap, m_scroll_panel_bitmap, flip_screen(), flip_screen(),
 					sx, visarea.min_y + yoffs, clip);
 	}
 }
@@ -293,12 +295,12 @@ void m58_state::draw_panel( bitmap_ind16 &bitmap, const rectangle &cliprect )
  *
  *************************************/
 
-UINT32 m58_state::screen_update_yard(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 m58_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->set_scrollx(0, (*m_yard_scroll_x_high * 0x100) + *m_yard_scroll_x_low);
-	m_bg_tilemap->set_scrolly(0, *m_yard_scroll_y_low);
+	m_bg_tilemap->set_scrollx(0, (*m_scroll_x_high * 0x100) + *m_scroll_x_low);
+	m_bg_tilemap->set_scrolly(0, *m_scroll_y_low);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	draw_panel(bitmap, cliprect);
 	return 0;

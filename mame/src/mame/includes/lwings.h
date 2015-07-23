@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Paul Leaman
 #include "video/bufsprite.h"
 #include "sound/msm5205.h"
 
@@ -11,7 +13,9 @@ public:
 		m_bg1videoram(*this, "bg1videoram"),
 		m_soundlatch2(*this, "soundlatch2"),
 		m_maincpu(*this, "maincpu"),
-		m_msm(*this, "5205") { }
+		m_msm(*this, "5205"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_device<buffered_spriteram8_device> m_spriteram;
@@ -71,4 +75,6 @@ public:
 	int avengers_fetch_paldata(  );
 	required_device<cpu_device> m_maincpu;
 	optional_device<msm5205_device> m_msm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };

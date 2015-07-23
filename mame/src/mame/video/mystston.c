@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Technos Mysterious Stones hardware
@@ -56,7 +58,7 @@ TIMER_CALLBACK_MEMBER(mystston_state::interrupt_callback)
 		scanline = FIRST_INT_VPOS;
 
 	/* the vertical synch chain is clocked by H256 -- this is probably not important, but oh well */
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(scanline - 1, INT_HPOS), scanline);
+	m_interrupt_timer->adjust(m_screen->time_until_pos(scanline - 1, INT_HPOS), scanline);
 }
 
 
@@ -110,7 +112,7 @@ void mystston_state::set_palette()
 		bit1 = (data >> 7) & 0x01;
 		b = combine_2_weights(weights_b, bit0, bit1);
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		m_palette->set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -197,7 +199,7 @@ void mystston_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 				flipy = !flipy;
 			}
 
-			drawgfx_transpen(bitmap, cliprect, gfx, code, color, flipx, flipy, x, y, 0);
+				gfx->transpen(bitmap,cliprect, code, color, flipx, flipy, x, y, 0);
 		}
 	}
 }
@@ -212,9 +214,9 @@ void mystston_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 
 VIDEO_START_MEMBER(mystston_state,mystston)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(mystston_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS_FLIP_X, 16, 16, 16, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(mystston_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS_FLIP_X, 16, 16, 16, 32);
 
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(mystston_state::get_fg_tile_info),this), TILEMAP_SCAN_COLS_FLIP_X,  8,  8, 32, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(mystston_state::get_fg_tile_info),this), TILEMAP_SCAN_COLS_FLIP_X,  8,  8, 32, 32);
 	m_fg_tilemap->set_transparent_pen(0);
 
 	/* create the interrupt timer */
@@ -231,7 +233,7 @@ VIDEO_START_MEMBER(mystston_state,mystston)
 
 VIDEO_RESET_MEMBER(mystston_state,mystston)
 {
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(FIRST_INT_VPOS - 1, INT_HPOS), FIRST_INT_VPOS);
+	m_interrupt_timer->adjust(m_screen->time_until_pos(FIRST_INT_VPOS - 1, INT_HPOS), FIRST_INT_VPOS);
 }
 
 
@@ -252,9 +254,9 @@ UINT32 mystston_state::screen_update_mystston(screen_device &screen, bitmap_ind1
 	m_bg_tilemap->set_scrolly(0, *m_scroll);
 	machine().tilemap().set_flip_all(flip ? (TILEMAP_FLIPY | TILEMAP_FLIPX) : 0);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
-	draw_sprites(bitmap, cliprect, machine().gfx[2], flip);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+	draw_sprites(bitmap, cliprect, m_gfxdecode->gfx(2), flip);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
@@ -311,10 +313,11 @@ MACHINE_CONFIG_FRAGMENT( mystston_video )
 	MCFG_VIDEO_START_OVERRIDE(mystston_state,mystston)
 	MCFG_VIDEO_RESET_OVERRIDE(mystston_state,mystston)
 
-	MCFG_GFXDECODE(mystston)
-	MCFG_PALETTE_LENGTH(0x40)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", mystston)
+	MCFG_PALETTE_ADD("palette", 0x40)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(PIXEL_CLOCK, HTOTAL, HBEND, HBSTART, VTOTAL, VBEND, VBSTART)
 	MCFG_SCREEN_UPDATE_DRIVER(mystston_state, screen_update_mystston)
+	MCFG_SCREEN_PALETTE("palette")
 MACHINE_CONFIG_END

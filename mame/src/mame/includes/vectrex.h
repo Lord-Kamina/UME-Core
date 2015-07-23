@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mathis Rosenhauer
 /*****************************************************************************
  *
  * includes/vectrex.h
@@ -10,7 +12,10 @@
 #include "machine/6522via.h"
 #include "sound/dac.h"
 #include "sound/ay8910.h"
+#include "video/vector.h"
 
+#include "bus/vectrex/slot.h"
+#include "bus/vectrex/rom.h"
 
 #define NVECT 10000
 
@@ -42,6 +47,8 @@ public:
 		m_via6522_0(*this, "via6522_0"),
 		m_dac(*this, "dac"),
 		m_ay8912(*this, "ay8912"),
+		m_vector(*this, "vector"),
+		m_cart(*this, "cartslot"),
 		m_io_contr1x(*this, "CONTR1X"),
 		m_io_contr1y(*this, "CONTR1Y"),
 		m_io_contr2x(*this, "CONTR2X"),
@@ -51,10 +58,11 @@ public:
 		m_io_lpenconf(*this, "LPENCONF"),
 		m_io_lpenx(*this, "LPENX"),
 		m_io_lpeny(*this, "LPENY"),
-		m_io_coin(*this, "COIN") { }
+		m_io_coin(*this, "COIN"),
+		m_screen(*this, "screen")
+	{ }
 
 	required_shared_ptr<UINT8> m_gce_vectorram;
-	int m_64k_cart;
 	int m_imager_status;
 	UINT32 m_beam_color;
 	unsigned char m_via_out[2];
@@ -96,6 +104,7 @@ public:
 	DECLARE_WRITE8_MEMBER(raaspec_led_w);
 	DECLARE_DRIVER_INIT(vectrex);
 	virtual void video_start();
+	virtual void machine_start();
 	DECLARE_VIDEO_START(raaspec);
 	UINT32 screen_update_vectrex(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	TIMER_CALLBACK_MEMBER(vectrex_imager_change_color);
@@ -110,8 +119,8 @@ public:
 	DECLARE_READ8_MEMBER(vectrex_s1_via_pb_r);
 	DECLARE_WRITE8_MEMBER(v_via_pb_w);
 	DECLARE_WRITE8_MEMBER(v_via_pa_w);
-	DECLARE_WRITE8_MEMBER(v_via_ca2_w);
-	DECLARE_WRITE8_MEMBER(v_via_cb2_w);
+	DECLARE_WRITE_LINE_MEMBER(v_via_ca2_w);
+	DECLARE_WRITE_LINE_MEMBER(v_via_cb2_w);
 	DECLARE_DEVICE_IMAGE_LOAD_MEMBER( vectrex_cart );
 	DECLARE_WRITE_LINE_MEMBER(vectrex_via_irq);
 
@@ -122,6 +131,8 @@ protected:
 	required_device<via6522_device> m_via6522_0;
 	required_device<dac_device> m_dac;
 	required_device<ay8910_device> m_ay8912;
+	required_device<vector_device> m_vector;
+	optional_device<vectrex_cart_slot_device> m_cart;
 	optional_ioport m_io_contr1x;
 	optional_ioport m_io_contr1y;
 	optional_ioport m_io_contr2x;
@@ -132,17 +143,12 @@ protected:
 	required_ioport m_io_lpenx;
 	required_ioport m_io_lpeny;
 	optional_ioport m_io_coin;
+	required_device<screen_device> m_screen;
 
 	void vectrex_configuration();
 	void vectrex_multiplexer(int mux);
 	void vectrex_add_point(int x, int y, rgb_t color, int intensity);
 	void vectrex_add_point_stereo(int x, int y, rgb_t color, int intensity);
-	int vectrex_verify_cart(char *data);
 };
-
-/*---------- defined in video/vectrex.c -----------*/
-
-extern const via6522_interface vectrex_via6522_interface;
-extern const via6522_interface spectrum1_via6522_interface;
 
 #endif /* VECTREX_H_ */

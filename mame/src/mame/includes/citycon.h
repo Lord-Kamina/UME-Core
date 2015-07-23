@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mirko Buffoni
 /*************************************************************************
 
     City Connection
@@ -13,7 +15,9 @@ public:
 		m_linecolor(*this, "linecolor"),
 		m_spriteram(*this, "spriteram"),
 		m_scroll(*this, "scroll"),
-		m_maincpu(*this, "maincpu"){ }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
@@ -29,6 +33,9 @@ public:
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	DECLARE_READ8_MEMBER(citycon_in_r);
 	DECLARE_READ8_MEMBER(citycon_irq_ack_r);
 	DECLARE_WRITE8_MEMBER(citycon_videoram_w);

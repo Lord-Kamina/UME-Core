@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /***************************************************************************
 
     Entertainment Sciences Real-Time Image Processor (RIP) hardware
@@ -44,15 +46,6 @@ WRITE_LINE_MEMBER(esripsys_state::ptm_irq)
 	m_soundcpu->set_input_line(M6809_FIRQ_LINE, state ? ASSERT_LINE : CLEAR_LINE);
 }
 
-static const ptm6840_interface ptm_intf =
-{
-	XTAL_8MHz / 4,
-	{ 0, 0, 0 },
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_NULL },
-	DEVCB_DRIVER_LINE_MEMBER(esripsys_state,ptm_irq)
-};
-
-
 /*************************************
  *
  *  i8251A UART
@@ -63,7 +56,7 @@ static const ptm6840_interface ptm_intf =
 WRITE8_MEMBER(esripsys_state::uart_w)
 {
 	if ((offset & 1) == 0)
-		mame_printf_debug("%c",data);
+		osd_printf_debug("%c",data);
 }
 
 READ8_MEMBER(esripsys_state::uart_r)
@@ -94,7 +87,7 @@ READ8_MEMBER(esripsys_state::uart_r)
 READ8_MEMBER(esripsys_state::g_status_r)
 {
 	int bank4 = BIT(m_videocpu->get_rip_status(), 2);
-	int vblank = machine().primary_screen->vblank();
+	int vblank = m_screen->vblank();
 
 	return (!vblank << 7) | (bank4 << 6) | (m_f_status & 0x2f);
 }
@@ -141,7 +134,7 @@ WRITE8_MEMBER(esripsys_state::g_status_w)
 
 READ8_MEMBER(esripsys_state::f_status_r)
 {
-	int vblank = machine().primary_screen->vblank();
+	int vblank = m_screen->vblank();
 	UINT8 rip_status = m_videocpu->get_rip_status();
 
 	rip_status = (rip_status & 0x18) | (BIT(rip_status, 6) << 1) |  BIT(rip_status, 7);
@@ -196,31 +189,29 @@ WRITE8_MEMBER(esripsys_state::fdt_w)
  *
  *************************************/
 
-static READ16_DEVICE_HANDLER( fdt_rip_r )
+READ16_MEMBER( esripsys_state::fdt_rip_r )
 {
-	esripsys_state *state = space.machine().driver_data<esripsys_state>();
 	offset = (offset & 0x7ff) << 1;
 
-	if (!state->m_fasel)
-		return (state->m_fdt_a[offset] << 8) | state->m_fdt_a[offset + 1];
+	if (!m_fasel)
+		return (m_fdt_a[offset] << 8) | m_fdt_a[offset + 1];
 	else
-		return (state->m_fdt_b[offset] << 8) | state->m_fdt_b[offset + 1];
+		return (m_fdt_b[offset] << 8) | m_fdt_b[offset + 1];
 }
 
-static WRITE16_DEVICE_HANDLER( fdt_rip_w )
+WRITE16_MEMBER( esripsys_state::fdt_rip_w )
 {
-	esripsys_state *state = space.machine().driver_data<esripsys_state>();
 	offset = (offset & 0x7ff) << 1;
 
-	if (!state->m_fasel)
+	if (!m_fasel)
 	{
-		state->m_fdt_a[offset + 0] = data >> 8;
-		state->m_fdt_a[offset + 1] = data & 0xff;
+		m_fdt_a[offset + 0] = data >> 8;
+		m_fdt_a[offset + 1] = data & 0xff;
 	}
 	else
 	{
-		state->m_fdt_b[offset + 0] = data >> 8;
-		state->m_fdt_b[offset + 1] = data & 0xff;
+		m_fdt_b[offset + 0] = data >> 8;
+		m_fdt_b[offset + 1] = data & 0xff;
 	}
 }
 
@@ -235,19 +226,18 @@ static WRITE16_DEVICE_HANDLER( fdt_rip_w )
    D7 = /FDONE
 */
 
-static UINT8 rip_status_in(running_machine &machine)
+READ8_MEMBER(esripsys_state::rip_status_in)
 {
-	esripsys_state *state = machine.driver_data<esripsys_state>();
-	int vpos =  machine.primary_screen->vpos();
+	int vpos =  m_screen->vpos();
 	UINT8 _vblank = !(vpos >= ESRIPSYS_VBLANK_START);
-//  UINT8 _hblank = !machine.primary_screen->hblank();
+//  UINT8 _hblank = !m_screen->hblank();
 
 	return  _vblank
-			| (state->m_hblank << 1)
-			| (state->m_12sel << 2)
-			| (state->m_fbsel << 4)
+			| (m_hblank << 1)
+			| (m_12sel << 2)
+			| (m_fbsel << 4)
 			| ((vpos & 1) << 5)
-			| (state->m_f_status & 0x80);
+			| (m_f_status & 0x80);
 }
 
 /*************************************
@@ -681,15 +671,6 @@ DRIVER_INIT_MEMBER(esripsys_state,esripsys)
 	save_item(NAME(m_fbsel));
 }
 
-static const esrip_config rip_config =
-{
-	fdt_rip_r,
-	fdt_rip_w,
-	rip_status_in,
-	esripsys_draw,
-	"proms"
-};
-
 static MACHINE_CONFIG_START( esripsys, esripsys_state )
 	MCFG_CPU_ADD("game_cpu", M6809E, XTAL_8MHz)
 	MCFG_CPU_PROGRAM_MAP(game_cpu_map)
@@ -701,7 +682,11 @@ static MACHINE_CONFIG_START( esripsys, esripsys_state )
 
 	MCFG_CPU_ADD("video_cpu", ESRIP, XTAL_40MHz / 4)
 	MCFG_CPU_PROGRAM_MAP(video_cpu_map)
-	MCFG_CPU_ESRIP_CONFIG(rip_config)
+	MCFG_ESRIP_FDT_R_CALLBACK(READ16(esripsys_state, fdt_rip_r))
+	MCFG_ESRIP_FDT_W_CALLBACK(WRITE16(esripsys_state, fdt_rip_w))
+	MCFG_ESRIP_STATUS_IN_CALLBACK(READ8(esripsys_state, rip_status_in))
+	MCFG_ESRIP_DRAW_CALLBACK_OWNER(esripsys_state, esripsys_draw)
+	MCFG_ESRIP_LBRM_PROM("proms")
 
 	MCFG_CPU_ADD("sound_cpu", M6809E, XTAL_8MHz)
 	MCFG_CPU_PROGRAM_MAP(sound_cpu_map)
@@ -712,8 +697,7 @@ static MACHINE_CONFIG_START( esripsys, esripsys_state )
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(ESRIPSYS_PIXEL_CLOCK, ESRIPSYS_HTOTAL, ESRIPSYS_HBLANK_END, ESRIPSYS_HBLANK_START, ESRIPSYS_VTOTAL, ESRIPSYS_VBLANK_END, ESRIPSYS_VBLANK_START)
 	MCFG_SCREEN_UPDATE_DRIVER(esripsys_state, screen_update_esripsys)
-
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
 
 	/* Sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -725,7 +709,10 @@ static MACHINE_CONFIG_START( esripsys, esripsys_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 
 	/* 6840 PTM */
-	MCFG_PTM6840_ADD("6840ptm", ptm_intf)
+	MCFG_DEVICE_ADD("6840ptm", PTM6840, 0)
+	MCFG_PTM6840_INTERNAL_CLOCK(XTAL_8MHz / 4)
+	MCFG_PTM6840_EXTERNAL_CLOCKS(0, 0, 0)
+	MCFG_PTM6840_IRQ_CB(WRITELINE(esripsys_state, ptm_irq))
 MACHINE_CONFIG_END
 
 

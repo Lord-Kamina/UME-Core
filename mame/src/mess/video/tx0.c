@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Raphael Nabet
 /*
     TX-0
 
@@ -62,7 +64,7 @@ void tx0_state::tx0_plot(int x, int y)
 
 
 /*
-    SCREEN_UPDATE_IND16( tx0 ): effectively redraw the screen
+    screen_update_tx0: effectively redraw the screen
 */
 UINT32 tx0_state::screen_update_tx0(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
@@ -197,7 +199,7 @@ void tx0_state::tx0_draw_multipleswitch(bitmap_ind16 &bitmap, int x, int y, int 
 /* write a single char on screen */
 void tx0_state::tx0_draw_char(bitmap_ind16 &bitmap, char character, int x, int y, int color)
 {
-	drawgfx_transpen(bitmap, bitmap.cliprect(), machine().gfx[0], character-32, color, 0, 0,
+	m_gfxdecode->gfx(0)->transpen(bitmap,bitmap.cliprect(), character-32, color, 0, 0,
 				x+1, y, 0);
 }
 
@@ -349,7 +351,7 @@ void tx0_state::tx0_typewriter_linefeed()
 	for (y=0; y<typewriter_window_height-typewriter_scroll_step; y++)
 	{
 		extract_scanline8(m_typewriter_bitmap, 0, y+typewriter_scroll_step, typewriter_window_width, buf);
-		draw_scanline8(m_typewriter_bitmap, 0, y, typewriter_window_width, buf, machine().pens);
+		draw_scanline8(m_typewriter_bitmap, 0, y, typewriter_window_width, buf, m_palette->pens());
 	}
 
 	const rectangle typewriter_scroll_clear_window(0, typewriter_window_width-1, typewriter_window_height-typewriter_scroll_step, typewriter_window_height-1);

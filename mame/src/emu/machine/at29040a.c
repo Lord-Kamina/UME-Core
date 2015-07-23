@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Raphael Nabet, Michael Zapf
 /*
     Atmel at29c040a flash EEPROM
 
@@ -33,7 +35,7 @@
     Constructor.
 */
 at29040a_device::at29040a_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-: device_t(mconfig, AT29040A, "ATMEL 29040A 512K*8 FEEPROM", tag, owner, clock),
+: device_t(mconfig, AT29040A, "ATMEL 29040A 512K*8 FEEPROM", tag, owner, clock, "at29040a", __FILE__),
 	device_nvram_interface(mconfig, *this)
 {
 }
@@ -403,16 +405,16 @@ WRITE8_MEMBER( at29040a_device::write )
 
 void at29040a_device::device_start(void)
 {
-	m_programming_buffer = (UINT8*)malloc(SECTOR_SIZE);
+	m_programming_buffer = global_alloc_array(UINT8, SECTOR_SIZE);
 	m_programming_timer = timer_alloc(PRG_TIMER);
 
-	m_eememory = (UINT8*)malloc(FEEPROM_SIZE+2);
+	m_eememory = global_alloc_array(UINT8, FEEPROM_SIZE+2);
 }
 
 void at29040a_device::device_stop(void)
 {
-	free(m_programming_buffer);
-	free(m_eememory);
+	global_free_array(m_programming_buffer);
+	global_free_array(m_eememory);
 }
 
 void at29040a_device::device_reset(void)

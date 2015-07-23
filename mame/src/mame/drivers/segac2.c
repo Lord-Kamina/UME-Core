@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Aaron Giles
 /***********************************************************************************************
 
     Sega System C (System 14)/C2 Driver
@@ -70,6 +72,7 @@
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
 #include "machine/nvram.h"
+#include "machine/315_5296.h"
 #include "sound/okim6295.h"
 #include "sound/sn76496.h"
 #include "sound/2612intf.h"
@@ -78,7 +81,6 @@
 
 #include "includes/megadriv.h"
 
-#include "machine/megavdp.h"
 
 #define XL1_CLOCK           XTAL_640kHz
 #define XL2_CLOCK           XTAL_53_693175MHz
@@ -87,6 +89,122 @@
 #define LOG_PROTECTION      1
 #define LOG_PALETTE         0
 #define LOG_IOCHIP          0
+
+typedef device_delegate<int (int in)> segac2_prot_delegate;
+
+class segac2_state : public md_base_state
+{
+public:
+	segac2_state(const machine_config &mconfig, device_type type, const char *tag)
+	: md_base_state(mconfig, type, tag),
+	m_paletteram(*this, "paletteram"),
+	m_upd7759(*this, "upd"),
+	m_screen(*this, "screen"),
+	m_palette(*this, "palette") { }
+
+	// for Print Club only
+	int m_cam_data;
+
+	int m_segac2_enable_display;
+
+	required_shared_ptr<UINT16> m_paletteram;
+
+	/* protection-related tracking */
+	segac2_prot_delegate m_prot_func;     /* emulation of protection chip */
+	UINT8       m_prot_write_buf;       /* remembers what was written */
+	UINT8       m_prot_read_buf;        /* remembers what was returned */
+
+	/* palette-related variables */
+	UINT8       m_segac2_alt_palette_mode;
+	UINT8       m_palbank;
+	UINT8       m_bg_palbase;
+	UINT8       m_sp_palbase;
+
+	/* sound-related variables */
+	UINT8       m_sound_banks;      /* number of sound banks */
+
+	DECLARE_DRIVER_INIT(c2boot);
+	DECLARE_DRIVER_INIT(bloxeedc);
+	DECLARE_DRIVER_INIT(columns);
+	DECLARE_DRIVER_INIT(columns2);
+	DECLARE_DRIVER_INIT(tfrceac);
+	DECLARE_DRIVER_INIT(tfrceacb);
+	DECLARE_DRIVER_INIT(borench);
+	DECLARE_DRIVER_INIT(twinsqua);
+	DECLARE_DRIVER_INIT(ribbit);
+	DECLARE_DRIVER_INIT(puyo);
+	DECLARE_DRIVER_INIT(tantr);
+	DECLARE_DRIVER_INIT(tantrkor);
+	DECLARE_DRIVER_INIT(potopoto);
+	DECLARE_DRIVER_INIT(stkclmns);
+	DECLARE_DRIVER_INIT(stkclmnj);
+	DECLARE_DRIVER_INIT(ichir);
+	DECLARE_DRIVER_INIT(ichirk);
+	DECLARE_DRIVER_INIT(ichirj);
+	DECLARE_DRIVER_INIT(ichirjbl);
+	DECLARE_DRIVER_INIT(puyopuy2);
+	DECLARE_DRIVER_INIT(zunkyou);
+	DECLARE_DRIVER_INIT(pclub);
+	DECLARE_DRIVER_INIT(pclubjv2);
+	DECLARE_DRIVER_INIT(pclubjv4);
+	DECLARE_DRIVER_INIT(pclubjv5);
+	void segac2_common_init(segac2_prot_delegate prot_func);
+	DECLARE_VIDEO_START(segac2_new);
+	DECLARE_MACHINE_START(segac2);
+	DECLARE_MACHINE_RESET(segac2);
+
+	UINT32 screen_update_segac2_new(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
+	int m_segac2_bg_pal_lookup[4];
+	int m_segac2_sp_pal_lookup[4];
+	void recompute_palette_tables();
+
+	DECLARE_WRITE_LINE_MEMBER(vdp_sndirqline_callback_c2);
+	DECLARE_WRITE_LINE_MEMBER(vdp_lv6irqline_callback_c2);
+	DECLARE_WRITE_LINE_MEMBER(vdp_lv4irqline_callback_c2);
+
+	DECLARE_READ8_MEMBER(io_portc_r);
+	DECLARE_WRITE8_MEMBER(io_portd_w);
+	DECLARE_WRITE8_MEMBER(io_porth_w);
+
+	DECLARE_WRITE16_MEMBER( segac2_upd7759_w );
+	DECLARE_READ16_MEMBER( palette_r );
+	DECLARE_WRITE16_MEMBER( palette_w );
+	DECLARE_WRITE8_MEMBER( control_w );
+	DECLARE_READ8_MEMBER( prot_r );
+	DECLARE_WRITE8_MEMBER( prot_w );
+	DECLARE_WRITE8_MEMBER( counter_timer_w );
+	DECLARE_READ16_MEMBER( printer_r );
+	DECLARE_WRITE16_MEMBER( print_club_camera_w );
+	DECLARE_READ16_MEMBER(ichirjbl_prot_r);
+	DECLARE_WRITE_LINE_MEMBER(segac2_irq2_interrupt);
+	optional_device<upd7759_device> m_upd7759;
+	optional_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
+
+	int prot_func_dummy(int in);
+	int prot_func_columns(int in);
+	int prot_func_columns2(int in);
+	int prot_func_tfrceac(int in);
+	int prot_func_borench(int in);
+	int prot_func_ribbit(int in);
+	int prot_func_twinsqua(int in);
+	int prot_func_puyo(int in);
+	int prot_func_tantr(int in);
+	int prot_func_tantrkor(int in);
+	int prot_func_potopoto(int in);
+	int prot_func_stkclmnj(int in);
+	int prot_func_stkclmns(int in);
+	int prot_func_ichirj(int in);
+	int prot_func_ichir(int in);
+	int prot_func_ichirk(int in);
+	int prot_func_puyopuy2(int in);
+	int prot_func_zunkyou(int in);
+	int prot_func_pclub(int in);
+	int prot_func_pclubjv2(int in);
+	int prot_func_pclubjv4(int in);
+	int prot_func_pclubjv5(int in);
+};
+
 
 /******************************************************************************
     Machine init
@@ -99,9 +217,10 @@
 
 MACHINE_START_MEMBER(segac2_state,segac2)
 {
-	save_item(NAME(m_misc_io_data));
 	save_item(NAME(m_prot_write_buf));
 	save_item(NAME(m_prot_read_buf));
+
+	m_vdp->stop_timers();
 }
 
 
@@ -136,7 +255,6 @@ MACHINE_RESET_MEMBER(segac2_state,segac2)
 	m_sp_palbase = 0;
 
 	recompute_palette_tables();
-
 }
 
 
@@ -154,18 +272,18 @@ MACHINE_RESET_MEMBER(segac2_state,segac2)
 ******************************************************************************/
 
 /* handle writes to the UPD7759 */
-WRITE16_MEMBER(segac2_state::segac2_upd7759_w )
+WRITE16_MEMBER(segac2_state::segac2_upd7759_w)
 {
 	/* make sure we have a UPD chip */
-	if (!m_sound_banks)
+	if (m_upd7759 == NULL)
 		return;
 
 	/* only works if we're accessing the low byte */
 	if (ACCESSING_BITS_0_7)
 	{
-		upd7759_port_w(m_upd7759, space, 0, data & 0xff);
-		upd7759_start_w(m_upd7759, 0);
-		upd7759_start_w(m_upd7759, 1);
+		m_upd7759->port_w(space, 0, data & 0xff);
+		m_upd7759->start_w(0);
+		m_upd7759->start_w(1);
 	}
 }
 
@@ -188,7 +306,7 @@ WRITE16_MEMBER(segac2_state::segac2_upd7759_w )
 ******************************************************************************/
 
 /* handle reads from the paletteram */
-READ16_MEMBER(segac2_state::palette_r )
+READ16_MEMBER(segac2_state::palette_r)
 {
 	offset &= 0x1ff;
 	if (m_segac2_alt_palette_mode)
@@ -198,7 +316,7 @@ READ16_MEMBER(segac2_state::palette_r )
 }
 
 /* handle writes to the paletteram */
-WRITE16_MEMBER(segac2_state::palette_w )
+WRITE16_MEMBER(segac2_state::palette_w)
 {
 	int r, g, b, newword;
 	int tmpr, tmpg, tmpb;
@@ -219,21 +337,18 @@ WRITE16_MEMBER(segac2_state::palette_w )
 	b = ((newword >> 7) & 0x1e) | ((newword >> 14) & 0x01);
 
 	/* set the color */
-	palette_set_color_rgb(space.machine(), offset, pal5bit(r), pal5bit(g), pal5bit(b));
-
-//  megadrive_vdp_palette_lookup[offset] = (b) | (g << 5) | (r << 10);
-//  megadrive_vdp_palette_lookup_sprite[offset] = (b) | (g << 5) | (r << 10);
+	m_palette->set_pen_color(offset, pal5bit(r), pal5bit(g), pal5bit(b));
 
 	tmpr = r >> 1;
 	tmpg = g >> 1;
 	tmpb = b >> 1;
-	palette_set_color_rgb(space.machine(), offset + 0x800, pal5bit(tmpr), pal5bit(tmpg), pal5bit(tmpb));
+	m_palette->set_pen_color(offset + 0x800, pal5bit(tmpr), pal5bit(tmpg), pal5bit(tmpb));
 
 	// how is it calculated on c2?
 	tmpr = tmpr | 0x10;
 	tmpg = tmpg | 0x10;
 	tmpb = tmpb | 0x10;
-	palette_set_color_rgb(space.machine(), offset + 0x1000, pal5bit(tmpr), pal5bit(tmpg), pal5bit(tmpb));
+	m_palette->set_pen_color(offset + 0x1000, pal5bit(tmpr), pal5bit(tmpg), pal5bit(tmpb));
 }
 
 
@@ -287,143 +402,62 @@ void segac2_state::recompute_palette_tables()
 			m_segac2_sp_pal_lookup[i] = 0x200 * m_palbank + ((~sppal << 2) & 0x100) + ((sppal << 2) & 0x80) + ((~sppal >> 2) & 0x40) + ((sppal >> 2) & 0x20) + (sppal & 0x10);
 		}
 	}
-
 }
 
 
 /******************************************************************************
-    I/O Read & Write Handlers
-*******************************************************************************
-
-    Controls, and Poto Poto reads 'S' 'E' 'G' and 'A' (SEGA) from this area
-    as a form of protection.
-
-    Lots of unknown writes however offset 0E certainly seems to be banking,
-    both colours and sound sample banks.
-
+    Sega 315-5296 I/O chip
 ******************************************************************************/
 
-READ16_MEMBER(segac2_state::io_chip_r )
+READ8_MEMBER(segac2_state::io_portc_r)
 {
-	static const char *const portnames[] = { "P1", "P2", "PORTC", "PORTD", "SERVICE", "COINAGE", "DSW", "PORTH" };
-	offset &= 0x1f/2;
-
-	switch (offset)
-	{
-		/* I/O ports */
-		case 0x00/2:
-		case 0x02/2:
-		case 0x04/2:
-		case 0x06/2:
-		case 0x08/2:
-		case 0x0a/2:
-		case 0x0c/2:
-		case 0x0e/2:
-			/* if the port is configured as an output, return the last thing written */
-			if (m_misc_io_data[0x1e/2] & (1 << offset))
-				return m_misc_io_data[offset];
-
-			/* otherwise, return an input port */
-			if (offset == 0x04/2 && m_sound_banks)
-				return (ioport(portnames[offset])->read() & 0xbf) | (upd7759_busy_r(m_upd7759) << 6);
-			return ioport(portnames[offset])->read();
-
-		/* 'SEGA' protection */
-		case 0x10/2:
-			return 'S';
-		case 0x12/2:
-			return 'E';
-		case 0x14/2:
-			return 'G';
-		case 0x16/2:
-			return 'A';
-
-		/* CNT register & mirror */
-		case 0x18/2:
-		case 0x1c/2:
-			return m_misc_io_data[0x1c/2];
-
-		/* port direction register & mirror */
-		case 0x1a/2:
-		case 0x1e/2:
-			return m_misc_io_data[0x1e/2];
-	}
-	return 0xffff;
+	// D7 : From MB3773P pin 1. (/RESET output)
+	// D6 : From uPD7759 pin 18. (/BUSY output)
+	int busy = (m_upd7759 != NULL) ? (m_upd7759->busy_r() << 6) : 0x40;
+	return 0xbf | busy;
 }
 
-
-WRITE16_MEMBER(segac2_state::io_chip_w )
+WRITE8_MEMBER(segac2_state::io_portd_w)
 {
-	UINT8 newbank;
-//  UINT8 old;
+	/*
+	 D7 : To pin 3 of JP15. (Watchdog clock control)
+	 D6 : To MUTE input pin on TDA1518BQ amplifier.
+	 D5 : To CN2 pin 10. (Unknown purpose)
+	 D4 : To CN2 pin 11. (Unknown purpose)
+	 D3 : To CN1 pin K. (Coin lockout 2)
+	 D2 : To CN1 pin 9. (Coin lockout 1)
+	 D1 : To CN1 pin J. (Coin meter 2)
+	 D0 : To CN1 pin 8. (Coin meter 1)
+	*/
+	//coin_lockout_w(space.machine(), 1, data & 0x08);
+	//coin_lockout_w(space.machine(), 0, data & 0x04);
+	coin_counter_w(space.machine(), 1, data & 0x02);
+	coin_counter_w(space.machine(), 0, data & 0x01);
+}
 
-	/* generic implementation */
-	offset &= 0x1f/2;
-//  old = m_misc_io_data[offset];
-	m_misc_io_data[offset] = data;
-
-	switch (offset)
+WRITE8_MEMBER(segac2_state::io_porth_w)
+{
+	/*
+	 D7 : To pin A19 of CN4
+	 D6 : To pin B19 of CN4
+	 D5 : ?
+	 D4 : ?
+	 D3 : To pin 31 of uPD7759 sample ROM (A18 on a 27C040)
+	 D2 : To pin 30 of uPD7759 sample ROM (A17 on a 27C040)
+	 D1 : To A10 of color RAM
+	 D0 : To A9 of color RAM
+	*/
+	int newbank = data & 3;
+	if (newbank != m_palbank)
 	{
-		/* I/O ports */
-		case 0x00/2:
-		case 0x02/2:
-		case 0x04/2:
-		case 0x08/2:
-		case 0x0a/2:
-		case 0x0c/2:
-			break;
-
-		/* miscellaneous output */
-		case 0x06/2:
-			/*
-			 D7 : To pin 3 of JP15. (Watchdog clock control)
-			 D6 : To MUTE input pin on TDA1518BQ amplifier.
-			 D5 : To CN2 pin 10. (Unknown purpose)
-			 D4 : To CN2 pin 11. (Unknown purpose)
-			 D3 : To CN1 pin K. (Coin lockout 2)
-			 D2 : To CN1 pin 9. (Coin lockout 1)
-			 D1 : To CN1 pin J. (Coin meter 2)
-			 D0 : To CN1 pin 8. (Coin meter 1)
-			*/
-/*          coin_lockout_w(space.machine(), 1, data & 0x08);
-            coin_lockout_w(space.machine(), 0, data & 0x04); */
-			coin_counter_w(space.machine(), 1, data & 0x02);
-			coin_counter_w(space.machine(), 0, data & 0x01);
-			break;
-
-		/* banking */
-		case 0x0e/2:
-			/*
-			 D7 : To pin A19 of CN4
-			 D6 : To pin B19 of CN4
-			 D5 : ?
-			 D4 : ?
-			 D3 : To pin 31 of uPD7759 sample ROM (A18 on a 27C040)
-			 D2 : To pin 30 of uPD7759 sample ROM (A17 on a 27C040)
-			 D1 : To A10 of color RAM
-			 D0 : To A9 of color RAM
-			*/
-			newbank = data & 3;
-			if (newbank != m_palbank)
-			{
-				//space.machine().primary_screen->update_partial(space.machine().primary_screen->vpos() + 1);
-				m_palbank = newbank;
-				recompute_palette_tables();
-			}
-			if (m_sound_banks > 1)
-			{
-				newbank = (data >> 2) & (m_sound_banks - 1);
-				upd7759_set_bank_base(m_upd7759, newbank * 0x20000);
-			}
-			break;
-
-		/* CNT register */
-		case 0x1c/2:
-			if (m_sound_banks > 1)
-			{
-				upd7759_reset_w(m_upd7759, (data >> 1) & 1);
-			}
-			break;
+		//m_screen->update_partial(m_screen->vpos() + 1);
+		m_palbank = newbank;
+		recompute_palette_tables();
+	}
+	if (m_sound_banks > 1)
+	{
+		newbank = (data >> 2) & (m_sound_banks - 1);
+		m_upd7759->set_bank_base(newbank * 0x20000);
 	}
 }
 
@@ -438,11 +472,8 @@ WRITE16_MEMBER(segac2_state::io_chip_w )
 
 ******************************************************************************/
 
-WRITE16_MEMBER(segac2_state::control_w )
+WRITE8_MEMBER(segac2_state::control_w)
 {
-	/* skip if not LSB */
-	if (!ACCESSING_BITS_0_7)
-		return;
 	data &= 0x0f;
 
 	/* bit 0 controls display enable */
@@ -473,23 +504,19 @@ WRITE16_MEMBER(segac2_state::control_w )
 ******************************************************************************/
 
 /* protection chip reads */
-READ16_MEMBER(segac2_state::prot_r )
+READ8_MEMBER(segac2_state::prot_r)
 {
-	if (LOG_PROTECTION) logerror("%06X:protection r=%02X\n", space.device().safe_pcbase(), m_prot_func ? m_prot_read_buf : 0xff);
+	if (LOG_PROTECTION) logerror("%06X:protection r=%02X\n", space.device().safe_pcbase(), m_prot_read_buf);
 	return m_prot_read_buf | 0xf0;
 }
 
 
 /* protection chip writes */
-WRITE16_MEMBER(segac2_state::prot_w )
+WRITE8_MEMBER(segac2_state::prot_w)
 {
 	int new_sp_palbase = (data >> 2) & 3;
 	int new_bg_palbase = data & 3;
 	int table_index;
-
-	/* only works for the LSB */
-	if (!ACCESSING_BITS_0_7)
-		return;
 
 	/* compute the table index */
 	table_index = (m_prot_write_buf << 4) | m_prot_read_buf;
@@ -498,18 +525,17 @@ WRITE16_MEMBER(segac2_state::prot_w )
 	m_prot_write_buf = data & 0x0f;
 
 	/* determine the value to return, should a read occur */
-	if (m_prot_func)
-		m_prot_read_buf = m_prot_func(table_index);
+	m_prot_read_buf = m_prot_func(table_index);
 	if (LOG_PROTECTION) logerror("%06X:protection w=%02X, new result=%02X\n", space.device().safe_pcbase(), data & 0x0f, m_prot_read_buf);
 
 	/* if the palette changed, force an update */
 	if (new_sp_palbase != m_sp_palbase || new_bg_palbase != m_bg_palbase)
 	{
-		//space.machine().primary_screen->update_partial(space.machine().primary_screen->vpos() + 1);
+		//m_screen->update_partial(m_screen->vpos() + 1);
 		m_sp_palbase = new_sp_palbase;
 		m_bg_palbase = new_bg_palbase;
 		recompute_palette_tables();
-		if (LOG_PALETTE) logerror("Set palbank: %d/%d (scan=%d)\n", m_bg_palbase, m_sp_palbase, space.machine().primary_screen->vpos());
+		if (LOG_PALETTE) logerror("Set palbank: %d/%d (scan=%d)\n", m_bg_palbase, m_sp_palbase, m_screen->vpos());
 	}
 }
 
@@ -525,42 +551,38 @@ WRITE16_MEMBER(segac2_state::prot_w )
 
 ******************************************************************************/
 
-WRITE16_MEMBER(segac2_state::counter_timer_w )
+WRITE8_MEMBER(segac2_state::counter_timer_w)
 {
-	/* only LSB matters */
-	if (ACCESSING_BITS_0_7)
+	/*int value = data & 1;*/
+	switch (data & 0x1e)
 	{
-		/*int value = data & 1;*/
-		switch (data & 0x1e)
-		{
-			case 0x00:  /* player 1 start/stop */
-			case 0x02:  /* player 2 start/stop */
-			case 0x04:  /* ??? */
-			case 0x06:  /* ??? */
-			case 0x08:  /* player 1 game timer? */
-			case 0x0a:  /* player 2 game timer? */
-			case 0x0c:  /* ??? */
-			case 0x0e:  /* ??? */
-				break;
+		case 0x00:  /* player 1 start/stop */
+		case 0x02:  /* player 2 start/stop */
+		case 0x04:  /* ??? */
+		case 0x06:  /* ??? */
+		case 0x08:  /* player 1 game timer? */
+		case 0x0a:  /* player 2 game timer? */
+		case 0x0c:  /* ??? */
+		case 0x0e:  /* ??? */
+			break;
 
-			case 0x10:  /* coin counter */
-//              coin_counter_w(space.machine(), 0,1);
-//              coin_counter_w(space.machine(), 0,0);
-				break;
+		case 0x10:  /* coin counter */
+//          coin_counter_w(space.machine(), 0,1);
+//          coin_counter_w(space.machine(), 0,0);
+			break;
 
-			case 0x12:  /* set coinage info -- followed by two 4-bit values */
-				break;
+		case 0x12:  /* set coinage info -- followed by two 4-bit values */
+			break;
 
-			case 0x14:  /* game timer? (see Tant-R) */
-			case 0x16:  /* intro timer? (see Tant-R) */
-			case 0x18:  /* ??? */
-			case 0x1a:  /* ??? */
-			case 0x1c:  /* ??? */
-				break;
+		case 0x14:  /* game timer? (see Tant-R) */
+		case 0x16:  /* intro timer? (see Tant-R) */
+		case 0x18:  /* ??? */
+		case 0x1a:  /* ??? */
+		case 0x1c:  /* ??? */
+			break;
 
-			case 0x1e:  /* reset */
-				break;
-		}
+		case 0x1e:  /* reset */
+			break;
 	}
 }
 
@@ -573,12 +595,12 @@ WRITE16_MEMBER(segac2_state::counter_timer_w )
 
 ******************************************************************************/
 
-READ16_MEMBER(segac2_state::printer_r )
+READ16_MEMBER(segac2_state::printer_r)
 {
 	return m_cam_data;
 }
 
-WRITE16_MEMBER(segac2_state::print_club_camera_w )
+WRITE16_MEMBER(segac2_state::print_club_camera_w)
 {
 	m_cam_data = data;
 }
@@ -596,13 +618,13 @@ WRITE16_MEMBER(segac2_state::print_club_camera_w )
 
 static ADDRESS_MAP_START( main_map, AS_PROGRAM, 16, segac2_state )
 	AM_RANGE(0x000000, 0x1fffff) AM_ROM
-	AM_RANGE(0x800000, 0x800001) AM_MIRROR(0x13fdfe) AM_READWRITE(prot_r, prot_w)
-	AM_RANGE(0x800200, 0x800201) AM_MIRROR(0x13fdfe) AM_WRITE(control_w)
-	AM_RANGE(0x840000, 0x84001f) AM_MIRROR(0x13fee0) AM_READWRITE(io_chip_r, io_chip_w)
+	AM_RANGE(0x800000, 0x800001) AM_MIRROR(0x13fdfe) AM_READWRITE8(prot_r, prot_w, 0x00ff)
+	AM_RANGE(0x800200, 0x800201) AM_MIRROR(0x13fdfe) AM_WRITE8(control_w, 0x00ff)
+	AM_RANGE(0x840000, 0x84001f) AM_MIRROR(0x13fee0) AM_DEVREADWRITE8("io", sega_315_5296_device, read, write, 0x00ff)
 	AM_RANGE(0x840100, 0x840107) AM_MIRROR(0x13fef8) AM_DEVREADWRITE8("ymsnd", ym3438_device, read, write, 0x00ff)
-	AM_RANGE(0x880100, 0x880101) AM_MIRROR(0x13fefe) AM_WRITE(counter_timer_w)
+	AM_RANGE(0x880100, 0x880101) AM_MIRROR(0x13fefe) AM_WRITE8(counter_timer_w, 0x00ff)
 	AM_RANGE(0x8c0000, 0x8c0fff) AM_MIRROR(0x13f000) AM_READWRITE(palette_r, palette_w) AM_SHARE("paletteram")
-	AM_RANGE(0xc00000, 0xc0001f) AM_MIRROR(0x18ff00) AM_DEVREADWRITE("gen_vdp", sega_genesis_vdp_device, megadriv_vdp_r,megadriv_vdp_w)
+	AM_RANGE(0xc00000, 0xc0001f) AM_MIRROR(0x18ff00) AM_DEVREADWRITE("gen_vdp", sega315_5313_device, vdp_r, vdp_w)
 	AM_RANGE(0xe00000, 0xe0ffff) AM_MIRROR(0x1f0000) AM_RAM AM_SHARE("nvram")
 ADDRESS_MAP_END
 
@@ -643,14 +665,6 @@ static INPUT_PORTS_START( systemc_generic )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(2)
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_PLAYER(2)
 
-	PORT_START("PORTC")
-	PORT_BIT( 0x3f, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_SPECIAL )    /* From uPD7759 pin 18. (/BUSY output) */
-	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_SPECIAL )    /* From MB3773P pin 1. (/RESET output) */
-
-	PORT_START("PORTD")
-	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
-
 	PORT_START("SERVICE")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_COIN1 )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_COIN2 )
@@ -673,9 +687,6 @@ static INPUT_PORTS_START( systemc_generic )
 	PORT_DIPUNUSED_DIPLOC( 0x20, IP_ACTIVE_LOW, "SW2:6" )
 	PORT_DIPUNUSED_DIPLOC( 0x40, IP_ACTIVE_LOW, "SW2:7" )
 	PORT_DIPUNUSED_DIPLOC( 0x80, IP_ACTIVE_LOW, "SW2:8" )
-
-	PORT_START("PORTH")
-	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 INPUT_PORTS_END
 
 
@@ -1075,20 +1086,29 @@ static INPUT_PORTS_START( bloxeedc )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )     /* Button 3 Unused */
 
 	PORT_MODIFY("DSW")
-	PORT_DIPNAME( 0x01, 0x01, "VS Mode Price" ) PORT_DIPLOCATION("SW2:1")
-	PORT_DIPSETTING(    0x00, "Same as Ordinary" )
-	PORT_DIPSETTING(    0x01, "Double as Ordinary" )
-	PORT_DIPNAME( 0x02, 0x02, "Credits to Start" ) PORT_DIPLOCATION("SW2:2")
-	PORT_DIPSETTING(    0x02, "1" )
-	PORT_DIPSETTING(    0x00, "2" )
-	//"SW2:3" unused
-	PORT_DIPNAME( 0x08, 0x00, DEF_STR( Demo_Sounds ) ) PORT_DIPLOCATION("SW2:4")
+	PORT_DIPNAME( 0x07, 0x07, DEF_STR( Coinage ) )      PORT_DIPLOCATION("SW2:1,2,3") // needs to be double checked
+	PORT_DIPSETTING(    0x00, "0" )
+	PORT_DIPSETTING(    0x01, "1" )
+	PORT_DIPSETTING(    0x02, "2" )
+	PORT_DIPSETTING(    0x03, "3" )
+	PORT_DIPSETTING(    0x04, "4" )
+	PORT_DIPSETTING(    0x05, "5" )
+	PORT_DIPSETTING(    0x06, "6" )
+	PORT_DIPSETTING(    0x07, "7" )
+	PORT_DIPNAME( 0x08, 0x00, DEF_STR( Demo_Sounds ) )  PORT_DIPLOCATION("SW2:4")
 	PORT_DIPSETTING(    0x08, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	//"SW2:5" unused
-	//"SW2:6" unused
-	//"SW2:7" unused
-	//"SW2:8" unused
+	PORT_DIPNAME( 0x30, 0x30, DEF_STR( Difficulty ) )   PORT_DIPLOCATION("SW2:5,6")
+	PORT_DIPSETTING(    0x20, DEF_STR( Easy ) )
+	PORT_DIPSETTING(    0x30, DEF_STR( Normal ) )
+	PORT_DIPSETTING(    0x10, DEF_STR( Hard ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( Hardest ) )
+	PORT_DIPNAME( 0x40, 0x40, DEF_STR( Unknown ) )      PORT_DIPLOCATION("SW2:7") // ?
+	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x80, 0x00, "High Speed Mode" )       PORT_DIPLOCATION("SW2:8")
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPSETTING(    0x80, DEF_STR( On ) )
 INPUT_PORTS_END
 
 
@@ -1248,10 +1268,10 @@ VIDEO_START_MEMBER(segac2_state,segac2_new)
 //  and applies it's own external colour circuity
 UINT32 segac2_state::screen_update_segac2_new(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	const pen_t *paldata = machine().pens;
+	const pen_t *paldata = m_palette->pens();
 	if (!m_segac2_enable_display)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		return 0;
 	}
 
@@ -1308,74 +1328,68 @@ UINT32 segac2_state::screen_update_segac2_new(screen_device &screen, bitmap_rgb3
 
 
 // the main interrupt on C2 comes from the vdp line used to drive the z80 interrupt on a regular genesis(!)
-void genesis_vdp_sndirqline_callback_segac2(running_machine &machine, bool state)
+WRITE_LINE_MEMBER(segac2_state::vdp_sndirqline_callback_c2)
 {
-	segac2_state *drvstate = machine.driver_data<segac2_state>();
-
-	if (state==true)
-		drvstate->m_maincpu->set_input_line(6, HOLD_LINE);
+	if (state == ASSERT_LINE)
+		m_maincpu->set_input_line(6, HOLD_LINE);
 }
 
 // the line usually used to drive irq6 is not connected
-void genesis_vdp_lv6irqline_callback_segac2(running_machine &machine, bool state)
+WRITE_LINE_MEMBER(segac2_state::vdp_lv6irqline_callback_c2)
 {
 	//
 }
 
 // the scanline interrupt seems connected as usual
-void genesis_vdp_lv4irqline_callback_segac2(running_machine &machine, bool state)
+WRITE_LINE_MEMBER(segac2_state::vdp_lv4irqline_callback_c2)
 {
-	segac2_state *drvstate = machine.driver_data<segac2_state>();
-	if (state==true)
-		drvstate->m_maincpu->set_input_line(4, HOLD_LINE);
+	if (state == ASSERT_LINE)
+		m_maincpu->set_input_line(4, HOLD_LINE);
 	else
-		drvstate->m_maincpu->set_input_line(4, CLEAR_LINE);
+		m_maincpu->set_input_line(4, CLEAR_LINE);
 }
 
-static const sega315_5124_interface sms_vdp_ntsc_intf =
-{
-	false,
-	"megadriv",
-	DEVCB_NULL,
-	DEVCB_NULL,
-};
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
 
 static MACHINE_CONFIG_START( segac, segac2_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, XL2_CLOCK/6)
 	MCFG_CPU_PROGRAM_MAP(main_map)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(md_base_state,genesis_int_callback)
 
 	MCFG_MACHINE_START_OVERRIDE(segac2_state,segac2)
 	MCFG_MACHINE_RESET_OVERRIDE(segac2_state,segac2)
-	MCFG_NVRAM_ADD_RANDOM_FILL("nvram")
+	MCFG_NVRAM_ADD_1FILL("nvram") // borencha requires 0xff fill or there is no sound (it lacks some of the init code of the borench set)
 
-//  MCFG_FRAGMENT_ADD(megadriv_timers)
+	MCFG_DEVICE_ADD("io", SEGA_315_5296, XL2_CLOCK/6) // clock divider guessed
+	MCFG_315_5296_IN_PORTA_CB(IOPORT("P1"))
+	MCFG_315_5296_IN_PORTB_CB(IOPORT("P2"))
+	MCFG_315_5296_IN_PORTC_CB(READ8(segac2_state, io_portc_r))
+	MCFG_315_5296_OUT_PORTD_CB(WRITE8(segac2_state, io_portd_w))
+	MCFG_315_5296_IN_PORTE_CB(IOPORT("SERVICE"))
+	MCFG_315_5296_IN_PORTF_CB(IOPORT("COINAGE"))
+	MCFG_315_5296_IN_PORTG_CB(IOPORT("DSW"))
+	MCFG_315_5296_OUT_PORTH_CB(WRITE8(segac2_state, io_porth_w))
 
-	MCFG_DEVICE_ADD("gen_vdp", SEGA_GEN_VDP, 0)
-	MCFG_DEVICE_CONFIG( sms_vdp_ntsc_intf )
-	sega_genesis_vdp_device::set_genesis_vdp_sndirqline_callback(*device, genesis_vdp_sndirqline_callback_segac2);
-	sega_genesis_vdp_device::set_genesis_vdp_lv6irqline_callback(*device, genesis_vdp_lv6irqline_callback_segac2);
-	sega_genesis_vdp_device::set_genesis_vdp_lv4irqline_callback(*device, genesis_vdp_lv4irqline_callback_segac2);
-	sega_genesis_vdp_device::set_genesis_vdp_alt_timing(*device, 1);
+	/* video hardware */
+	MCFG_DEVICE_ADD("gen_vdp", SEGA315_5313, 0)
+	MCFG_SEGA315_5313_IS_PAL(false)
+	MCFG_SEGA315_5313_SND_IRQ_CALLBACK(WRITELINE(segac2_state, vdp_sndirqline_callback_c2));
+	MCFG_SEGA315_5313_LV6_IRQ_CALLBACK(WRITELINE(segac2_state, vdp_lv6irqline_callback_c2));
+	MCFG_SEGA315_5313_LV4_IRQ_CALLBACK(WRITELINE(segac2_state, vdp_lv4irqline_callback_c2));
+	MCFG_SEGA315_5313_ALT_TIMING(1);
+	MCFG_VIDEO_SET_SCREEN("megadriv")
 
-	MCFG_TIMER_ADD_SCANLINE("scantimer", megadriv_scanline_timer_callback_alt_timing, "megadriv", 0, 1)
-
+	MCFG_TIMER_DEVICE_ADD_SCANLINE("scantimer", "gen_vdp", sega315_5313_device, megadriv_scanline_timer_callback_alt_timing, "megadriv", 0, 1)
 
 	MCFG_SCREEN_ADD("megadriv", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0)) // Vblank handled manually.
-	MCFG_SCREEN_SIZE(64*8, 64*8)
+	MCFG_SCREEN_SIZE(512, 262)
 	MCFG_SCREEN_VISIBLE_AREA(0, 32*8-1, 0, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(segac2_state, screen_update_segac2_new)
 	MCFG_SCREEN_VBLANK_DRIVER(segac2_state, screen_eof_megadriv )
 
-	MCFG_PALETTE_LENGTH(2048*3)
+	MCFG_PALETTE_ADD("palette", 2048*3)
 
 	MCFG_VIDEO_START_OVERRIDE(segac2_state,segac2_new)
 
@@ -1388,7 +1402,6 @@ static MACHINE_CONFIG_START( segac, segac2_state )
 	/* right channel not connected */
 
 	MCFG_SOUND_ADD("snsnd", SN76496, XL2_CLOCK/15)
-	MCFG_SOUND_CONFIG(psg_intf)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 
@@ -1396,6 +1409,8 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( segac2, segac )
 
 	/* basic machine hardware */
+	MCFG_DEVICE_MODIFY("io")
+	MCFG_315_5296_OUT_CNT1_CB(DEVWRITELINE("upd", upd7759_device, reset_w))
 
 	/* sound hardware */
 	MCFG_SOUND_ADD("upd", UPD7759, XL1_CLOCK)
@@ -1503,7 +1518,16 @@ ROM_START( borench ) /* Borench  (c)1990 Sega */
 	ROM_LOAD16_BYTE( "ic31.bin", 0x000001, 0x040000, CRC(b46445fc) SHA1(24e85ef5abbc5376a854b13ed90f08f0c30d7f25) )
 
 	ROM_REGION( 0x020000, "upd", 0 )
-	ROM_LOAD( "ic4.bin", 0x000000, 0x020000, CRC(62b85e56) SHA1(822ab733c87938bb70a9e32cc5dd36bbf6f21d11) )
+	ROM_LOAD( "13587.ic4", 0x000000, 0x020000, CRC(62b85e56) SHA1(822ab733c87938bb70a9e32cc5dd36bbf6f21d11) )
+ROM_END
+
+ROM_START( borencha ) /* Borench  (c)1990 Sega */
+	ROM_REGION( 0x200000, "maincpu", 0 )
+	ROM_LOAD16_BYTE( "13591.ic32", 0x000000, 0x040000, CRC(7851078b) SHA1(122934f0414a29b4b363acad01ee4db369259e72) )
+	ROM_LOAD16_BYTE( "13590.ic31", 0x000001, 0x040000, CRC(01bc6fe6) SHA1(b241b09852f52f712e3ddc6660ec3eb436b1302c) )
+
+	ROM_REGION( 0x020000, "upd", 0 )
+	ROM_LOAD( "13587.ic4", 0x000000, 0x020000, CRC(62b85e56) SHA1(822ab733c87938bb70a9e32cc5dd36bbf6f21d11) )
 ROM_END
 
 
@@ -1828,19 +1852,22 @@ it should be, otherwise I don't see how the formula could be computed.
 
 ******************************************************************************/
 
-void segac2_state::segac2_common_init(int (*func)(int in))
+void segac2_state::segac2_common_init(segac2_prot_delegate prot_func)
 {
 	DRIVER_INIT_CALL(megadriv_c2);
-	m_prot_func = func;
+	m_prot_func = prot_func;
 
 	if (m_upd7759 != NULL)
 		m_maincpu->space(AS_PROGRAM).install_write_handler(0x880000, 0x880001, 0, 0x13fefe, write16_delegate(FUNC(segac2_state::segac2_upd7759_w),this));
 }
 
-
+int segac2_state::prot_func_dummy(int in)
+{
+	return 0x0;
+}
 
 /* 317-0149 */
-static int prot_func_columns(int in)
+int segac2_state::prot_func_columns(int in)
 {
 	int const b0 = BIT( in,2) ^ ((BIT(~in,0) && BIT( in,7)) || (BIT( in,4) && BIT( in,6)));
 	int const b1 = BIT(~in,0) ^ (BIT( in,2) || (BIT( in,5) && BIT(~in,6) && BIT( in,7)));
@@ -1851,7 +1878,7 @@ static int prot_func_columns(int in)
 }
 
 /* 317-0160 */
-static int prot_func_columns2(int in)
+int segac2_state::prot_func_columns2(int in)
 {
 	int const b0 =  BIT( in,2) ^ (BIT( in,1) || (BIT( in,4) && BIT( in,5)));
 	int const b1 = (BIT( in,0) && BIT( in,3) && BIT( in,4)) ^ (BIT( in,6) || (BIT( in,5) && BIT( in,7)));
@@ -1862,7 +1889,7 @@ static int prot_func_columns2(int in)
 }
 
 /* 317-0172 */
-static int prot_func_tfrceac(int in)
+int segac2_state::prot_func_tfrceac(int in)
 {
 	int const b0 = BIT(~in,2) ^ ((BIT( in,0) && BIT(~in,7)) || (BIT( in,3) && BIT( in,4)));
 	int const b1 = (BIT( in,4) && BIT(~in,5) && BIT( in,7)) ^ ((BIT(~in,0) || BIT(~in,3)) && (BIT(~in,6) || BIT(~in,7)));   // not in the form x1 XOR (x2 OR x3 OR x4)
@@ -1873,7 +1900,7 @@ static int prot_func_tfrceac(int in)
 }
 
 /* 317-0173 */
-static int prot_func_borench(int in)
+int segac2_state::prot_func_borench(int in)
 {
 	int const b0 = (BIT( in,1) && BIT( in,2) && BIT( in,3) && BIT( in,7))   ^ (BIT( in,5) || (BIT(~in,0) && BIT(~in,4)));
 	int const b1 = (BIT(~in,2) && BIT( in,3) && BIT( in,5))                 ^ (BIT( in,1) || (BIT( in,0) && BIT(~in,4)));
@@ -1884,7 +1911,7 @@ static int prot_func_borench(int in)
 }
 
 /* 317-0178 */
-static int prot_func_ribbit(int in)
+int segac2_state::prot_func_ribbit(int in)
 {
 	int const b0 = (BIT( in,0) && BIT( in,4)) ^ ((BIT( in,1) && BIT( in,2)) || BIT( in,3) || BIT(~in,5));
 	int const b1 = (BIT( in,1) && BIT( in,5)) ^ ((BIT( in,2) && BIT( in,3)) || BIT( in,0) || BIT(~in,6));
@@ -1895,7 +1922,7 @@ static int prot_func_ribbit(int in)
 }
 
 /* 317-0193 */
-static int prot_func_twinsqua(int in)
+int segac2_state::prot_func_twinsqua(int in)
 {
 	int const b0 = (BIT( in,2) && BIT(~in,5)) ^ (BIT( in,3) || BIT(~in,4));
 	int const b1 = (BIT( in,0) && BIT(~in,2) && BIT( in,4)) ^ (BIT(~in,0) || BIT(~in,4) || BIT(~in,6)); // 0,4 repeated
@@ -1906,7 +1933,7 @@ static int prot_func_twinsqua(int in)
 }
 
 /* 317-0203 */
-static int prot_func_puyo(int in)
+int segac2_state::prot_func_puyo(int in)
 {
 	int const b0 = (BIT(~in,3) && BIT( in,7)) ^ ((BIT(~in,0) && BIT(~in,1)) || (BIT(~in,1) && BIT(~in,4))); // 1 repeated
 	int const b1 = (BIT( in,3) && BIT( in,5)) ^ (BIT(~in,2) || BIT( in,4) || BIT( in,6));
@@ -1917,7 +1944,7 @@ static int prot_func_puyo(int in)
 }
 
 /* 317-0211 */
-static int prot_func_tantr(int in)
+int segac2_state::prot_func_tantr(int in)
 {
 	int const b0 = (BIT( in,0) && BIT( in,4)) ^ ( BIT( in,5) || BIT(~in,6)  || (BIT(~in,3) && BIT( in,7)));
 	int const b1 = (BIT( in,2) && BIT( in,6)) ^ ((BIT( in,1) && BIT( in,5)) || (BIT( in,3) && BIT( in,4)));
@@ -1928,7 +1955,7 @@ static int prot_func_tantr(int in)
 }
 
 /* 317-???? */
-static int prot_func_tantrkor(int in)
+int segac2_state::prot_func_tantrkor(int in)
 {
 	int const b0 = (BIT(~in,1) && BIT(~in,7)) ^ (BIT(~in,2) && BIT(~in,4));
 	int const b1 = (BIT( in,2) && BIT( in,6)) ^ (BIT( in,0) && BIT( in,1));
@@ -1939,7 +1966,7 @@ static int prot_func_tantrkor(int in)
 }
 
 /* 317-0218 */
-static int prot_func_potopoto(int in)
+int segac2_state::prot_func_potopoto(int in)
 {
 	int const b0 = (BIT(~in,2) && BIT(~in,4)) ^ (BIT(~in,1) && BIT( in,3));
 	int const b1 = (BIT( in,0) && BIT( in,5)) ^ (BIT( in,2) || BIT(~in,7));
@@ -1950,7 +1977,7 @@ static int prot_func_potopoto(int in)
 }
 
 /* 317-0219 */
-static int prot_func_stkclmnj(int in)
+int segac2_state::prot_func_stkclmnj(int in)
 {
 	int const b0 = (BIT( in,1) && BIT( in,4)) ^ (BIT( in,5) && BIT( in,2));
 	int const b1 = (BIT(~in,2) && BIT( in,6)) ^ (BIT(~in,5) && BIT( in,7));
@@ -1961,7 +1988,7 @@ static int prot_func_stkclmnj(int in)
 }
 
 /* 317-0223 */
-static int prot_func_stkclmns(int in)
+int segac2_state::prot_func_stkclmns(int in)
 {
 	int const b0 = (BIT( in,2) && BIT( in,4)) ^ (BIT( in,1) || BIT(~in,3));
 	int const b1 = (BIT( in,0) && BIT( in,5)) ^ (BIT( in,2) && BIT( in,7));
@@ -1972,7 +1999,7 @@ static int prot_func_stkclmns(int in)
 }
 
 /* 317-0224 */
-static int prot_func_ichirj(int in)
+int segac2_state::prot_func_ichirj(int in)
 {
 	int const b0 = (BIT( in,2) && BIT( in,4)) ^ (BIT(~in,5) && BIT(~in,2));
 	int const b1 = (BIT( in,2) && BIT(~in,6)) ^ (BIT( in,5) && BIT( in,7));
@@ -1983,7 +2010,7 @@ static int prot_func_ichirj(int in)
 }
 
 /* 317-???? */
-static int prot_func_ichir(int in)
+int segac2_state::prot_func_ichir(int in)
 {
 	int const b0 = (BIT(~in,2) && BIT( in,4)) ^ (BIT( in,5) && BIT(~in,2));
 	int const b1 = (BIT( in,1) && BIT( in,6)) ^ (BIT( in,5) || BIT( in,7));
@@ -1994,7 +2021,7 @@ static int prot_func_ichir(int in)
 }
 
 /* 317-???? */
-static int prot_func_ichirk(int in)
+int segac2_state::prot_func_ichirk(int in)
 {
 	int const b0 = (BIT(~in,2) && BIT( in,4)) ^ (BIT( in,5) && BIT(~in,1));
 	int const b1 = (BIT( in,0) && BIT( in,6)) ^ (BIT( in,5) && BIT( in,4));
@@ -2005,7 +2032,7 @@ static int prot_func_ichirk(int in)
 }
 
 /* 317-0228 */
-static int prot_func_puyopuy2(int in)
+int segac2_state::prot_func_puyopuy2(int in)
 {
 	int const b0 = (BIT(~in,0) && BIT(~in,7)) ^ (BIT( in,1) || BIT(~in,4) || BIT(~in,6));
 	int const b1 = (BIT( in,0) && BIT(~in,6)) ^ (BIT( in,3) && BIT( in,5));
@@ -2015,7 +2042,7 @@ static int prot_func_puyopuy2(int in)
 	return (b3 << 3) | (b2 << 2) | (b1 << 1) | b0;
 }
 
-static int prot_func_zunkyou(int in)
+int segac2_state::prot_func_zunkyou(int in)
 {
 	int const b0 = (BIT(~in,1) && BIT( in,6)) ^ (BIT(~in,5) && BIT( in,7));
 	int const b1 = (BIT( in,0) && BIT(~in,5)) ^ (BIT(~in,3) || BIT( in,4));
@@ -2025,12 +2052,12 @@ static int prot_func_zunkyou(int in)
 	return (b3 << 3) | (b2 << 2) | (b1 << 1) | b0;
 }
 
-static int prot_func_pclub(int in)
+int segac2_state::prot_func_pclub(int in)
 {
 	return 0xf;
 }
 
-static int prot_func_pclubjv2(int in)
+int segac2_state::prot_func_pclubjv2(int in)
 {
 	int const b0 = (BIT( in,3) && BIT(~in,4)) ^ ((BIT(~in,1) && BIT(~in,7)) || BIT( in,6));
 	int const b1 = (BIT( in,0) && BIT( in,5)) ^  (BIT( in,2) && BIT(~in,6));
@@ -2040,7 +2067,7 @@ static int prot_func_pclubjv2(int in)
 	return (b3 << 3) | (b2 << 2) | (b1 << 1) | b0;
 }
 
-static int prot_func_pclubjv4(int in)
+int segac2_state::prot_func_pclubjv4(int in)
 {
 	int const b0 = (BIT(~in,2) && BIT( in,4)) ^ (BIT( in,1) && BIT(~in,6) && BIT(~in,3));
 	int const b1 = (BIT(~in,3) && BIT(~in,4)) ^ (BIT( in,0) && BIT( in,5) && BIT(~in,6));
@@ -2050,7 +2077,7 @@ static int prot_func_pclubjv4(int in)
 	return (b3 << 3) | (b2 << 2) | (b1 << 1) | b0;
 }
 
-static int prot_func_pclubjv5(int in)
+int segac2_state::prot_func_pclubjv5(int in)
 {
 	int const b0 = (BIT(~in,1) && BIT( in,5)) ^ (BIT(~in,2) && BIT(~in,6));
 	int const b1 = (BIT(~in,0) && BIT( in,4)) ^ (BIT(~in,3) && BIT(~in,7));
@@ -2064,94 +2091,94 @@ static int prot_func_pclubjv5(int in)
 
 DRIVER_INIT_MEMBER(segac2_state,c2boot)
 {
-	segac2_common_init(NULL);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_dummy),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,bloxeedc)
 {
-	segac2_common_init(NULL);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_dummy),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,columns)
 {
-	segac2_common_init(prot_func_columns);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_columns),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,columns2)
 {
-	segac2_common_init(prot_func_columns2);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_columns2),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,tfrceac)
 {
-	segac2_common_init(prot_func_tfrceac);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_tfrceac),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,tfrceacb)
 {
 	/* disable the palette bank switching from the protection chip */
-	segac2_common_init(NULL);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_dummy),this));
 	m_maincpu->space(AS_PROGRAM).nop_write(0x800000, 0x800001);
 }
 
 DRIVER_INIT_MEMBER(segac2_state,borench)
 {
-	segac2_common_init(prot_func_borench);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_borench),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,twinsqua)
 {
-	segac2_common_init(prot_func_twinsqua);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_twinsqua),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,ribbit)
 {
-	segac2_common_init(prot_func_ribbit);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_ribbit),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,puyo)
 {
-	segac2_common_init(prot_func_puyo);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_puyo),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,tantr)
 {
-	segac2_common_init(prot_func_tantr);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_tantr),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,tantrkor)
 {
-	segac2_common_init(prot_func_tantrkor);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_tantrkor),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,potopoto)
 {
-	segac2_common_init(prot_func_potopoto);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_potopoto),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,stkclmns)
 {
-	segac2_common_init(prot_func_stkclmns);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_stkclmns),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,stkclmnj)
 {
-	segac2_common_init(prot_func_stkclmnj);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_stkclmnj),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,ichir)
 {
-	segac2_common_init(prot_func_ichir);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_ichir),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,ichirk)
 {
-	segac2_common_init(prot_func_ichirk);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_ichirk),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,ichirj)
 {
-	segac2_common_init(prot_func_ichirj);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_ichirj),this));
 }
 
 READ16_MEMBER(segac2_state::ichirjbl_prot_r )
@@ -2161,25 +2188,25 @@ READ16_MEMBER(segac2_state::ichirjbl_prot_r )
 
 DRIVER_INIT_MEMBER(segac2_state,ichirjbl)
 {
-	segac2_common_init(NULL);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_dummy),this));
 
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x840108, 0x840109, read16_delegate(FUNC(segac2_state::ichirjbl_prot_r),this) );
 }
 
 DRIVER_INIT_MEMBER(segac2_state,puyopuy2)
 {
-	segac2_common_init(prot_func_puyopuy2);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_puyopuy2),this));
 }
 
 DRIVER_INIT_MEMBER(segac2_state,zunkyou)
 {
-	segac2_common_init(prot_func_zunkyou);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_zunkyou),this));
 }
 
 
 DRIVER_INIT_MEMBER(segac2_state,pclub)
 {
-	segac2_common_init(prot_func_pclub);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_pclub),this));
 
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x880120, 0x880121, read16_delegate(FUNC(segac2_state::printer_r),this) );/*Print Club Vol.1*/
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x880124, 0x880125, read16_delegate(FUNC(segac2_state::printer_r),this) );/*Print Club Vol.2*/
@@ -2188,7 +2215,7 @@ DRIVER_INIT_MEMBER(segac2_state,pclub)
 
 DRIVER_INIT_MEMBER(segac2_state,pclubjv2)
 {
-	segac2_common_init(prot_func_pclubjv2);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_pclubjv2),this));
 
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x880120, 0x880121, read16_delegate(FUNC(segac2_state::printer_r),this) );/*Print Club Vol.1*/
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x880124, 0x880125, read16_delegate(FUNC(segac2_state::printer_r),this) );/*Print Club Vol.2*/
@@ -2197,7 +2224,7 @@ DRIVER_INIT_MEMBER(segac2_state,pclubjv2)
 
 DRIVER_INIT_MEMBER(segac2_state,pclubjv4)
 {
-	segac2_common_init(prot_func_pclubjv4);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_pclubjv4),this));
 
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x880120, 0x880121, read16_delegate(FUNC(segac2_state::printer_r),this) );/*Print Club Vol.1*/
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x880124, 0x880125, read16_delegate(FUNC(segac2_state::printer_r),this) );/*Print Club Vol.2*/
@@ -2206,7 +2233,7 @@ DRIVER_INIT_MEMBER(segac2_state,pclubjv4)
 
 DRIVER_INIT_MEMBER(segac2_state,pclubjv5)
 {
-	segac2_common_init(prot_func_pclubjv5);
+	segac2_common_init(segac2_prot_delegate(FUNC(segac2_state::prot_func_pclubjv5),this));
 
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x880120, 0x880121, read16_delegate(FUNC(segac2_state::printer_r),this) );/*Print Club Vol.1*/
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x880124, 0x880125, read16_delegate(FUNC(segac2_state::printer_r),this) );/*Print Club Vol.2*/
@@ -2228,7 +2255,6 @@ DRIVER_INIT_MEMBER(segac2_state,pclubjv5)
 
     bloxeedc is set as as clone of bloxeed as it is the same game but running
     on a different piece of hardware.  The parent 'bloxeed' is a system18 game
-    and does not currently work due to it being encrypted.
 
 ******************************************************************************/
 
@@ -2236,9 +2262,11 @@ DRIVER_INIT_MEMBER(segac2_state,pclubjv5)
 /* System C Games */
 GAME( 1989, bloxeedc,  bloxeed,  segac,  bloxeedc, segac2_state, bloxeedc, ROT0,   "Sega / Elorg", "Bloxeed (World, C System)", 0 )
 GAME( 1989, bloxeedu,  bloxeed,  segac,  bloxeedc, segac2_state, bloxeedc, ROT0,   "Sega / Elorg", "Bloxeed (US, C System)", 0 )
+
 GAME( 1990, columns,   0,        segac,  columns, segac2_state,  columns,  ROT0,   "Sega", "Columns (World)", 0 )
 GAME( 1990, columnsu,  columns,  segac,  columnsu, segac2_state, columns,  ROT0,   "Sega", "Columns (US, cocktail)", 0 ) // has cocktail mode dsw
 GAME( 1990, columnsj,  columns,  segac,  columns, segac2_state,  columns,  ROT0,   "Sega", "Columns (Japan)", 0 )
+
 GAME( 1990, columns2,  0,        segac,  columns2, segac2_state, columns2, ROT0,   "Sega", "Columns II: The Voyage Through Time (World)", 0 )
 GAME( 1990, column2j,  columns2, segac,  columns2, segac2_state, columns2, ROT0,   "Sega", "Columns II: The Voyage Through Time (Japan)", 0 )
 
@@ -2246,26 +2274,37 @@ GAME( 1990, column2j,  columns2, segac,  columns2, segac2_state, columns2, ROT0,
 GAME( 1990, tfrceac,   0,        segac2, tfrceac, segac2_state,  tfrceac,  ROT0,   "Technosoft / Sega", "Thunder Force AC", 0 )
 GAME( 1990, tfrceacj,  tfrceac,  segac2, tfrceac, segac2_state,  tfrceac,  ROT0,   "Technosoft / Sega", "Thunder Force AC (Japan)", 0 )
 GAME( 1990, tfrceacb,  tfrceac,  segac2, tfrceac, segac2_state,  tfrceacb, ROT0,   "bootleg", "Thunder Force AC (bootleg)", 0 )
-GAME( 1990, borench,   0,        segac2, borench, segac2_state,  borench,  ROT0,   "Sega", "Borench", 0 )
+
+GAME( 1990, borench,   0,        segac2, borench, segac2_state,  borench,  ROT0,   "Sega", "Borench (set 1)", 0 )
+GAME( 1990, borencha,  borench,  segac2, borench, segac2_state,  borench,  ROT0,   "Sega", "Borench (set 2)", 0 )
+
 GAME( 1991, twinsqua,  0,        segac2, twinsqua, segac2_state, twinsqua, ROT0,   "Sega", "Twin Squash", 0 )
+
 GAME( 1991, ribbit,    0,        segac2, ribbit, segac2_state,   ribbit,   ROT0,   "Sega", "Ribbit!", 0 )
+
 GAME( 1992, puyo,      0,        segac2, puyo, segac2_state,     puyo,     ROT0,   "Compile / Sega", "Puyo Puyo (World)", 0 )
 GAME( 1992, puyobl,    puyo,     segac2, puyo, segac2_state,     puyo,     ROT0,   "bootleg", "Puyo Puyo (World, bootleg)", 0 )
 GAME( 1992, puyoj,     puyo,     segac2, puyo, segac2_state,     puyo,     ROT0,   "Compile / Sega", "Puyo Puyo (Japan, Rev B)", 0 )
 GAME( 1992, puyoja,    puyo,     segac2, puyo, segac2_state,     puyo,     ROT0,   "Compile / Sega", "Puyo Puyo (Japan, Rev A)", 0 )
+
 GAME( 1992, tantr,     0,        segac2, ichir, segac2_state,    tantr,    ROT0,   "Sega", "Puzzle & Action: Tant-R (Japan)", 0 )
 GAME( 1993, tantrkor,  tantr,    segac2, ichir, segac2_state,    tantrkor, ROT0,   "Sega", "Puzzle & Action: Tant-R (Korea)", 0 )
 GAME( 1992, tantrbl,   tantr,    segac2, ichir, segac2_state,    c2boot,   ROT0,   "bootleg", "Puzzle & Action: Tant-R (Japan) (bootleg set 1)", 0 )
 GAME( 1994, tantrbl2,  tantr,    segac,  ichir, segac2_state,    tantr,    ROT0,   "bootleg", "Puzzle & Action: Tant-R (Japan) (bootleg set 2)", 0 ) // Common bootleg in Europe, C board, no samples
 GAME( 1994, tantrbl3,  tantr,    segac,  ichir, segac2_state,    tantr,    ROT0,   "bootleg", "Puzzle & Action: Tant-R (Japan) (bootleg set 3)", 0 ) // Common bootleg in Europe, C board, no samples
+
 GAME( 1994, potopoto,  0,        segac2, potopoto, segac2_state, potopoto, ROT0,   "Sega", "Poto Poto (Japan)", 0 )
+
 GAME( 1994, stkclmns,  0,        segac2, stkclmns, segac2_state, stkclmns, ROT0,   "Sega", "Stack Columns (World)", 0 )
 GAME( 1994, stkclmnsj, stkclmns, segac2, stkclmns, segac2_state, stkclmnj, ROT0,   "Sega", "Stack Columns (Japan)", 0 )
+
 GAME( 1994, ichir,     0,        segac2, ichir, segac2_state,    ichir,    ROT0,   "Sega", "Puzzle & Action: Ichidant-R (World)", 0 )
 GAME( 1994, ichirk,    ichir,    segac2, ichir, segac2_state,    ichirk,   ROT0,   "Sega", "Puzzle & Action: Ichidant-R (Korea)", 0 )
 GAME( 1994, ichirj,    ichir,    segac2, ichir, segac2_state,    ichirj,   ROT0,   "Sega", "Puzzle & Action: Ichidant-R (Japan)", 0 )
 GAME( 1994, ichirjbl,  ichir,    segac,  ichir, segac2_state,    ichirjbl, ROT0,   "bootleg", "Puzzle & Action: Ichidant-R (Japan) (bootleg)", 0 ) // C board, no samples
+
 GAME( 1994, puyopuy2,  0,        segac2, puyopuy2, segac2_state, puyopuy2, ROT0,   "Compile (Sega license)", "Puyo Puyo 2 (Japan)", 0 )
+
 GAME( 1994, zunkyou,   0,        segac2, zunkyou, segac2_state,  zunkyou,  ROT0,   "Sega", "Zunzunkyou No Yabou (Japan)", 0 )
 
 /* Atlus Print Club 'Games' (C-2 Hardware, might not be possible to support them because they use camera + printer, really just put here for reference) */

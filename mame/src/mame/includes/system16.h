@@ -1,9 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Phil Stroffolino, Mirko Buffoni
 
 // later, this might be merged with segas1x_state in segas16.h
 
 #include "video/sega16sp.h"
 #include "machine/segaic16.h"
 #include "sound/msm5205.h"
+#include "sound/upd7759.h"
 
 class segas1x_bootleg_state : public sega_16bit_common_base
 {
@@ -19,8 +22,10 @@ public:
 		m_sprites(*this, "sprites"),
 		m_maincpu(*this, "maincpu"),
 		m_soundcpu(*this, "soundcpu"),
-		m_msm(*this, "5205")
-		{ }
+		m_msm(*this, "5205"),
+		m_upd7759(*this, "7759"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_decrypted_opcodes(*this, "decrypted_opcodes") { }
 
 	required_shared_ptr<UINT16> m_textram;
 	optional_shared_ptr<UINT16> m_bg0_tileram;
@@ -115,8 +120,12 @@ public:
 	required_device<cpu_device> m_maincpu;
 	optional_device<cpu_device> m_soundcpu;
 	optional_device<msm5205_device> m_msm;
+	optional_device<upd7759_device> m_upd7759;
+	required_device<gfxdecode_device> m_gfxdecode;
+	optional_shared_ptr<UINT16> m_decrypted_opcodes;
+
 	DECLARE_WRITE16_MEMBER(sound_command_nmi_w);
-	DECLARE_WRITE16_MEMBER(sound_command_w);
+	DECLARE_WRITE16_MEMBER(sound_command_irq_w);
 	DECLARE_WRITE16_MEMBER(sys16_coinctrl_w);
 	DECLARE_READ16_MEMBER(passht4b_service_r);
 	DECLARE_READ16_MEMBER(passht4b_io1_r);
@@ -144,12 +153,12 @@ public:
 	DECLARE_WRITE16_MEMBER(goldnaxeb2_fgpage_w);
 	DECLARE_WRITE16_MEMBER(goldnaxeb2_bgpage_w);
 	DECLARE_WRITE16_MEMBER(eswat_tilebank0_w);
+	DECLARE_WRITE16_MEMBER(altbeastbl_gfx_w);
 	DECLARE_READ16_MEMBER(beautyb_unkx_r);
 	DECLARE_WRITE16_MEMBER(sys18_refreshenable_w);
 	DECLARE_WRITE16_MEMBER(sys18_tilebank_w);
 	DECLARE_READ8_MEMBER(system18_bank_r);
 	DECLARE_WRITE8_MEMBER(sys18_soundbank_w);
-	DECLARE_WRITE16_MEMBER(sound_command_irq_w);
 	DECLARE_WRITE8_MEMBER(shdancbl_msm5205_data_w);
 	DECLARE_READ8_MEMBER(shdancbl_soundbank_r);
 	DECLARE_WRITE8_MEMBER(shdancbl_bankctrl_w);
@@ -169,6 +178,7 @@ public:
 	DECLARE_DRIVER_INIT(astormbl);
 	DECLARE_DRIVER_INIT(shdancbl);
 	DECLARE_DRIVER_INIT(dduxbl);
+	DECLARE_DRIVER_INIT(altbeastbl);
 	DECLARE_DRIVER_INIT(goldnaxeb2);
 	DECLARE_DRIVER_INIT(bayrouteb1);
 	DECLARE_DRIVER_INIT(beautyb);
@@ -207,4 +217,5 @@ public:
 	void datsu_set_pages(  );
 	DECLARE_WRITE_LINE_MEMBER(tturfbl_msm5205_callback);
 	DECLARE_WRITE_LINE_MEMBER(shdancbl_msm5205_callback);
+	DECLARE_WRITE_LINE_MEMBER(sound_cause_nmi);
 };

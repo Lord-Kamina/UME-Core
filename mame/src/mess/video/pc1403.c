@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner
 /*****************************************************************************
  *
  *   pc1403.c
@@ -5,18 +7,6 @@
  *   (sharp pocket computers)
  *
  *   Copyright (c) 2001 Peter Trauner, all rights reserved.
- *
- *   - This source code is released as freeware for non-commercial purposes.
- *   - You are free to use and redistribute this code in modified or
- *     unmodified form, provided you list me in the credits.
- *   - If you modify this source code, you must add a notice to each modified
- *     source file that it has been changed.  If you're a nice person, you
- *     will clearly mark each change too.  :)
- *   - If you wish to use this for commercial purposes, please contact me at
- *     peter.trauner@jk.uni-linz.ac.at
- *   - The author of this copywritten work reserves the right to change the
- *     terms of its usage and license at any time, including retroactively
- *   - This entire notice must remain in the source code.
  *
  * History of changes:
  * 21.07.2001 Several changes listed below were made by Mario Konegger
@@ -159,37 +149,37 @@ UINT32 pc1403_state::screen_update_pc1403(screen_device &screen, bitmap_ind16 &b
 	{
 		for (x=m_RIGHT, y=m_DOWN, i=0; i<6*5; x+=2) {
 			for (j=0; j<5; j++, i++, x+=2)
-			drawgfx_opaque(bitmap, cliprect, screen.machine().gfx[0], m_reg[i],CONTRAST,0,0,
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect, m_reg[i],CONTRAST,0,0,
 				x,y);
 		}
 		for (i=9*5; i<12*5; x+=2)
 		{
 			for (j=0; j<5; j++, i++, x+=2)
-			drawgfx_opaque(bitmap, cliprect, screen.machine().gfx[0], m_reg[i],CONTRAST,0,0,
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect, m_reg[i],CONTRAST,0,0,
 				x,y);
 		}
 		for (i=6*5; i<9*5; x+=2)
 		{
 			for (j=0; j<5; j++, i++, x+=2)
-			drawgfx_opaque(bitmap, cliprect, screen.machine().gfx[0], m_reg[i],CONTRAST,0,0,
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect, m_reg[i],CONTRAST,0,0,
 				x,y);
 		}
 		for (i=0x7b-3*5; i>0x7b-6*5; x+=2)
 		{
 			for (j=0; j<5; j++, i--, x+=2)
-				drawgfx_opaque(bitmap, cliprect, screen.machine().gfx[0], m_reg[i],CONTRAST,0,0,
+				m_gfxdecode->gfx(0)->opaque(bitmap,cliprect, m_reg[i],CONTRAST,0,0,
 				x,y);
 		}
 		for (i=0x7b; i>0x7b-3*5; x+=2)
 		{
 			for (j=0; j<5; j++, i--, x+=2)
-			drawgfx_opaque(bitmap, cliprect, screen.machine().gfx[0], m_reg[i],CONTRAST,0,0,
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect, m_reg[i],CONTRAST,0,0,
 				x,y);
 		}
 		for (i=0x7b-6*5; i>0x7b-12*5; x+=2)
 		{
 			for (j=0; j<5; j++, i--, x+=2)
-			drawgfx_opaque(bitmap, cliprect, screen.machine().gfx[0], m_reg[i],CONTRAST,0,0,
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect, m_reg[i],CONTRAST,0,0,
 				x,y);
 		}
 	}

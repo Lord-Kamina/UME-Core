@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese, Roberto Fresca
 /***********************************************************************
 
   Bingo Roll / Bell Star
@@ -438,7 +440,7 @@
 ************************************************************************/
 
 #include "emu.h"
-#include "cpu/i86/i86.h"
+#include "cpu/i86/i186.h"
 #include "cpu/pic16c5x/pic16c5x.h"
 #include "sound/saa1099.h"
 
@@ -449,16 +451,16 @@ public:
 	bingor_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_blit_ram(*this, "blit_ram"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_palette(*this, "palette")  { }
 
 	required_shared_ptr<UINT16> m_blit_ram;
-	DECLARE_READ16_MEMBER(test_r);
-	DECLARE_READ8_MEMBER(test8_r);
 	virtual void video_start();
 	UINT32 screen_update_bingor(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(vblank_irq);
 	INTERRUPT_GEN_MEMBER(unk_irq);
 	required_device<cpu_device> m_maincpu;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -470,7 +472,7 @@ UINT32 bingor_state::screen_update_bingor(screen_device &screen, bitmap_rgb32 &b
 {
 	int x,y,count;
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	count = (0x2000/2);
 
@@ -483,22 +485,22 @@ UINT32 bingor_state::screen_update_bingor(screen_device &screen, bitmap_rgb32 &b
 			color = (m_blit_ram[count] & 0xf000)>>12;
 
 			if(cliprect.contains(x+3, y))
-				bitmap.pix32(y, x+3) = machine().pens[color];
+				bitmap.pix32(y, x+3) = m_palette->pen(color);
 
 			color = (m_blit_ram[count] & 0x0f00)>>8;
 
 			if(cliprect.contains(x+2, y))
-				bitmap.pix32(y, x+2) = machine().pens[color];
+				bitmap.pix32(y, x+2) = m_palette->pen(color);
 
 			color = (m_blit_ram[count] & 0x00f0)>>4;
 
 			if(cliprect.contains(x+1, y))
-				bitmap.pix32(y, x+1) = machine().pens[color];
+				bitmap.pix32(y, x+1) = m_palette->pen(color);
 
 			color = (m_blit_ram[count] & 0x000f)>>0;
 
 			if(cliprect.contains(x+0, y))
-				bitmap.pix32(y, x+0) = machine().pens[color];
+				bitmap.pix32(y, x+0) = m_palette->pen(color);
 
 			count++;
 		}
@@ -507,38 +509,20 @@ UINT32 bingor_state::screen_update_bingor(screen_device &screen, bitmap_rgb32 &b
 	return 0;
 }
 
-#if 0
-READ16_MEMBER(bingor_state::test_r)
-{
-	return machine().rand();
-}
-#endif
 
 static ADDRESS_MAP_START( bingor_map, AS_PROGRAM, 16, bingor_state )
 	AM_RANGE(0x00000, 0x0ffff) AM_RAM
 	AM_RANGE(0x90000, 0x9ffff) AM_ROM AM_REGION("gfx", 0)
-	AM_RANGE(0xa0300, 0xa031f) AM_RAM_WRITE(paletteram_RRRRGGGGBBBBIIII_word_w) AM_SHARE("paletteram") //wrong
+	AM_RANGE(0xa0300, 0xa031f) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette") //wrong
 	AM_RANGE(0xa0000, 0xaffff) AM_RAM AM_SHARE("blit_ram")
 	AM_RANGE(0xe0000, 0xfffff) AM_ROM AM_REGION("boot_prg",0)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( bingor_io, AS_IO, 16, bingor_state )
-//  AM_RANGE(0x0000, 0x00ff) AM_READ(test_r )
-	AM_RANGE(0x0100, 0x0101) AM_DEVWRITE8("saa", saa1099_device, saa1099_data_w, 0x00ff)
-	AM_RANGE(0x0102, 0x0103) AM_DEVWRITE8("saa", saa1099_device, saa1099_control_w, 0x00ff)
-//  AM_RANGE(0x0200, 0x0201) AM_READ(test_r )
+	AM_RANGE(0x0100, 0x0101) AM_DEVWRITE8("saa", saa1099_device, data_w, 0x00ff)
+	AM_RANGE(0x0102, 0x0103) AM_DEVWRITE8("saa", saa1099_device, control_w, 0x00ff)
 ADDRESS_MAP_END
 
-READ8_MEMBER(bingor_state::test8_r)
-{
-	return machine().rand();
-}
-
-static ADDRESS_MAP_START( pic_io_map, AS_IO, 8, bingor_state )
-	AM_RANGE(0x00, 0x00) AM_WRITENOP
-	AM_RANGE(0x02, 0x02) AM_READ(test8_r)
-	AM_RANGE(0x10, 0x10) AM_READNOP
-ADDRESS_MAP_END
 
 static INPUT_PORTS_START( bingor )
 	PORT_START("IN0")
@@ -621,7 +605,7 @@ GFXDECODE_END
 
 
 static MACHINE_CONFIG_START( bingor, bingor_state )
-	MCFG_CPU_ADD("maincpu", I80186, 14000000 ) //?? Mhz
+	MCFG_CPU_ADD("maincpu", I80186, XTAL_16MHz)
 	MCFG_CPU_PROGRAM_MAP(bingor_map)
 	MCFG_CPU_IO_MAP(bingor_io)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", bingor_state,  vblank_irq)
@@ -629,10 +613,8 @@ static MACHINE_CONFIG_START( bingor, bingor_state )
 	MCFG_CPU_PERIODIC_INT_DRIVER(bingor_state, unk_irq,  30)
 
 	MCFG_CPU_ADD("pic", PIC16C57, 12000000) //?? Mhz
-	MCFG_CPU_IO_MAP(pic_io_map)
 
-
-	MCFG_GFXDECODE(bingor)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", bingor)
 	//MCFG_NVRAM_ADD_0FILL("nvram")
 
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -642,8 +624,8 @@ static MACHINE_CONFIG_START( bingor, bingor_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 400-1, 0, 300-1)
 	MCFG_SCREEN_UPDATE_DRIVER(bingor_state, screen_update_bingor)
 
-	MCFG_PALETTE_LENGTH(0x100)
-
+	MCFG_PALETTE_ADD("palette", 0x100)
+	MCFG_PALETTE_FORMAT(RRRRGGGGBBBBIIII)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SAA1099_ADD("saa", 6000000 )

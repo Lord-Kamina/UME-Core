@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /*************************************************************************
 
     Mitchell hardware
@@ -6,7 +8,7 @@
 
 #include "sound/okim6295.h"
 #include "machine/nvram.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "sound/msm5205.h"
 
 class mitchell_state : public driver_device
@@ -21,7 +23,12 @@ public:
 		m_colorram(*this, "colorram"),
 		m_videoram(*this, "videoram"),
 		m_eeprom(*this, "eeprom"),
-		m_msm(*this, "msm"){ }
+		m_msm(*this, "msm"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
+		m_bank1(*this, "bank1"),
+		m_bank0d(*this, "bank0d"),
+		m_bank1d(*this, "bank1d") { }
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
@@ -32,15 +39,21 @@ public:
 	required_shared_ptr<UINT8> m_colorram;
 	required_shared_ptr<UINT8> m_videoram;
 
-	optional_device<eeprom_device> m_eeprom;
+	optional_device<eeprom_serial_93cxx_device> m_eeprom;
 	optional_device<msm5205_device> m_msm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+	required_memory_bank m_bank1;
+	optional_memory_bank m_bank0d;
+	optional_memory_bank m_bank1d;
 
 	/* video-related */
 	tilemap_t    *m_bg_tilemap;
-	UINT8      *m_objram;           /* Sprite RAM */
+	std::vector<UINT8> m_objram;           /* Sprite RAM */
 	int        m_flipscreen;
 	int        m_video_bank;
 	int        m_paletteram_bank;
+	std::vector<UINT8> m_paletteram;
 
 	/* sound-related */
 	int        m_sample_buffer;
@@ -80,8 +93,6 @@ public:
 	DECLARE_WRITE8_MEMBER(mstworld_gfxctrl_w);
 	DECLARE_WRITE8_MEMBER(pang_paletteram_w);
 	DECLARE_READ8_MEMBER(pang_paletteram_r);
-	DECLARE_WRITE8_MEMBER(mgakuen_paletteram_w);
-	DECLARE_READ8_MEMBER(mgakuen_paletteram_r);
 	DECLARE_WRITE8_MEMBER(eeprom_cs_w);
 	DECLARE_WRITE8_MEMBER(eeprom_clock_w);
 	DECLARE_WRITE8_MEMBER(eeprom_serial_w);
@@ -112,7 +123,7 @@ public:
 	UINT32 screen_update_pang(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	TIMER_DEVICE_CALLBACK_MEMBER(mitchell_irq);
 	void draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect );
-	void bootleg_decode(  );
-	void configure_banks(  );
+	void bootleg_decode();
+	void configure_banks(void (*decode)(UINT8 *src, UINT8 *dst, int size));
 	DECLARE_WRITE_LINE_MEMBER(spangbl_adpcm_int);
 };

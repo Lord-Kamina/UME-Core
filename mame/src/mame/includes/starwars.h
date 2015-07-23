@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Steve Baines, Frank Palazzolo
 /***************************************************************************
 
     Atari Star Wars hardware
@@ -5,6 +7,7 @@
 ***************************************************************************/
 
 #include "machine/6532riot.h"
+#include "includes/slapstic.h"
 
 
 class starwars_state : public driver_device
@@ -15,7 +18,9 @@ public:
 		m_riot(*this, "riot"),
 		m_mathram(*this, "mathram"),
 		m_maincpu(*this, "maincpu"),
-		m_audiocpu(*this, "audiocpu")  { }
+		m_audiocpu(*this, "audiocpu"),
+		m_slapstic_device(*this, "slapstic")
+		{ }
 
 	UINT8 m_sound_data;
 	UINT8 m_main_data;
@@ -67,6 +72,8 @@ public:
 	DECLARE_DRIVER_INIT(starwars);
 	virtual void machine_reset();
 	TIMER_CALLBACK_MEMBER(math_run_clear);
+	TIMER_CALLBACK_MEMBER(main_callback);
+	TIMER_CALLBACK_MEMBER(sound_callback);
 	DECLARE_READ8_MEMBER(r6532_porta_r);
 	DECLARE_WRITE8_MEMBER(r6532_porta_w);
 	DECLARE_WRITE_LINE_MEMBER(snd_interrupt);
@@ -76,13 +83,5 @@ public:
 	void esb_slapstic_tweak(address_space &space, offs_t offset);
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
+	optional_device<atari_slapstic_device> m_slapstic_device;
 };
-
-
-/*----------- defined in machine/starwars.c -----------*/
-void starwars_mproc_init(running_machine &machine);
-void starwars_mproc_reset(running_machine &machine);
-
-/*----------- defined in audio/starwars.c -----------*/
-
-extern const riot6532_interface starwars_riot6532_intf;

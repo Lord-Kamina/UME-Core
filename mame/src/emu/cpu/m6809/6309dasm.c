@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods,Tim Lindner
 /*****************************************************************************
 
     6309dasm.c - a 6309 opcode disassembler
@@ -582,9 +584,9 @@ static const opcodeinfo *const hd6309_pgpointers[3] =
 
 static const int hd6309_numops[3] =
 {
-	sizeof(hd6309_pg0opcodes) / sizeof(hd6309_pg0opcodes[0]),
-	sizeof(hd6309_pg1opcodes) / sizeof(hd6309_pg1opcodes[0]),
-	sizeof(hd6309_pg2opcodes) / sizeof(hd6309_pg2opcodes[0])
+	ARRAY_LENGTH(hd6309_pg0opcodes),
+	ARRAY_LENGTH(hd6309_pg1opcodes),
+	ARRAY_LENGTH(hd6309_pg2opcodes)
 };
 
 static const char *const hd6309_regs[5] = { "X", "Y", "U", "S", "PC" };

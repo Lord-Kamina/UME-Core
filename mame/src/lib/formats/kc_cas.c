@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /********************************************************************
 
     Support for KC85 cassette images
@@ -10,6 +12,8 @@
     - sss: BASIC data without head (miss the first 11 bytes)
 
 ********************************************************************/
+
+#include <assert.h>
 
 #include "kc_cas.h"
 
@@ -208,19 +212,17 @@ static int kc_handle_tap(INT16 *buffer, const UINT8 *casdata)
 
 static int kc_handle_sss(INT16 *buffer, const UINT8 *casdata)
 {
-	UINT8 *sss = (UINT8*)malloc(kc_image_size + 11);
+	dynamic_buffer sss(kc_image_size + 11);
 
 	// tries to generate the missing head
-	memset(sss + 0, 0xd3, 3);
-	memset(sss + 3, 0x20, 8);
-	memcpy(sss + 11, casdata, kc_image_size);
+	memset(&sss[0], 0xd3, 3);
+	memset(&sss[3], 0x20, 8);
+	memcpy(&sss[11], casdata, kc_image_size);
 
 	// set an arbitrary filename
 	sss[3] = 'A';
 
-	int retval = kc_handle_cass(buffer, sss, KC_IMAGE_KCC);
-
-	free(sss);
+	int retval = kc_handle_cass(buffer, &sss[0], KC_IMAGE_KCC);
 
 	return retval;
 }

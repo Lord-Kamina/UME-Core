@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert,Aaron Giles
 /*********************************************************/
 /*    ricoh RF5C68(or clone) PCM controller              */
 /*********************************************************/
@@ -19,13 +21,12 @@ const device_type RF5C68 = &device_creator<rf5c68_device>;
 //-------------------------------------------------
 
 rf5c68_device::rf5c68_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, RF5C68, "RF5C68", tag, owner, clock),
+	: device_t(mconfig, RF5C68, "RF5C68", tag, owner, clock, "rf5c68", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_stream(NULL),
 		m_cbank(0),
 		m_wbank(0),
-		m_enable(0),
-		m_sample_callback(NULL)
+		m_enable(0)
 {
 	memset(m_data, 0, sizeof(UINT8)*0x10000);
 }
@@ -37,19 +38,13 @@ rf5c68_device::rf5c68_device(const machine_config &mconfig, const char *tag, dev
 
 void rf5c68_device::device_start()
 {
-	const rf5c68_interface* intf = (const rf5c68_interface*)static_config();
+	m_sample_end_cb.bind_relative_to(*owner());
 
 	/* allocate memory for the chip */
 	memset(m_data, 0xff, sizeof(m_data));
 
 	/* allocate the stream */
 	m_stream = stream_alloc(0, 2, clock() / 384);
-
-	/* set up callback */
-	if(intf != NULL)
-		m_sample_callback = intf->sample_end_callback;
-	else
-		m_sample_callback = NULL;
 }
 
 
@@ -88,10 +83,10 @@ void rf5c68_device::sound_stream_update(sound_stream &stream, stream_sample_t **
 				int sample;
 
 				/* trigger sample callback */
-				if(m_sample_callback)
+				if(!m_sample_end_cb.isnull())
 				{
 					if(((chan->addr >> 11) & 0xfff) == 0xfff)
-						m_sample_callback(this, ((chan->addr >> 11)/0x2000));
+						m_sample_end_cb((chan->addr >> 11)/0x2000);
 				}
 
 				/* fetch the sample and handle looping */

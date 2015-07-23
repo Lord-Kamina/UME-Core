@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli, Quench
 /* Super Slam (c)1993 Playmark */
 
 /*
@@ -83,7 +85,6 @@ Notes:
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
 #include "cpu/mcs51/mcs51.h"
-#include "sound/okim6295.h"
 #include "includes/sslam.h"
 
 
@@ -246,120 +247,115 @@ TIMER_CALLBACK_MEMBER(sslam_state::music_playback)
 }
 
 
-static void sslam_play(device_t *device, int track, int data)
+void sslam_state::sslam_play(int track, int data)
 {
-	sslam_state *state = device->machine().driver_data<sslam_state>();
-	okim6295_device *oki = downcast<okim6295_device *>(device);
-	int status = oki->read_status();
+	int status = m_oki->read_status();
 
 	if (data < 0x80) {
 		if (track) {
-			if (state->m_track != data) {
-				state->m_track  = data;
-				state->m_bar = 0;
+			if (m_track != data) {
+				m_track  = data;
+				m_bar = 0;
 				if (status & 0x08)
-					oki->write_command(0x40);
-				oki->write_command((0x80 | data));
-				oki->write_command(0x81);
-				state->m_music_timer->adjust(attotime::from_msec(4), 0, attotime::from_hz(250));    /* 250Hz for smooth sequencing */
+					m_oki->write_command(0x40);
+				m_oki->write_command((0x80 | data));
+				m_oki->write_command(0x81);
+				m_music_timer->adjust(attotime::from_msec(4), 0, attotime::from_hz(250));    /* 250Hz for smooth sequencing */
 			}
 		}
 		else {
 			if ((status & 0x01) == 0) {
-				oki->write_command((0x80 | data));
-				oki->write_command(0x11);
+				m_oki->write_command((0x80 | data));
+				m_oki->write_command(0x11);
 			}
 			else if ((status & 0x02) == 0) {
-				oki->write_command((0x80 | data));
-				oki->write_command(0x21);
+				m_oki->write_command((0x80 | data));
+				m_oki->write_command(0x21);
 			}
 			else if ((status & 0x04) == 0) {
-				oki->write_command((0x80 | data));
-				oki->write_command(0x41);
+				m_oki->write_command((0x80 | data));
+				m_oki->write_command(0x41);
 			}
 		}
 	}
 	else {      /* use above 0x80 to turn off channels */
 		if (track) {
-			state->m_music_timer->enable(false);
-			state->m_track = 0;
-			state->m_melody = 0;
-			state->m_bar = 0;
+			m_music_timer->enable(false);
+			m_track = 0;
+			m_melody = 0;
+			m_bar = 0;
 		}
 		data &= 0x7f;
-		oki->write_command(data);
+		m_oki->write_command(data);
 	}
 }
 
-WRITE16_MEMBER(sslam_state::sslam_snd_w)
+WRITE8_MEMBER(sslam_state::sslam_snd_w)
 {
-	if (ACCESSING_BITS_0_7)
-	{
-		logerror("%s Writing %04x to Sound CPU\n",machine().describe_context(),data);
-		if (data >= 0x40) {
-			if (data == 0xfe) {
-				/* This should reset the sound MCU and stop audio playback, but here, it */
-				/* chops the first coin insert. So let's only stop any playing melodies. */
-				sslam_play(m_oki, 1, (0x80 | 0x40));       /* Stop playing the melody */
-			}
-			else {
-				logerror("Unknown command (%02x) sent to the Sound controller\n",data);
-				popmessage("Unknown command (%02x) sent to the Sound controller",data);
-			}
-		}
-		else if (data == 0) {
-			m_bar = 0;      /* Complete any current bars then stop sequencing */
-			m_melody = 0;
+	logerror("%s Writing %04x to Sound CPU\n",machine().describe_context(),data);
+	if (data >= 0x40) {
+		if (data == 0xfe) {
+			/* This should reset the sound MCU and stop audio playback, but here, it */
+			/* chops the first coin insert. So let's only stop any playing melodies. */
+			sslam_play(1, (0x80 | 0x40));       /* Stop playing the melody */
 		}
 		else {
-			m_sound = sslam_snd_cmd[data];
+			logerror("Unknown command (%02x) sent to the Sound controller\n",data);
+			popmessage("Unknown command (%02x) sent to the Sound controller",data);
+		}
+	}
+	else if (data == 0) {
+		m_bar = 0;      /* Complete any current bars then stop sequencing */
+		m_melody = 0;
+	}
+	else {
+		m_sound = sslam_snd_cmd[data];
 
-			if (m_sound == 0xff) {
-				popmessage("Unmapped sound command %02x on Bank %02x",data,m_snd_bank);
+		if (m_sound == 0xff) {
+			popmessage("Unmapped sound command %02x on Bank %02x",data,m_snd_bank);
+		}
+		else if (m_sound >= 0x70) {
+			/* These vocals are in bank 1, but a bug in the actual MCU doesn't set the bank */
+//          if (m_snd_bank != 1)
+//          m_oki->set_bank_base((1 * 0x40000));
+//          sslam_snd_bank = 1;
+			sslam_play(0, m_sound);
+		}
+		else if (m_sound >= 0x69) {
+			if (m_snd_bank != 2)
+				m_oki->set_bank_base(2 * 0x40000);
+			m_snd_bank = 2;
+			switch (m_sound)
+			{
+				case 0x69:  m_melody = 5; break;
+				case 0x6b:  m_melody = 6; break;
+				case 0x6c:  m_melody = 7; break;
+				default:    m_melody = 0; m_bar = 0; break; /* Invalid */
 			}
-			else if (m_sound >= 0x70) {
-				/* These vocals are in bank 1, but a bug in the actual MCU doesn't set the bank */
-//              if (m_snd_bank != 1)
-//                  m_oki->set_bank_base((1 * 0x40000));
-//              sslam_snd_bank = 1;
-				sslam_play(m_oki, 0, m_sound);
+			sslam_play(m_melody, m_sound);
+		}
+		else if (m_sound >= 0x65) {
+			if (m_snd_bank != 1)
+				m_oki->set_bank_base(1 * 0x40000);
+			m_snd_bank = 1;
+			m_melody = 4;
+			sslam_play(m_melody, m_sound);
+		}
+		else if (m_sound >= 0x60) {
+			if (m_snd_bank != 0)
+				m_oki->set_bank_base(0 * 0x40000);
+			m_snd_bank = 0;
+			switch (m_sound)
+			{
+				case 0x60:  m_melody = 1; break;
+				case 0x63:  m_melody = 2; break;
+				case 0x64:  m_melody = 3; break;
+				default:    m_melody = 0; m_bar = 0; break; /* Invalid */
 			}
-			else if (m_sound >= 0x69) {
-				if (m_snd_bank != 2)
-					m_oki->set_bank_base(2 * 0x40000);
-				m_snd_bank = 2;
-				switch (m_sound)
-				{
-					case 0x69:  m_melody = 5; break;
-					case 0x6b:  m_melody = 6; break;
-					case 0x6c:  m_melody = 7; break;
-					default:    m_melody = 0; m_bar = 0; break; /* Invalid */
-				}
-				sslam_play(m_oki, m_melody, m_sound);
-			}
-			else if (m_sound >= 0x65) {
-				if (m_snd_bank != 1)
-					m_oki->set_bank_base(1 * 0x40000);
-				m_snd_bank = 1;
-				m_melody = 4;
-				sslam_play(m_oki, m_melody, m_sound);
-			}
-			else if (m_sound >= 0x60) {
-				if (m_snd_bank != 0)
-					m_oki->set_bank_base(0 * 0x40000);
-				m_snd_bank = 0;
-				switch (m_sound)
-				{
-					case 0x60:  m_melody = 1; break;
-					case 0x63:  m_melody = 2; break;
-					case 0x64:  m_melody = 3; break;
-					default:    m_melody = 0; m_bar = 0; break; /* Invalid */
-				}
-				sslam_play(m_oki, m_melody, m_sound);
-			}
-			else {
-				sslam_play(m_oki, 0, m_sound);
-			}
+			sslam_play(m_melody, m_sound);
+		}
+		else {
+			sslam_play(0, m_sound);
 		}
 	}
 }
@@ -383,7 +379,7 @@ static ADDRESS_MAP_START( sslam_program_map, AS_PROGRAM, 16, sslam_state )
 	AM_RANGE(0x108000, 0x10ffff) AM_RAM_WRITE(sslam_tx_tileram_w) AM_SHARE("tx_tileram")
 	AM_RANGE(0x110000, 0x11000d) AM_RAM AM_SHARE("regs")
 	AM_RANGE(0x200000, 0x200001) AM_WRITENOP
-	AM_RANGE(0x280000, 0x280fff) AM_RAM_WRITE(sslam_paletteram_w) AM_SHARE("paletteram")
+	AM_RANGE(0x280000, 0x280fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x201000, 0x201fff) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0x304000, 0x304001) AM_WRITENOP
 	AM_RANGE(0x300010, 0x300011) AM_READ_PORT("IN0")
@@ -393,7 +389,7 @@ static ADDRESS_MAP_START( sslam_program_map, AS_PROGRAM, 16, sslam_state )
 	AM_RANGE(0x300018, 0x300019) AM_READ_PORT("IN4")
 	AM_RANGE(0x30001a, 0x30001b) AM_READ_PORT("DSW2")
 	AM_RANGE(0x30001c, 0x30001d) AM_READ_PORT("DSW1")
-	AM_RANGE(0x30001e, 0x30001f) AM_WRITE(sslam_snd_w)
+	AM_RANGE(0x30001e, 0x30001f) AM_WRITE8(sslam_snd_w, 0x00ff)
 	AM_RANGE(0xf00000, 0xffffff) AM_RAM   /* Main RAM */
 
 	AM_RANGE(0x000000, 0xffffff) AM_ROM   /* I don't honestly know where the rom is mirrored .. so all unmapped reads / writes go to rom */
@@ -406,7 +402,7 @@ static ADDRESS_MAP_START( powerbls_map, AS_PROGRAM, 16, sslam_state )
 	AM_RANGE(0x110000, 0x11000d) AM_RAM AM_SHARE("regs")
 	AM_RANGE(0x200000, 0x200001) AM_WRITENOP
 	AM_RANGE(0x201000, 0x201fff) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0x280000, 0x2803ff) AM_RAM_WRITE(sslam_paletteram_w) AM_SHARE("paletteram")
+	AM_RANGE(0x280000, 0x2803ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x300010, 0x300011) AM_READ_PORT("IN0")
 	AM_RANGE(0x300012, 0x300013) AM_READ_PORT("IN1")
 	AM_RANGE(0x300014, 0x300015) AM_READ_PORT("IN2")
@@ -712,9 +708,11 @@ static MACHINE_CONFIG_START( sslam, sslam_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(1*8, 39*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(sslam_state, screen_update_sslam)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(sslam)
-	MCFG_PALETTE_LENGTH(0x800)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", sslam)
+	MCFG_PALETTE_ADD("palette", 0x800)
+	MCFG_PALETTE_FORMAT(RRRRGGGGBBBBRGBx)
 
 	MCFG_VIDEO_START_OVERRIDE(sslam_state,sslam)
 
@@ -742,9 +740,11 @@ static MACHINE_CONFIG_START( powerbls, sslam_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(sslam_state, screen_update_powerbls)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(powerbls)
-	MCFG_PALETTE_LENGTH(0x200)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", powerbls)
+	MCFG_PALETTE_ADD("palette", 0x200)
+	MCFG_PALETTE_FORMAT(RRRRGGGGBBBBRGBx)
 
 	MCFG_VIDEO_START_OVERRIDE(sslam_state,powerbls)
 

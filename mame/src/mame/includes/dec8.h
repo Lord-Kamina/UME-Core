@@ -1,5 +1,10 @@
-#include "video/bufsprite.h"
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 #include "sound/msm5205.h"
+#include "video/bufsprite.h"
+#include "video/decbac06.h"
+#include "video/deckarn.h"
+#include "video/decmxc06.h"
 
 class dec8_state : public driver_device
 {
@@ -16,9 +21,15 @@ public:
 		m_audiocpu(*this, "audiocpu"),
 		m_mcu(*this, "mcu"),
 		m_spriteram(*this, "spriteram") ,
+		m_msm(*this, "msm"),
+		m_tilegen1(*this, "tilegen1"),
+		m_tilegen2(*this, "tilegen2"),
+		m_spritegen_krn(*this, "spritegen_krn"),
+		m_spritegen_mxc(*this, "spritegen_mxc"),
 		m_videoram(*this, "videoram"),
 		m_bg_data(*this, "bg_data"),
-		m_msm(*this, "msm") { }
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
@@ -26,12 +37,19 @@ public:
 	required_device<cpu_device> m_audiocpu;
 	optional_device<cpu_device> m_mcu;
 	required_device<buffered_spriteram8_device> m_spriteram;
+	optional_device<msm5205_device> m_msm;
+	optional_device<deco_bac06_device> m_tilegen1;
+	optional_device<deco_bac06_device> m_tilegen2;
+	optional_device<deco_karnovsprites_device> m_spritegen_krn;
+	optional_device<deco_mxc06_device> m_spritegen_mxc;
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
 	optional_shared_ptr<UINT8> m_bg_data;
 
-	optional_device<msm5205_device> m_msm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	UINT8 *  m_pf1_data;
 	UINT8 *  m_row;
 //  UINT8 *  m_paletteram;    // currently this uses generic palette handling
@@ -146,7 +164,6 @@ public:
 	INTERRUPT_GEN_MEMBER(gondo_interrupt);
 	INTERRUPT_GEN_MEMBER(oscar_interrupt);
 	void srdarwin_draw_sprites(  bitmap_ind16 &bitmap, const rectangle &cliprect, int pri );
-	DECLARE_WRITE_LINE_MEMBER(irqhandler);
 	DECLARE_WRITE_LINE_MEMBER(csilver_adpcm_int);
 
 protected:

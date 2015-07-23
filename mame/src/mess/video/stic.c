@@ -1,10 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods,Frank Palazzolo
 /**********************************************************************
 
  General Instruments AY-3-8900-1 a.k.a. Standard Television Interface Chip
  (STIC) emulation for Mattel Intellivision
-
- Copyright MESS Team.
- Visit http://mamedev.org for licensing and usage restrictions.
 
  *********************************************************************/
 
@@ -20,7 +19,7 @@ const device_type STIC = &device_creator<stic_device>;
 
 stic_device::stic_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
 				device_t(mconfig, STIC, "STIC (Standard Television Interface Chip) Video Chip", tag, owner, clock, "stic", __FILE__),
-				m_grom_region(*this, "grom"),
+				m_grom(*this, "grom"),
 				m_x_scale(1),
 				m_y_scale(1)
 {
@@ -41,7 +40,7 @@ stic_device::~stic_device()
 
 void stic_device::device_start()
 {
-	machine().primary_screen->register_screen_bitmap(m_bitmap);
+	machine().first_screen()->register_screen_bitmap(m_bitmap);
 
 	save_item(NAME(m_stic_registers));
 	save_item(NAME(m_gramdirty));
@@ -58,23 +57,23 @@ void stic_device::device_start()
 	save_item(NAME(m_backtab_buffer));
 	for (int sp = 0; sp < STIC_MOBS; sp++)
 	{
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].visible);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].xpos);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].ypos);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].coll);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].collision);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].doublex);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].doubley);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].quady);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].xflip);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].yflip);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].behind_foreground);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].grom);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].card);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].color);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].doubleyres);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite[sp].dirty);
-		state_save_register_item(machine(), "STIC sprite", NULL, sp, m_sprite_buffers[sp]);
+		save_item(m_sprite[sp].visible, "STIC sprite/m_sprite[sp].visible", sp);
+		save_item(m_sprite[sp].xpos, "STIC sprite/m_sprite[sp].xpos", sp);
+		save_item(m_sprite[sp].ypos, "STIC sprite/m_sprite[sp].ypos", sp);
+		save_item(m_sprite[sp].coll, "STIC sprite/m_sprite[sp].coll", sp);
+		save_item(m_sprite[sp].collision, "STIC sprite/m_sprite[sp].collision", sp);
+		save_item(m_sprite[sp].doublex, "STIC sprite/m_sprite[sp].doublex", sp);
+		save_item(m_sprite[sp].doubley, "STIC sprite/m_sprite[sp].doubley", sp);
+		save_item(m_sprite[sp].quady, "STIC sprite/m_sprite[sp].quady", sp);
+		save_item(m_sprite[sp].xflip, "STIC sprite/m_sprite[sp].xflip", sp);
+		save_item(m_sprite[sp].yflip, "STIC sprite/m_sprite[sp].yflip", sp);
+		save_item(m_sprite[sp].behind_foreground, "STIC sprite/m_sprite[sp].behind_foreground", sp);
+		save_item(m_sprite[sp].grom, "STIC sprite/m_sprite[sp].grom", sp);
+		save_item(m_sprite[sp].card, "STIC sprite/m_sprite[sp].card", sp);
+		save_item(m_sprite[sp].color, "STIC sprite/m_sprite[sp].color", sp);
+		save_item(m_sprite[sp].doubleyres, "STIC sprite/m_sprite[sp].doubleyres", sp);
+		save_item(m_sprite[sp].dirty, "STIC sprite/m_sprite[sp].dirty", sp);
+		save_item(m_sprite_buffers[sp], "STIC sprite/m_sprite[sp].sprite_buffers", sp);
 	}
 }
 
@@ -247,8 +246,6 @@ void stic_device::render_sprites()
 	INT32 nextY;
 	INT32 xInc;
 
-	UINT8* memory = m_grom_region->base();
-
 	for (int i = 0; i < STIC_MOBS; i++)
 	{
 		intv_sprite_type* s = &m_sprite[i];
@@ -265,7 +262,7 @@ void stic_device::render_sprites()
 		{
 			nextMemoryLocation = (cardMemoryLocation + (j/pixelSize));
 			if (s->grom)
-				nextData = memory[nextMemoryLocation];
+				nextData = m_grom[nextMemoryLocation];
 			else if (nextMemoryLocation < 0x200)
 				nextData = m_gram[nextMemoryLocation];
 			else
@@ -307,7 +304,6 @@ void stic_device::render_color_stack_mode(bitmap_ind16 &bitmap)
 	INT16 w, h, nextx, nexty;
 	UINT8 csPtr = 0;
 	UINT16 nextCard;
-	UINT8 *ram = m_grom_region->base();
 
 	for (h = 0, nexty = (STIC_OVERSCAN_TOP_HEIGHT + m_row_delay) * STIC_Y_SCALE;
 			h < STIC_BACKTAB_HEIGHT;
@@ -353,7 +349,7 @@ void stic_device::render_color_stack_mode(bitmap_ind16 &bitmap)
 				if (isGrom)
 				{
 					memoryLocation = nextCard & STIC_CSTM_C;
-					memory = ram;
+					memory = m_grom;
 					for (int j = 0; j < STIC_CARD_HEIGHT; j++)
 						render_line(bitmap, memory[memoryLocation + j],
 									nextx, nexty + j * STIC_Y_SCALE, fgcolor, bgcolor);
@@ -377,7 +373,6 @@ void stic_device::render_fg_bg_mode(bitmap_ind16 &bitmap)
 	UINT8 isGrom, fgcolor, bgcolor;
 	UINT16 nextCard, memoryLocation;
 	UINT8* memory;
-	UINT8* ram = m_grom_region->base();
 
 	for (h = 0, nexty = (STIC_OVERSCAN_TOP_HEIGHT + m_row_delay) * STIC_Y_SCALE;
 			h < STIC_BACKTAB_HEIGHT;
@@ -396,7 +391,7 @@ void stic_device::render_fg_bg_mode(bitmap_ind16 &bitmap)
 			if (isGrom)
 			{
 				memoryLocation = nextCard & STIC_FBM_C;
-				memory = ram;
+				memory = m_grom;
 				for (int j = 0; j < STIC_CARD_HEIGHT; j++)
 					render_line(bitmap, memory[memoryLocation + j],
 								nextx, nexty + j * STIC_Y_SCALE, fgcolor, bgcolor);
@@ -568,14 +563,14 @@ void stic_device::draw_background(bitmap_ind16 &bitmap, int transparency)
 						code &= (STIC_CSTM_C50 >> 3);  // keep from going outside the array
 						//if (m_gramdirtybytes[code] == 1)
 						{
-							decodechar(machine().gfx[1],
+							decodechar(m_gfxdecode->gfx(1),
 										code,
 										m_gram,
 										machine().config()->gfxdecodeinfo[1].gfxlayout);
 							m_gramdirtybytes[code] = 0;
 						}
 						// Draw GRAM char
-						drawgfx(bitmap,machine().gfx[1],
+						drawgfx(bitmap,m_gfxdecode->gfx(1),
 								code,
 								bgcolor*16+fgcolor,
 								0,0, (x0 + col * STIC_CARD_WIDTH) * STIC_X_SCALE, (y0 + row * STIC_CARD_HEIGHT) * STIC_Y_SCALE,
@@ -589,7 +584,7 @@ void stic_device::draw_background(bitmap_ind16 &bitmap, int transparency)
 					}
 					else // read from grom
 					{
-						drawgfx(bitmap,machine().gfx[0],
+						drawgfx(bitmap,m_gfxdecode->gfx(0),
 								code,
 								bgcolor*16+fgcolor,
 								0,0, (x0 + col * STIC_CARD_WIDTH) * STIC_X_SCALE, (y0 + row * STIC_CARD_HEIGHT) * STIC_Y_SCALE,
@@ -621,14 +616,14 @@ void stic_device::draw_background(bitmap_ind16 &bitmap, int transparency)
 				{
 					//if (m_gramdirtybytes[code] == 1)
 					{
-						decodechar(machine().gfx[1],
+						decodechar(m_gfxdecode->gfx(1),
 									code,
 									m_gram,
 									machine().config()->gfxdecodeinfo[1].gfxlayout);
 						m_gramdirtybytes[code] = 0;
 					}
 					// Draw GRAM char
-					drawgfx(bitmap,machine().gfx[1],
+					drawgfx(bitmap,m_gfxdecode->gfx(1),
 							code,
 							bgcolor*16+fgcolor,
 							0,0, (x0 + col * STIC_CARD_WIDTH) * STIC_X_SCALE, (y0 + row * STIC_CARD_HEIGHT) * STIC_Y_SCALE,
@@ -636,7 +631,7 @@ void stic_device::draw_background(bitmap_ind16 &bitmap, int transparency)
 				}
 				else // read from GROM
 				{
-					drawgfx(bitmap,machine().gfx[0],
+					drawgfx(bitmap,m_gfxdecode->gfx(0),
 							code,
 							bgcolor*16+fgcolor,
 							0,0, (x0 + col * STIC_CARD_WIDTH) * STIC_X_SCALE, (y0 + row * STIC_CARD_HEIGHT) * STIC_Y_SCALE,
@@ -670,14 +665,14 @@ void stic_device::draw_sprites(bitmap_ind16 &bitmap, int behind_foreground)
 				{
 					//if (m_gramdirtybytes[code] == 1)
 					{
-						decodechar(machine().gfx[1],
+						decodechar(m_gfxdecode->gfx(1),
 									code,
 									m_gram,
 									machine().config()->gfxdecodeinfo[1].gfxlayout);
 						m_gramdirtybytes[code] = 0;
 					}
 					// Draw GRAM char
-					drawgfxzoom_transpen(bitmap,&machine().screen[0].visarea,machine().gfx[1],
+					m_gfxdecode->gfx(1)->zoom_transpen(bitmap,&machine().screen[0].visarea,
 											code,
 											s->color,
 											s->xflip,s->yflip,
@@ -688,11 +683,11 @@ void stic_device::draw_sprites(bitmap_ind16 &bitmap, int behind_foreground)
 				{
 					//if ((m_gramdirtybytes[code] == 1) || (m_gramdirtybytes[code+1] == 1))
 					{
-						decodechar(machine().gfx[1],
+						decodechar(m_gfxdecode->gfx(1),
 									code,
 									m_gram,
 									machine().config()->gfxdecodeinfo[1].gfxlayout);
-						decodechar(machine().gfx[1],
+						decodechar(m_gfxdecode->gfx(1),
 									code+1,
 									m_gram,
 									machine().config()->gfxdecodeinfo[1].gfxlayout);
@@ -700,13 +695,13 @@ void stic_device::draw_sprites(bitmap_ind16 &bitmap, int behind_foreground)
 						m_gramdirtybytes[code+1] = 0;
 					}
 					// Draw GRAM char
-					drawgfxzoom_transpen(bitmap,&machine().screen[0].visarea,machine().gfx[1],
+					m_gfxdecode->gfx(1)->zoom_transpen(bitmap,&machine().screen[0].visarea,
 											code,
 											s->color,
 											s->xflip,s->yflip,
 											(s->xpos + x0) * STIC_X_SCALE, (s->ypos + y0) * STIC_Y_SCALE + s->yflip * s->ysize * STIC_CARD_HEIGHT,
 											0x8000*s->xsize, 0x8000*s->ysize,0);
-					drawgfxzoom_transpen(bitmap,&machine().screen[0].visarea,machine().gfx[1],
+					m_gfxdecode->gfx(1)->zoom_transpen(bitmap,&machine().screen[0].visarea,
 											code+1,
 											s->color,
 											s->xflip,s->yflip,
@@ -719,7 +714,7 @@ void stic_device::draw_sprites(bitmap_ind16 &bitmap, int behind_foreground)
 				if (s->yres == 1)
 				{
 					// Draw GROM char
-					drawgfxzoom_transpen(bitmap,&machine().screen[0].visarea,machine().gfx[0],
+					m_gfxdecode->gfx(0)->zoom_transpen(bitmap,&machine().screen[0].visarea,
 											code,
 											s->color,
 											s->xflip,s->yflip,
@@ -728,13 +723,13 @@ void stic_device::draw_sprites(bitmap_ind16 &bitmap, int behind_foreground)
 				}
 				else
 				{
-					drawgfxzoom_transpen(bitmap,&machine().screen[0].visarea,machine().gfx[0],
+					m_gfxdecode->gfx(0)->zoom_transpen(bitmap,&machine().screen[0].visarea,
 											code,
 											s->color,
 											s->xflip,s->yflip,
 											(s->xpos + x0) * STIC_X_SCALE, (s->ypos + y0) * STIC_Y_SCALE + s->yflip * s->ysize * STIC_CARD_HEIGHT,
 											0x8000*s->xsize, 0x8000*s->ysize,0);
-					drawgfxzoom_transpen(bitmap,&machine().screen[0].visarea,machine().gfx[0],
+					m_gfxdecode->gfx(0)->zoom_transpen(bitmap,&machine().screen[0].visarea,
 											code+1,
 											s->color,
 											s->xflip,s->yflip,
@@ -952,7 +947,7 @@ WRITE16_MEMBER( stic_device::write )
 			break;
 	}
 
-	if (offset < sizeof(m_stic_registers) / sizeof(m_stic_registers[0]))
+	if (offset < ARRAY_LENGTH(m_stic_registers))
 		m_stic_registers[offset] = data;
 }
 

@@ -1,10 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*************************************************************************
 
     Simple 156 based board
 
 *************************************************************************/
 
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "sound/okim6295.h"
 #include "video/deco16ic.h"
 #include "video/decospr.h"
@@ -14,19 +16,19 @@ class simpl156_state : public driver_device
 public:
 	simpl156_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_maincpu(*this, "maincpu"),
-			m_deco_tilegen1(*this, "tilegen1"),
-			m_eeprom(*this, "eeprom"),
-			m_okimusic(*this, "okimusic") ,
+		m_maincpu(*this, "maincpu"),
+		m_deco_tilegen1(*this, "tilegen1"),
+		m_eeprom(*this, "eeprom"),
+		m_okimusic(*this, "okimusic") ,
 		m_mainram(*this, "mainram"),
 		m_systemram(*this, "systemram"),
-		m_sprgen(*this, "spritegen")
-	{ }
+		m_sprgen(*this, "spritegen"),
+		m_palette(*this, "palette") { }
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
 	required_device<deco16ic_device> m_deco_tilegen1;
-	required_device<eeprom_device> m_eeprom;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
 	required_device<okim6295_device> m_okimusic;
 	/* memory pointers */
 	UINT16 *  m_pf1_rowscroll;
@@ -34,13 +36,12 @@ public:
 	required_shared_ptr<UINT32> m_mainram;
 	required_shared_ptr<UINT32> m_systemram;
 	optional_device<decospr_device> m_sprgen;
+	required_device<palette_device> m_palette;
 	UINT16 *m_spriteram;
 	size_t m_spriteram_size;
+	DECO16IC_BANK_CB_MEMBER(bank_callback);
+	DECOSPR_PRIORITY_CB_MEMBER(pri_callback);
 
-	DECLARE_READ32_MEMBER(simpl156_inputs_read);
-	DECLARE_READ32_MEMBER(simpl156_palette_r);
-	DECLARE_WRITE32_MEMBER(simpl156_palette_w);
-	DECLARE_READ32_MEMBER(simpl156_system_r);
 	DECLARE_WRITE32_MEMBER(simpl156_eeprom_w);
 	DECLARE_READ32_MEMBER(simpl156_spriteram_r);
 	DECLARE_WRITE32_MEMBER(simpl156_spriteram_w);

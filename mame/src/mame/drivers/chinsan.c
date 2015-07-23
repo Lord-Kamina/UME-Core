@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Ganbare Chinsan Ooshoubu
  driver by David Haywood
 
@@ -54,7 +56,9 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_video(*this, "video"),
 		m_maincpu(*this, "maincpu"),
-		m_adpcm(*this, "adpcm") { }
+		m_adpcm(*this, "adpcm"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_video;
@@ -76,11 +80,14 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(chinsan);
 	UINT32 screen_update_chinsan(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	DECLARE_WRITE_LINE_MEMBER(chin_adpcm_int);
 	required_device<cpu_device> m_maincpu;
 	required_device<msm5205_device> m_adpcm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+	UINT8 *m_decrypted_opcodes;
 };
 
 
@@ -90,13 +97,13 @@ public:
  *
  *************************************/
 
-void chinsan_state::palette_init()
+PALETTE_INIT_MEMBER(chinsan_state, chinsan)
 {
 	UINT8 *src = memregion( "color_proms" )->base();
 	int i;
 
 	for (i = 0; i < 0x100; i++)
-		palette_set_color_rgb(machine(), i, pal4bit(src[i + 0x200]), pal4bit(src[i + 0x100]), pal4bit(src[i + 0x000]));
+		palette.set_pen_color(i, pal4bit(src[i + 0x200]), pal4bit(src[i + 0x100]), pal4bit(src[i + 0x000]));
 }
 
 void chinsan_state::video_start()
@@ -114,7 +121,7 @@ UINT32 chinsan_state::screen_update_chinsan(screen_device &screen, bitmap_ind16 
 			int tileno, colour;
 			tileno = m_video[count] | (m_video[count + 0x800] << 8);
 			colour = m_video[count + 0x1000] >> 3;
-			drawgfx_opaque(bitmap,cliprect,machine().gfx[0],tileno,colour,0,0,x*8,y*8);
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect,tileno,colour,0,0,x*8,y*8);
 			count++;
 		}
 	}
@@ -133,6 +140,7 @@ UINT32 chinsan_state::screen_update_chinsan(screen_device &screen, bitmap_ind16 
 WRITE8_MEMBER(chinsan_state::ctrl_w)
 {
 	membank("bank1")->set_entry(data >> 6);
+	membank("bank1d")->set_entry(data >> 6);
 }
 
 WRITE8_MEMBER(chinsan_state::ym_port_w1)
@@ -145,17 +153,6 @@ WRITE8_MEMBER(chinsan_state::ym_port_w2)
 {
 	logerror("ym_write port 2 %02x\n", data);
 }
-
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSW1"),
-	DEVCB_INPUT_PORT("DSW2"),
-	DEVCB_DRIVER_MEMBER(chinsan_state,ym_port_w1),
-	DEVCB_DRIVER_MEMBER(chinsan_state,ym_port_w2)
-};
 
 WRITE8_MEMBER(chinsan_state::chinsan_port00_w)
 {
@@ -251,6 +248,11 @@ static ADDRESS_MAP_START( chinsan_map, AS_PROGRAM, 8, chinsan_state )
 	AM_RANGE(0x8000, 0xbfff) AM_ROMBANK("bank1")
 	AM_RANGE(0xc000, 0xdfff) AM_RAM
 	AM_RANGE(0xe000, 0xf7ff) AM_RAM AM_SHARE("video")
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 8, chinsan_state )
+	AM_RANGE(0x0000, 0x7fff) AM_ROMBANK("bank0d")
+	AM_RANGE(0x8000, 0xbfff) AM_ROMBANK("bank1d")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( chinsan_io, AS_IO, 8, chinsan_state )
@@ -560,11 +562,6 @@ WRITE_LINE_MEMBER(chinsan_state::chin_adpcm_int)
 	}
 }
 
-static const msm5205_interface msm5205_config =
-{
-	DEVCB_DRIVER_LINE_MEMBER(chinsan_state,chin_adpcm_int), /* interrupt function */
-	MSM5205_S64_4B  /* 8kHz */
-};
 
 /*************************************
  *
@@ -574,7 +571,9 @@ static const msm5205_interface msm5205_config =
 
 void chinsan_state::machine_start()
 {
-	membank("bank1")->configure_entries(0, 4, memregion("maincpu")->base() + 0x10000, 0x4000);
+	membank("bank1")->configure_entries(0, 4, memregion("maincpu")->base() + 0x8000, 0x4000);
+	membank("bank0d")->set_base(m_decrypted_opcodes);
+	membank("bank1d")->configure_entries(0, 4, m_decrypted_opcodes + 0x8000, 0x4000);
 
 	save_item(NAME(m_adpcm_idle));
 	save_item(NAME(m_port_select));
@@ -599,6 +598,7 @@ static MACHINE_CONFIG_START( chinsan, chinsan_state )
 	MCFG_CPU_ADD("maincpu", Z80,10000000/2)      /* ? MHz */
 	MCFG_CPU_PROGRAM_MAP(chinsan_map)
 	MCFG_CPU_IO_MAP(chinsan_io)
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", chinsan_state,  irq0_line_hold)
 
 
@@ -609,23 +609,28 @@ static MACHINE_CONFIG_START( chinsan, chinsan_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_VISIBLE_AREA(24, 512-24-1, 16, 256-16-1)
 	MCFG_SCREEN_UPDATE_DRIVER(chinsan_state, screen_update_chinsan)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(chinsan)
-	MCFG_PALETTE_LENGTH(0x100)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", chinsan)
+	MCFG_PALETTE_ADD("palette", 0x100)
+	MCFG_PALETTE_INIT_OWNER(chinsan_state, chinsan)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, 1500000) /* ? Mhz */
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSW1"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSW2"))
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(chinsan_state, ym_port_w1))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(chinsan_state, ym_port_w2))
 	MCFG_SOUND_ROUTE(0, "mono", 0.15)
 	MCFG_SOUND_ROUTE(1, "mono", 0.15)
 	MCFG_SOUND_ROUTE(2, "mono", 0.15)
 	MCFG_SOUND_ROUTE(3, "mono", 0.10)
 
 	MCFG_SOUND_ADD("adpcm", MSM5205, 384000)
-	MCFG_SOUND_CONFIG(msm5205_config)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(chinsan_state, chin_adpcm_int)) /* interrupt function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S64_4B)  /* 8kHz */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 
@@ -638,10 +643,10 @@ MACHINE_CONFIG_END
  *************************************/
 
 ROM_START( chinsan )
-	ROM_REGION( 0x20000, "maincpu", 0 ) /* encrypted code / data */
+	ROM_REGION( 0x18000, "maincpu", 0 ) /* encrypted code / data */
 	ROM_LOAD( "mm00.7d", 0x00000, 0x08000, CRC(f7a4414f) SHA1(f65223b2928f610ab97fda2f2c008806cf2420e5) )
 	ROM_CONTINUE(        0x00000, 0x08000 ) // first half is blank
-	ROM_LOAD( "mm01.8d", 0x10000, 0x10000, CRC(c69ddbf5) SHA1(9533365c1761b113174d53a2e23ce6a7baca7dfe) )
+	ROM_LOAD( "mm01.8d", 0x08000, 0x10000, CRC(c69ddbf5) SHA1(9533365c1761b113174d53a2e23ce6a7baca7dfe) )
 
 	ROM_REGION( 0x2000, "user1", 0 ) /* MC8123 key */
 	ROM_LOAD( "317-5012.key",  0x0000, 0x2000, CRC(2ecfb132) SHA1(3110ef82080dd7d908cc6bf34c6643f187f90b29) )
@@ -672,7 +677,8 @@ ROM_END
 
 DRIVER_INIT_MEMBER(chinsan_state,chinsan)
 {
-	mc8123_decrypt_rom(machine(), "maincpu", "user1", "bank1", 4);
+	m_decrypted_opcodes = auto_alloc_array(machine(), UINT8, 0x18000);
+	mc8123_decode(memregion("maincpu")->base(), m_decrypted_opcodes, memregion("user1")->base(), 0x18000);
 }
 
 

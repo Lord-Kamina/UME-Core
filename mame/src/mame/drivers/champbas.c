@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi, Jarek Parchanski, Nicola Salmoria
 /***************************************************************************
 
 Talbot                     - (c) 1982 Alpha Denshi Co.
@@ -320,7 +322,7 @@ static ADDRESS_MAP_START( exctsccr_main_map, AS_PROGRAM, 8, champbas_state )
 	AM_RANGE(0xa002, 0xa002) AM_WRITE(champbas_gfxbank_w)
 	AM_RANGE(0xa003, 0xa003) AM_WRITE(champbas_flipscreen_w)
 	AM_RANGE(0xa006, 0xa006) AM_WRITE(champbas_mcu_halt_w)
-	AM_RANGE(0xa007, 0xa007) AM_WRITENOP /* This is also MCU control, but i dont need it */
+	AM_RANGE(0xa007, 0xa007) AM_WRITENOP /* This is also MCU control, but I don't need it */
 
 	AM_RANGE(0xa040, 0xa06f) AM_WRITEONLY AM_SHARE("spriteram") /* Sprite pos */
 	AM_RANGE(0xa080, 0xa080) AM_WRITE(soundlatch_byte_w)
@@ -619,11 +621,12 @@ static MACHINE_CONFIG_START( talbot, champbas_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(champbas_state, screen_update_champbas)
 	MCFG_SCREEN_VBLANK_DRIVER(champbas_state, screen_eof_champbas)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(talbot)
-	MCFG_PALETTE_LENGTH(0x200)
-
-	MCFG_PALETTE_INIT_OVERRIDE(champbas_state,champbas)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", talbot)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(champbas_state,champbas)
 	MCFG_VIDEO_START_OVERRIDE(champbas_state,champbas)
 
 	/* sound hardware */
@@ -654,11 +657,12 @@ static MACHINE_CONFIG_START( champbas, champbas_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(champbas_state, screen_update_champbas)
 	MCFG_SCREEN_VBLANK_DRIVER(champbas_state, screen_eof_champbas)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(champbas)
-	MCFG_PALETTE_LENGTH(0x200)
-
-	MCFG_PALETTE_INIT_OVERRIDE(champbas_state,champbas)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", champbas)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(champbas_state,champbas)
 	MCFG_VIDEO_START_OVERRIDE(champbas_state,champbas)
 
 	/* sound hardware */
@@ -711,11 +715,12 @@ static MACHINE_CONFIG_START( exctsccr, champbas_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(champbas_state, screen_update_exctsccr)
 	MCFG_SCREEN_VBLANK_DRIVER(champbas_state, screen_eof_champbas)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(exctsccr)
-	MCFG_PALETTE_LENGTH(0x200)
-
-	MCFG_PALETTE_INIT_OVERRIDE(champbas_state,exctsccr)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", exctsccr)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(champbas_state,exctsccr)
 	MCFG_VIDEO_START_OVERRIDE(champbas_state,exctsccr)
 
 	/* sound hardware */
@@ -762,11 +767,12 @@ static MACHINE_CONFIG_START( exctsccrb, champbas_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(champbas_state, screen_update_exctsccr)
 	MCFG_SCREEN_VBLANK_DRIVER(champbas_state, screen_eof_champbas)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(exctsccr)
-	MCFG_PALETTE_LENGTH(0x200)
-
-	MCFG_PALETTE_INIT_OVERRIDE(champbas_state,exctsccr)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", exctsccr)
+	MCFG_PALETTE_ADD("palette", 512)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(champbas_state,exctsccr)
 	MCFG_VIDEO_START_OVERRIDE(champbas_state,exctsccr)
 
 	/* sound hardware */
@@ -797,7 +803,7 @@ ROM_START( talbot )
 	ROM_LOAD( "16.11i", 0x5000, 0x1000, CRC(1612adf5) SHA1(9adeb21d5d1692f6e31460062f03f2008076b307) )
 
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8201.bin", 0x0000, 0x2000, CRC(b77931ac) SHA1(405b02585e80d95a2821455538c5c2c31ce262d1) )
+	ROM_LOAD( "alpha-8201__44801a75__2f25.bin", 0x0000, 0x2000, CRC(b77931ac) SHA1(405b02585e80d95a2821455538c5c2c31ce262d1) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 ) // chars
 	ROM_LOAD( "7.6a", 0x0000, 0x1000, CRC(bde14194) SHA1(f8f569342a3094eb5450a30b8ab87901b98e6061) )
@@ -844,7 +850,7 @@ ROM_START( champbasj )
 	ROM_LOAD( "18.2n", 0x4000, 0x2000, CRC(2dc484dd) SHA1(28bd68c787d7e6989849ca52009948dbd5cdcc79) )
 
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8201.bin", 0x0000, 0x2000, CRC(b77931ac) SHA1(405b02585e80d95a2821455538c5c2c31ce262d1) )
+	ROM_LOAD( "alpha-8201__44801a75__2f25.bin", 0x0000, 0x2000, CRC(b77931ac) SHA1(405b02585e80d95a2821455538c5c2c31ce262d1) )
 
 	ROM_REGION( 0x2000, "gfx1", 0 ) // chars + sprites: rearranged by DRIVER_INIT to leave only chars
 	ROM_LOAD( "14.5e", 0x0000, 0x2000, CRC(1b8202b3) SHA1(889b77fc3d0cb029baf8c47be260f513f3ed59bd) )
@@ -893,7 +899,7 @@ ROM_START( champbb2 )
 
 	// the pcb has a 8302 on it, though only the 8201 instructions are used
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8302.bin", 0x0000, 0x2000, CRC(edabac6c) SHA1(eaf1c51b63023256df526b0d3fd53cffc919c901) )
+	ROM_LOAD( "alpha-8302__44801b35.bin", 0x0000, 0x2000, CRC(edabac6c) SHA1(eaf1c51b63023256df526b0d3fd53cffc919c901) )
 
 	ROM_REGION( 0x2000, "gfx1", 0 ) // chars + sprites: rearranged by DRIVER_INIT to leave only chars
 	ROM_LOAD( "epr5936", 0x0000, 0x2000, CRC(c4a4df75) SHA1(7b85dbf405697b0b8881f910c08f6db6c828b19a) )
@@ -921,7 +927,7 @@ ROM_START( champbb2a )
 
 	// the pcb has a 8302 on it, though only the 8201 instructions are used
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8302.bin", 0x0000, 0x2000, CRC(edabac6c) SHA1(eaf1c51b63023256df526b0d3fd53cffc919c901) )
+	ROM_LOAD( "alpha-8302__44801b35.bin", 0x0000, 0x2000, CRC(edabac6c) SHA1(eaf1c51b63023256df526b0d3fd53cffc919c901) )
 
 	ROM_REGION( 0x2000, "gfx1", 0 ) // chars + sprites: rearranged by DRIVER_INIT to leave only chars
 	ROM_LOAD( "epr5936", 0x0000, 0x2000, CRC(c4a4df75) SHA1(7b85dbf405697b0b8881f910c08f6db6c828b19a) )
@@ -949,7 +955,7 @@ ROM_START( champbb2j )
 
 	// the pcb has a 8302 on it, though only the 8201 instructions are used
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8302.bin", 0x0000, 0x2000, CRC(edabac6c) SHA1(eaf1c51b63023256df526b0d3fd53cffc919c901) )
+	ROM_LOAD( "alpha-8302__44801b35.bin", 0x0000, 0x2000, CRC(edabac6c) SHA1(eaf1c51b63023256df526b0d3fd53cffc919c901) )
 
 	ROM_REGION( 0x2000, "gfx1", 0 ) // chars + sprites: rearranged by DRIVER_INIT to leave only chars
 	ROM_LOAD( "4.6a", 0x0000, 0x2000, CRC(c4a4df75) SHA1(7b85dbf405697b0b8881f910c08f6db6c828b19a) )

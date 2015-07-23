@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     RCA CDP1869/1870/1876 Video Interface System (VIS) emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -95,7 +94,7 @@ ADDRESS_MAP_END
 
 inline bool cdp1869_device::is_ntsc()
 {
-	return m_in_pal_ntsc_func() ? false : true;
+	return m_read_pal_ntsc() ? false : true;
 }
 
 
@@ -130,9 +129,9 @@ inline UINT8 cdp1869_device::read_char_ram_byte(offs_t pma, offs_t cma, UINT8 pm
 {
 	UINT8 data = 0;
 
-	if (m_in_char_ram_func != NULL)
+	if (!m_in_char_ram_func.isnull())
 	{
-		data = m_in_char_ram_func(this, pma, cma, pmd);
+		data = m_in_char_ram_func(pma, cma, pmd);
 	}
 
 	return data;
@@ -146,9 +145,9 @@ inline UINT8 cdp1869_device::read_char_ram_byte(offs_t pma, offs_t cma, UINT8 pm
 
 inline void cdp1869_device::write_char_ram_byte(offs_t pma, offs_t cma, UINT8 pmd, UINT8 data)
 {
-	if (m_out_char_ram_func != NULL)
+	if (!m_out_char_ram_func.isnull())
 	{
-		m_out_char_ram_func(this, pma, cma, pmd, data);
+		m_out_char_ram_func(pma, cma, pmd, data);
 	}
 }
 
@@ -161,9 +160,9 @@ inline int cdp1869_device::read_pcb(offs_t pma, offs_t cma, UINT8 pmd)
 {
 	int pcb = 0;
 
-	if (m_in_pcb_func != NULL)
+	if (!m_in_pcb_func.isnull())
 	{
-		pcb = m_in_pcb_func(this, pma, cma, pmd);
+		pcb = m_in_pcb_func(pma, cma, pmd);
 	}
 
 	return pcb;
@@ -232,7 +231,7 @@ inline rgb_t cdp1869_device::get_rgb(int i, int c, int l)
 	g = (c & 1) ? luma : 0;
 	b = (c & 2) ? luma : 0;
 
-	return MAKE_RGB(r, g, b);
+	return rgb_t(r, g, b);
 }
 
 
@@ -341,38 +340,33 @@ inline int cdp1869_device::get_pen(int ccb0, int ccb1, int pcb)
 //  cdp1869_device - constructor
 //-------------------------------------------------
 
-cdp1869_device::cdp1869_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, CDP1869, "RCA CDP1869", tag, owner, clock),
-		device_sound_interface(mconfig, *this),
-		device_memory_interface(mconfig, *this),
-		m_stream(NULL),
-		m_space_config("pageram", ENDIANNESS_LITTLE, 8, 11, 0, NULL, *ADDRESS_MAP_NAME(cdp1869))
+cdp1869_device::cdp1869_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
+	device_t(mconfig, CDP1869, "RCA CDP1869", tag, owner, clock, "cdp1869", __FILE__),
+	device_sound_interface(mconfig, *this),
+	device_video_interface(mconfig, *this),
+	device_memory_interface(mconfig, *this),
+	m_read_pal_ntsc(*this),
+	m_write_prd(*this),
+	m_color_clock(0),
+	m_stream(NULL),
+	m_palette(*this, "palette"),
+	m_space_config("pageram", ENDIANNESS_LITTLE, 8, 11, 0, NULL, *ADDRESS_MAP_NAME(cdp1869))
 {
 }
 
+static MACHINE_CONFIG_FRAGMENT( cdp1869 )
+	MCFG_PALETTE_ADD("palette", 8+64)
+	MCFG_PALETTE_INIT_OWNER(cdp1869_device, cdp1869)
+MACHINE_CONFIG_END
 
 //-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
+//  machine_config_additions - return a pointer to
+//  the device's machine fragment
 //-------------------------------------------------
 
-void cdp1869_device::device_config_complete()
+machine_config_constructor cdp1869_device::device_mconfig_additions() const
 {
-	// inherit a copy of the static data
-	const cdp1869_interface *intf = reinterpret_cast<const cdp1869_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<cdp1869_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&in_pal_ntsc_cb, 0, sizeof(in_pal_ntsc_cb));
-		memset(&out_prd_cb, 0, sizeof(out_prd_cb));
-		in_pcb_cb = NULL;
-		in_char_ram_cb = NULL;
-		out_char_ram_cb = NULL;
-	}
+	return MACHINE_CONFIG_NAME( cdp1869 );
 }
 
 
@@ -382,16 +376,12 @@ void cdp1869_device::device_config_complete()
 
 void cdp1869_device::device_start()
 {
-	// get the screen device
-	m_screen = machine().device<screen_device>(screen_tag);
-	assert(m_screen != NULL);
-
 	// resolve callbacks
-	m_in_pal_ntsc_func.resolve(in_pal_ntsc_cb, *this);
-	m_out_prd_func.resolve(out_prd_cb, *this);
-	m_in_pcb_func = in_pcb_cb;
-	m_in_char_ram_func = in_char_ram_cb;
-	m_out_char_ram_func = out_char_ram_cb;
+	m_read_pal_ntsc.resolve_safe(0);
+	m_write_prd.resolve_safe();
+	m_in_pcb_func.bind_relative_to(*owner());
+	m_in_char_ram_func.bind_relative_to(*owner());
+	m_out_char_ram_func.bind_relative_to(*owner());
 
 	// allocate timers
 	m_prd_timer = timer_alloc();
@@ -399,7 +389,6 @@ void cdp1869_device::device_start()
 	update_prd_changed_timer();
 
 	// initialize palette
-	initialize_palette();
 	m_bkg = 0;
 
 	// create sound stream
@@ -464,7 +453,7 @@ void cdp1869_device::device_post_load()
 
 void cdp1869_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
 {
-	m_out_prd_func(param);
+	m_write_prd(param);
 	m_prd = param;
 
 	update_prd_changed_timer();
@@ -486,14 +475,14 @@ const address_space_config *cdp1869_device::memory_space_config(address_spacenum
 //  initialize_palette - initialize palette
 //-------------------------------------------------
 
-void cdp1869_device::initialize_palette()
+PALETTE_INIT_MEMBER(cdp1869_device, cdp1869)
 {
 	// color-on-color display (CFC=0)
 	int i;
 
 	for (i = 0; i < 8; i++)
 	{
-		m_palette[i] = get_rgb(i, i, 15);
+		palette.set_pen_color(i, get_rgb(i, i, 15));
 	}
 
 	// tone-on-tone display (CFC=1)
@@ -501,7 +490,7 @@ void cdp1869_device::initialize_palette()
 	{
 		for (int l = 0; l < 8; l++)
 		{
-			m_palette[i] = get_rgb(i, c, l);
+			palette.set_pen_color(i, get_rgb(i, c, l));
 			i++;
 		}
 	}
@@ -579,6 +568,7 @@ void cdp1869_device::sound_stream_update(sound_stream &stream, stream_sample_t *
 void cdp1869_device::draw_line(bitmap_rgb32 &bitmap, const rectangle &rect, int x, int y, UINT8 data, int color)
 {
 	int i;
+	pen_t fg = m_palette->pen(color);
 
 	data <<= 2;
 
@@ -586,20 +576,20 @@ void cdp1869_device::draw_line(bitmap_rgb32 &bitmap, const rectangle &rect, int 
 	{
 		if (data & 0x80)
 		{
-			bitmap.pix32(y, x) = m_palette[color];
+			bitmap.pix32(y, x) = fg;
 
 			if (!m_fresvert)
 			{
-				bitmap.pix32(y + 1, x) = m_palette[color];
+				bitmap.pix32(y + 1, x) = fg;
 			}
 
 			if (!m_freshorz)
 			{
-				bitmap.pix32(y, x + 1) = m_palette[color];
+				bitmap.pix32(y, x + 1) = fg;
 
 				if (!m_fresvert)
 				{
-					bitmap.pix32(y + 1, x + 1) = m_palette[color];
+					bitmap.pix32(y + 1, x + 1) = fg;
 				}
 			}
 		}
@@ -936,7 +926,7 @@ READ_LINE_MEMBER( cdp1869_device::predisplay_r )
 
 READ_LINE_MEMBER( cdp1869_device::pal_ntsc_r )
 {
-	return m_in_pal_ntsc_func();
+	return m_read_pal_ntsc();
 }
 
 
@@ -972,7 +962,7 @@ UINT32 cdp1869_device::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 	}
 
 	outer &= cliprect;
-	bitmap.fill(m_palette[m_bkg], outer);
+	bitmap.fill(m_palette->pen(m_bkg), outer);
 
 	if (!m_dispoff)
 	{

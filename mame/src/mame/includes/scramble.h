@@ -1,23 +1,32 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #include "machine/i8255.h"
 #include "includes/galaxold.h"
+#include "sound/tms5110.h"
+#include "sound/digitalk.h"
 
 class scramble_state : public galaxold_state
 {
 public:
 	scramble_state(const machine_config &mconfig, device_type type, const char *tag)
 		: galaxold_state(mconfig, type, tag),
-			m_ppi8255_0(*this, "ppi8255_0"),
-			m_ppi8255_1(*this, "ppi8255_1"),
-			m_soundram(*this, "soundram")
-	{ }
+		m_konami_7474(*this, "konami_7474"),
+		m_ppi8255_0(*this, "ppi8255_0"),
+		m_ppi8255_1(*this, "ppi8255_1"),
+		m_tmsprom(*this, "tmsprom"),
+		m_soundram(*this, "soundram"),
+		m_digitalker(*this, "digitalker")
+	{
+	}
 
+	optional_device<ttl7474_device> m_konami_7474;
 	optional_device<i8255_device>  m_ppi8255_0;
 	optional_device<i8255_device>  m_ppi8255_1;
+	optional_device<tmsprom_device>  m_tmsprom;
 	optional_shared_ptr<UINT8> m_soundram;
+	optional_device<digitalker_device> m_digitalker;
 
 	UINT8 m_cavelon_bank;
-	UINT8 m_security_2B_counter;
-	UINT8 m_xb;
 
 	// harem
 	UINT8 m_harem_decrypt_mode;
@@ -34,15 +43,22 @@ public:
 	DECLARE_READ8_MEMBER(mars_ppi8255_0_r);
 	DECLARE_READ8_MEMBER(mars_ppi8255_1_r);
 	DECLARE_WRITE8_MEMBER(scramble_soundram_w);
+	DECLARE_READ8_MEMBER(scramble_portB_r);
+	DECLARE_READ8_MEMBER(hustler_portB_r);
 	DECLARE_WRITE8_MEMBER(hotshock_sh_irqtrigger_w);
+	DECLARE_READ8_MEMBER(hotshock_soundlatch_r);
 	DECLARE_WRITE8_MEMBER(scramble_filter_w);
 	DECLARE_WRITE8_MEMBER(frogger_filter_w);
 	DECLARE_WRITE8_MEMBER(mars_ppi8255_0_w);
 	DECLARE_WRITE8_MEMBER(mars_ppi8255_1_w);
+	DECLARE_WRITE8_MEMBER(ad2083_tms5110_ctrl_w);
 
+	// harem
 	DECLARE_WRITE8_MEMBER(harem_decrypt_bit_w);
 	DECLARE_WRITE8_MEMBER(harem_decrypt_clk_w);
 	DECLARE_WRITE8_MEMBER(harem_decrypt_rst_w);
+	DECLARE_READ8_MEMBER(harem_digitalker_intr_r);
+	DECLARE_WRITE8_MEMBER(harem_digitalker_control_w);
 
 	DECLARE_DRIVER_INIT(cavelon);
 	DECLARE_DRIVER_INIT(mariner);
@@ -70,8 +86,6 @@ public:
 	DECLARE_DRIVER_INIT(billiard);
 	DECLARE_MACHINE_RESET(scramble);
 	DECLARE_MACHINE_RESET(explorer);
-	DECLARE_WRITE8_MEMBER(scramble_protection_w);
-	DECLARE_READ8_MEMBER(scramble_protection_r);
 	DECLARE_WRITE_LINE_MEMBER(scramble_sh_7474_q_callback);
 	void cavelon_banksw();
 	inline int bit(int i,int n);
@@ -83,29 +97,12 @@ public:
 	DECLARE_WRITE8_MEMBER( cavelon_banksw_w );
 	DECLARE_READ8_MEMBER( hunchbks_mirror_r );
 	DECLARE_WRITE8_MEMBER( hunchbks_mirror_w );
+	void sh_init();
+	DECLARE_WRITE8_MEMBER( scramble_sh_irqtrigger_w );
+	DECLARE_WRITE8_MEMBER( mrkougar_sh_irqtrigger_w );
+	IRQ_CALLBACK_MEMBER( scramble_sh_irq_callback );
 };
 
-
-/*----------- defined in machine/scramble.c -----------*/
-
-extern const i8255_interface(scramble_ppi_0_intf);
-extern const i8255_interface(scramble_ppi_1_intf);
-extern const i8255_interface(stratgyx_ppi_1_intf);
-
 /*----------- defined in audio/scramble.c -----------*/
-
-void scramble_sh_init(running_machine &machine);
-
-
-DECLARE_READ8_DEVICE_HANDLER( scramble_portB_r );
-DECLARE_READ8_DEVICE_HANDLER( frogger_portB_r );
-
-DECLARE_READ8_DEVICE_HANDLER( hotshock_soundlatch_r );
-
-DECLARE_WRITE8_DEVICE_HANDLER( scramble_sh_irqtrigger_w );
-DECLARE_WRITE8_DEVICE_HANDLER( mrkougar_sh_irqtrigger_w );
-
-DECLARE_WRITE8_DEVICE_HANDLER( harem_portA_w );
-DECLARE_WRITE8_DEVICE_HANDLER( harem_portB_w );
 
 MACHINE_CONFIG_EXTERN( ad2083_audio );

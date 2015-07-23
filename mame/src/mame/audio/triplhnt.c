@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Derrick Renaud
 /*************************************************************************
 
     audio\triplhnt.c
@@ -8,20 +10,13 @@
 #include "sound/discrete.h"
 
 
-static const char *const triplhnt_sample_names[] =
+const char *const triplhnt_sample_names[] =
 {
 	"*triplhnt",
 	"bear_rac",
 	"witch",
 	0
 };
-
-const samples_interface triplhnt_samples_interface =
-{
-	2,  /* 2 channels */
-	triplhnt_sample_names
-};
-
 
 /************************************************************************/
 /* triplhnt Sound System Analog emulation                               */

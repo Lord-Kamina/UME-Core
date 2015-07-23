@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
   video/balsente.c
@@ -63,11 +65,11 @@ WRITE8_MEMBER(balsente_state::balsente_palette_select_w)
 	if (m_palettebank_vis != (data & 3))
 	{
 		/* update the scanline palette */
-		machine().primary_screen->update_partial(machine().primary_screen->vpos() - 1 + BALSENTE_VBEND);
+		m_screen->update_partial(m_screen->vpos() - 1 + BALSENTE_VBEND);
 		m_palettebank_vis = data & 3;
 	}
 
-	logerror("balsente_palette_select_w(%d) scanline=%d\n", data & 3, machine().primary_screen->vpos());
+	logerror("balsente_palette_select_w(%d) scanline=%d\n", data & 3, m_screen->vpos());
 }
 
 
@@ -88,7 +90,7 @@ WRITE8_MEMBER(balsente_state::balsente_paletteram_w)
 	g = m_generic_paletteram_8[(offset & ~3) + 1];
 	b = m_generic_paletteram_8[(offset & ~3) + 2];
 
-	palette_set_color_rgb(machine(), offset / 4, pal4bit(r), pal4bit(g), pal4bit(b));
+	m_palette->set_pen_color(offset / 4, pal4bit(r), pal4bit(g), pal4bit(b));
 }
 
 
@@ -104,7 +106,7 @@ WRITE8_MEMBER(balsente_state::shrike_sprite_select_w)
 	if( m_sprite_data != m_sprite_bank[(data & 0x80 >> 7) ^ 1 ])
 	{
 		logerror( "shrike_sprite_select_w( 0x%02x )\n", data );
-		machine().primary_screen->update_partial(machine().primary_screen->vpos() - 1 + BALSENTE_VBEND);
+		m_screen->update_partial(m_screen->vpos() - 1 + BALSENTE_VBEND);
 		m_sprite_data = m_sprite_bank[(data & 0x80 >> 7) ^ 1];
 	}
 
@@ -137,7 +139,7 @@ void balsente_state::draw_one_sprite(bitmap_ind16 &bitmap, const rectangle &clip
 	{
 		if (ypos >= (16 + BALSENTE_VBEND) && ypos >= cliprect.min_y && ypos <= cliprect.max_y)
 		{
-			const pen_t *pens = &machine().pens[m_palettebank_vis * 256];
+			const pen_t *pens = &m_palette->pen(m_palettebank_vis * 256);
 			UINT8 *old = &m_expanded_videoram[(ypos - BALSENTE_VBEND) * 256 + xpos];
 			int currx = xpos;
 
@@ -204,7 +206,7 @@ void balsente_state::draw_one_sprite(bitmap_ind16 &bitmap, const rectangle &clip
 
 UINT32 balsente_state::screen_update_balsente(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	const pen_t *pens = &machine().pens[m_palettebank_vis * 256];
+	const pen_t *pens = &m_palette->pen(m_palettebank_vis * 256);
 	int y, i;
 
 	/* draw scanlines from the VRAM directly */

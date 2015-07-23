@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Brad Oliver
 /*************************************************************************
 
     Jack the Giant Killer
@@ -14,7 +16,10 @@ public:
 		m_spriteram(*this, "spriteram"),
 		m_scrollram(*this, "scrollram"),
 		m_videoram(*this, "videoram"),
-		m_colorram(*this, "colorram")
+		m_colorram(*this, "colorram"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
+		m_decrypted_opcodes(*this, "decrypted_opcodes")
 	{ }
 
 	/* device- and memory pointers */
@@ -24,6 +29,9 @@ public:
 	optional_shared_ptr<UINT8> m_scrollram;
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_colorram;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+	optional_shared_ptr<UINT8> m_decrypted_opcodes;
 
 	/* video-related */
 	tilemap_t    *m_bg_tilemap;

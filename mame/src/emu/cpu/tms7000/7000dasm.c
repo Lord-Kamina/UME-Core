@@ -1,3 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Tim Lindner
+/*
+
+  TMS7000 disassembler
+
+*/
+
 #include "emu.h"
 #include "debugger.h"
 #include "tms7000.h"
@@ -5,15 +13,15 @@
 enum operandtype { DONE, NONE, UI8, I8, UI16, I16, PCREL, PCABS, TRAP };
 
 struct oprandinfo {
-	char        opstr[4][12];
+	char opstr[4][12];
 	operandtype decode[4];
 };
 
-struct opcodeinfo {
-	int     opcode;
-	char        name[8];
-	int     operand;
-	UINT32      s_flag;
+struct tms7000_opcodeinfo {
+	int opcode;
+	char name[8];
+	int operand;
+	UINT32 s_flag;
 };
 
 static const oprandinfo of[] = {
@@ -76,7 +84,7 @@ static const oprandinfo of[] = {
 /* 45 */ { {" *R%u",    "",         "",         ""},        {UI8, DONE, DONE, DONE} }
 };
 
-static const opcodeinfo opcodes[] = {
+static const tms7000_opcodeinfo opcodes[] = {
 	{0x69, "ADC", 0, 0 },
 	{0x19, "ADC", 1, 0 },
 	{0x39, "ADC", 2, 0 },
@@ -367,13 +375,13 @@ CPU_DISASSEMBLE( tms7000 )
 
 	opcode = oprom[pos++];
 
-	for( i=0; i<sizeof(opcodes) / sizeof(opcodeinfo); i++ )
+	for( i=0; i<sizeof(opcodes) / sizeof(tms7000_opcodeinfo); i++ )
 	{
 		if( opcode == opcodes[i].opcode )
 		{
 			/* We found a match */
 
-			int             j,k,vector;
+			int j,k,vector;
 			UINT8   a;
 			INT8    b;
 			UINT16  c;
@@ -395,32 +403,27 @@ CPU_DISASSEMBLE( tms7000 )
 					case UI8:
 						a = (UINT8)opram[pos++];
 						buffer += sprintf(buffer, of[j].opstr[k], (unsigned int)a);
-						//size += 1;
 						break;
 					case I8:
 						b = (INT8)opram[pos++];
 						buffer += sprintf (buffer, of[j].opstr[k], (INT8)b);
-						//size += 1;
 						break;
 					case UI16:
 						c = (UINT16)opram[pos++];
 						c <<= 8;
 						c += opram[pos++];
 						buffer += sprintf (buffer, of[j].opstr[k], (unsigned int)c);
-						//size += 2;
 						break;
 					case I16:
 						d = (INT16)opram[pos++];
 						d <<= 8;
 						d += opram[pos++];
 						buffer += sprintf (buffer, of[j].opstr[k], (signed int)d);
-						//size += 2;
 						break;
 					case PCREL:
 						b = (INT8)opram[pos++];
 						sprintf(tmpbuf, "$%04X", pc+2+k+b);
 						buffer += sprintf (buffer, of[j].opstr[k], tmpbuf);
-						//size += 1;
 						break;
 					case PCABS:
 						c = (UINT16)opram[pos++];
@@ -428,11 +431,10 @@ CPU_DISASSEMBLE( tms7000 )
 						c += opram[pos++];
 						sprintf(tmpbuf, "$%04X", c);
 						buffer += sprintf (buffer, of[j].opstr[k], tmpbuf);
-						//size += 2;
 						break;
 					case TRAP:
 						vector = 0xffff - ((0xff - opcode) * 2);
-						c = vector;//(UINT16)((memory_decrypted_read_byte( vector-1 ) << 8) + memory_decrypted_read_byte( vector ));
+						c = vector;
 						break;
 				}
 			}

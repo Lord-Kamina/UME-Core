@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Videa Gridlee hardware
@@ -103,15 +105,15 @@ TIMER_CALLBACK_MEMBER(gridlee_state::irq_timer_tick)
 {
 	/* next interrupt after scanline 256 is scanline 64 */
 	if (param == 256)
-		m_irq_timer->adjust(machine().primary_screen->time_until_pos(64), 64);
+		m_irq_timer->adjust(m_screen->time_until_pos(64), 64);
 	else
-		m_irq_timer->adjust(machine().primary_screen->time_until_pos(param + 64), param + 64);
+		m_irq_timer->adjust(m_screen->time_until_pos(param + 64), param + 64);
 
 	/* IRQ starts on scanline 0, 64, 128, etc. */
 	m_maincpu->set_input_line(M6809_IRQ_LINE, ASSERT_LINE);
 
 	/* it will turn off on the next HBLANK */
-	m_irq_off->adjust(machine().primary_screen->time_until_pos(param, GRIDLEE_HBSTART));
+	m_irq_off->adjust(m_screen->time_until_pos(param, GRIDLEE_HBSTART));
 }
 
 
@@ -124,13 +126,13 @@ TIMER_CALLBACK_MEMBER(gridlee_state::firq_off_tick)
 TIMER_CALLBACK_MEMBER(gridlee_state::firq_timer_tick)
 {
 	/* same time next frame */
-	m_firq_timer->adjust(machine().primary_screen->time_until_pos(FIRQ_SCANLINE));
+	m_firq_timer->adjust(m_screen->time_until_pos(FIRQ_SCANLINE));
 
 	/* IRQ starts on scanline FIRQ_SCANLINE? */
 	m_maincpu->set_input_line(M6809_FIRQ_LINE, ASSERT_LINE);
 
 	/* it will turn off on the next HBLANK */
-	m_firq_off->adjust(machine().primary_screen->time_until_pos(FIRQ_SCANLINE, GRIDLEE_HBSTART));
+	m_firq_off->adjust(m_screen->time_until_pos(FIRQ_SCANLINE, GRIDLEE_HBSTART));
 }
 
 void gridlee_state::machine_start()
@@ -151,8 +153,8 @@ void gridlee_state::machine_start()
 void gridlee_state::machine_reset()
 {
 	/* start timers to generate interrupts */
-	m_irq_timer->adjust(machine().primary_screen->time_until_pos(0));
-	m_firq_timer->adjust(machine().primary_screen->time_until_pos(FIRQ_SCANLINE));
+	m_irq_timer->adjust(m_screen->time_until_pos(0));
+	m_firq_timer->adjust(m_screen->time_until_pos(FIRQ_SCANLINE));
 }
 
 
@@ -398,14 +400,6 @@ static const char *const sample_names[] =
 	0   /* end of array */
 };
 
-static const samples_interface gridlee_samples_interface =
-{
-	8,  /* 8 channels */
-	sample_names
-};
-
-
-
 /*************************************
  *
  *  Machine driver
@@ -424,9 +418,10 @@ static MACHINE_CONFIG_START( gridlee, gridlee_state )
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(GRIDLEE_PIXEL_CLOCK, GRIDLEE_HTOTAL, GRIDLEE_HBEND, GRIDLEE_HBSTART, GRIDLEE_VTOTAL, GRIDLEE_VBEND, GRIDLEE_VBSTART)
 	MCFG_SCREEN_UPDATE_DRIVER(gridlee_state, screen_update_gridlee)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(2048)
-
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_INIT_OWNER(gridlee_state,gridlee)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -434,7 +429,9 @@ static MACHINE_CONFIG_START( gridlee, gridlee_state )
 	MCFG_SOUND_ADD("gridlee", GRIDLEE, 0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
-	MCFG_SAMPLES_ADD("samples", gridlee_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(8)
+	MCFG_SAMPLES_NAMES(sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.40)
 MACHINE_CONFIG_END
 

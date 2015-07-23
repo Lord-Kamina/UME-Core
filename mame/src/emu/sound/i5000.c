@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:hap
 /***************************************************************************
 
     i5000.c - Imagetek I5000 sound emulator
@@ -22,7 +24,7 @@
 const device_type I5000_SND = &device_creator<i5000snd_device>;
 
 i5000snd_device::i5000snd_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, I5000_SND, "I5000", tag, owner, clock),
+	: device_t(mconfig, I5000_SND, "I5000", tag, owner, clock, "i5000snd", __FILE__),
 		device_sound_interface(mconfig, *this)
 {
 }
@@ -41,7 +43,7 @@ void i5000snd_device::device_start()
 	m_lut_volume[0xff] = 0;
 
 	// create the stream
-	m_stream = machine().sound().stream_alloc(*this, 0, 2, clock() / 0x400, this);
+	m_stream = machine().sound().stream_alloc(*this, 0, 2, clock() / 0x400);
 
 	m_rom_base = (UINT16 *)device().machine().root_device().memregion(":i5000snd")->base();
 	m_rom_mask = device().machine().root_device().memregion(":i5000snd")->bytes() / 2 - 1;

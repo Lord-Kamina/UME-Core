@@ -1,37 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Sega 16-bit common hardware
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -103,6 +74,8 @@ protected:
 	UINT8       m_palette_normal[32];       // RGB translations for normal pixels
 	UINT8       m_palette_shadow[32];       // RGB translations for shadowed pixels
 	UINT8       m_palette_hilight[32];      // RGB translations for hilighted pixels
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -128,7 +101,7 @@ public:
 	DECLARE_WRITE8_MEMBER( write );
 
 	// mapping helpers
-	void map_as_rom(UINT32 offset, UINT32 length, offs_t mirror, const char *bank_name, offs_t rgnoffset, write16_delegate whandler);
+	void map_as_rom(UINT32 offset, UINT32 length, offs_t mirror, const char *bank_name, const char *decrypted_bank_name, offs_t rgnoffset, write16_delegate whandler);
 	void map_as_ram(UINT32 offset, UINT32 length, offs_t mirror, const char *bank_share_name, write16_delegate whandler);
 	void map_as_handler(UINT32 offset, UINT32 length, offs_t mirror, read16_delegate rhandler, write16_delegate whandler);
 
@@ -162,23 +135,24 @@ private:
 		// configuration
 		void set_decrypt(fd1089_base_device *fd1089);
 		void set_decrypt(fd1094_device *fd1094);
-		void clear() { set(NULL, 0, 0, ~0, NULL); }
-		void set(memory_bank *bank, offs_t start, offs_t end, offs_t rgnoffs, UINT8 *src);
+		void clear() { set(NULL, NULL, 0, 0, ~0, NULL); }
+		void set(memory_bank *bank, memory_bank *decrypted_bank, offs_t start, offs_t end, offs_t rgnoffs, UINT8 *src);
 
 		// updating
 		void update();
-		void reset() { m_fd1089_decrypted.reset(); if (m_fd1094_cache != NULL) m_fd1094_cache->reset(); }
+		void reset() { m_fd1089_decrypted.clear(); if (m_fd1094_cache != NULL) m_fd1094_cache->reset(); }
 
 	private:
 		// internal state
 		memory_bank *           m_bank;
+		memory_bank *           m_decrypted_bank;
 		offs_t                  m_start;
 		offs_t                  m_end;
 		offs_t                  m_rgnoffs;
 		UINT8 *                 m_srcptr;
 		fd1089_base_device *    m_fd1089;
-		dynamic_array<UINT16>   m_fd1089_decrypted;
-		fd1094_decryption_cache *m_fd1094_cache;
+		std::vector<UINT16>   m_fd1089_decrypted;
+		auto_pointer<fd1094_decryption_cache> m_fd1094_cache;
 	};
 
 	// internal helpers
@@ -195,6 +169,7 @@ private:
 	// internal state
 	m68000_device *             m_cpu;
 	address_space *             m_space;
+	address_space *             m_decrypted_space;
 	UINT8                       m_regs[0x20];
 	UINT8                       m_curregion;
 	decrypt_bank                m_banks[8];

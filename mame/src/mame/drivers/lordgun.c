@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /*************************************************************************************************************
 
                                                 -= IGS Lord Of Gun =-
@@ -41,11 +43,12 @@ Notes:
 #include "cpu/m68000/m68000.h"
 #include "cpu/z80/z80.h"
 #include "machine/i8255.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "sound/3812intf.h"
 #include "sound/okim6295.h"
 #include "sound/ymf278b.h"
 #include "includes/lordgun.h"
+
 
 /***************************************************************************
 
@@ -59,15 +62,15 @@ WRITE16_MEMBER(lordgun_state::lordgun_protection_w)
 	{
 		case 0x00/2: // increment counter
 		{
-			m_lordgun_protection_data++;
-			m_lordgun_protection_data &= 0x1f;
+			m_protection_data++;
+			m_protection_data &= 0x1f;
 
 			return;
 		}
 
 		case 0xc0/2: // reset protection device
 		{
-			m_lordgun_protection_data = 0;
+			m_protection_data = 0;
 
 			return;
 		}
@@ -80,22 +83,22 @@ READ16_MEMBER(lordgun_state::lordgun_protection_r)
 	{
 		case 0x40/2: // bitswap and xor counter
 		{
-			UINT8 x = m_lordgun_protection_data;
+			UINT8 x = m_protection_data;
 
-			m_lordgun_protection_data  = ((( x >> 0) | ( x >> 1)) & 1) << 4;
-			m_lordgun_protection_data |=  ((~x >> 2) & 1) << 3;
-			m_lordgun_protection_data |= (((~x >> 4) | ( x >> 0)) & 1) << 2;
-			m_lordgun_protection_data |=  (( x >> 3) & 1) << 1;
-			m_lordgun_protection_data |= (((~x >> 0) | ( x >> 2)) & 1) << 0;
+			m_protection_data  = ((( x >> 0) | ( x >> 1)) & 1) << 4;
+			m_protection_data |=  ((~x >> 2) & 1) << 3;
+			m_protection_data |= (((~x >> 4) | ( x >> 0)) & 1) << 2;
+			m_protection_data |=  (( x >> 3) & 1) << 1;
+			m_protection_data |= (((~x >> 0) | ( x >> 2)) & 1) << 0;
 
 			return 0;
 		}
 
 		case 0x80/2: // return value if conditions are met
 		{
-			if ((m_lordgun_protection_data & 0x11) == 0x01) return 0x10;
-			if ((m_lordgun_protection_data & 0x06) == 0x02) return 0x10;
-			if ((m_lordgun_protection_data & 0x09) == 0x08) return 0x10;
+			if ((m_protection_data & 0x11) == 0x01) return 0x10;
+			if ((m_protection_data & 0x06) == 0x02) return 0x10;
+			if ((m_protection_data & 0x09) == 0x08) return 0x10;
 
 			return 0;
 		}
@@ -110,7 +113,7 @@ WRITE16_MEMBER(lordgun_state::aliencha_protection_w)
 	{
 		case 0xc0/2: // reset protection device
 		{
-			m_lordgun_protection_data = 0;
+			m_protection_data = 0;
 
 			return;
 		}
@@ -123,30 +126,30 @@ READ16_MEMBER(lordgun_state::aliencha_protection_r)
 	{
 		case 0x00/2: // de-increment counter
 		{
-			m_lordgun_protection_data--;
-			m_lordgun_protection_data &= 0x1f;
+			m_protection_data--;
+			m_protection_data &= 0x1f;
 
 			return 0;
 		}
 
 		case 0x40/2: // bitswap and xor counter
 		{
-			UINT8 x = m_lordgun_protection_data;
+			UINT8 x = m_protection_data;
 
-			m_lordgun_protection_data  = (((x >> 3) ^ (x >> 2)) & 1) << 4;
-			m_lordgun_protection_data |= (((x >> 2) ^ (x >> 1)) & 1) << 3;
-			m_lordgun_protection_data |= (((x >> 1) ^ (x >> 0)) & 1) << 2;
-			m_lordgun_protection_data |= (((x >> 4) ^ (x >> 0)) & 1) << 1;
-			m_lordgun_protection_data |= (((x >> 4) ^ (x >> 3)) & 1) << 0;
+			m_protection_data  = (((x >> 3) ^ (x >> 2)) & 1) << 4;
+			m_protection_data |= (((x >> 2) ^ (x >> 1)) & 1) << 3;
+			m_protection_data |= (((x >> 1) ^ (x >> 0)) & 1) << 2;
+			m_protection_data |= (((x >> 4) ^ (x >> 0)) & 1) << 1;
+			m_protection_data |= (((x >> 4) ^ (x >> 3)) & 1) << 0;
 
 			return 0;
 		}
 
 		case 0x80/2: // return value if conditions are met
 		{
-			if ((m_lordgun_protection_data & 0x11) == 0x00) return 0x20;
-			if ((m_lordgun_protection_data & 0x06) != 0x06) return 0x20;
-			if ((m_lordgun_protection_data & 0x18) == 0x00) return 0x20;
+			if ((m_protection_data & 0x11) == 0x00) return 0x20;
+			if ((m_protection_data & 0x06) != 0x06) return 0x20;
+			if ((m_protection_data & 0x18) == 0x00) return 0x20;
 
 			return 0;
 		}
@@ -183,13 +186,13 @@ WRITE8_MEMBER(lordgun_state::lordgun_eeprom_w)
 			lordgun_update_gun(i);
 
 	// latch the bit
-	m_eeprom->write_bit(data & 0x40);
+	m_eeprom->di_write((data & 0x40) >> 6);
 
 	// reset line asserted: reset.
-	m_eeprom->set_cs_line((data & 0x10) ? CLEAR_LINE : ASSERT_LINE );
+	m_eeprom->cs_write((data & 0x10) ? ASSERT_LINE : CLEAR_LINE );
 
 	// clock line asserted: write latch or select next bit to read
-	m_eeprom->set_clock_line((data & 0x20) ? ASSERT_LINE : CLEAR_LINE );
+	m_eeprom->clk_write((data & 0x20) ? ASSERT_LINE : CLEAR_LINE );
 
 	m_whitescreen = data & 0x80;
 
@@ -211,13 +214,13 @@ WRITE8_MEMBER(lordgun_state::aliencha_eeprom_w)
 	coin_counter_w(machine(), 1, data & 0x10);
 
 	// latch the bit
-	m_eeprom->write_bit(data & 0x80);
+	m_eeprom->di_write((data & 0x80) >> 7);
 
 	// reset line asserted: reset.
-	m_eeprom->set_cs_line((data & 0x20) ? CLEAR_LINE : ASSERT_LINE );
+	m_eeprom->cs_write((data & 0x20) ? ASSERT_LINE : CLEAR_LINE );
 
 	// clock line asserted: write latch or select next bit to read
-	m_eeprom->set_clock_line((data & 0x40) ? ASSERT_LINE : CLEAR_LINE );
+	m_eeprom->clk_write((data & 0x40) ? ASSERT_LINE : CLEAR_LINE );
 }
 
 
@@ -334,6 +337,9 @@ static ADDRESS_MAP_START( aliencha_map, AS_PROGRAM, 16, lordgun_state )
 	AM_RANGE(0x50b900, 0x50b9ff) AM_READWRITE(aliencha_protection_r, aliencha_protection_w)
 ADDRESS_MAP_END
 
+static ADDRESS_MAP_START( ymf278_map, AS_0, 8, lordgun_state)
+	AM_RANGE(0x000000, 0x1fffff) AM_ROM
+ADDRESS_MAP_END
 
 /***************************************************************************
 
@@ -451,7 +457,7 @@ static INPUT_PORTS_START( lordgun )
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1)
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2)
 	PORT_SERVICE_NO_TOGGLE( 0x40, IP_ACTIVE_LOW )
-	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)
 
 	PORT_START("START1")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_START1   )
@@ -572,7 +578,7 @@ static INPUT_PORTS_START( aliencha )
 	PORT_DIPUNUSED_DIPLOC( 0x0080, 0x0080, "SW3:8" ) /* Listed as "Unused" */
 
 	PORT_START("SERVICE")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_SERVICE1 )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNKNOWN  )
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN  )
@@ -619,50 +625,11 @@ INPUT_PORTS_END
 
 ***************************************************************************/
 
-static I8255A_INTERFACE( lordgun_ppi8255_0_intf )
+void lordgun_state::machine_start()
 {
-	DEVCB_INPUT_PORT("DIP"),            /* Port A read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,fake_w),              /* Port A write */
-	DEVCB_NULL,                         /* Port B read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,lordgun_eeprom_w),    /* Port B write */
-	DEVCB_INPUT_PORT("SERVICE"),        /* Port C read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,fake2_w)              /* Port C write */
-};
-
-static I8255A_INTERFACE( lordgun_ppi8255_1_intf )
-{
-	DEVCB_INPUT_PORT("START1"),         /* Port A read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,fake_w),              /* Port A write */
-	DEVCB_INPUT_PORT("START2"),         /* Port B read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,fake_w),              /* Port B write */
-	DEVCB_INPUT_PORT("COIN"),           /* Port C read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,fake_w)               /* Port C write */
-};
-
-static I8255A_INTERFACE( aliencha_ppi8255_0_intf )
-{
-	DEVCB_DRIVER_MEMBER(lordgun_state,aliencha_dip_r),      /* Port A read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,fake2_w),             /* Port A write */
-	DEVCB_NULL,                         /* Port B read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,aliencha_eeprom_w),   /* Port B write */
-	DEVCB_INPUT_PORT("SERVICE"),        /* Port C read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,aliencha_dip_w)       /* Port C write */
-};
-
-static I8255A_INTERFACE( aliencha_ppi8255_1_intf )
-{
-	DEVCB_INPUT_PORT("P1"),             /* Port A read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,fake_w),              /* Port A write */
-	DEVCB_INPUT_PORT("P2"),             /* Port B read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,fake_w),              /* Port B write */
-	DEVCB_INPUT_PORT("COIN"),           /* Port C read */
-	DEVCB_DRIVER_MEMBER(lordgun_state,fake_w)               /* Port C write */
-};
-
-
-WRITE_LINE_MEMBER(lordgun_state::soundirq)
-{
-	m_soundcpu->set_input_line(INPUT_LINE_IRQ0, state ? ASSERT_LINE : CLEAR_LINE);
+	save_item(NAME(m_protection_data));
+	save_item(NAME(m_priority));
+	save_item(NAME(m_whitescreen));
 }
 
 static MACHINE_CONFIG_START( lordgun, lordgun_state )
@@ -674,10 +641,22 @@ static MACHINE_CONFIG_START( lordgun, lordgun_state )
 	MCFG_CPU_PROGRAM_MAP(lordgun_soundmem_map)
 	MCFG_CPU_IO_MAP(lordgun_soundio_map)
 
-	MCFG_I8255A_ADD( "ppi8255_0", lordgun_ppi8255_0_intf )
-	MCFG_I8255A_ADD( "ppi8255_1", lordgun_ppi8255_1_intf )
+	MCFG_DEVICE_ADD("ppi8255_0", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(IOPORT("DIP"))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(lordgun_state, fake_w))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(lordgun_state, lordgun_eeprom_w))
+	MCFG_I8255_IN_PORTC_CB(IOPORT("SERVICE"))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(lordgun_state, fake2_w))
 
-	MCFG_EEPROM_93C46_ADD("eeprom")
+	MCFG_DEVICE_ADD("ppi8255_1", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(IOPORT("START1"))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(lordgun_state, fake_w))
+	MCFG_I8255_IN_PORTB_CB(IOPORT("START2"))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(lordgun_state, fake_w))
+	MCFG_I8255_IN_PORTC_CB(IOPORT("COIN"))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(lordgun_state, fake_w))
+
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -685,15 +664,16 @@ static MACHINE_CONFIG_START( lordgun, lordgun_state )
 	MCFG_SCREEN_SIZE(0x200, 0x100)
 	MCFG_SCREEN_VISIBLE_AREA(0,0x1c0-1, 0,0xe0-1)
 	MCFG_SCREEN_UPDATE_DRIVER(lordgun_state, screen_update_lordgun)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(lordgun)
-	MCFG_PALETTE_LENGTH(0x800 * 8)  // 0x800 real colors, repeated per priority level
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", lordgun)
+	MCFG_PALETTE_ADD("palette", 0x800 * 8)  // 0x800 real colors, repeated per priority level
 
 	// sound hardware
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM3812, XTAL_3_579545MHz)
-	MCFG_YM3812_IRQ_HANDLER(WRITELINE(lordgun_state, soundirq))
+	MCFG_YM3812_IRQ_HANDLER(INPUTLINE("soundcpu", 0))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 
 	MCFG_OKIM6295_ADD("oki", XTAL_20MHz / 20, OKIM6295_PIN7_HIGH)   // ? 5MHz can't be right!
@@ -710,10 +690,22 @@ static MACHINE_CONFIG_START( aliencha, lordgun_state )
 	MCFG_CPU_PROGRAM_MAP(lordgun_soundmem_map)
 	MCFG_CPU_IO_MAP(aliencha_soundio_map)
 
-	MCFG_I8255A_ADD( "ppi8255_0", aliencha_ppi8255_0_intf )
-	MCFG_I8255A_ADD( "ppi8255_1", aliencha_ppi8255_1_intf )
+	MCFG_DEVICE_ADD("ppi8255_0", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(lordgun_state, aliencha_dip_r))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(lordgun_state, fake2_w))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(lordgun_state, aliencha_eeprom_w))
+	MCFG_I8255_IN_PORTC_CB(IOPORT("SERVICE"))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(lordgun_state, aliencha_dip_w))
 
-	MCFG_EEPROM_93C46_ADD("eeprom")
+	MCFG_DEVICE_ADD("ppi8255_1", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(IOPORT("P1"))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(lordgun_state, fake_w))
+	MCFG_I8255_IN_PORTB_CB(IOPORT("P2"))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(lordgun_state, fake_w))
+	MCFG_I8255_IN_PORTC_CB(IOPORT("COIN"))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(lordgun_state, fake_w))
+
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -721,15 +713,17 @@ static MACHINE_CONFIG_START( aliencha, lordgun_state )
 	MCFG_SCREEN_SIZE(0x200, 0x100)
 	MCFG_SCREEN_VISIBLE_AREA(0,0x1c0-1, 0,0xe0-1)
 	MCFG_SCREEN_UPDATE_DRIVER(lordgun_state, screen_update_lordgun)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(lordgun)
-	MCFG_PALETTE_LENGTH(0x800 * 8)  // 0x800 real colors, repeated per priority level
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", lordgun)
+	MCFG_PALETTE_ADD("palette", 0x800 * 8)  // 0x800 real colors, repeated per priority level
 
 	// sound hardware
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymf", YMF278B, 26000000)            // ? 26MHz matches video (decrease for faster music tempo)
-	MCFG_YMF278B_IRQ_HANDLER(WRITELINE(lordgun_state, soundirq))
+	MCFG_DEVICE_ADDRESS_MAP(AS_0, ymf278_map)
+	MCFG_YMF278B_IRQ_HANDLER(INPUTLINE("soundcpu", 0))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.5)
 
 	MCFG_OKIM6295_ADD("oki", XTAL_20MHz / 20, OKIM6295_PIN7_HIGH)   // ? 5MHz can't be right
@@ -1043,13 +1037,12 @@ ROM_END
 
 ***************************************************************************/
 
-DRIVER_INIT_MEMBER(lordgun_state,lordgun)
+DRIVER_INIT_MEMBER(lordgun_state, lordgun)
 {
-	int i;
 	UINT16 *rom = (UINT16 *)memregion("maincpu")->base();
 	int rom_size = 0x100000;
 
-	for(i = 0; i < rom_size/2; i++)
+	for(int i = 0; i < rom_size/2; i++)
 	{
 		UINT16 x = rom[i];
 
@@ -1058,6 +1051,21 @@ DRIVER_INIT_MEMBER(lordgun_state,lordgun)
 
 		rom[i] = x;
 	}
+
+	save_item(NAME(m_old));
+
+	for (int i = 0; i < 2; i++)
+	{
+		save_item(NAME(m_gun[i].scr_x), i);
+		save_item(NAME(m_gun[i].scr_y), i);
+		save_item(NAME(m_gun[i].hw_x), i);
+		save_item(NAME(m_gun[i].hw_y), i);
+	}
+}
+
+DRIVER_INIT_MEMBER(lordgun_state, aliencha)
+{
+	save_item(NAME(m_aliencha_dip_sel));
 }
 
 /***************************************************************************
@@ -1066,6 +1074,6 @@ DRIVER_INIT_MEMBER(lordgun_state,lordgun)
 
 ***************************************************************************/
 
-GAME( 1994, lordgun,   0,        lordgun,  lordgun,  lordgun_state, lordgun,  ROT0, "IGS", "Lord of Gun (USA)",       GAME_IMPERFECT_GRAPHICS )
-GAME( 1994, aliencha,  0,        aliencha, aliencha, driver_device, 0,        ROT0, "IGS", "Alien Challenge (World)", 0 )
-GAME( 1994, alienchac, aliencha, aliencha, aliencha, driver_device, 0,        ROT0, "IGS", "Alien Challenge (China)", 0 )
+GAME( 1994, lordgun,   0,        lordgun,  lordgun,  lordgun_state, lordgun,  ROT0, "IGS", "Lord of Gun (USA)", GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1994, aliencha,  0,        aliencha, aliencha, driver_device, 0,        ROT0, "IGS", "Alien Challenge (World)", GAME_SUPPORTS_SAVE )
+GAME( 1994, alienchac, aliencha, aliencha, aliencha, driver_device, 0,        ROT0, "IGS", "Alien Challenge (China)", GAME_SUPPORTS_SAVE )

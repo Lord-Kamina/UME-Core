@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Fabio Priuli
 /***************************************************************************
 
     Midway 8080-based black and white hardware
@@ -16,7 +18,7 @@
 const device_type MB14241 = &device_creator<mb14241_device>;
 
 mb14241_device::mb14241_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MB14241, "MB14241", tag, owner, clock)
+	: device_t(mconfig, MB14241, "MB14241 Data Shifter", tag, owner, clock, "mb14241", __FILE__)
 {
 }
 

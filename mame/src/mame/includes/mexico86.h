@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi
 #include "sound/2203intf.h"
 
 class mexico86_state : public driver_device
@@ -12,7 +14,9 @@ public:
 		m_audiocpu(*this, "audiocpu"),
 		m_subcpu(*this, "sub"),
 		m_mcu(*this, "mcu"),
-		m_ymsnd(*this, "ymsnd")
+		m_ymsnd(*this, "ymsnd"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")
 	{
 	}
 
@@ -45,6 +49,8 @@ public:
 	optional_device<cpu_device> m_subcpu;
 	optional_device<cpu_device> m_mcu;
 	required_device<ym2203_device> m_ymsnd;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	/* queue */
 	UINT8 m_queue[64];

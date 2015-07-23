@@ -1,3 +1,6 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
+#include "sound/msm5232.h"
 
 class nycaptor_state : public driver_device
 {
@@ -7,23 +10,28 @@ public:
 		m_videoram(*this, "videoram"),
 		m_scrlram(*this, "scrlram"),
 		m_sharedram(*this, "sharedram"),
+		m_spriteram(*this, "spriteram"),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
 		m_subcpu(*this, "sub"),
-		m_mcu(*this, "mcu"){ }
+		m_mcu(*this, "mcu"),
+		m_msm(*this, "msm"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_scrlram;
 	required_shared_ptr<UINT8> m_sharedram;
-
-	UINT8 *      m_spriteram;
+	required_shared_ptr<UINT8> m_spriteram;
 
 	/* video-related */
 	tilemap_t *m_bg_tilemap;
-	int m_char_bank;
-	int m_palette_bank;
-	int m_gfxctrl;
+	std::vector<UINT8> m_paletteram;
+	std::vector<UINT8> m_paletteram_ext;
+	UINT8 m_gfxctrl;
+	UINT8 m_char_bank;
+	UINT8 m_palette_bank;
 
 	/* mcu */
 	UINT8 m_from_main;
@@ -54,11 +62,13 @@ public:
 	required_device<cpu_device> m_audiocpu;
 	required_device<cpu_device> m_subcpu;
 	optional_device<cpu_device> m_mcu;
+	required_device<msm5232_device> m_msm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	DECLARE_WRITE8_MEMBER(sub_cpu_halt_w);
 	DECLARE_READ8_MEMBER(from_snd_r);
 	DECLARE_WRITE8_MEMBER(to_main_w);
-	DECLARE_READ8_MEMBER(nycaptor_sharedram_r);
-	DECLARE_WRITE8_MEMBER(nycaptor_sharedram_w);
 	DECLARE_READ8_MEMBER(nycaptor_b_r);
 	DECLARE_READ8_MEMBER(nycaptor_by_r);
 	DECLARE_READ8_MEMBER(nycaptor_bx_r);
@@ -87,15 +97,11 @@ public:
 	DECLARE_READ8_MEMBER(nycaptor_mcu_r);
 	DECLARE_READ8_MEMBER(nycaptor_mcu_status_r1);
 	DECLARE_READ8_MEMBER(nycaptor_mcu_status_r2);
-	DECLARE_WRITE8_MEMBER(nycaptor_spriteram_w);
-	DECLARE_READ8_MEMBER(nycaptor_spriteram_r);
 	DECLARE_WRITE8_MEMBER(nycaptor_videoram_w);
-	DECLARE_READ8_MEMBER(nycaptor_videoram_r);
 	DECLARE_WRITE8_MEMBER(nycaptor_palette_w);
 	DECLARE_READ8_MEMBER(nycaptor_palette_r);
 	DECLARE_WRITE8_MEMBER(nycaptor_gfxctrl_w);
 	DECLARE_READ8_MEMBER(nycaptor_gfxctrl_r);
-	DECLARE_READ8_MEMBER(nycaptor_scrlram_r);
 	DECLARE_WRITE8_MEMBER(nycaptor_scrlram_w);
 	DECLARE_WRITE8_MEMBER(unk_w);
 	DECLARE_DRIVER_INIT(cyclshtg);

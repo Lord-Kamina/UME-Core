@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 class pk8000_base_state : public driver_device
 {
 public:
@@ -21,7 +23,7 @@ public:
 	DECLARE_WRITE8_MEMBER(pk8000_84_porta_w);
 	DECLARE_WRITE8_MEMBER(pk8000_84_portc_w);
 
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(pk8000);
 
 	UINT32 pk8000_video_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, UINT8 *videomem);
 protected:

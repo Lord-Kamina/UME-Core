@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Dirk Best
 /****************************************************************************
 
     amiga.c
@@ -19,7 +21,6 @@
 #include "imgtool.h"
 #include "iflopimg.h"
 #include "formats/imageutl.h"
-#include "formats/ami_dsk.h"
 
 
 
@@ -1765,12 +1766,31 @@ static void amiga_image_info(imgtool_image *img, char *string, size_t len)
 {
 	imgtoolerr_t ret;
 	root_block root;
+	char info[255];
+	time_t t_c, t_v, t_r;
+	char c[19], v[19], r[19];
 
 	ret = read_root_block(img, &root);
 	if (ret) return;
 
-	memcpy(string, root.diskname, MIN(root.name_len, len));
-	string[MIN(root.name_len, len)] = '\0';
+	t_c = amiga_crack_time(&root.c);
+	t_v = amiga_crack_time(&root.v);
+	t_r = amiga_crack_time(&root.r);
+
+	strftime(c, sizeof(c), "%d-%b-%y %H:%M:%S", localtime(&t_c));
+	strftime(v, sizeof(v), "%d-%b-%y %H:%M:%S", localtime(&t_v));
+	strftime(r, sizeof(r), "%d-%b-%y %H:%M:%S", localtime(&t_r));
+
+	strcpy(info, "Volume     name: ");
+	strncat(info, (char *)root.diskname, root.name_len);
+	strcat(info, "\nVolume  created: ");
+	strcat(info, c);
+	strcat(info, "\nVolume modified: ");
+	strcat(info, v);
+	strcat(info, "\n  Root modified: ");
+	strcat(info, r);
+
+	strncpy(string, info, len);
 }
 
 

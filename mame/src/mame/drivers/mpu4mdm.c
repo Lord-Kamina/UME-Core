@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* MPU4 games by MDM */
 
 
@@ -7,7 +9,7 @@
 MACHINE_CONFIG_EXTERN( mod4oki );
 INPUT_PORTS_EXTERN( mpu4 );
 
-#define GAME_FLAGS (GAME_NOT_WORKING|GAME_REQUIRES_ARTWORK)
+#define GAME_FLAGS (GAME_NOT_WORKING|GAME_REQUIRES_ARTWORK|GAME_MECHANICAL)
 
 
 
@@ -452,8 +454,8 @@ GAME(199?, m4smshgba,m4smshgb,  mod4oki, mpu4, mpu4_state, m4default, ROT0,   "M
 GAME(199?, m4smshgbb,m4smshgb,  mod4oki, mpu4, mpu4_state, m4default, ROT0,   "Mdm","Smash 'n' Grab (Mdm) (MPU4, set 3)",   GAME_FLAGS|GAME_NO_SOUND )
 GAME(199?, m4smshgbc,m4smshgb,  mod4oki, mpu4, mpu4_state, m4default, ROT0,   "Mdm","Smash 'n' Grab (Mdm) (MPU4, set 4)",   GAME_FLAGS|GAME_NO_SOUND )
 GAME(199?, m4snklad, 0,         mod2    ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Snakes & Ladders (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )
-GAME(199?, m4excam, 0,          mod4oki    ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Excalibur (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )
-GAME(199?, m4front, 0,          mod4oki    ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Final Frontier (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )
-GAME(199?, m4safar, 0,          mod4oki    ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Safari Club (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )
+GAME(199?, m4excam, 0,          mod4oki ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Excalibur (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )
+GAME(199?, m4front, 0,          mod4oki ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Final Frontier (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )
+GAME(199?, m4safar, 0,          mod4oki ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Safari Club (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )
 GAME(199?, m4snowbl, 0,         mod2    ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Snowball Bingo (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )
-GAME(199?, m4ewshft, 0,         mod4oki    ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Each Way Shifter (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )
+GAME(199?, m4ewshft, 0,         mod4oki ,mpu4, mpu4_state, m4default, ROT0,   "Mdm","Each Way Shifter (Mdm) (MPU4)",   GAME_FLAGS|GAME_NO_SOUND )

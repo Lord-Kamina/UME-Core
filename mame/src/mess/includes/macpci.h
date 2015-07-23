@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /*****************************************************************************
  *
  * includes/macpci.h
@@ -64,13 +66,9 @@ enum model_t
 	PCIMODEL_MAC_PBG3WALLST1,
 	PCIMODEL_MAC_PBG3WALLST2,
 
-	PCIMODEL_MAC_PIPPIN,    // Apple/Bandai Pippin
+	PCIMODEL_MAC_PIPPIN    // Apple/Bandai Pippin
 
 };
-
-/*----------- defined in machine/pcimac.c -----------*/
-
-extern const via6522_interface pcimac_via6522_intf;
 
 
 /* Mac driver data */
@@ -85,7 +83,6 @@ public:
 		m_awacs(*this, "awacs"),
 		m_cuda(*this, CUDA_TAG),
 		m_ram(*this, RAM_TAG),
-		m_screen(*this, MAC_SCREEN_NAME),
 		m_539x_1(*this, MAC_539X_1_TAG),
 		m_539x_2(*this, MAC_539X_2_TAG)
 		{ }
@@ -95,7 +92,6 @@ public:
 	optional_device<awacs_device> m_awacs;
 	required_device<cuda_device> m_cuda;
 	required_device<ram_device> m_ram;
-	optional_device<screen_device> m_screen;
 	optional_device<ncr539x_device> m_539x_1;
 	optional_device<ncr539x_device> m_539x_2;
 
@@ -164,8 +160,8 @@ public:
 	DECLARE_READ8_MEMBER(mac_via_in_b);
 	DECLARE_WRITE8_MEMBER(mac_via_out_a);
 	DECLARE_WRITE8_MEMBER(mac_via_out_b);
-	DECLARE_READ8_MEMBER(mac_adb_via_in_cb2);
-	DECLARE_WRITE8_MEMBER(mac_adb_via_out_cb2);
+	DECLARE_READ_LINE_MEMBER(mac_adb_via_in_cb2);
+	DECLARE_WRITE_LINE_MEMBER(mac_adb_via_out_cb2);
 	DECLARE_WRITE_LINE_MEMBER(mac_via_irq);
 	void mac_driver_init(model_t model);
 };

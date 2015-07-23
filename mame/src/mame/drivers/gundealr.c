@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
 Gun Dealer memory map
@@ -43,6 +45,16 @@ write:
 Interrupts:
 Runs in interrupt mode 0, the interrupt vectors are 0xcf (RST 08h) and
 0xd7 (RST 10h)
+
+PCB:  DY-90010001
+  CPU: Z80B
+Sound: YM2203C + Y3014B DAC
+  MCU: Unknown 64 pin DIL
+  OSC: 12MHz, 5MHz
+
+Clock measurements:
+Z80 CPU - 12MHz/2
+ YM2203 - 12MHz/8
 
 ***************************************************************************/
 
@@ -390,20 +402,10 @@ TIMER_DEVICE_CALLBACK_MEMBER(gundealr_state::gundealr_scanline)
 		m_maincpu->set_input_line_and_vector(0, HOLD_LINE,0xcf); /* RST 10h */
 }
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 static MACHINE_CONFIG_START( gundealr, gundealr_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", Z80, 8000000)   /* 8 MHz ??? */
+	MCFG_CPU_ADD("maincpu", Z80, XTAL_12MHz/2)   /* 6 MHz verified for Yam! Yam!? */
 	MCFG_CPU_PROGRAM_MAP(main_map)
 	MCFG_CPU_IO_MAP(main_portmap)
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", gundealr_state, gundealr_scanline, "screen", 0, 1)
@@ -416,16 +418,16 @@ static MACHINE_CONFIG_START( gundealr, gundealr_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gundealr_state, screen_update_gundealr)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(gundealr)
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", gundealr)
+	MCFG_PALETTE_ADD("palette", 512)
 
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SOUND_ADD("ymsnd", YM2203, 1500000)
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
+	MCFG_SOUND_ADD("ymsnd", YM2203, XTAL_12MHz/8) /* 1.5Mhz verified for Yam! Yam!? */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 MACHINE_CONFIG_END
 
@@ -495,7 +497,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(gundealr_state::yamyam_mcu_sim)
 
 static MACHINE_CONFIG_DERIVED( yamyam, gundealr )
 
-	MCFG_TIMER_DRIVER_ADD_PERIODIC("mcusim", gundealr_state, yamyam_mcu_sim, attotime::from_hz(8000000/60))
+	MCFG_TIMER_DRIVER_ADD_PERIODIC("mcusim", gundealr_state, yamyam_mcu_sim, attotime::from_hz(6000000/60)) /* 6mhz confirmed */
 MACHINE_CONFIG_END
 
 
@@ -541,44 +543,57 @@ ROM_START( gundealrt )
 	ROM_LOAD( "2.6b",         0x00000, 0x20000, CRC(508ed0d0) SHA1(ea6b2d07e2e3d4f6c2a622a73b150ee7709b28de) )
 ROM_END
 
-ROM_START( yamyam )
+ROM_START( yamyam ) /* DY-90010001 PCB */
+	ROM_REGION( 0x30000, "maincpu", 0 ) /* 64k for code + 128k for banks */
+	ROM_LOAD( "3.10f",       0x00000, 0x20000, CRC(96ae9088) SHA1(a605882dcdcf1e8cf8b0112f614e696d59acfd97) )
+	ROM_RELOAD(               0x10000, 0x20000 )    /* banked at 0x8000-0xbfff */
+
+	ROM_REGION( 0x10000, "mcu", 0 ) // unknown 64 pin MCU at J9 with internal ROM code
+	ROM_LOAD( "mcu", 0x0000, 0x10000, NO_DUMP)
+
+	ROM_REGION( 0x10000, "gfx1", 0 ) /* only gfx are different, code is the same */
+	ROM_LOAD( "b2.16d",       0x00000, 0x10000, CRC(cb4f84ee) SHA1(54319ecbd74b763757eb6d17c8f7be0705ab0714) )
+
+	ROM_REGION( 0x20000, "gfx2", 0 )
+	ROM_LOAD( "1.16a",       0x00000, 0x20000, CRC(b122828d) SHA1(90994ba548893a2eacdd58351cfa3952f4af926a) )
+ROM_END
+
+ROM_START( yamyamk ) /* DY-90010001 PCB */
+	ROM_REGION( 0x30000, "maincpu", 0 ) /* 64k for code + 128k for banks */
+	ROM_LOAD( "3.10f",       0x00000, 0x20000, CRC(96ae9088) SHA1(a605882dcdcf1e8cf8b0112f614e696d59acfd97) )
+	ROM_RELOAD(               0x10000, 0x20000 )    /* banked at 0x8000-0xbfff */
+
+	ROM_REGION( 0x10000, "mcu", 0 ) // unknown 64 pin MCU at J9 with internal ROM code
+	ROM_LOAD( "mcu", 0x0000, 0x10000, NO_DUMP)
+
+	ROM_REGION( 0x10000, "gfx1", 0 ) /* only gfx are different, code is the same */
+	ROM_LOAD( "2.16d",       0x00000, 0x10000, CRC(dc9691d8) SHA1(118a05a1c94020d6739ed8c805c61b8ab003b6af) )
+
+	ROM_REGION( 0x20000, "gfx2", 0 )
+	ROM_LOAD( "1.16a",       0x00000, 0x20000, CRC(b122828d) SHA1(90994ba548893a2eacdd58351cfa3952f4af926a) )
+ROM_END
+
+ROM_START( wiseguy ) /* DY-90010001 PCB */
 	ROM_REGION( 0x30000, "maincpu", 0 ) /* 64k for code + 128k for banks */
 	ROM_LOAD( "b3.f10",       0x00000, 0x20000, CRC(96ae9088) SHA1(a605882dcdcf1e8cf8b0112f614e696d59acfd97) )
 	ROM_RELOAD(               0x10000, 0x20000 )    /* banked at 0x8000-0xbfff */
 
-	ROM_REGION( 0x10000, "mcu", 0 ) //unknown type, there must be one
+	ROM_REGION( 0x10000, "mcu", 0 ) // unknown 64 pin MCU at J9 with internal ROM code
 	ROM_LOAD( "mcu", 0x0000, 0x10000, NO_DUMP)
 
-	ROM_REGION( 0x10000, "gfx1", 0 )
-	ROM_LOAD( "b2.d16",       0x00000, 0x10000, CRC(cb4f84ee) SHA1(54319ecbd74b763757eb6d17c8f7be0705ab0714) )
+	ROM_REGION( 0x10000, "gfx1", 0 ) /* only gfx are different, code is the same */
+	ROM_LOAD( "wguyb2.16d",   0x00000, 0x10000, CRC(1c684c46) SHA1(041bc500e31b02a8bf3ce4683a67de998f938ccc) )
 
 	ROM_REGION( 0x20000, "gfx2", 0 )
-	ROM_LOAD( "b1.a16",       0x00000, 0x20000, CRC(b122828d) SHA1(90994ba548893a2eacdd58351cfa3952f4af926a) )
+	ROM_LOAD( "1.16a",       0x00000, 0x20000, CRC(b122828d) SHA1(90994ba548893a2eacdd58351cfa3952f4af926a) )
 ROM_END
-
-/* only gfx are different, code is the same */
-ROM_START( wiseguy )
-	ROM_REGION( 0x30000, "maincpu", 0 ) /* 64k for code + 128k for banks */
-	ROM_LOAD( "b3.f10",       0x00000, 0x20000, CRC(96ae9088) SHA1(a605882dcdcf1e8cf8b0112f614e696d59acfd97) )
-	ROM_RELOAD(               0x10000, 0x20000 )    /* banked at 0x8000-0xbfff */
-
-	ROM_REGION( 0x10000, "mcu", 0 ) //unknown type, there must be one
-	ROM_LOAD( "mcu", 0x0000, 0x10000, NO_DUMP)
-
-	ROM_REGION( 0x10000, "gfx1", 0 )
-	ROM_LOAD( "wguyb2.bin",   0x00000, 0x10000, CRC(1c684c46) SHA1(041bc500e31b02a8bf3ce4683a67de998f938ccc) )
-
-	ROM_REGION( 0x20000, "gfx2", 0 )
-	ROM_LOAD( "b1.a16",       0x00000, 0x20000, CRC(b122828d) SHA1(90994ba548893a2eacdd58351cfa3952f4af926a) )
-ROM_END
-
-
-
 
 
 
 GAME( 1990, gundealr,  0,        gundealr, gundealr, driver_device, 0, ROT270, "Dooyong", "Gun Dealer",                GAME_SUPPORTS_SAVE )
 GAME( 1990, gundealra, gundealr, gundealr, gundealr, driver_device, 0, ROT270, "Dooyong", "Gun Dealer (alt card set)", GAME_SUPPORTS_SAVE )
 GAME( 1990, gundealrt, gundealr, gundealr, gundealt, driver_device, 0, ROT270, "Dooyong (Tecmo license)", "Gun Dealer (Japan)", GAME_SUPPORTS_SAVE )
+
 GAME( 1990, yamyam,    0,        yamyam,   yamyam, driver_device,   0, ROT0,   "Dooyong", "Yam! Yam!?",                GAME_SUPPORTS_SAVE )
+GAME( 1990, yamyamk,   yamyam,   yamyam,   yamyam, driver_device,   0, ROT0,   "Dooyong", "Yam! Yam!? (Korea)",        GAME_SUPPORTS_SAVE )
 GAME( 1990, wiseguy,   yamyam,   yamyam,   yamyam, driver_device,   0, ROT0,   "Dooyong", "Wise Guy",                  GAME_SUPPORTS_SAVE )

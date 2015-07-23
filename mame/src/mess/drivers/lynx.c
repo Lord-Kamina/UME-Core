@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner
 /******************************************************************************
  PeT peter.trauner@utanet.at 2000,2001
 
@@ -11,7 +13,6 @@
 #include "audio/lynx.h"
 #include "includes/lynx.h"
 
-#include "imagedev/snapquik.h"
 #include "lynx.lh"
 
 static ADDRESS_MAP_START( lynx_mem , AS_PROGRAM, 8, lynx_state )
@@ -40,13 +41,13 @@ static INPUT_PORTS_START( lynx )
 	// power on and power off buttons
 INPUT_PORTS_END
 
-void lynx_state::palette_init()
+PALETTE_INIT_MEMBER(lynx_state, lynx)
 {
 	int i;
 
 	for (i=0; i< 0x1000; i++)
 	{
-		palette_set_color_rgb(machine(), i,
+		palette.set_pen_color(i,
 			((i >> 0) & 0x0f) * 0x11,
 			((i >> 4) & 0x0f) * 0x11,
 			((i >> 8) & 0x0f) * 0x11);
@@ -55,7 +56,7 @@ void lynx_state::palette_init()
 
 void lynx_state::video_start()
 {
-	machine().primary_screen->register_screen_bitmap(m_bitmap);
+	machine().first_screen()->register_screen_bitmap(m_bitmap);
 }
 
 UINT32 lynx_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
@@ -70,13 +71,11 @@ void lynx_state::sound_cb()
 	lynx_timer_count_down(1);
 }
 
-
 static MACHINE_CONFIG_START( lynx, lynx_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M65SC02, 4000000)        /* vti core, integrated in vlsi, stz, but not bbr bbs */
 	MCFG_CPU_PROGRAM_MAP(lynx_mem)
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
-
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", LCD)
@@ -85,9 +84,11 @@ static MACHINE_CONFIG_START( lynx, lynx_state )
 	MCFG_SCREEN_UPDATE_DRIVER(lynx_state, screen_update)
 	MCFG_SCREEN_SIZE(160, 102)
 	MCFG_SCREEN_VISIBLE_AREA(0, 160-1, 0, 102-1)
+	MCFG_SCREEN_PALETTE("palette")
 	MCFG_DEFAULT_LAYOUT(layout_lynx)
 
-	MCFG_PALETTE_LENGTH(0x1000)
+	MCFG_PALETTE_ADD("palette", 0x1000)
+	MCFG_PALETTE_INIT_OWNER(lynx_state, lynx)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -98,7 +99,13 @@ static MACHINE_CONFIG_START( lynx, lynx_state )
 	/* devices */
 	MCFG_QUICKLOAD_ADD("quickload", lynx_state, lynx, "o", 0)
 
-	MCFG_FRAGMENT_ADD(lynx_cartslot)
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "lynx_cart")
+	MCFG_GENERIC_EXTENSIONS("lnx,lyx")
+	MCFG_GENERIC_MANDATORY
+	MCFG_GENERIC_LOAD(lynx_state, lynx_cart)
+
+	/* Software lists */
+	MCFG_SOFTWARE_LIST_ADD("cart_list","lynx")
 MACHINE_CONFIG_END
 
 #if 0
@@ -129,24 +136,22 @@ ROM_START(lynx)
 	ROMX_LOAD( "lynxa.bin", 0x00000, 0x200, BAD_DUMP CRC(0d973c9d) SHA1(e4ed47fae31693e016b081c6bda48da5b70d7ccb), ROM_BIOS(2))
 
 	ROM_REGION(0x100,"gfx1", ROMREGION_ERASE00)
-
-	ROM_REGION(0x100000, "user1", ROMREGION_ERASEFF)
 ROM_END
 
+#if 0
 ROM_START(lynx2)
 	ROM_REGION(0x200,"maincpu", 0)
 	ROM_LOAD("lynx2.bin", 0, 0x200, NO_DUMP)
 
 	ROM_REGION(0x100,"gfx1", ROMREGION_ERASE00)
-
-	ROM_REGION(0x100000, "user1", ROMREGION_ERASEFF)
 ROM_END
+#endif
 
 
 QUICKLOAD_LOAD_MEMBER( lynx_state, lynx )
 {
 	address_space &space = m_maincpu->space(AS_PROGRAM);
-	UINT8 *data = NULL;
+	dynamic_buffer data;
 	UINT8 *rom = memregion("maincpu")->base();
 	UINT8 header[10]; // 80 08 dw Start dw Len B S 9 3
 	UINT16 start, length;
@@ -163,18 +168,15 @@ QUICKLOAD_LOAD_MEMBER( lynx_state, lynx )
 	length = header[5] | (header[4]<<8);
 	length -= 10;
 
-	data = (UINT8*)malloc(length);
+	data.resize(length);
 
-	if (image.fread( data, length) != length)
+	if (image.fread( &data[0], length) != length)
 	{
-		free(data);
 		return IMAGE_INIT_FAIL;
 	}
 
 	for (i = 0; i < length; i++)
 		space.write_byte(start + i, data[i]);
-
-	free(data);
 
 	rom[0x1fc] = start & 0xff;
 	rom[0x1fd] = start >> 8;

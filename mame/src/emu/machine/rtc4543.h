@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /**********************************************************************
 
     rtc4543.h - Epson R4543 real-time clock emulation
@@ -21,6 +23,9 @@
 #define MCFG_RTC4543_ADD(_tag, _clock) \
 	MCFG_DEVICE_ADD(_tag, RTC4543, _clock)
 
+#define MCFG_RTC4543_DATA_CALLBACK(_devcb) \
+	devcb = &rtc4543_device::set_data_cb(*device, DEVCB_##_devcb);
+
 
 
 //**************************************************************************
@@ -42,6 +47,8 @@ public:
 	DECLARE_READ_LINE_MEMBER( data_r );
 	DECLARE_WRITE_LINE_MEMBER( data_w );
 
+	template<class _Object> static devcb_base &set_data_cb(device_t &device, _Object object) { return downcast<rtc4543_device &>(device).data_cb.set_callback(object); }
+
 protected:
 	// device-level overrides
 	virtual void device_start();
@@ -53,13 +60,16 @@ protected:
 	virtual bool rtc_feature_leap_year() { return true; }
 
 private:
+	devcb_write_line data_cb;
+
 	int m_ce;
 	int m_clk;
 	int m_wr;
 	int m_data;
+	int m_shiftreg;
 	int m_regs[7];
 	int m_curreg;
-	int m_bit;
+	int m_curbit;
 
 	// timers
 	emu_timer *m_clock_timer;

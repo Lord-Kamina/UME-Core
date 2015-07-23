@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi
 /***************************************************************************
 
     2151intf.c
@@ -21,7 +23,7 @@ const device_type YM2151 = &device_creator<ym2151_device>;
 //-------------------------------------------------
 
 ym2151_device::ym2151_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, YM2151, "YM2151", tag, owner, clock),
+	: device_t(mconfig, YM2151, "YM2151", tag, owner, clock, "ym2151", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_irqhandler(*this),
 		m_portwritehandler(*this)

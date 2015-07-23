@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     asap.c
@@ -6,37 +8,6 @@
     ASAP = Atari Simplified Architecture Processor
 
     Special thanks to Mike Albaugh for clarification on a couple of fine points.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -56,7 +27,7 @@ const UINT32 PS_NFLAG           = 0x00000008;
 const UINT32 PS_IFLAG           = 0x00000010;
 const UINT32 PS_PFLAG           = 0x00000020;
 
-const int EXCEPTION_RESET       = 0;
+//const int EXCEPTION_RESET       = 0;
 const int EXCEPTION_TRAP0       = 1;
 const int EXCEPTION_TRAPF       = 2;
 const int EXCEPTION_INTERRUPT   = 3;
@@ -166,7 +137,7 @@ const device_type ASAP = &device_creator<asap_device>;
 //-------------------------------------------------
 
 asap_device::asap_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: cpu_device(mconfig, ASAP, "ASAP", tag, owner, clock),
+	: cpu_device(mconfig, ASAP, "ASAP", tag, owner, clock, "asap", __FILE__),
 		m_program_config("program", ENDIANNESS_LITTLE, 32, 32),
 		m_pc(0),
 		m_pflag(0),
@@ -215,7 +186,7 @@ void asap_device::device_start()
 	m_direct = &m_program->direct();
 
 	// register our state for the debugger
-	astring tempstr;
+	std::string tempstr;
 	state_add(STATE_GENPC,     "GENPC",     m_pc).noshow();
 	state_add(STATE_GENPCBASE, "GENPCBASE", m_ppc).noshow();
 	state_add(STATE_GENSP,     "GENSP",     m_src2val[REGBASE + 31]).noshow();
@@ -223,7 +194,7 @@ void asap_device::device_start()
 	state_add(ASAP_PC,         "PC",        m_pc);
 	state_add(ASAP_PS,         "PS",        m_flagsio).callimport().callexport();
 	for (int regnum = 0; regnum < 32; regnum++)
-		state_add(ASAP_R0 + regnum, tempstr.format("R%d", regnum), m_src2val[REGBASE + regnum]);
+		state_add(ASAP_R0 + regnum, strformat(tempstr, "R%d", regnum).c_str(), m_src2val[REGBASE + regnum]);
 
 	// register our state for saving
 	save_item(NAME(m_pc));
@@ -310,12 +281,12 @@ void asap_device::state_export(const device_state_entry &entry)
 //  for the debugger
 //-------------------------------------------------
 
-void asap_device::state_string_export(const device_state_entry &entry, astring &string)
+void asap_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case STATE_GENFLAGS:
-			string.printf("%c%c%c%c%c%c",
+			strprintf(str, "%c%c%c%c%c%c",
 							m_pflag ? 'P' : '.',
 							m_iflag ? 'I' : '.',
 							((INT32)m_znflag < 0) ? 'N' : '.',
@@ -372,7 +343,7 @@ offs_t asap_device::disasm_disassemble(char *buffer, offs_t pc, const UINT8 *opr
 
 inline UINT32 asap_device::readop(offs_t pc)
 {
-	return m_direct->read_decrypted_dword(pc);
+	return m_direct->read_dword(pc);
 }
 
 

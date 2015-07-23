@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods, R. Belmont
 /***************************************************************************
 
     drivers/bebox.c
@@ -11,26 +13,25 @@
 #include "includes/bebox.h"
 
 /* Components */
-#include "video/pc_vga.h"
-#include "video/cirrus.h"
+#include "video/clgd542x.h"
+#include "bus/lpci/cirrus.h"
 #include "cpu/powerpc/ppc.h"
 #include "sound/3812intf.h"
 #include "machine/ins8250.h"
 #include "machine/pic8259.h"
 #include "machine/mc146818.h"
-#include "machine/pci.h"
+#include "bus/lpci/pci.h"
 #include "machine/am9517a.h"
 #include "machine/pckeybrd.h"
-#include "machine/8042kbdc.h"
 #include "machine/idectrl.h"
-#include "machine/mpc105.h"
+#include "bus/lpci/mpc105.h"
 #include "machine/intelfsh.h"
-#include "machine/scsibus.h"
+#include "bus/scsi/scsi.h"
 #include "machine/53c810.h"
 
 /* Devices */
-#include "machine/scsicd.h"
-#include "machine/scsihd.h"
+#include "bus/scsi/scsicd.h"
+#include "bus/scsi/scsihd.h"
 #include "formats/pc_dsk.h"
 #include "machine/ram.h"
 #include "machine/8042kbdc.h"
@@ -53,23 +54,23 @@ static ADDRESS_MAP_START( bebox_mem, AS_PROGRAM, 64, bebox_state )
 	AM_RANGE(0x80000080, 0x8000009F) AM_READWRITE8(bebox_page_r, bebox_page_w, U64(0xffffffffffffffff) )
 	AM_RANGE(0x800000A0, 0x800000BF) AM_DEVREADWRITE8("pic8259_2", pic8259_device, read, write, U64(0xffffffffffffffff) )
 	AM_RANGE(0x800000C0, 0x800000DF) AM_READWRITE8(at_dma8237_1_r, at_dma8237_1_w, U64(0xffffffffffffffff))
-	AM_RANGE(0x800001F0, 0x800001F7) AM_DEVREADWRITE16("ide", ide_controller_device, read_cs0_pc, write_cs0_pc, U64(0xffffffffffffffff) )
+	AM_RANGE(0x800001F0, 0x800001F7) AM_DEVREADWRITE16("ide", ide_controller_device, read_cs0, write_cs0, U64(0xffffffffffffffff) )
 	AM_RANGE(0x800002F8, 0x800002FF) AM_DEVREADWRITE8( "ns16550_1", ns16550_device, ins8250_r, ins8250_w, U64(0xffffffffffffffff) )
 	AM_RANGE(0x80000380, 0x80000387) AM_DEVREADWRITE8( "ns16550_2", ns16550_device, ins8250_r, ins8250_w, U64(0xffffffffffffffff) )
 	AM_RANGE(0x80000388, 0x8000038F) AM_DEVREADWRITE8( "ns16550_3", ns16550_device, ins8250_r, ins8250_w, U64(0xffffffffffffffff) )
-	AM_RANGE(0x800003b0, 0x800003bf) AM_DEVREADWRITE8("vga", cirrus_vga_device, port_03b0_r, port_03b0_w, U64(0xffffffffffffffff))
-	AM_RANGE(0x800003c0, 0x800003cf) AM_DEVREADWRITE8("vga", cirrus_vga_device, port_03c0_r, port_03c0_w, U64(0xffffffffffffffff))
-	AM_RANGE(0x800003d0, 0x800003df) AM_DEVREADWRITE8("vga", cirrus_vga_device, port_03d0_r, port_03d0_w, U64(0xffffffffffffffff))
-	AM_RANGE(0x800003F0, 0x800003F7) AM_DEVREADWRITE16("ide", ide_controller_device, read_cs1_pc, write_cs1_pc, U64(0xffffffffffffffff) )
+	AM_RANGE(0x800003b0, 0x800003bf) AM_DEVREADWRITE8("vga", cirrus_gd5428_device, port_03b0_r, port_03b0_w, U64(0xffffffffffffffff))
+	AM_RANGE(0x800003c0, 0x800003cf) AM_DEVREADWRITE8("vga", cirrus_gd5428_device, port_03c0_r, port_03c0_w, U64(0xffffffffffffffff))
+	AM_RANGE(0x800003d0, 0x800003df) AM_DEVREADWRITE8("vga", cirrus_gd5428_device, port_03d0_r, port_03d0_w, U64(0xffffffffffffffff))
+	AM_RANGE(0x800003F0, 0x800003F7) AM_DEVREADWRITE16("ide", ide_controller_device, read_cs1, write_cs1, U64(0xffffffffffffffff) )
 	AM_RANGE(0x800003F0, 0x800003F7) AM_DEVICE8( "smc37c78", smc37c78_device, map, U64(0xffffffffffffffff) )
 	AM_RANGE(0x800003F8, 0x800003FF) AM_DEVREADWRITE8( "ns16550_0",ns16550_device,  ins8250_r, ins8250_w, U64(0xffffffffffffffff) )
 	AM_RANGE(0x80000480, 0x8000048F) AM_READWRITE8(bebox_80000480_r, bebox_80000480_w, U64(0xffffffffffffffff) )
 	AM_RANGE(0x80000CF8, 0x80000CFF) AM_DEVREADWRITE("pcibus", pci_bus_device, read_64be, write_64be )
-	//AM_RANGE(0x800042E8, 0x800042EF) AM_DEVWRITE8_LEGACY("cirrus", cirrus_42E8_w, U64(0xffffffffffffffff) )
+	//AM_RANGE(0x800042E8, 0x800042EF) AM_DEVWRITE8("cirrus", cirrus_device, cirrus_42E8_w, U64(0xffffffffffffffff) )
 
 	AM_RANGE(0xBFFFFFF0, 0xBFFFFFFF) AM_READ(bebox_interrupt_ack_r )
-	AM_RANGE(0xC00A0000, 0XC00BFFFF) AM_DEVREADWRITE8("vga", cirrus_vga_device, mem_r, mem_w, U64(0xffffffffffffffff) )
-	AM_RANGE(0xC1000000, 0XC11FFFFF) AM_DEVREADWRITE8("vga", cirrus_vga_device, mem_linear_r, mem_linear_w, U64(0xffffffffffffffff) )
+	AM_RANGE(0xC00A0000, 0XC00BFFFF) AM_DEVREADWRITE8("vga", cirrus_gd5428_device, mem_r, mem_w, U64(0xffffffffffffffff) )
+	AM_RANGE(0xC1000000, 0XC11FFFFF) AM_DEVREADWRITE8("vga", cirrus_gd5428_device, mem_linear_r, mem_linear_w, U64(0xffffffffffffffff) )
 	AM_RANGE(0xFFF00000, 0xFFF03FFF) AM_ROMBANK("bank2")
 	AM_RANGE(0xFFF04000, 0xFFFFFFFF) AM_READWRITE8(bebox_flash_r, bebox_flash_w, U64(0xffffffffffffffff) )
 ADDRESS_MAP_END
@@ -101,33 +102,22 @@ ADDRESS_MAP_END
 								((x << 8) & 0xff0000) | \
 								((x << 24) & 0xff000000))
 
-static UINT32 scsi53c810_fetch(running_machine &machine, UINT32 dsp)
+LSI53C810_FETCH_CB(bebox_state::scsi_fetch)
 {
-	UINT32 result;
-	bebox_state *state = machine.driver_data<bebox_state>();
-	result = state->m_ppc1->space(AS_PROGRAM).read_dword(dsp & 0x7FFFFFFF);
+	UINT32 result = m_ppc1->space(AS_PROGRAM).read_dword(dsp & 0x7FFFFFFF);
 	return BYTE_REVERSE32(result);
 }
 
 
-static void scsi53c810_irq_callback(running_machine &machine, int value)
+LSI53C810_IRQ_CB(bebox_state::scsi_irq_callback)
 {
-	bebox_set_irq_bit(machine, 21, value);
+	bebox_set_irq_bit(21, state);
 }
 
 
-static void scsi53c810_dma_callback(running_machine &machine, UINT32 src, UINT32 dst, int length, int byteswap)
+LSI53C810_DMA_CB(bebox_state::scsi_dma_callback)
 {
 }
-
-
-static const struct LSI53C810interface lsi53c810_intf =
-{
-	&scsi53c810_irq_callback,
-	&scsi53c810_dma_callback,
-	&scsi53c810_fetch,
-};
-
 
 FLOPPY_FORMATS_MEMBER( bebox_state::floppy_formats )
 	FLOPPY_PC_FORMAT
@@ -137,11 +127,10 @@ static SLOT_INTERFACE_START( bebox_floppies )
 	SLOT_INTERFACE( "35hd", FLOPPY_35_HD )
 SLOT_INTERFACE_END
 
-const struct mpc105_interface mpc105_config =
-{
-	"ppc1",
-	0
-};
+static MACHINE_CONFIG_FRAGMENT( mpc105_config )
+	MCFG_MPC105_CPU( "ppc1" )
+	MCFG_MPC105_BANK_BASE_DEFAULT( 0 )
+MACHINE_CONFIG_END
 
 
 /*************************************
@@ -152,26 +141,9 @@ const struct mpc105_interface mpc105_config =
 
 WRITE_LINE_MEMBER(bebox_state::bebox_keyboard_interrupt)
 {
-	bebox_set_irq_bit(machine(), 16, state);
+	bebox_set_irq_bit(16, state);
 	m_pic8259_1->ir1_w(state);
 }
-
-READ8_MEMBER(bebox_state::bebox_get_out2)
-{
-	return m_pit8254->get_output(2);
-}
-
-static const struct kbdc8042_interface bebox_8042_interface =
-{
-	KBDC8042_STANDARD,
-	DEVCB_CPU_INPUT_LINE("ppc1", INPUT_LINE_RESET),
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(bebox_state,bebox_keyboard_interrupt),
-	DEVCB_NULL,
-
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(bebox_state,bebox_get_out2)
-};
 
 static SLOT_INTERFACE_START( pci_devices )
 	SLOT_INTERFACE_INTERNAL("mpc105", MPC105)
@@ -188,23 +160,38 @@ static MACHINE_CONFIG_START( bebox, bebox_state )
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(60))
 
-	MCFG_PIT8254_ADD( "pit8254", bebox_pit8254_config )
+	MCFG_DEVICE_ADD("pit8254", PIT8254, 0)
+	MCFG_PIT8253_CLK0(4772720/4) /* heartbeat IRQ */
+	MCFG_PIT8253_OUT0_HANDLER(WRITELINE(bebox_state, bebox_timer0_w))
+	MCFG_PIT8253_CLK1(4772720/4) /* dram refresh */
+	MCFG_PIT8253_CLK2(4772720/4) /* pio port c pin 4, and speaker polling enough */
+	MCFG_PIT8253_OUT2_HANDLER(DEVWRITELINE("kbdc", kbdc8042_device, write_out2))
 
-	MCFG_I8237_ADD( "dma8237_1", XTAL_14_31818MHz/3, bebox_dma8237_1_config )
+	MCFG_DEVICE_ADD( "dma8237_1", AM9517A, XTAL_14_31818MHz/3 )
+	MCFG_I8237_OUT_HREQ_CB(WRITELINE(bebox_state, bebox_dma_hrq_changed))
+	MCFG_I8237_OUT_EOP_CB(WRITELINE(bebox_state, bebox_dma8237_out_eop))
+	MCFG_I8237_IN_MEMR_CB(READ8(bebox_state, bebox_dma_read_byte))
+	MCFG_I8237_OUT_MEMW_CB(WRITE8(bebox_state, bebox_dma_write_byte))
+	MCFG_I8237_IN_IOR_2_CB(READ8(bebox_state, bebox_dma8237_fdc_dack_r))
+	MCFG_I8237_OUT_IOW_2_CB(WRITE8(bebox_state, bebox_dma8237_fdc_dack_w))
+	MCFG_I8237_OUT_DACK_0_CB(WRITELINE(bebox_state, pc_dack0_w))
+	MCFG_I8237_OUT_DACK_1_CB(WRITELINE(bebox_state, pc_dack1_w))
+	MCFG_I8237_OUT_DACK_2_CB(WRITELINE(bebox_state, pc_dack2_w))
+	MCFG_I8237_OUT_DACK_3_CB(WRITELINE(bebox_state, pc_dack3_w))
 
-	MCFG_I8237_ADD( "dma8237_2", XTAL_14_31818MHz/3, bebox_dma8237_2_config )
+	MCFG_DEVICE_ADD( "dma8237_2", AM9517A, XTAL_14_31818MHz/3 )
 
 	MCFG_PIC8259_ADD( "pic8259_1", WRITELINE(bebox_state,bebox_pic8259_master_set_int_line), VCC, READ8(bebox_state,get_slave_ack) )
 
 	MCFG_PIC8259_ADD( "pic8259_2", WRITELINE(bebox_state,bebox_pic8259_slave_set_int_line), GND, NULL )
 
-	MCFG_NS16550_ADD( "ns16550_0", bebox_uart_inteface_0, 0 )   /* TODO: Verify model */
-	MCFG_NS16550_ADD( "ns16550_1", bebox_uart_inteface_1, 0 )   /* TODO: Verify model */
-	MCFG_NS16550_ADD( "ns16550_2", bebox_uart_inteface_2, 0 )   /* TODO: Verify model */
-	MCFG_NS16550_ADD( "ns16550_3", bebox_uart_inteface_3, 0 )   /* TODO: Verify model */
+	MCFG_DEVICE_ADD( "ns16550_0", NS16550, 0 )   /* TODO: Verify model */
+	MCFG_DEVICE_ADD( "ns16550_1", NS16550, 0 )   /* TODO: Verify model */
+	MCFG_DEVICE_ADD( "ns16550_2", NS16550, 0 )   /* TODO: Verify model */
+	MCFG_DEVICE_ADD( "ns16550_3", NS16550, 0 )   /* TODO: Verify model */
 
 	/* video hardware */
-	MCFG_FRAGMENT_ADD( pcvideo_cirrus_vga )
+	MCFG_FRAGMENT_ADD( pcvideo_cirrus_gd5428 )
 
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -213,29 +200,40 @@ static MACHINE_CONFIG_START( bebox, bebox_state )
 
 	MCFG_FUJITSU_29F016A_ADD("flash")
 
-	MCFG_SCSIBUS_ADD("scsi")
-	MCFG_SCSIDEV_ADD("scsi:harddisk1", SCSIHD, SCSI_ID_0)
-	MCFG_SCSIDEV_ADD("scsi:cdrom", SCSICD, SCSI_ID_3)
-	MCFG_LSI53C810_ADD( "scsi:lsi53c810", lsi53c810_intf)
+	MCFG_DEVICE_ADD("scsi", SCSI_PORT, 0)
+	MCFG_SCSIDEV_ADD("scsi:" SCSI_PORT_DEVICE1, "harddisk", SCSIHD, SCSI_ID_0)
+	MCFG_SCSIDEV_ADD("scsi:" SCSI_PORT_DEVICE2, "cdrom", SCSICD, SCSI_ID_3)
 
-	MCFG_IDE_CONTROLLER_ADD( "ide", ide_devices, "hdd", NULL, false ) /* FIXME */
-	MCFG_IDE_CONTROLLER_IRQ_HANDLER(WRITELINE(bebox_state, bebox_ide_interrupt))
+	MCFG_DEVICE_ADD("lsi53c810", LSI53C810, 0)
+	MCFG_LSI53C810_IRQ_CB(bebox_state, scsi_irq_callback)
+	MCFG_LSI53C810_DMA_CB(bebox_state, scsi_dma_callback)
+	MCFG_LSI53C810_FETCH_CB(bebox_state, scsi_fetch)
+	MCFG_LEGACY_SCSI_PORT("scsi")
+
+	MCFG_IDE_CONTROLLER_ADD( "ide", ata_devices, "hdd", NULL, false ) /* FIXME */
+	MCFG_ATA_INTERFACE_IRQ_HANDLER(WRITELINE(bebox_state, bebox_ide_interrupt))
 
 	/* pci */
 	MCFG_PCI_BUS_ADD("pcibus", 0)
 	MCFG_PCI_BUS_DEVICE("pcibus:0", pci_devices, "mpc105", true)
-	MCFG_DEVICE_CARD_CONFIG("mpc105", &mpc105_config)
+	MCFG_SLOT_OPTION_MACHINE_CONFIG("mpc105", mpc105_config)
 
 	MCFG_PCI_BUS_DEVICE("pcibus:1", pci_devices, "cirrus", true)
 
 	/*MCFG_PCI_BUS_DEVICE(12, NULL, scsi53c810_pci_read, scsi53c810_pci_write)*/
 
 	MCFG_SMC37C78_ADD("smc37c78")
+	MCFG_UPD765_INTRQ_CALLBACK(WRITELINE(bebox_state, fdc_interrupt))
+	MCFG_UPD765_DRQ_CALLBACK(DEVWRITELINE("dma8237_1", am9517a_device, dreq2_w))
 	MCFG_FLOPPY_DRIVE_ADD("smc37c78:0", bebox_floppies, "35hd", bebox_state::floppy_formats)
 
-	MCFG_MC146818_ADD( "rtc", MC146818_STANDARD )
+	MCFG_MC146818_ADD( "rtc", XTAL_32_768kHz )
 
-	MCFG_KBDC8042_ADD("kbdc", bebox_8042_interface)
+	MCFG_DEVICE_ADD("kbdc", KBDC8042, 0)
+	MCFG_KBDC8042_KEYBOARD_TYPE(KBDC8042_STANDARD)
+	MCFG_KBDC8042_SYSTEM_RESET_CB(INPUTLINE("ppc1", INPUT_LINE_RESET))
+	MCFG_KBDC8042_INPUT_BUFFER_FULL_CB(WRITELINE(bebox_state, bebox_keyboard_interrupt))
+
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("32M")

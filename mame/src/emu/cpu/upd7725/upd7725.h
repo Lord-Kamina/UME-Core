@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont,byuu
 /***************************************************************************
 
     upd7725.h
@@ -30,41 +32,68 @@ class necdsp_device;
 class upd7725_device;
 class upd96050_device;
 
-// ======================> necdsp_interface
 
-struct necdsp_interface
-{
-	devcb_read_line     m_in_int_cb;
-	//devcb_read8       m_in_si_cb;
-	//devcb_read_line   m_in_sck_cb;
-	//devcb_read_line   m_in_sien_cb;
-	//devcb_read_line   m_in_soen_cb;
-	//devcb_read_line   m_in_dack_cb;
-	devcb_write_line    m_out_p0_cb;
-	devcb_write_line    m_out_p1_cb;
-	//devcb_write8      m_out_so_cb;
-	//devcb_write_line  m_out_sorq_cb;
-	//devcb_write_line  m_out_drq_cb;
-};
+#define MCFG_NECDSP_IN_INT_CB(_devcb) \
+	devcb = &necdsp_device::set_in_int_callback(*device, DEVCB_##_devcb);
 
-#define NECDSP_INTERFACE(name) \
-	const necdsp_interface (name) =
+#define MCFG_NECDSP_IN_SI_CB(_devcb) \
+	devcb = &necdsp_device::set_in_si_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_NECDSP_IN_SCK_CB(_devcb) \
+	devcb = &necdsp_device::set_in_sck_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_NECDSP_IN_SIEN_CB(_devcb) \
+	devcb = &necdsp_device::set_in_sien_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_NECDSP_IN_SOEN_CB(_devcb) \
+	devcb = &necdsp_device::set_in_soen_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_NECDSP_IN_DACK_CB(_devcb) \
+	devcb = &necdsp_device::set_in_dack_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_NECDSP_OUT_P0_CB(_devcb) \
+	devcb = &necdsp_device::set_out_p0_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_NECDSP_OUT_P1_CB(_devcb) \
+	devcb = &necdsp_device::set_out_p1_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_NECDSP_OUT_SO_CB(_devcb) \
+	devcb = &necdsp_device::set_out_so_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_NECDSP_OUT_SORQ_CB(_devcb) \
+	devcb = &necdsp_device::set_out_sorq_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_NECDSP_OUT_DRQ_CB(_devcb) \
+	devcb = &necdsp_device::set_out_drq_callback(*device, DEVCB_##_devcb);
+
 
 // ======================> necdsp_device
 
-class necdsp_device : public cpu_device, public necdsp_interface
+class necdsp_device : public cpu_device
 {
 protected:
 	// construction/destruction
-	necdsp_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, UINT32 clock, UINT32 abits, UINT32 dbits, const char *name);
+	necdsp_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, UINT32 clock, UINT32 abits, UINT32 dbits, const char *name, const char *shortname, const char *source);
 
 public:
+
+	template<class _Object> static devcb_base &set_in_int_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_in_int_cb.set_callback(object); }
+	//template<class _Object> static devcb_base &set_in_si_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_in_si_cb.set_callback(object); }
+	//template<class _Object> static devcb_base &set_in_sck_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_in_sck_cb.set_callback(object); }
+	//template<class _Object> static devcb_base &set_in_sien_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_in_sien_cb.set_callback(object); }
+	//template<class _Object> static devcb_base &set_in_soen_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_in_soen_cb.set_callback(object); }
+	//template<class _Object> static devcb_base &set_in_dack_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_in_dack_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_out_p0_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_out_p0_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_out_p1_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_out_p1_cb.set_callback(object); }
+	//template<class _Object> static devcb_base &set_out_so_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_out_so_cb.set_callback(object); }
+	//template<class _Object> static devcb_base &set_out_sorq_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_out_sorq_cb.set_callback(object); }
+	//template<class _Object> static devcb_base &set_out_drq_callback(device_t &device, _Object object) { return downcast<necdsp_device &>(device).m_out_drq_cb.set_callback(object); }
+
 	UINT8 snesdsp_read(bool mode);
 	void snesdsp_write(bool mode, UINT8 data);
 
 protected:
 	// device-level overrides
-	virtual void device_config_complete();
 	virtual void device_start();
 	virtual void device_reset();
 
@@ -81,7 +110,7 @@ protected:
 	// device_state_interface overrides
 	virtual void state_import(const device_state_entry &entry);
 	virtual void state_export(const device_state_entry &entry);
-	virtual void state_string_export(const device_state_entry &entry, astring &string);
+	virtual void state_string_export(const device_state_entry &entry, std::string &str);
 
 	// device_disasm_interface overrides
 	virtual UINT32 disasm_min_opcode_bytes() const;
@@ -170,17 +199,17 @@ private:
 
 protected:
 // device callbacks
-	devcb_resolved_read_line    m_in_int_func;
-	//devcb_resolved_read8      m_in_si_func;
-	//devcb_resolved_read_line  m_in_sck_func;
-	//devcb_resolved_read_line  m_in_sien_func;
-	//devcb_resolved_read_line  m_in_soen_func;
-	//devcb_resolved_read_line  m_in_dack_func;
-	devcb_resolved_write_line   m_out_p0_func;
-	devcb_resolved_write_line   m_out_p1_func;
-	//devcb_resolved_write8     m_out_so_func;
-	//devcb_resolved_write_line m_out_sorq_func;
-	//devcb_resolved_write_line m_out_drq_func;
+	devcb_read_line     m_in_int_cb;
+	//devcb_read8       m_in_si_cb;
+	//devcb_read_line   m_in_sck_cb;
+	//devcb_read_line   m_in_sien_cb;
+	//devcb_read_line   m_in_soen_cb;
+	//devcb_read_line   m_in_dack_cb;
+	devcb_write_line    m_out_p0_cb;
+	devcb_write_line    m_out_p1_cb;
+	//devcb_write8      m_out_so_cb;
+	//devcb_write_line  m_out_sorq_cb;
+	//devcb_write_line  m_out_drq_cb;
 };
 
 class upd7725_device : public necdsp_device

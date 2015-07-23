@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Derrick Renaud
 /***************************************************************************
 
     Sigma Spiders hardware
@@ -175,29 +177,29 @@ DISCRETE_SOUND_END
 WRITE8_MEMBER(spiders_state::spiders_audio_command_w)
 {
 	pia6821_device *pia = downcast<pia6821_device *>(machine().device("pia4"));
-	pia->set_a_input(data & 0xf8, 0);
+	pia->porta_w(data & 0xf8);
 	pia->ca1_w(data & 0x80 ? 1 : 0);
 }
 
 
 WRITE8_MEMBER(spiders_state::spiders_audio_a_w)
 {
-	discrete_sound_w(m_discrete, space, SPIDER_WEB_SOUND_MOD_DATA, 1 + (data & 4) * 8 + (data & 2) * 4 + (data & 1) * 2);
+	m_discrete->write(space, SPIDER_WEB_SOUND_MOD_DATA, 1 + (data & 4) * 8 + (data & 2) * 4 + (data & 1) * 2);
 }
 
 WRITE8_MEMBER(spiders_state::spiders_audio_b_w)
 {
-	discrete_sound_w(m_discrete, space, SPIDERS_WEB_SOUND_DATA, data);
+	m_discrete->write(space, SPIDERS_WEB_SOUND_DATA, data);
 }
 
 
 WRITE8_MEMBER(spiders_state::spiders_audio_ctrl_w)
 {
-	discrete_sound_w(m_discrete, space, SPIDERS_FIRE_EN, data & 0x10 ? 1 : 0);
-	discrete_sound_w(m_discrete, space, SPIDERS_EXP_EN, data & 0x08 ? 1 : 0);
-	discrete_sound_w(m_discrete, space, SPIDERS_SUPER_WEB_EXPL_EN, data & 0x04 ? 1 : 0);
-	discrete_sound_w(m_discrete, space, SPIDERS_SUPER_WEB_EN, data & 0x02 ? 1 : 0);
-	discrete_sound_w(m_discrete, space, SPIDERS_X_EN, data & 0x01 ? 1 : 0);
+	m_discrete->write(space, SPIDERS_FIRE_EN, data & 0x10 ? 1 : 0);
+	m_discrete->write(space, SPIDERS_EXP_EN, data & 0x08 ? 1 : 0);
+	m_discrete->write(space, SPIDERS_SUPER_WEB_EXPL_EN, data & 0x04 ? 1 : 0);
+	m_discrete->write(space, SPIDERS_SUPER_WEB_EN, data & 0x02 ? 1 : 0);
+	m_discrete->write(space, SPIDERS_X_EN, data & 0x01 ? 1 : 0);
 }
 
 
@@ -205,6 +207,6 @@ MACHINE_CONFIG_FRAGMENT( spiders_audio )
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(spiders)
+	MCFG_DISCRETE_INTF(spiders)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END

@@ -1,14 +1,14 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
 /* video/shangkid */
 
 #include "emu.h"
-#include "cpu/z80/z80.h"
 #include "includes/shangkid.h"
 
 
 TILE_GET_INFO_MEMBER(shangkid_state::get_bg_tile_info){
-	UINT8 *videoram = m_videoram;
-	int attributes = videoram[tile_index+0x800];
-	int tile_number = videoram[tile_index]+0x100*(attributes&0x3);
+	int attributes = m_videoram[tile_index+0x800];
+	int tile_number = m_videoram[tile_index]+0x100*(attributes&0x3);
 	int color;
 
 	if( m_gfx_type==1 )
@@ -20,8 +20,7 @@ TILE_GET_INFO_MEMBER(shangkid_state::get_bg_tile_info){
 		*/
 		color = attributes>>3;
 		color = (color&0x03)|((color&0x1c)<<1);
-		SET_TILE_INFO_MEMBER(
-				0,
+		SET_TILE_INFO_MEMBER(0,
 				tile_number,
 				color,
 				(attributes&0x04)?TILE_FLIPX:0);
@@ -34,8 +33,7 @@ TILE_GET_INFO_MEMBER(shangkid_state::get_bg_tile_info){
 		    x-------    flipx?
 		*/
 		color = (attributes>>2)&0x1f;
-		SET_TILE_INFO_MEMBER(
-				0,
+		SET_TILE_INFO_MEMBER(0,
 				tile_number,
 				color,
 				(attributes&0x80)?TILE_FLIPX:0);
@@ -47,13 +45,12 @@ TILE_GET_INFO_MEMBER(shangkid_state::get_bg_tile_info){
 
 VIDEO_START_MEMBER(shangkid_state,shangkid)
 {
-	m_background = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(shangkid_state::get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,32);
+	m_background = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(shangkid_state::get_bg_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,32);
 }
 
-WRITE8_MEMBER(shangkid_state::shangkid_videoram_w)
+WRITE8_MEMBER(shangkid_state::videoram_w)
 {
-	UINT8 *videoram = m_videoram;
-	videoram[offset] = data;
+	m_videoram[offset] = data;
 	m_background->mark_tile_dirty(offset&0x7ff );
 }
 
@@ -128,7 +125,7 @@ void shangkid_state::draw_sprite(const UINT8 *source, bitmap_ind16 &bitmap, cons
 		transparent_pen = 7;
 	}
 
-	gfx = machine().gfx[1+bank_index];
+	gfx = m_gfxdecode->gfx(1+bank_index);
 
 	width = (xscale+1)*2;
 	height = (yscale+1)*2;
@@ -143,10 +140,10 @@ void shangkid_state::draw_sprite(const UINT8 *source, bitmap_ind16 &bitmap, cons
 		{
 			sx = xpos+(c^xflip)*width;
 			sy = ypos+(r^yflip)*height;
-			drawgfxzoom_transpen(
+
+				gfx->zoom_transpen(
 				bitmap,
 				cliprect,
-				gfx,
 				tile+c*8+r,
 				color,
 				xflip,yflip,
@@ -154,10 +151,10 @@ void shangkid_state::draw_sprite(const UINT8 *source, bitmap_ind16 &bitmap, cons
 				(width<<16)/16, (height<<16)/16,transparent_pen );
 
 			// wrap around y
-			drawgfxzoom_transpen(
+
+				gfx->zoom_transpen(
 				bitmap,
 				cliprect,
-				gfx,
 				tile+c*8+r,
 				color,
 				xflip,yflip,
@@ -186,9 +183,9 @@ UINT32 shangkid_state::screen_update_shangkid(screen_device &screen, bitmap_ind1
 	m_background->set_scrollx(0,m_videoreg[0]-40 );
 	m_background->set_scrolly(0,m_videoreg[2]+0x10 );
 
-	m_background->draw(bitmap, cliprect, 0,0 );
+	m_background->draw(screen, bitmap, cliprect, 0,0 );
 	shangkid_draw_sprites(bitmap,cliprect );
-	m_background->draw(bitmap, cliprect, 1,0 ); /* high priority tiles */
+	m_background->draw(screen, bitmap, cliprect, 1,0 ); /* high priority tiles */
 	return 0;
 }
 
@@ -198,16 +195,13 @@ PALETTE_INIT_MEMBER(shangkid_state,dynamski)
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x20);
-
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x20; i++)
 	{
 		UINT16 data = (color_prom[i | 0x20] << 8) | color_prom[i];
-		rgb_t color = MAKE_RGB(pal5bit(data >> 1), pal5bit(data >> 6), pal5bit(data >> 11));
+		rgb_t color = rgb_t(pal5bit(data >> 1), pal5bit(data >> 6), pal5bit(data >> 11));
 
-		colortable_palette_set_color(machine().colortable, i, color);
+		palette.set_indirect_color(i, color);
 	}
 
 	/* color_prom now points to the beginning of the lookup table */
@@ -217,21 +211,20 @@ PALETTE_INIT_MEMBER(shangkid_state,dynamski)
 	for (i = 0; i < 0x40; i++)
 	{
 		UINT8 ctabentry = color_prom[i] & 0x0f;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 
 	/* sprites */
 	for (i = 0x40; i < 0x80; i++)
 	{
 		UINT8 ctabentry = (color_prom[(i - 0x40) + 0x100] & 0x0f) | 0x10;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 }
 
 
 void shangkid_state::dynamski_draw_background(bitmap_ind16 &bitmap, const rectangle &cliprect, int pri )
 {
-	UINT8 *videoram = m_videoram;
 	int i;
 	int sx,sy;
 	int tile;
@@ -260,8 +253,8 @@ void shangkid_state::dynamski_draw_background(bitmap_ind16 &bitmap, const rectan
 			sx+=16;
 		}
 
-		tile = videoram[i];
-		attr = videoram[i+0x400];
+		tile = m_videoram[i];
+		attr = m_videoram[i+0x400];
 		/*
 		    x---.----   priority?
 		    -xx-.----   bank
@@ -269,10 +262,10 @@ void shangkid_state::dynamski_draw_background(bitmap_ind16 &bitmap, const rectan
 		if( pri==0 || (attr>>7)==pri )
 		{
 			tile += ((attr>>5)&0x3)*256;
-			drawgfx_transpen(
+
+				m_gfxdecode->gfx(0)->transpen(
 				bitmap,
 				cliprect,
-				machine().gfx[0],
 				tile,
 				attr & 0x0f,
 				0,0,//xflip,yflip,
@@ -284,7 +277,6 @@ void shangkid_state::dynamski_draw_background(bitmap_ind16 &bitmap, const rectan
 
 void shangkid_state::dynamski_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	UINT8 *videoram = m_videoram;
 	int i;
 	int sx,sy;
 	int tile;
@@ -293,19 +285,19 @@ void shangkid_state::dynamski_draw_sprites(bitmap_ind16 &bitmap, const rectangle
 	int color;
 	for( i=0x7e; i>=0x00; i-=2 )
 	{
-		bank = videoram[0x1b80+i];
-		attr = videoram[0x1b81+i];
-		tile = videoram[0xb80+i];
-		color = videoram[0xb81+i];
-		sy = 240-videoram[0x1380+i];
+		bank = m_videoram[0x1b80+i];
+		attr = m_videoram[0x1b81+i];
+		tile = m_videoram[0xb80+i];
+		color = m_videoram[0xb81+i];
+		sy = 240-m_videoram[0x1380+i];
 
-		sx = videoram[0x1381+i]-64+8+16;
+		sx = m_videoram[0x1381+i]-64+8+16;
 		if( attr&1 ) sx += 0x100;
 
-		drawgfx_transpen(
+
+				m_gfxdecode->gfx(1)->transpen(
 				bitmap,
 				cliprect,
-				machine().gfx[1],
 				bank*0x40 + (tile&0x3f),
 				color,
 				tile&0x80,tile&0x40, /* flipx,flipy */

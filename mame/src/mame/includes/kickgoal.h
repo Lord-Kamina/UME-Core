@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*************************************************************************
 
     Kick Goal - Action Hollywood
@@ -5,7 +7,7 @@
 *************************************************************************/
 
 #include "sound/okim6295.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 
 class kickgoal_state : public driver_device
 {
@@ -20,7 +22,9 @@ public:
 		m_adpcm(*this, "oki"),
 		m_eeprom(*this, "eeprom") ,
 		m_maincpu(*this, "maincpu"),
-		m_oki(*this, "oki") { }
+		m_oki(*this, "oki"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_fgram;
@@ -56,7 +60,7 @@ public:
 
 	/* devices */
 	required_device<okim6295_device> m_adpcm;
-	required_device<eeprom_device> m_eeprom;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
 	DECLARE_READ16_MEMBER(kickgoal_eeprom_r);
 	DECLARE_WRITE16_MEMBER(kickgoal_eeprom_w);
 	DECLARE_WRITE16_MEMBER(kickgoal_fgram_w);
@@ -82,4 +86,6 @@ public:
 	void kickgoal_play(okim6295_device *oki, int melody, int data);
 	required_device<cpu_device> m_maincpu;
 	required_device<okim6295_device> m_oki;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };

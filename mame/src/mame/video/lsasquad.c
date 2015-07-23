@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #include "emu.h"
 #include "includes/lsasquad.h"
 
@@ -32,13 +34,13 @@ void lsasquad_state::draw_layer( bitmap_ind16 &bitmap, const rectangle &cliprect
 			code = m_videoram[base + 2 * y] + ((attr & 0x0f) << 8);
 			color = attr >> 4;
 
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 					code,
 					color,
 					flip_screen(),flip_screen(),
 					sx,sy,15);
 			if (sx > 248)   /* wraparound */
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+				m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 						code,
 						color,
 						flip_screen(),flip_screen(),
@@ -119,13 +121,13 @@ int lsasquad_state::draw_layer_daikaiju( bitmap_ind16 &bitmap, const rectangle &
 
 			if ((type == 0 && color != 0x0d) || (type != 0 && color == 0x0d))
 			{
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+				m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 					code,
 					color,
 					flip_screen(),flip_screen(),
 					sx,sy,15);
 				if (sx > 248)   /* wraparound */
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+					m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 						code,
 						color,
 						flip_screen(),flip_screen(),
@@ -180,13 +182,13 @@ void lsasquad_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			flipy = !flipy;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				code,
 				color,
 				flipx,flipy,
 				sx,sy,15);
 		/* wraparound */
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				code,
 				color,
 				flipx,flipy,

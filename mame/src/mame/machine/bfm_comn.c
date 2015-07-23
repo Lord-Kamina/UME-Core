@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Bellfruit Common Hardware / Functions */
 #include "emu.h"
 
@@ -19,16 +21,15 @@ static const UINT8 DataDecode[]=
 ///////////////////////////////////////////////////////////////////////////
 void bfm_decode_mainrom(running_machine &machine, const char *rom_region, UINT8* codec_data)
 {
-	UINT8 *tmp, *rom;
+	UINT8 *rom;
 
 	rom = machine.root_device().memregion(rom_region)->base();
 
-	tmp = auto_alloc_array(machine, UINT8, 0x10000);
 	{
+		dynamic_buffer tmp(0x10000);
 		int i;
-		long address;
 
-		memcpy(tmp, rom, 0x10000);
+		memcpy(&tmp[0], rom, 0x10000);
 
 		for ( i = 0; i < 256; i++ )
 		{
@@ -48,7 +49,7 @@ void bfm_decode_mainrom(running_machine &machine, const char *rom_region, UINT8*
 			codec_data[i] = newdata;
 		}
 
-		for ( address = 0; address < 0x10000; address++)
+		for ( int address = 0; address < 0x10000; address++)
 		{
 			int newaddress,pattern;
 			UINT16 *tab;
@@ -64,6 +65,5 @@ void bfm_decode_mainrom(running_machine &machine, const char *rom_region, UINT8*
 
 			rom[newaddress] = codec_data[ tmp[address] ];
 		}
-		auto_free(machine, tmp);
 	}
 }

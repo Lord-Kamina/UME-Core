@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /***************************************************************************
 
   video.c
@@ -21,18 +23,6 @@ int nycaptor_state::nycaptor_spot(  )
 		return m_sharedram[0x299] ? m_sharedram[0x298] : 0;
 	else
 		return 0;
-
-	return 0;
-}
-
-WRITE8_MEMBER(nycaptor_state::nycaptor_spriteram_w)
-{
-	m_spriteram[offset] = data;
-}
-
-READ8_MEMBER(nycaptor_state::nycaptor_spriteram_r)
-{
-	return m_spriteram[offset];
 }
 
 TILE_GET_INFO_MEMBER(nycaptor_state::get_tile_info)
@@ -61,8 +51,7 @@ TILE_GET_INFO_MEMBER(nycaptor_state::get_tile_info)
 	}
 #endif
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			m_videoram[tile_index * 2] + ((m_videoram[tile_index * 2 + 1] & 0xc0) << 2) + 0x400 * m_char_bank,
 			pal, 0
 			);
@@ -71,19 +60,21 @@ TILE_GET_INFO_MEMBER(nycaptor_state::get_tile_info)
 
 void nycaptor_state::video_start()
 {
-	m_spriteram = auto_alloc_array(machine(), UINT8, 160);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(nycaptor_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32 );
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(nycaptor_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32 );
 
 	m_bg_tilemap->set_transmask(0, 0xf800, 0x7ff); //split 0
 	m_bg_tilemap->set_transmask(1, 0xfe00, 0x01ff);//split 1
 	m_bg_tilemap->set_transmask(2, 0xfffc, 0x0003);//split 2
 	m_bg_tilemap->set_transmask(3, 0xfff0, 0x000f);//split 3
-
-	m_generic_paletteram_8.allocate(0x200);
-	m_generic_paletteram2_8.allocate(0x200);
 	m_bg_tilemap->set_scroll_cols(32);
 
-	save_pointer(NAME(m_spriteram), 160);
+	m_paletteram.resize(m_palette->entries());
+	m_paletteram_ext.resize(m_palette->entries());
+	m_palette->basemem().set(m_paletteram, ENDIANNESS_LITTLE, 1);
+	m_palette->extmem().set(m_paletteram_ext, ENDIANNESS_LITTLE, 1);
+
+	save_item(NAME(m_paletteram));
+	save_item(NAME(m_paletteram_ext));
 }
 
 WRITE8_MEMBER(nycaptor_state::nycaptor_videoram_w)
@@ -92,35 +83,27 @@ WRITE8_MEMBER(nycaptor_state::nycaptor_videoram_w)
 	m_bg_tilemap->mark_tile_dirty(offset >> 1);
 }
 
-READ8_MEMBER(nycaptor_state::nycaptor_videoram_r)
-{
-	return m_videoram[offset];
-}
-
 WRITE8_MEMBER(nycaptor_state::nycaptor_palette_w)
 {
 	if (m_gametype == 2) //colt
 		return;
 
 	if (offset & 0x100)
-		paletteram_xxxxBBBBGGGGRRRR_byte_split_hi_w(space, (offset & 0xff) + (m_palette_bank << 8), data);
+		m_palette->write_ext(space, (offset & 0xff) + (m_palette_bank << 8), data);
 	else
-		paletteram_xxxxBBBBGGGGRRRR_byte_split_lo_w(space, (offset & 0xff) + (m_palette_bank << 8), data);
+		m_palette->write(space, (offset & 0xff) + (m_palette_bank << 8), data);
 }
 
 READ8_MEMBER(nycaptor_state::nycaptor_palette_r)
 {
 	if (offset & 0x100)
-		return m_generic_paletteram2_8[(offset & 0xff) + (m_palette_bank << 8)];
+		return m_paletteram_ext[(offset & 0xff) + (m_palette_bank << 8)];
 	else
-		return m_generic_paletteram_8 [(offset & 0xff) + (m_palette_bank << 8)];
+		return m_paletteram[(offset & 0xff) + (m_palette_bank << 8)];
 }
 
 WRITE8_MEMBER(nycaptor_state::nycaptor_gfxctrl_w)
 {
-	if (m_gfxctrl == data)
-		return;
-
 	m_gfxctrl = data;
 
 	if (m_char_bank != ((data & 0x18) >> 3))
@@ -136,11 +119,6 @@ WRITE8_MEMBER(nycaptor_state::nycaptor_gfxctrl_w)
 READ8_MEMBER(nycaptor_state::nycaptor_gfxctrl_r)
 {
 	return m_gfxctrl;
-}
-
-READ8_MEMBER(nycaptor_state::nycaptor_scrlram_r)
-{
-	return m_scrlram[offset];
 }
 
 WRITE8_MEMBER(nycaptor_state::nycaptor_scrlram_w)
@@ -173,7 +151,7 @@ void nycaptor_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			flipx = BIT(m_spriteram[offs + 1], 6);
 			flipy = BIT(m_spriteram[offs + 1], 7);
 
-			drawgfx_transpen(bitmap, cliprect, machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					code,
 					pal,
 					flipx,flipy,
@@ -182,7 +160,7 @@ void nycaptor_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			if (m_spriteram[offs + 3] > 240)
 			{
 				sx = (m_spriteram[offs + 3] - 256);
-				drawgfx_transpen(bitmap, cliprect, machine().gfx[1],
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					code,
 					pal,
 					flipx,flipy,
@@ -205,7 +183,7 @@ void nycaptor_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
    x - no bg/sprite pri.
 */
 
-#define mKEY_MASK(x,y) if (machine.input().code_pressed_once(x)) { state->m_mask |= y; state->m_bg_tilemap->mark_all_dirty(); }
+#define mKEY_MASK(x,y) if (machine().input().code_pressed_once(x)) { m_mask |= y; m_bg_tilemap->mark_all_dirty(); }
 
 void nycaptor_state::nycaptor_setmask(  )
 {
@@ -231,81 +209,81 @@ void nycaptor_state::nycaptor_setmask(  )
 UINT32 nycaptor_state::screen_update_nycaptor(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 #if NYCAPTOR_DEBUG
-	nycaptor_setmask(machine());
+	nycaptor_setmask();
 	if (m_mask & 0x1000)
 	{
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
-		draw_sprites(machine(), bitmap, cliprect, 0);
-		draw_sprites(machine(), bitmap, cliprect, 1);
-		draw_sprites(machine(), bitmap, cliprect, 2);
-		draw_sprites(machine(), bitmap, cliprect, 3);
-		draw_sprites(machine(), bitmap, cliprect, 4);
-		draw_sprites(machine(), bitmap, cliprect, 5);
-		draw_sprites(machine(), bitmap, cliprect, 6);
-		draw_sprites(machine(), bitmap, cliprect, 7);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
+		draw_sprites(bitmap, cliprect, 0);
+		draw_sprites(bitmap, cliprect, 1);
+		draw_sprites(bitmap, cliprect, 2);
+		draw_sprites(bitmap, cliprect, 3);
+		draw_sprites(bitmap, cliprect, 4);
+		draw_sprites(bitmap, cliprect, 5);
+		draw_sprites(bitmap, cliprect, 6);
+		draw_sprites(bitmap, cliprect, 7);
 	}
 	else
 #endif
 	switch (nycaptor_spot() & 3)
 	{
 	case 0:
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3, 0);
 		draw_sprites(bitmap, cliprect, 6);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
 		draw_sprites(bitmap, cliprect, 3);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
 		draw_sprites(bitmap, cliprect, 0);
 		draw_sprites(bitmap, cliprect, 2);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
 		draw_sprites(bitmap, cliprect, 1);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
 		break;
 
 	case 1:
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3, 0);
 		draw_sprites(bitmap, cliprect, 3);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3, 0);
 		draw_sprites(bitmap, cliprect, 2);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
 		draw_sprites(bitmap, cliprect, 1);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2, 0);
 		draw_sprites(bitmap, cliprect, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
 		break;
 
 	case 2:
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
 		draw_sprites(bitmap, cliprect, 1);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2, 0);
 		draw_sprites(bitmap, cliprect, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
 		break;
 
 	case 3:
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1, 0);
 		draw_sprites(bitmap, cliprect, 1);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1, 0);
 		draw_sprites(bitmap, cliprect, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0, 0);
 		break;
 	}
 

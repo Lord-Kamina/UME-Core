@@ -1,6 +1,8 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
-Atari Drag Race Driver
+    Atari Drag Race Driver
 
 ***************************************************************************/
 
@@ -14,20 +16,21 @@ Atari Drag Race Driver
 
 TIMER_DEVICE_CALLBACK_MEMBER(dragrace_state::dragrace_frame_callback)
 {
-	int i;
 	static const char *const portnames[] = { "P1", "P2" };
 
-	for (i = 0; i < 2; i++)
+	for (int i = 0; i < 2; i++)
 	{
 		switch (ioport(portnames[i])->read())
 		{
-		case 0x01: m_gear[i] = 1; break;
-		case 0x02: m_gear[i] = 2; break;
-		case 0x04: m_gear[i] = 3; break;
-		case 0x08: m_gear[i] = 4; break;
-		case 0x10: m_gear[i] = 0; break;
+			case 0x01: m_gear[i] = 1; break;
+			case 0x02: m_gear[i] = 2; break;
+			case 0x04: m_gear[i] = 3; break;
+			case 0x08: m_gear[i] = 4; break;
+			case 0x10: m_gear[i] = 0; break;
 		}
 	}
+	output_set_value("P1gear", m_gear[0]);
+	output_set_value("P2gear", m_gear[1]);
 
 	/* watchdog is disabled during service mode */
 	machine().watchdog_enable(ioport("IN0")->read() & 0x20);
@@ -70,21 +73,25 @@ void dragrace_state::dragrace_update_misc_flags( address_space &space )
 	set_led_status(machine(), 0, m_misc_flags & 0x00008000);
 	set_led_status(machine(), 1, m_misc_flags & 0x80000000);
 
-	discrete_sound_w(m_discrete, space, DRAGRACE_MOTOR1_DATA,  ~m_misc_flags & 0x0000001f);       // Speed1 data*
-	discrete_sound_w(m_discrete, space, DRAGRACE_EXPLODE1_EN, (m_misc_flags & 0x00000020) ? 1: 0);    // Explosion1 enable
-	discrete_sound_w(m_discrete, space, DRAGRACE_SCREECH1_EN, (m_misc_flags & 0x00000040) ? 1: 0);    // Screech1 enable
-	discrete_sound_w(m_discrete, space, DRAGRACE_KLEXPL1_EN, (m_misc_flags & 0x00000200) ? 1: 0); // KLEXPL1 enable
-	discrete_sound_w(m_discrete, space, DRAGRACE_MOTOR1_EN, (m_misc_flags & 0x00000800) ? 1: 0);  // Motor1 enable
+	m_discrete->write(space, DRAGRACE_MOTOR1_DATA,  ~m_misc_flags & 0x0000001f);       // Speed1 data*
+	m_discrete->write(space, DRAGRACE_EXPLODE1_EN, (m_misc_flags & 0x00000020) ? 1: 0);    // Explosion1 enable
+	m_discrete->write(space, DRAGRACE_SCREECH1_EN, (m_misc_flags & 0x00000040) ? 1: 0);    // Screech1 enable
+	m_discrete->write(space, DRAGRACE_KLEXPL1_EN, (m_misc_flags & 0x00000200) ? 1: 0); // KLEXPL1 enable
+	m_discrete->write(space, DRAGRACE_MOTOR1_EN, (m_misc_flags & 0x00000800) ? 1: 0);  // Motor1 enable
 
-	discrete_sound_w(m_discrete, space, DRAGRACE_MOTOR2_DATA, (~m_misc_flags & 0x001f0000) >> 0x10);  // Speed2 data*
-	discrete_sound_w(m_discrete, space, DRAGRACE_EXPLODE2_EN, (m_misc_flags & 0x00200000) ? 1: 0);    // Explosion2 enable
-	discrete_sound_w(m_discrete, space, DRAGRACE_SCREECH2_EN, (m_misc_flags & 0x00400000) ? 1: 0);    // Screech2 enable
-	discrete_sound_w(m_discrete, space, DRAGRACE_KLEXPL2_EN, (m_misc_flags & 0x02000000) ? 1: 0); // KLEXPL2 enable
-	discrete_sound_w(m_discrete, space, DRAGRACE_MOTOR2_EN, (m_misc_flags & 0x08000000) ? 1: 0);  // Motor2 enable
+	m_discrete->write(space, DRAGRACE_MOTOR2_DATA, (~m_misc_flags & 0x001f0000) >> 0x10);  // Speed2 data*
+	m_discrete->write(space, DRAGRACE_EXPLODE2_EN, (m_misc_flags & 0x00200000) ? 1: 0);    // Explosion2 enable
+	m_discrete->write(space, DRAGRACE_SCREECH2_EN, (m_misc_flags & 0x00400000) ? 1: 0);    // Screech2 enable
+	m_discrete->write(space, DRAGRACE_KLEXPL2_EN, (m_misc_flags & 0x02000000) ? 1: 0); // KLEXPL2 enable
+	m_discrete->write(space, DRAGRACE_MOTOR2_EN, (m_misc_flags & 0x08000000) ? 1: 0);  // Motor2 enable
 
-	discrete_sound_w(m_discrete, space, DRAGRACE_ATTRACT_EN, (m_misc_flags & 0x00001000) ? 1: 0); // Attract enable
-	discrete_sound_w(m_discrete, space, DRAGRACE_LOTONE_EN, (m_misc_flags & 0x00002000) ? 1: 0);  // LoTone enable
-	discrete_sound_w(m_discrete, space, DRAGRACE_HITONE_EN, (m_misc_flags & 0x20000000) ? 1: 0);  // HiTone enable
+	m_discrete->write(space, DRAGRACE_ATTRACT_EN, (m_misc_flags & 0x00001000) ? 1: 0); // Attract enable
+	m_discrete->write(space, DRAGRACE_LOTONE_EN, (m_misc_flags & 0x00002000) ? 1: 0);  // LoTone enable
+	m_discrete->write(space, DRAGRACE_HITONE_EN, (m_misc_flags & 0x20000000) ? 1: 0);  // HiTone enable
+
+	// the tachometers are driven from the same frequency generator that creates the engine sound
+	output_set_value("tachometer", ~m_misc_flags & 0x0000001f);
+	output_set_value("tachometer2", (~m_misc_flags & 0x001f0000) >> 0x10);
 }
 
 WRITE8_MEMBER(dragrace_state::dragrace_misc_w)
@@ -116,9 +123,7 @@ READ8_MEMBER(dragrace_state::dragrace_input_r)
 	UINT8 maskA = 1 << (offset % 8);
 	UINT8 maskB = 1 << (offset / 8);
 
-	int i;
-
-	for (i = 0; i < 2; i++)
+	for (int i = 0; i < 2; i++)
 	{
 		int in = ioport(portnames[i])->read();
 
@@ -139,9 +144,7 @@ READ8_MEMBER(dragrace_state::dragrace_steering_r)
 	int bitB[2];
 	static const char *const dialnames[] = { "DIAL1", "DIAL2" };
 
-	int i;
-
-	for (i = 0; i < 2; i++)
+	for (int i = 0; i < 2; i++)
 	{
 		int dial = ioport(dialnames[i])->read();
 
@@ -157,7 +160,7 @@ READ8_MEMBER(dragrace_state::dragrace_steering_r)
 
 READ8_MEMBER(dragrace_state::dragrace_scanline_r)
 {
-	return (machine().primary_screen->vpos() ^ 0xf0) | 0x0f;
+	return (m_screen->vpos() ^ 0xf0) | 0x0f;
 }
 
 
@@ -287,24 +290,24 @@ static GFXDECODE_START( dragrace )
 GFXDECODE_END
 
 
-void dragrace_state::palette_init()
+PALETTE_INIT_MEMBER(dragrace_state, dragrace)
 {
-	palette_set_color(machine(), 0, MAKE_RGB(0xFF, 0xFF, 0xFF));   /* 2 color tiles */
-	palette_set_color(machine(), 1, MAKE_RGB(0x00, 0x00, 0x00));
-	palette_set_color(machine(), 2, MAKE_RGB(0x00, 0x00, 0x00));
-	palette_set_color(machine(), 3, MAKE_RGB(0xFF, 0xFF, 0xFF));
-	palette_set_color(machine(), 4, MAKE_RGB(0x00, 0x00, 0x00));
-	palette_set_color(machine(), 5, MAKE_RGB(0x00, 0x00, 0x00));
-	palette_set_color(machine(), 6, MAKE_RGB(0xFF, 0xFF, 0xFF));
-	palette_set_color(machine(), 7, MAKE_RGB(0xFF, 0xFF, 0xFF));
-	palette_set_color(machine(), 8, MAKE_RGB(0xFF, 0xFF, 0xFF));   /* 4 color tiles */
-	palette_set_color(machine(), 9, MAKE_RGB(0xB0, 0xB0, 0xB0));
-	palette_set_color(machine(), 10,MAKE_RGB(0x5F, 0x5F, 0x5F));
-	palette_set_color(machine(), 11,MAKE_RGB(0x00, 0x00, 0x00));
-	palette_set_color(machine(), 12,MAKE_RGB(0xFF, 0xFF, 0xFF));
-	palette_set_color(machine(), 13,MAKE_RGB(0x5F, 0x5F, 0x5F));
-	palette_set_color(machine(), 14,MAKE_RGB(0xB0, 0xB0, 0xB0));
-	palette_set_color(machine(), 15,MAKE_RGB(0x00, 0x00, 0x00));
+	palette.set_pen_color(0, rgb_t(0xFF, 0xFF, 0xFF));   /* 2 color tiles */
+	palette.set_pen_color(1, rgb_t(0x00, 0x00, 0x00));
+	palette.set_pen_color(2, rgb_t(0x00, 0x00, 0x00));
+	palette.set_pen_color(3, rgb_t(0xFF, 0xFF, 0xFF));
+	palette.set_pen_color(4, rgb_t(0x00, 0x00, 0x00));
+	palette.set_pen_color(5, rgb_t(0x00, 0x00, 0x00));
+	palette.set_pen_color(6, rgb_t(0xFF, 0xFF, 0xFF));
+	palette.set_pen_color(7, rgb_t(0xFF, 0xFF, 0xFF));
+	palette.set_pen_color(8, rgb_t(0xFF, 0xFF, 0xFF));   /* 4 color tiles */
+	palette.set_pen_color(9, rgb_t(0xB0, 0xB0, 0xB0));
+	palette.set_pen_color(10,rgb_t(0x5F, 0x5F, 0x5F));
+	palette.set_pen_color(11,rgb_t(0x00, 0x00, 0x00));
+	palette.set_pen_color(12,rgb_t(0xFF, 0xFF, 0xFF));
+	palette.set_pen_color(13,rgb_t(0x5F, 0x5F, 0x5F));
+	palette.set_pen_color(14,rgb_t(0xB0, 0xB0, 0xB0));
+	palette.set_pen_color(15,rgb_t(0x00, 0x00, 0x00));
 }
 
 
@@ -337,15 +340,17 @@ static MACHINE_CONFIG_START( dragrace, dragrace_state )
 	MCFG_SCREEN_SIZE(256, 262)
 	MCFG_SCREEN_VISIBLE_AREA(0, 255, 0, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(dragrace_state, screen_update_dragrace)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(dragrace)
-	MCFG_PALETTE_LENGTH(16)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", dragrace)
+	MCFG_PALETTE_ADD("palette", 16)
+	MCFG_PALETTE_INIT_OWNER(dragrace_state, dragrace)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(dragrace)
+	MCFG_DISCRETE_INTF(dragrace)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -367,6 +372,9 @@ ROM_START( dragrace )
 	ROM_LOAD( "8517dr.h0", 0x200, 0x200, CRC(8b5bff1f) SHA1(fdcd719c66bff7c4b9f3d56d1e635259dd8add61) )
 	ROM_LOAD( "8516dr.l0", 0x400, 0x200, CRC(d1e74af1) SHA1(f55a3bfd7d152ac9af128697f55c9a0c417779f5) )
 	ROM_LOAD( "8518dr.n0", 0x600, 0x200, CRC(b1369028) SHA1(598a8779982d532c9f34345e793a79fcb29cac62) )
+
+	ROM_REGION( 0x100, "sync", 0 )  /* sync prom located at L8, it's a 82s129 */
+	ROM_LOAD( "l8.bin", 0x000, 0x100, CRC(3610b453) SHA1(9e33ee04f22a9174c29fafb8e71781fa330a7a08) )
 ROM_END
 
 

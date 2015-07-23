@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     distate.c
 
     Device state interfaces.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -78,9 +49,11 @@ const UINT64 device_state_entry::k_decimal_divisor[] =
 //  device_state_entry - constructor
 //-------------------------------------------------
 
-device_state_entry::device_state_entry(int index, const char *symbol, void *dataptr, UINT8 size)
-	: m_next(NULL),
+device_state_entry::device_state_entry(int index, const char *symbol, void *dataptr, UINT8 size, device_state_interface *dev)
+	: m_device_state(dev),
+		m_next(NULL),
 		m_index(index),
+		m_dataptr(dataptr),
 		m_datamask(0),
 		m_datasize(size),
 		m_flags(0),
@@ -88,9 +61,6 @@ device_state_entry::device_state_entry(int index, const char *symbol, void *data
 		m_default_format(true),
 		m_sizemask(0)
 {
-	// set the data pointer
-	m_dataptr.v = dataptr;
-
 	// convert the size to a mask
 	assert(size == 1 || size == 2 || size == 4 || size == 8);
 	if (size == 1)
@@ -108,13 +78,27 @@ device_state_entry::device_state_entry(int index, const char *symbol, void *data
 
 	// override well-known symbols
 	if (index == STATE_GENPC)
-		m_symbol.cpy("CURPC");
+		m_symbol.assign("CURPC");
 	else if (index == STATE_GENPCBASE)
-		m_symbol.cpy("CURPCBASE");
+		m_symbol.assign("CURPCBASE");
 	else if (index == STATE_GENSP)
-		m_symbol.cpy("CURSP");
+		m_symbol.assign("CURSP");
 	else if (index == STATE_GENFLAGS)
-		m_symbol.cpy("CURFLAGS");
+		m_symbol.assign("CURFLAGS");
+}
+
+device_state_entry::device_state_entry(int index, device_state_interface *dev)
+	: m_device_state(dev),
+		m_next(NULL),
+		m_index(index),
+		m_dataptr(NULL),
+		m_datamask(0),
+		m_datasize(0),
+		m_flags(DSF_DIVIDER),
+		m_symbol(),
+		m_default_format(true),
+		m_sizemask(0)
+{
 }
 
 
@@ -124,12 +108,12 @@ device_state_entry::device_state_entry(int index, const char *symbol, void *data
 
 device_state_entry &device_state_entry::formatstr(const char *_format)
 {
-	m_format.cpy(_format);
+	m_format.assign(_format);
 	m_default_format = false;
 
 	// set the DSF_CUSTOM_STRING flag by formatting with a NULL string
 	m_flags &= ~DSF_CUSTOM_STRING;
-	astring dummy;
+	std::string dummy;
 	format(dummy, NULL);
 
 	return *this;
@@ -151,7 +135,7 @@ void device_state_entry::format_from_mask()
 	int width = 0;
 	for (UINT64 tempmask = m_datamask; tempmask != 0; tempmask >>= 4)
 		width++;
-	m_format.printf("%%0%dX", width);
+	strprintf(m_format,"%%0%dX", width);
 }
 
 
@@ -180,7 +164,7 @@ UINT64 device_state_entry::value() const
 //  pieces of indexed state as a string
 //-------------------------------------------------
 
-astring &device_state_entry::format(astring &dest, const char *string, bool maxout) const
+std::string &device_state_entry::format(std::string &dest, const char *string, bool maxout) const
 {
 	UINT64 result = value();
 
@@ -191,7 +175,7 @@ astring &device_state_entry::format(astring &dest, const char *string, bool maxo
 	bool hitnonzero = false;
 	bool reset = true;
 	int width = 0;
-	for (const char *fptr = m_format; *fptr != 0; fptr++)
+	for (const char *fptr = m_format.c_str(); *fptr != 0; fptr++)
 	{
 		// reset any accumulated state
 		if (reset)
@@ -204,7 +188,7 @@ astring &device_state_entry::format(astring &dest, const char *string, bool maxo
 		// if we're not within a format, then anything other than a % outputs directly
 		if (!percent && *fptr != '%')
 		{
-			dest.cat(fptr, 1);
+			dest.append(fptr, 1);
 			continue;
 		}
 
@@ -217,7 +201,7 @@ astring &device_state_entry::format(astring &dest, const char *string, bool maxo
 					percent = true;
 				else
 				{
-					dest.cat(fptr, 1);
+					dest.append(fptr, 1);
 					percent = false;
 				}
 				break;
@@ -248,7 +232,7 @@ astring &device_state_entry::format(astring &dest, const char *string, bool maxo
 				hitnonzero = false;
 				while (leadzero && width > 16)
 				{
-					dest.cat(" ");
+					dest.append(" ");
 					width--;
 				}
 				for (int digitnum = 15; digitnum >= 0; digitnum--)
@@ -257,11 +241,36 @@ astring &device_state_entry::format(astring &dest, const char *string, bool maxo
 					if (digit != 0)
 					{
 						static const char hexchars[] = "0123456789ABCDEF";
-						dest.cat(&hexchars[digit], 1);
+						dest.append(&hexchars[digit], 1);
 						hitnonzero = true;
 					}
 					else if (hitnonzero || (leadzero && digitnum < width) || digitnum == 0)
-						dest.cat("0");
+						dest.append("0");
+				}
+				reset = true;
+				break;
+
+			// O outputs as octal
+			case 'O':
+				if (width == 0)
+					throw emu_fatalerror("Width required for %%O formats\n");
+				hitnonzero = false;
+				while (leadzero && width > 22)
+				{
+					dest.append(" ");
+					width--;
+				}
+				for (int digitnum = 21; digitnum >= 0; digitnum--)
+				{
+					int digit = (result >> (3 * digitnum)) & 07;
+					if (digit != 0)
+					{
+						static const char octchars[] = "01234567";
+						dest.append(&octchars[digit], 1);
+						hitnonzero = true;
+					}
+					else if (hitnonzero || (leadzero && digitnum < width) || digitnum == 0)
+						dest.append("0");
 				}
 				reset = true;
 				break;
@@ -273,12 +282,12 @@ astring &device_state_entry::format(astring &dest, const char *string, bool maxo
 				if ((result & m_datamask) > (m_datamask >> 1))
 				{
 					result = -result & m_datamask;
-					dest.cat("-");
+					dest.append("-");
 					width--;
 				}
 				else if (explicitsign)
 				{
-					dest.cat("+");
+					dest.append("+");
 					width--;
 				}
 				// fall through to unsigned case
@@ -290,7 +299,7 @@ astring &device_state_entry::format(astring &dest, const char *string, bool maxo
 				hitnonzero = false;
 				while (leadzero && width > ARRAY_LENGTH(k_decimal_divisor))
 				{
-					dest.cat(" ");
+					dest.append(" ");
 					width--;
 				}
 				for (int digitnum = ARRAY_LENGTH(k_decimal_divisor) - 1; digitnum >= 0; digitnum--)
@@ -299,11 +308,11 @@ astring &device_state_entry::format(astring &dest, const char *string, bool maxo
 					if (digit != 0)
 					{
 						static const char decchars[] = "0123456789";
-						dest.cat(&decchars[digit], 1);
+						dest.append(&decchars[digit], 1);
 						hitnonzero = true;
 					}
 					else if (hitnonzero || (leadzero && digitnum < width) || digitnum == 0)
-						dest.cat("0");
+						dest.append("0");
 				}
 				reset = true;
 				break;
@@ -319,13 +328,13 @@ astring &device_state_entry::format(astring &dest, const char *string, bool maxo
 				}
 				if (strlen(string) <= width)
 				{
-					dest.cat(string);
+					dest.append(string);
 					width -= strlen(string);
 					while (width-- != 0)
-						dest.cat(" ");
+						dest.append(" ");
 				}
 				else
-					dest.cat(string, width);
+					dest.append(string, width);
 				reset = true;
 				break;
 
@@ -383,7 +392,7 @@ void device_state_entry::set_value(const char *string) const
 //-------------------------------------------------
 
 device_state_interface::device_state_interface(const machine_config &mconfig, device_t &device)
-	: device_interface(device)
+	: device_interface(device, "state")
 {
 	memset(m_fast_state, 0, sizeof(m_fast_state));
 
@@ -427,20 +436,20 @@ UINT64 device_state_interface::state_int(int index)
 //  pieces of indexed state as a string
 //-------------------------------------------------
 
-astring &device_state_interface::state_string(int index, astring &dest)
+std::string &device_state_interface::state_string(int index, std::string &dest)
 {
 	// NULL or out-of-range entry returns bogus string
 	const device_state_entry *entry = state_find_entry(index);
 	if (entry == NULL)
-		return dest.cpy("???");
+		return dest.assign("???");
 
 	// get the custom string if needed
-	astring custom;
+	std::string custom;
 	if (entry->needs_custom_string())
 		state_string_export(*entry, custom);
 
 	// ask the entry to format itself
-	return entry->format(dest, custom);
+	return entry->format(dest, custom.c_str());
 }
 
 
@@ -457,8 +466,8 @@ int device_state_interface::state_string_max_length(int index)
 		return 3;
 
 	// ask the entry to format itself maximally
-	astring tempstring;
-	return entry->format(tempstring, "", true).len();
+	std::string tempstring;
+	return entry->format(tempstring, "", true).length();
 }
 
 
@@ -516,7 +525,7 @@ device_state_entry &device_state_interface::state_add(int index, const char *sym
 	assert(symbol != NULL);
 
 	// allocate new entry
-	device_state_entry *entry = global_alloc(device_state_entry(index, symbol, data, size));
+	device_state_entry *entry = global_alloc(device_state_entry(index, symbol, data, size, this));
 
 	// append to the end of the list
 	m_state_list.append(*entry);
@@ -528,6 +537,21 @@ device_state_entry &device_state_interface::state_add(int index, const char *sym
 	return *entry;
 }
 
+//-------------------------------------------------
+//  state_add_divider - add a simple divider
+//  entry
+//-------------------------------------------------
+
+device_state_entry &device_state_interface::state_add_divider(int index)
+{
+	// allocate new entry
+	device_state_entry *entry = global_alloc(device_state_entry(index, this));
+
+	// append to the end of the list
+	m_state_list.append(*entry);
+
+	return *entry;
+}
 
 //-------------------------------------------------
 //  state_import - called after new state is
@@ -556,7 +580,7 @@ void device_state_interface::state_export(const device_state_entry &entry)
 //  written to perform any post-processing
 //-------------------------------------------------
 
-void device_state_interface::state_string_import(const device_state_entry &entry, astring &string)
+void device_state_interface::state_string_import(const device_state_entry &entry, std::string &str)
 {
 	// do nothing by default
 }
@@ -567,7 +591,7 @@ void device_state_interface::state_string_import(const device_state_entry &entry
 //  written to perform any post-processing
 //-------------------------------------------------
 
-void device_state_interface::state_string_export(const device_state_entry &entry, astring &string)
+void device_state_interface::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	// do nothing by default
 }

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*
    NEC V-series Disassembler
 
@@ -7,18 +9,7 @@
 
 #include "emu.h"
 
-struct nec_config
-{
-	const UINT8*    v25v35_decryptiontable; // internal decryption table
-};
-
-/* default configuration */
-static const nec_config default_config =
-{
-	NULL
-};
-
-static const nec_config *Iconfig;
+static const UINT8 *Iconfig;
 
 enum
 {
@@ -74,7 +65,7 @@ enum
 	SEG_SS
 };
 
-struct I386_OPCODE {
+struct NEC_I386_OPCODE {
 	char mnemonic[32];
 	UINT32 flags;
 	UINT32 param1;
@@ -83,15 +74,15 @@ struct I386_OPCODE {
 	offs_t dasm_flags;
 };
 
-struct GROUP_OP {
+struct NEC_GROUP_OP {
 	char mnemonic[32];
-	const I386_OPCODE *opcode;
+	const NEC_I386_OPCODE *opcode;
 };
 
 static const UINT8 *opcode_ptr;
 static const UINT8 *opcode_ptr_base;
 
-static const I386_OPCODE necv_opcode_table1[256] =
+static const NEC_I386_OPCODE necv_opcode_table1[256] =
 {
 	// 0x00
 	{"add",             MODRM,          PARAM_RM8,          PARAM_REG8,         0               },
@@ -367,7 +358,7 @@ static const I386_OPCODE necv_opcode_table1[256] =
 	{"group2w",         GROUP,          0,                  0,                  0               }
 };
 
-static const I386_OPCODE necv_opcode_table2[256] =
+static const NEC_I386_OPCODE necv_opcode_table2[256] =
 {
 	// 0x00
 	{"???",             0,              0,                  0,                  0               },
@@ -643,7 +634,7 @@ static const I386_OPCODE necv_opcode_table2[256] =
 	{"brkem",           0,              PARAM_UI8,          0,                  0               }   /* V20,30,40,50 only */
 };
 
-static const I386_OPCODE immb_table[8] =
+static const NEC_I386_OPCODE immb_table[8] =
 {
 	{"add",             0,              PARAM_RMPTR8,       PARAM_UI8,          0               },
 	{"or",              0,              PARAM_RMPTR8,       PARAM_UI8,          0               },
@@ -655,7 +646,7 @@ static const I386_OPCODE immb_table[8] =
 	{"cmp",             0,              PARAM_RMPTR8,       PARAM_UI8,          0               }
 };
 
-static const I386_OPCODE immw_table[8] =
+static const NEC_I386_OPCODE immw_table[8] =
 {
 	{"add",             0,              PARAM_RMPTR16,      PARAM_IMM,          0               },
 	{"or",              0,              PARAM_RMPTR16,      PARAM_IMM,          0               },
@@ -667,7 +658,7 @@ static const I386_OPCODE immw_table[8] =
 	{"cmp",             0,              PARAM_RMPTR16,      PARAM_IMM,          0               }
 };
 
-static const I386_OPCODE immws_table[8] =
+static const NEC_I386_OPCODE immws_table[8] =
 {
 	{"add",             0,              PARAM_RMPTR16,      PARAM_I8,           0               },
 	{"or",              0,              PARAM_RMPTR16,      PARAM_I8,           0               },
@@ -679,7 +670,7 @@ static const I386_OPCODE immws_table[8] =
 	{"cmp",             0,              PARAM_RMPTR16,      PARAM_I8,           0               }
 };
 
-static const I386_OPCODE shiftbi_table[8] =
+static const NEC_I386_OPCODE shiftbi_table[8] =
 {
 	{"rol",             0,              PARAM_RMPTR8,       PARAM_I8,           0               },
 	{"ror",             0,              PARAM_RMPTR8,       PARAM_I8,           0               },
@@ -691,7 +682,7 @@ static const I386_OPCODE shiftbi_table[8] =
 	{"shra",            0,              PARAM_RMPTR8,       PARAM_I8,           0               }
 };
 
-static const I386_OPCODE shiftwi_table[8] =
+static const NEC_I386_OPCODE shiftwi_table[8] =
 {
 	{"rol",             0,              PARAM_RMPTR16,      PARAM_I8,           0               },
 	{"ror",             0,              PARAM_RMPTR16,      PARAM_I8,           0               },
@@ -703,7 +694,7 @@ static const I386_OPCODE shiftwi_table[8] =
 	{"shra",            0,              PARAM_RMPTR16,      PARAM_I8,           0               }
 };
 
-static const I386_OPCODE shiftb_table[8] =
+static const NEC_I386_OPCODE shiftb_table[8] =
 {
 	{"rol",             0,              PARAM_RMPTR8,       PARAM_1,            0               },
 	{"ror",             0,              PARAM_RMPTR8,       PARAM_1,            0               },
@@ -715,7 +706,7 @@ static const I386_OPCODE shiftb_table[8] =
 	{"shra",            0,              PARAM_RMPTR8,       PARAM_1,            0               }
 };
 
-static const I386_OPCODE shiftw_table[8] =
+static const NEC_I386_OPCODE shiftw_table[8] =
 {
 	{"rol",             0,              PARAM_RMPTR16,      PARAM_1,            0               },
 	{"ror",             0,              PARAM_RMPTR16,      PARAM_1,            0               },
@@ -727,7 +718,7 @@ static const I386_OPCODE shiftw_table[8] =
 	{"shra",            0,              PARAM_RMPTR16,      PARAM_1,            0               }
 };
 
-static const I386_OPCODE shiftbv_table[8] =
+static const NEC_I386_OPCODE shiftbv_table[8] =
 {
 	{"rol",             0,              PARAM_RMPTR8,       PARAM_CL,           0               },
 	{"ror",             0,              PARAM_RMPTR8,       PARAM_CL,           0               },
@@ -739,7 +730,7 @@ static const I386_OPCODE shiftbv_table[8] =
 	{"shra",            0,              PARAM_RMPTR8,       PARAM_CL,           0               }
 };
 
-static const I386_OPCODE shiftwv_table[8] =
+static const NEC_I386_OPCODE shiftwv_table[8] =
 {
 	{"rol",             0,              PARAM_RMPTR16,      PARAM_CL,           0               },
 	{"ror",             0,              PARAM_RMPTR16,      PARAM_CL,           0               },
@@ -751,7 +742,7 @@ static const I386_OPCODE shiftwv_table[8] =
 	{"shra",            0,              PARAM_RMPTR16,      PARAM_CL,           0               }
 };
 
-static const I386_OPCODE group1b_table[8] =
+static const NEC_I386_OPCODE group1b_table[8] =
 {
 	{"test",            0,              PARAM_RMPTR8,       PARAM_UI8,          0               },
 	{"???",             0,              0,                  0,                  0               },
@@ -763,7 +754,7 @@ static const I386_OPCODE group1b_table[8] =
 	{"div",             0,              PARAM_RMPTR8,       0,                  0               }
 };
 
-static const I386_OPCODE group1w_table[8] =
+static const NEC_I386_OPCODE group1w_table[8] =
 {
 	{"test",            0,              PARAM_RMPTR16,      PARAM_IMM,          0               },
 	{"???",             0,              0,                  0,                  0               },
@@ -775,7 +766,7 @@ static const I386_OPCODE group1w_table[8] =
 	{"div",             0,              PARAM_RMPTR16,      0,                  0               }
 };
 
-static const I386_OPCODE group2b_table[8] =
+static const NEC_I386_OPCODE group2b_table[8] =
 {
 	{"inc",             0,              PARAM_RMPTR8,       0,                  0               },
 	{"dec",             0,              PARAM_RMPTR8,       0,                  0               },
@@ -787,7 +778,7 @@ static const I386_OPCODE group2b_table[8] =
 	{"???",             0,              0,                  0,                  0               }
 };
 
-static const I386_OPCODE group2w_table[8] =
+static const NEC_I386_OPCODE group2w_table[8] =
 {
 	{"inc",             0,              PARAM_RMPTR16,      0,                  0               },
 	{"dec",             0,              PARAM_RMPTR16,      0,                  0               },
@@ -799,7 +790,7 @@ static const I386_OPCODE group2w_table[8] =
 	{"???",             0,              0,                  0,                  0               }
 };
 
-static const GROUP_OP group_op_table[] =
+static const NEC_GROUP_OP group_op_table[] =
 {
 	{ "immb",               immb_table              },
 	{ "immw",               immw_table              },
@@ -892,6 +883,7 @@ INLINE UINT8 FETCH(void)
 	return *opcode_ptr++;
 }
 
+#if 0
 INLINE UINT16 FETCH16(void)
 {
 	UINT16 d;
@@ -902,6 +894,7 @@ INLINE UINT16 FETCH16(void)
 	pc += 2;
 	return d;
 }
+#endif
 
 INLINE UINT8 FETCHD(void)
 {
@@ -1514,7 +1507,7 @@ static void handle_fpu(char *s, UINT8 op1, UINT8 op2)
 	}
 }
 
-static void decode_opcode(char *s, const I386_OPCODE *op, UINT8 op1 )
+static void decode_opcode(char *s, const NEC_I386_OPCODE *op, UINT8 op1 )
 {
 	int i;
 	UINT8 op2;
@@ -1532,14 +1525,14 @@ static void decode_opcode(char *s, const I386_OPCODE *op, UINT8 op1 )
 		case SEG_SS:
 			segment = op->flags;
 			op2 = FETCH();
-			if (Iconfig->v25v35_decryptiontable) op2 = Iconfig->v25v35_decryptiontable[op2];
+			if (Iconfig) op2 = Iconfig[op2];
 			decode_opcode( s, &necv_opcode_table1[op2], op1 );
 			return;
 
 		case PREFIX:
 			s += sprintf( s, "%-8s", op->mnemonic );
 			op2 = FETCH();
-			if (Iconfig->v25v35_decryptiontable) op2 = Iconfig->v25v35_decryptiontable[op2];
+			if (Iconfig) op2 = Iconfig[op2];
 			decode_opcode( s, &necv_opcode_table1[op2], op1 );
 			return;
 
@@ -1586,11 +1579,10 @@ handle_unknown:
 	sprintf(s, "???");
 }
 
-int necv_dasm_one(char *buffer, UINT32 eip, const UINT8 *oprom, const nec_config *_config)
+int necv_dasm_one(char *buffer, UINT32 eip, const UINT8 *oprom, const UINT8 *decryption_table)
 {
 	UINT8 op;
-	const nec_config *config = _config ? _config : &default_config;
-	Iconfig = config;
+	Iconfig = decryption_table;
 
 	opcode_ptr = opcode_ptr_base = oprom;
 	pc = eip;
@@ -1599,7 +1591,7 @@ int necv_dasm_one(char *buffer, UINT32 eip, const UINT8 *oprom, const nec_config
 
 	op = FETCH();
 
-	if (Iconfig->v25v35_decryptiontable) op = Iconfig->v25v35_decryptiontable[op];
+	if (Iconfig) op = Iconfig[op];
 
 	decode_opcode( buffer, &necv_opcode_table1[op], op );
 	return (pc-eip) | dasm_flags | DASMFLAG_SUPPORTED;

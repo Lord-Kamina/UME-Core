@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:BUT
 /*
 
 Chack'n Pop driver by BUT
@@ -143,44 +145,23 @@ WRITE8_MEMBER(chaknpop_state::coinlock_w)
 static ADDRESS_MAP_START( chaknpop_map, AS_PROGRAM, 8, chaknpop_state )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
 	AM_RANGE(0x8000, 0x87ff) AM_RAM AM_SHARE("mcu_ram")
-	AM_RANGE(0x8800, 0x8800) AM_READWRITE(chaknpop_mcu_port_a_r, chaknpop_mcu_port_a_w)
-	AM_RANGE(0x8801, 0x8801) AM_READWRITE(chaknpop_mcu_port_b_r, chaknpop_mcu_port_b_w)
-	AM_RANGE(0x8802, 0x8802) AM_READWRITE(chaknpop_mcu_port_c_r, chaknpop_mcu_port_c_w)
+	AM_RANGE(0x8800, 0x8800) AM_READWRITE(mcu_port_a_r, mcu_port_a_w)
+	AM_RANGE(0x8801, 0x8801) AM_READWRITE(mcu_port_b_r, mcu_port_b_w)
+	AM_RANGE(0x8802, 0x8802) AM_READWRITE(mcu_port_c_r, mcu_port_c_w)
 	AM_RANGE(0x8804, 0x8805) AM_DEVREADWRITE("ay1", ay8910_device, data_r, address_data_w)
 	AM_RANGE(0x8806, 0x8807) AM_DEVREADWRITE("ay2", ay8910_device, data_r, address_data_w)
 	AM_RANGE(0x8808, 0x8808) AM_READ_PORT("DSWC")
 	AM_RANGE(0x8809, 0x8809) AM_READ_PORT("P1")
 	AM_RANGE(0x880a, 0x880a) AM_READ_PORT("SYSTEM")
 	AM_RANGE(0x880b, 0x880b) AM_READ_PORT("P2")
-	AM_RANGE(0x880c, 0x880c) AM_READWRITE(chaknpop_gfxmode_r, chaknpop_gfxmode_w)
+	AM_RANGE(0x880c, 0x880c) AM_READWRITE(gfxmode_r, gfxmode_w)
 	AM_RANGE(0x880d, 0x880d) AM_WRITE(coinlock_w)                                               // coin lock out
-	AM_RANGE(0x9000, 0x93ff) AM_RAM_WRITE(chaknpop_txram_w) AM_SHARE("tx_ram")          // TX tilemap
-	AM_RANGE(0x9800, 0x983f) AM_RAM_WRITE(chaknpop_attrram_w) AM_SHARE("attr_ram")      // Color attribute
+	AM_RANGE(0x9000, 0x93ff) AM_RAM_WRITE(txram_w) AM_SHARE("tx_ram")          // TX tilemap
+	AM_RANGE(0x9800, 0x983f) AM_RAM_WRITE(attrram_w) AM_SHARE("attr_ram")      // Color attribute
 	AM_RANGE(0x9840, 0x98ff) AM_RAM AM_SHARE("spr_ram") // sprite
 	AM_RANGE(0xa000, 0xbfff) AM_ROM
 	AM_RANGE(0xc000, 0xffff) AM_RAMBANK("bank1")                                                        // bitmap plane 1-4
 ADDRESS_MAP_END
-
-static const ay8910_interface ay8910_interface_1 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSWA"),       // DSW A
-	DEVCB_INPUT_PORT("DSWB"),       // DSW B
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static const ay8910_interface ay8910_interface_2 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(chaknpop_state,unknown_port_1_w),   // ??
-	DEVCB_DRIVER_MEMBER(chaknpop_state,unknown_port_2_w)    // ??
-};
-
 
 /***************************************************************************
 
@@ -383,21 +364,24 @@ static MACHINE_CONFIG_START( chaknpop, chaknpop_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(chaknpop_state, screen_update_chaknpop)
+	MCFG_SCREEN_UPDATE_DRIVER(chaknpop_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(chaknpop)
-	MCFG_PALETTE_LENGTH(1024)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", chaknpop)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_INIT_OWNER(chaknpop_state, chaknpop)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ay1", AY8910, XTAL_18MHz / 12)  /* Verified on PCB */
-	MCFG_SOUND_CONFIG(ay8910_interface_1)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSWA"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSWB"))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.15)
 
 	MCFG_SOUND_ADD("ay2", AY8910, XTAL_18MHz / 12)  /* Verified on PCB */
-	MCFG_SOUND_CONFIG(ay8910_interface_2)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(chaknpop_state, unknown_port_1_w))   // ??
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(chaknpop_state, unknown_port_2_w))    // ??
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.10)
 MACHINE_CONFIG_END
 
@@ -434,4 +418,4 @@ ROM_END
 
 
 /*  ( YEAR  NAME      PARENT    MACHINE   INPUT     INIT      MONITOR  COMPANY              FULLNAME ) */
-GAME( 1983, chaknpop, 0,        chaknpop, chaknpop, driver_device, 0,        ROT0,    "Taito Corporation", "Chack'n Pop", 0 )
+GAME( 1983, chaknpop, 0,        chaknpop, chaknpop, driver_device, 0,        ROT0,    "Taito Corporation", "Chack'n Pop", GAME_SUPPORTS_SAVE )

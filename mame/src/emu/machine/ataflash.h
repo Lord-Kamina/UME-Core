@@ -1,16 +1,17 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 #pragma once
 
 #ifndef __ATAFLASH_H__
 #define __ATAFLASH_H__
 
 #include "pccard.h"
-#include "machine/idectrl.h"
+#include "machine/idehd.h"
 
 extern const device_type ATA_FLASH_PCCARD;
 
-class ata_flash_pccard_device : public device_t,
-	public pccard_interface,
-	public device_slot_card_interface
+class ata_flash_pccard_device : public ide_hdd_device,
+	public pccard_interface
 {
 public:
 	ata_flash_pccard_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
@@ -23,14 +24,18 @@ public:
 protected:
 	// device-level overrides
 	virtual void device_start();
-	virtual void device_reset_after_children();
-	virtual machine_config_constructor device_mconfig_additions() const;
+	virtual void device_reset();
+
+	virtual attotime seek_time();
+	virtual void process_command();
+	virtual void process_buffer();
+	virtual bool is_ready();
 
 private:
-	chd_file *m_chd_file;
-	unsigned char m_cis[512];
+	UINT8 m_cis[512];
+	UINT8 m_key[5];
+	UINT8 m_gnetreadlock;
 	int m_locked;
-	required_device<ide_controller_device> m_card;
 };
 
 #endif

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Time Pilot
@@ -37,10 +39,10 @@
 
 ***************************************************************************/
 
-void timeplt_state::palette_init()
+PALETTE_INIT_MEMBER(timeplt_state, timeplt)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
-	rgb_t palette[32];
+	rgb_t palette_val[32];
 	int i;
 
 	for (i = 0; i < 32; i++)
@@ -66,7 +68,7 @@ void timeplt_state::palette_init()
 		bit4 = (color_prom[i + 0 * 32] >> 7) & 0x01;
 		b = 0x19 * bit0 + 0x24 * bit1 + 0x35 * bit2 + 0x40 * bit3 + 0x4d * bit4;
 
-		palette[i] = MAKE_RGB(r, g, b);
+		palette_val[i] = rgb_t(r, g, b);
 	}
 
 	color_prom += 2*32;
@@ -75,11 +77,11 @@ void timeplt_state::palette_init()
 
 	/* sprites */
 	for (i = 0; i < 64 * 4; i++)
-		palette_set_color(machine(), 32 * 4 + i, palette[*color_prom++ & 0x0f]);
+		palette.set_pen_color(32 * 4 + i, palette_val[*color_prom++ & 0x0f]);
 
 	/* characters */
 	for (i = 0; i < 32 * 4; i++)
-		palette_set_color(machine(), i, palette[(*color_prom++ & 0x0f) + 0x10]);
+		palette.set_pen_color(i, palette_val[(*color_prom++ & 0x0f) + 0x10]);
 }
 
 
@@ -122,12 +124,12 @@ TILE_GET_INFO_MEMBER(timeplt_state::get_chkun_tile_info)
 
 void timeplt_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(timeplt_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(timeplt_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 }
 
 VIDEO_START_MEMBER(timeplt_state,chkun)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(timeplt_state::get_chkun_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(timeplt_state::get_chkun_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 }
 
 
@@ -160,7 +162,7 @@ WRITE8_MEMBER(timeplt_state::timeplt_flipscreen_w)
 
 READ8_MEMBER(timeplt_state::timeplt_scanline_r)
 {
-	return machine().primary_screen->vpos();
+	return m_screen->vpos();
 }
 
 
@@ -187,7 +189,7 @@ void timeplt_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprec
 		int flipx = ~spriteram_2[offs] & 0x40;
 		int flipy = spriteram_2[offs] & 0x80;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 				code,
 				color,
 				flipx,flipy,
@@ -205,8 +207,8 @@ void timeplt_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprec
 
 UINT32 timeplt_state::screen_update_timeplt(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
-	m_bg_tilemap->draw(bitmap, cliprect, 1, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 1, 0);
 	return 0;
 }

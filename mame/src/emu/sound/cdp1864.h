@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     RCA CDP1864C COS/MOS PAL Compatible Color TV Interface
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************
                             _____   _____
@@ -39,6 +38,8 @@
 #define __CDP1864__
 
 #include "emu.h"
+#include "machine/rescap.h"
+#include "video/resnet.h"
 
 
 
@@ -82,15 +83,15 @@
 
 #define MCFG_CDP1864_ADD(_tag, _screen_tag, _clock, _inlace, _irq, _dma_out, _efx, _hsync, _rdata, _bdata, _gdata) \
 	MCFG_SOUND_ADD(_tag, CDP1864, _clock) \
-	downcast<cdp1864_device *>(device)->set_screen_tag(_screen_tag); \
-	downcast<cdp1864_device *>(device)->set_inlace_callback(DEVCB2_##_inlace); \
-	downcast<cdp1864_device *>(device)->set_irq_callback(DEVCB2_##_irq); \
-	downcast<cdp1864_device *>(device)->set_dma_out_callback(DEVCB2_##_dma_out); \
-	downcast<cdp1864_device *>(device)->set_efx_callback(DEVCB2_##_efx); \
-	downcast<cdp1864_device *>(device)->set_hsync_callback(DEVCB2_##_hsync); \
-	downcast<cdp1864_device *>(device)->set_rdata_callback(DEVCB2_##_rdata); \
-	downcast<cdp1864_device *>(device)->set_bdata_callback(DEVCB2_##_bdata); \
-	downcast<cdp1864_device *>(device)->set_gdata_callback(DEVCB2_##_gdata);
+	MCFG_VIDEO_SET_SCREEN(_screen_tag) \
+	downcast<cdp1864_device *>(device)->set_inlace_callback(DEVCB_##_inlace); \
+	downcast<cdp1864_device *>(device)->set_irq_callback(DEVCB_##_irq); \
+	downcast<cdp1864_device *>(device)->set_dma_out_callback(DEVCB_##_dma_out); \
+	downcast<cdp1864_device *>(device)->set_efx_callback(DEVCB_##_efx); \
+	downcast<cdp1864_device *>(device)->set_hsync_callback(DEVCB_##_hsync); \
+	downcast<cdp1864_device *>(device)->set_rdata_callback(DEVCB_##_rdata); \
+	downcast<cdp1864_device *>(device)->set_bdata_callback(DEVCB_##_bdata); \
+	downcast<cdp1864_device *>(device)->set_gdata_callback(DEVCB_##_gdata);
 
 #define MCFG_CDP1864_CHROMINANCE(_r, _b, _g, _bkg) \
 	downcast<cdp1864_device *>(device)->set_chrominance_resistors(_r, _b, _g, _bkg);
@@ -108,13 +109,13 @@
 // ======================> cdp1864_device
 
 class cdp1864_device :  public device_t,
-						public device_sound_interface
+						public device_sound_interface,
+						public device_video_interface
 {
 public:
 	// construction/destruction
 	cdp1864_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
-	void set_screen_tag(const char *screen_tag) { m_screen_tag = screen_tag; }
 	template<class _inlace> void set_inlace_callback(_inlace inlace) { m_read_inlace.set_callback(inlace); }
 	template<class _irq> void set_irq_callback(_irq irq) { m_write_irq.set_callback(irq); }
 	template<class _dma_out> void set_dma_out_callback(_dma_out dma_out) { m_write_dma_out.set_callback(dma_out); }
@@ -149,8 +150,6 @@ protected:
 	virtual void sound_stream_update(sound_stream &stream, stream_sample_t **inputs, stream_sample_t **outputs, int samples);
 
 private:
-	inline void initialize_palette();
-
 	enum
 	{
 		TIMER_INT,
@@ -159,17 +158,19 @@ private:
 		TIMER_HSYNC
 	};
 
-	devcb2_read_line        m_read_inlace;
-	devcb2_read_line        m_read_rdata;
-	devcb2_read_line        m_read_bdata;
-	devcb2_read_line        m_read_gdata;
-	devcb2_write_line       m_write_irq;
-	devcb2_write_line       m_write_dma_out;
-	devcb2_write_line       m_write_efx;
-	devcb2_write_line       m_write_hsync;
+	void initialize_palette();
 
-	const char *m_screen_tag;
-	screen_device *m_screen;        // screen
+	static const int bckgnd[];
+
+	devcb_read_line        m_read_inlace;
+	devcb_read_line        m_read_rdata;
+	devcb_read_line        m_read_bdata;
+	devcb_read_line        m_read_gdata;
+	devcb_write_line       m_write_irq;
+	devcb_write_line       m_write_dma_out;
+	devcb_write_line       m_write_efx;
+	devcb_write_line       m_write_hsync;
+
 	bitmap_rgb32 m_bitmap;          // bitmap
 	sound_stream *m_stream;         // sound output
 

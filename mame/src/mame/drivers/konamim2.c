@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ville Linde
 /*
 Konami M2 Hardware
 Preliminary driver by Ville Linde
@@ -379,7 +381,7 @@ WRITE64_MEMBER(konamim2_state::unk4_w)
 	{
 		if (data & 0x800000)
 		{
-//          mame_printf_debug("CPU '%s': CPU1 IRQ at %08X\n", device().tag(), space.device().safe_pc());
+//          osd_printf_debug("CPU '%s': CPU1 IRQ at %08X\n", device().tag(), space.device().safe_pc());
 			m_subcpu->set_input_line(INPUT_LINE_IRQ0, ASSERT_LINE);
 		}
 
@@ -456,11 +458,11 @@ WRITE64_MEMBER(konamim2_state::unk4000010_w)
 {
 	if ((data & 0xff) == 0xd)
 	{
-//      mame_printf_debug("\n");
+//      osd_printf_debug("\n");
 	}
 	else
 	{
-//      mame_printf_debug("%c", (UINT8)(data & 0xff));
+//      osd_printf_debug("%c", (UINT8)(data & 0xff));
 	}
 }
 
@@ -543,7 +545,7 @@ void konamim2_state::cde_handle_command()
 			m_cde_status_bytes[0] = 0x04;
 			m_cde_status_byte_ptr = 0;
 
-//          mame_printf_debug("CDE: SET SPEED %02X, %02X\n", m_cde_command_bytes[1], m_cde_command_bytes[2]);
+//          osd_printf_debug("CDE: SET SPEED %02X, %02X\n", m_cde_command_bytes[1], m_cde_command_bytes[2]);
 			break;
 		}
 		case 0x06:      // Audio Format / Data Format
@@ -555,11 +557,11 @@ void konamim2_state::cde_handle_command()
 
 			if (m_cde_command_bytes[1] == 0x00)      // Audio Format
 			{
-//              mame_printf_debug("CDE: AUDIO FORMAT\n");
+//              osd_printf_debug("CDE: AUDIO FORMAT\n");
 			}
 			else if (m_cde_command_bytes[1] == 0x78) // Data Format
 			{
-//              mame_printf_debug("CDE: DATA FORMAT\n");
+//              osd_printf_debug("CDE: DATA FORMAT\n");
 			}
 			else
 			{
@@ -576,16 +578,16 @@ void konamim2_state::cde_handle_command()
 
 			if (m_cde_command_bytes[1] == 0x00)      // Eject
 			{
-//              mame_printf_debug("CDE: EJECT command\n");
+//              osd_printf_debug("CDE: EJECT command\n");
 			}
 			else if (m_cde_command_bytes[1] == 0x02) // Pause
 			{
-//              mame_printf_debug("CDE: PAUSE command\n");
+//              osd_printf_debug("CDE: PAUSE command\n");
 				m_cde_drive_state = CDE_DRIVE_STATE_PAUSED;
 			}
 			else if (m_cde_command_bytes[1] == 0x03) // Play
 			{
-//              mame_printf_debug("CDE: PLAY command\n");
+//              osd_printf_debug("CDE: PLAY command\n");
 			}
 			else
 			{
@@ -602,7 +604,7 @@ void konamim2_state::cde_handle_command()
 
 			m_cde_drive_state = CDE_DRIVE_STATE_SEEK_DONE;
 
-//          mame_printf_debug("CDE: SEEK %08X\n", (m_cde_command_bytes[1] << 16) | (m_cde_command_bytes[2] << 8) | (m_cde_command_bytes[3]));
+//          osd_printf_debug("CDE: SEEK %08X\n", (m_cde_command_bytes[1] << 16) | (m_cde_command_bytes[2] << 8) | (m_cde_command_bytes[3]));
 			break;
 		}
 		case 0x0b:      // Get Drive State
@@ -623,7 +625,7 @@ void konamim2_state::cde_handle_command()
 				m_cde_enable_seek_reports = 0;
 			}
 
-//          mame_printf_debug("CDE: GET DRIVE STATE %02X\n", m_cde_command_bytes[1]);
+//          osd_printf_debug("CDE: GET DRIVE STATE %02X\n", m_cde_command_bytes[1]);
 			break;
 		}
 		case 0x0c:      // ?
@@ -643,7 +645,7 @@ void konamim2_state::cde_handle_command()
 				m_cde_enable_qchannel_reports = 0;
 			}
 
-//          mame_printf_debug("CDE: UNKNOWN CMD 0x0c %02X\n", m_cde_command_bytes[1]);
+//          osd_printf_debug("CDE: UNKNOWN CMD 0x0c %02X\n", m_cde_command_bytes[1]);
 			break;
 		}
 		case 0x0d:      // Get Switch State
@@ -655,7 +657,7 @@ void konamim2_state::cde_handle_command()
 			m_cde_status_bytes[2] = 0x02;
 			m_cde_status_byte_ptr = 0;
 
-//          mame_printf_debug("CDE: GET SWITCH STATE %02X\n", m_cde_command_bytes[1]);
+//          osd_printf_debug("CDE: GET SWITCH STATE %02X\n", m_cde_command_bytes[1]);
 			break;
 		}
 		case 0x21:      // Mech type
@@ -673,7 +675,7 @@ void konamim2_state::cde_handle_command()
 
 			m_cde_status_byte_ptr = 0;
 
-//          mame_printf_debug("CDE: MECH TYPE %02X, %02X, %02X\n", m_cde_command_bytes[1], m_cde_command_bytes[2], m_cde_command_bytes[3]);
+//          osd_printf_debug("CDE: MECH TYPE %02X, %02X, %02X\n", m_cde_command_bytes[1], m_cde_command_bytes[2], m_cde_command_bytes[3]);
 			break;
 		}
 		case 0x83:      // Read ID
@@ -695,13 +697,12 @@ void konamim2_state::cde_handle_command()
 
 			m_cde_status_byte_ptr = 0;
 
-//          mame_printf_debug("CDE: READ ID\n");
+//          osd_printf_debug("CDE: READ ID\n");
 			break;
 		}
 		default:
 		{
 			fatalerror("CDE: unknown command %08X\n", m_cde_command_bytes[0]);
-			break;
 		}
 	}
 }
@@ -721,7 +722,7 @@ void konamim2_state::cde_handle_reports()
 
 				m_cde_command_bytes[0] = 0x0c;
 
-//              mame_printf_debug("CDE: SEEK REPORT\n");
+//              osd_printf_debug("CDE: SEEK REPORT\n");
 			}
 			break;
 		}
@@ -817,7 +818,7 @@ void konamim2_state::cde_handle_reports()
 				m_cde_status_byte_ptr = 0;
 				m_cde_command_bytes[0] = 0x0c;
 
-//              mame_printf_debug("CDE: QCHANNEL REPORT\n");
+//              osd_printf_debug("CDE: QCHANNEL REPORT\n");
 				break;
 			}
 		}
@@ -908,7 +909,7 @@ READ64_MEMBER(konamim2_state::cde_r)
 
 		default:
 		{
-//                      mame_printf_debug("cde_r: %08X at %08X\n", reg*4, space.device().safe_pc());
+//                      osd_printf_debug("cde_r: %08X at %08X\n", reg*4, space.device().safe_pc());
 			break;
 		}
 	}
@@ -975,7 +976,7 @@ WRITE64_MEMBER(konamim2_state::cde_w)
 
 		case 0x300/4:       // DMA Channel 0 enable
 		{
-//          mame_printf_debug("CDE: DMA0 enable %08X\n", d);
+//          osd_printf_debug("CDE: DMA0 enable %08X\n", d);
 
 			if (d & 0x20)
 			{
@@ -993,28 +994,28 @@ WRITE64_MEMBER(konamim2_state::cde_w)
 		}
 		case 0x308/4:       // DMA Channel 0 destination address
 		{
-//          mame_printf_debug("CDE: DMA0 dst addr %08X\n", d);
+//          osd_printf_debug("CDE: DMA0 dst addr %08X\n", d);
 
 			m_cde_dma[0].dst_addr = d;
 			break;
 		}
 		case 0x30c/4:       // DMA Channel 0 length?
 		{
-//          mame_printf_debug("CDE: DMA0 length %08X\n", d);
+//          osd_printf_debug("CDE: DMA0 length %08X\n", d);
 
 			m_cde_dma[0].length = d;
 			break;
 		}
 		case 0x318/4:       // DMA Channel 0 next destination address
 		{
-//          mame_printf_debug("CDE: DMA0 next dst addr %08X\n", d);
+//          osd_printf_debug("CDE: DMA0 next dst addr %08X\n", d);
 
 			m_cde_dma[0].next_dst_addr = d;
 			break;
 		}
 		case 0x31c/4:       // DMA Channel 0 next length?
 		{
-//          mame_printf_debug("CDE: DMA0 next length %08X\n", d);
+//          osd_printf_debug("CDE: DMA0 next length %08X\n", d);
 
 			m_cde_dma[0].next_length = d;
 			break;
@@ -1022,33 +1023,33 @@ WRITE64_MEMBER(konamim2_state::cde_w)
 
 		case 0x320/4:       // DMA Channel 1 enable
 		{
-//          mame_printf_debug("CDE: DMA1 enable %08X\n", d);
+//          osd_printf_debug("CDE: DMA1 enable %08X\n", d);
 			break;
 		}
 		case 0x328/4:       // DMA Channel 1 destination address
 		{
-//          mame_printf_debug("CDE: DMA1 dst addr %08X\n", d);
+//          osd_printf_debug("CDE: DMA1 dst addr %08X\n", d);
 
 			m_cde_dma[1].dst_addr = d;
 			break;
 		}
 		case 0x32c/4:       // DMA Channel 1 length?
 		{
-//          mame_printf_debug("CDE: DMA1 length %08X\n", d);
+//          osd_printf_debug("CDE: DMA1 length %08X\n", d);
 
 			m_cde_dma[1].length = d;
 			break;
 		}
 		case 0x338/4:       // DMA Channel 1 next destination address
 		{
-//          mame_printf_debug("CDE: DMA1 next dst addr %08X\n", d);
+//          osd_printf_debug("CDE: DMA1 next dst addr %08X\n", d);
 
 			m_cde_dma[1].next_dst_addr = d;
 			break;
 		}
 		case 0x33c/4:       // DMA Channel 1 next length?
 		{
-//          mame_printf_debug("CDE: DMA1 next length %08X\n", d);
+//          osd_printf_debug("CDE: DMA1 next length %08X\n", d);
 
 			m_cde_dma[1].next_length = d;
 			break;
@@ -1070,7 +1071,7 @@ WRITE64_MEMBER(konamim2_state::cde_w)
 
 		default:
 		{
-//                      mame_printf_debug("cde_w: %08X, %08X at %08X\n", d, reg*4, space.device().safe_pc());
+//                      osd_printf_debug("cde_w: %08X, %08X at %08X\n", d, reg*4, space.device().safe_pc());
 			break;
 		}
 	}
@@ -1148,13 +1149,6 @@ static INPUT_PORTS_START( m2 )
 INPUT_PORTS_END
 
 
-static const powerpc_config ppc602_config =
-{
-	33000000,           /* Multiplier 2, Bus = 33MHz, Core = 66MHz */
-	NULL,
-	NULL
-};
-
 INTERRUPT_GEN_MEMBER(konamim2_state::m2)
 {
 	if (m_irq_enable & 0x800000)
@@ -1174,12 +1168,12 @@ static MACHINE_CONFIG_START( m2, konamim2_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", PPC602, 66000000)   /* actually PPC602, 66MHz */
-	MCFG_CPU_CONFIG(ppc602_config)
+	MCFG_PPC_BUS_FREQUENCY(33000000)  /* Multiplier 2, Bus = 33MHz, Core = 66MHz */
 	MCFG_CPU_PROGRAM_MAP(m2_main)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", konamim2_state,  m2)
 
 	MCFG_CPU_ADD("sub", PPC602, 66000000)   /* actually PPC602, 66MHz */
-	MCFG_CPU_CONFIG(ppc602_config)
+	MCFG_PPC_BUS_FREQUENCY(33000000)  /* Multiplier 2, Bus = 33MHz, Core = 66MHz */
 	MCFG_CPU_PROGRAM_MAP(m2_main)
 
 	/* video hardware */
@@ -1189,9 +1183,9 @@ static MACHINE_CONFIG_START( m2, konamim2_state )
 	MCFG_SCREEN_SIZE(640, 480)
 	MCFG_SCREEN_VISIBLE_AREA(0, 511, 0, 383)
 	MCFG_SCREEN_UPDATE_DRIVER(konamim2_state, screen_update_m2)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(32768)
-	MCFG_PALETTE_INIT(RRRRR_GGGGG_BBBBB)
+	MCFG_PALETTE_ADD_RRRRRGGGGGBBBBB("palette")
 
 
 MACHINE_CONFIG_END
@@ -1204,8 +1198,8 @@ ROM_START( polystar )
 	ROM_REGION( 0x80, "eeprom", 0 )
 	ROM_LOAD( "93c46.7k",  0x000000, 0x000080, CRC(66d02984) SHA1(d07c57d198c611b6ff67a783c20a3d038ba34cd1) )
 
-	DISK_REGION( "cdrom" ) // TODO: Add correct CHD
-	DISK_IMAGE( "623jaa02", 0, BAD_DUMP SHA1(cd542931cdac95d05344d34421e223dd6e371bb5) )
+	DISK_REGION( "cdrom" )
+	DISK_IMAGE( "623jaa02", 0, SHA1(e7d9e628a3e0e085e084e4e3630fa5e3a7345547) )
 ROM_END
 
 ROM_START( btltryst )
@@ -1213,7 +1207,7 @@ ROM_START( btltryst )
 	ROM_LOAD16_WORD( "636a01.8q", 0x000000, 0x200000, CRC(7b1dc738) SHA1(32ae8e7ddd38fcc70b4410275a2cc5e9a0d7d33b) )
 
 	DISK_REGION( "cdrom" )
-	DISK_IMAGE( "btltryst", 0, BAD_DUMP SHA1(c76326b0a0fcfe696a2ca019170d3abde40e773e) )
+	DISK_IMAGE( "636jac02", 0, SHA1(d36556a3a4b91058100924a9e9f1a58983399c6e) )
 ROM_END
 
 ROM_START( heatof11 )
@@ -1241,7 +1235,7 @@ ROM_START( evilngt )
 	ROM_LOAD( "93c46.7k",    0x000000, 0x000080, CRC(d7ba2e5e) SHA1(d729557555c6fc1cd433b14017952cc63ec73573) )
 
 	DISK_REGION( "cdrom" )
-	DISK_IMAGE( "810uba02", 0, BAD_DUMP SHA1(ca3b957e3e33435391fbf630f9ed89aa08a70c8f) )
+	DISK_IMAGE( "810uba02", 0, SHA1(e570470c1cbfe187d5bba8125616412f386264ba) )
 ROM_END
 
 ROM_START( evilngte )
@@ -1267,8 +1261,8 @@ ROM_START( hellngt )
 	ROM_REGION( 0x400000, "ymz", 0 ) /* YMZ280B sound rom on sub board */
 	ROM_LOAD( "810a03.16h",  0x000000, 0x400000, CRC(4cd79d98) SHA1(12fea41cfc5c1b883ffbeda7e428dd1d1bf54d7f) )
 
-	DISK_REGION( "cdrom" ) // TODO: Add correct CHD
-	DISK_IMAGE( "810eaa02", 0, BAD_DUMP SHA1(c407bad498cb87788ce332dbef5e8c6e19c1fd16) )
+	DISK_REGION( "cdrom" )
+	DISK_IMAGE( "810eaa02", 0, SHA1(d701b900eddc7674015823b2cb33e887bf107fa8) )
 ROM_END
 
 ROM_START( totlvice )
@@ -1278,8 +1272,33 @@ ROM_START( totlvice )
 	ROM_REGION( 0x100000, "ymz", 0 ) /* YMZ280B sound rom on sub board */
 	ROM_LOAD( "639jaa02.bin",  0x000000, 0x100000, CRC(c6163818) SHA1(b6f8f2d808b98610becc0a5be5443ece3908df0b) )
 
+	// was converted from the following cue/bin pair, is this sufficient / good for this platform? - there are a lot of audio tracks that need verifying as non-corrupt
+	//ROM_LOAD( "TotalVice-GQ639-EBA01.cue",  0, 0x00000555, CRC(55ef2f62) SHA1(8e31b3e62244e6090a93228dae377552340dcdeb) )
+	//ROM_LOAD( "TotalVice-GQ639-EBA01.bin",  0, 0x1ec4db10, CRC(5882f8ba) SHA1(e589d500d99d2f4cff4506cd5ac9a5bfc8d30675) )
+	DISK_REGION( "cdrom" )
+	DISK_IMAGE( "639eba01", 0, BAD_DUMP  SHA1(d95c13575e015169b126f7e8492d150bd7e5ebda) )
+ROM_END
+
+ROM_START( totlvicu )
+	ROM_REGION64_BE( 0x200000, "boot", 0 )
+	ROM_LOAD16_WORD( "623b01.8q", 0x000000, 0x200000, CRC(bd879f93) SHA1(e2d63bfbd2b15260a2664082652442eadea3eab6) )
+
+	ROM_REGION( 0x100000, "ymz", 0 ) /* YMZ280B sound rom on sub board */
+	ROM_LOAD( "639jaa02.bin",  0x000000, 0x100000, CRC(c6163818) SHA1(b6f8f2d808b98610becc0a5be5443ece3908df0b) )
+
 	DISK_REGION( "cdrom" )
 	DISK_IMAGE( "639uac01", 0, BAD_DUMP SHA1(88431b8a0ce83c156c8b19efbba1af901b859404) )
+ROM_END
+
+ROM_START( totlvica )
+	ROM_REGION64_BE( 0x200000, "boot", 0 )
+	ROM_LOAD16_WORD( "623b01.8q", 0x000000, 0x200000, CRC(bd879f93) SHA1(e2d63bfbd2b15260a2664082652442eadea3eab6) )
+
+	ROM_REGION( 0x100000, "ymz", 0 ) /* YMZ280B sound rom on sub board */
+	ROM_LOAD( "639jaa02.bin",  0x000000, 0x100000, CRC(c6163818) SHA1(b6f8f2d808b98610becc0a5be5443ece3908df0b) )
+
+	DISK_REGION( "cdrom" )
+	DISK_IMAGE( "639aab01", 0, SHA1(bb99db2eeaecabfda8f20b7b06f714605bbd5b7c) )
 ROM_END
 
 ROM_START( totlvicj )
@@ -1292,6 +1311,8 @@ ROM_START( totlvicj )
 	DISK_REGION( "cdrom" ) // Need a re-image
 	DISK_IMAGE( "639jad01", 0, BAD_DUMP SHA1(39d41d5a9d1c40636d174c8bb8172b1121e313f8) )
 ROM_END
+
+
 
 ROM_START(3do_m2)
 	ROM_REGION64_BE( 0x100000, "boot", 0 )
@@ -1307,13 +1328,14 @@ DRIVER_INIT_MEMBER(konamim2_state,m2)
 }
 
 GAME( 1997, polystar, 0,        m2, m2, konamim2_state, m2, ROT0, "Konami", "Tobe! Polystars (ver JAA)", GAME_NOT_WORKING | GAME_NO_SOUND )
-GAME( 1997, totlvice, 0,        m2, m2, konamim2_state, m2, ROT0, "Konami", "Total Vice (ver UAC)", GAME_NOT_WORKING | GAME_NO_SOUND )
+GAME( 1997, totlvice, 0,        m2, m2, konamim2_state, m2, ROT0, "Konami", "Total Vice (ver EBA)", GAME_NOT_WORKING | GAME_NO_SOUND )
+GAME( 1997, totlvicu, totlvice, m2, m2, konamim2_state, m2, ROT0, "Konami", "Total Vice (ver UAC)", GAME_NOT_WORKING | GAME_NO_SOUND )
 GAME( 1997, totlvicj, totlvice, m2, m2, konamim2_state, m2, ROT0, "Konami", "Total Vice (ver JAD)", GAME_NOT_WORKING | GAME_NO_SOUND )
-//GAME( 1997, totlvica, totlvice, m2, m2, konamim2_state, m2, ROT0, "Konami", "Total Vice (ver AAB)", GAME_NOT_WORKING | GAME_NO_SOUND )
+GAME( 1997, totlvica, totlvice, m2, m2, konamim2_state, m2, ROT0, "Konami", "Total Vice (ver AAB)", GAME_NOT_WORKING | GAME_NO_SOUND )
 GAME( 1998, btltryst, 0,        m2, m2, konamim2_state, m2, ROT0, "Konami", "Battle Tryst (ver JAC)", GAME_NOT_WORKING | GAME_NO_SOUND )
 GAME( 1998, heatof11, 0,        m2, m2, konamim2_state, m2, ROT0, "Konami", "Heat of Eleven '98 (ver EAA)", GAME_NOT_WORKING | GAME_NO_SOUND )
-GAME( 1998, evilngt, 0,         m2, m2, konamim2_state, m2, ROT0, "Konami", "Evil Night (ver UBA)", GAME_NOT_WORKING | GAME_NO_SOUND )
-GAME( 1998, evilngte,  evilngt,       m2, m2, konamim2_state, m2, ROT0, "Konami", "Evil Night (ver EAA)", GAME_NOT_WORKING | GAME_NO_SOUND )
+GAME( 1998, evilngt,  0,        m2, m2, konamim2_state, m2, ROT0, "Konami", "Evil Night (ver UBA)", GAME_NOT_WORKING | GAME_NO_SOUND )
+GAME( 1998, evilngte, evilngt,  m2, m2, konamim2_state, m2, ROT0, "Konami", "Evil Night (ver EAA)", GAME_NOT_WORKING | GAME_NO_SOUND )
 GAME( 1998, hellngt,  evilngt,  m2, m2, konamim2_state, m2, ROT0, "Konami", "Hell Night (ver EAA)", GAME_NOT_WORKING | GAME_NO_SOUND )
 
 CONS( 199?, 3do_m2,     0,      0,    m2,    m2,    driver_device, 0,      "3DO",  "3DO M2",    GAME_NOT_WORKING | GAME_NO_SOUND )

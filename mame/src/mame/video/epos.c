@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
     Epos games
@@ -48,7 +50,7 @@ void epos_state::get_pens( pen_t *pens )
 		bit1 = (data >> 0) & 0x01;
 		b = 0xad * bit0 + 0x52 * bit1;
 
-		pens[i] = MAKE_RGB(r, g, b);
+		pens[i] = rgb_t(r, g, b);
 	}
 }
 

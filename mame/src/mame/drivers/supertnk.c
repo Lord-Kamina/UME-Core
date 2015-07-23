@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Norbert Kehrer
 /***************************************************************************
 
 Super Tank
@@ -96,7 +98,7 @@ CRU lines:
 
 
 #include "emu.h"
-#include "cpu/tms9900/tms9900l.h"
+#include "cpu/tms9900/tms9980a.h"
 #include "sound/ay8910.h"
 
 
@@ -124,6 +126,7 @@ public:
 	DECLARE_WRITE8_MEMBER(supertnk_bitplane_select_0_w);
 	DECLARE_WRITE8_MEMBER(supertnk_bitplane_select_1_w);
 	DECLARE_DRIVER_INIT(supertnk);
+	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
 	UINT32 screen_update_supertnk(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
@@ -131,6 +134,11 @@ public:
 	required_device<cpu_device> m_maincpu;
 };
 
+
+void supertnk_state::machine_start()
+{
+	membank("bank1")->configure_entries(0, 4, memregion("maincpu")->base() + 0x10000, 0x1000);
+}
 
 
 /*************************************
@@ -141,25 +149,15 @@ public:
 
 WRITE8_MEMBER(supertnk_state::supertnk_bankswitch_0_w)
 {
-	offs_t bank_address;
-
 	m_rom_bank = (m_rom_bank & 0x02) | ((data << 0) & 0x01);
-
-	bank_address = 0x10000 + (m_rom_bank * 0x1000);
-
-	membank("bank1")->set_base(&memregion("maincpu")->base()[bank_address]);
+	membank("bank1")->set_entry(m_rom_bank);
 }
 
 
 WRITE8_MEMBER(supertnk_state::supertnk_bankswitch_1_w)
 {
-	offs_t bank_address;
-
 	m_rom_bank = (m_rom_bank & 0x01) | ((data << 1) & 0x02);
-
-	bank_address = 0x10000 + (m_rom_bank * 0x1000);
-
-	membank("bank1")->set_base(&memregion("maincpu")->base()[bank_address]);
+	membank("bank1")->set_entry(m_rom_bank);
 }
 
 
@@ -172,14 +170,13 @@ WRITE8_MEMBER(supertnk_state::supertnk_bankswitch_1_w)
 
 INTERRUPT_GEN_MEMBER(supertnk_state::supertnk_interrupt)
 {
-	/* On a TMS9980, a 6 on the interrupt bus means a level 4 interrupt */
-	device.execute().set_input_line_and_vector(0, ASSERT_LINE, 6);
+	m_maincpu->set_input_line(INT_9980A_LEVEL4, ASSERT_LINE);
 }
 
 
 WRITE8_MEMBER(supertnk_state::supertnk_interrupt_ack_w)
 {
-	m_maincpu->set_input_line(0, CLEAR_LINE);
+	m_maincpu->set_input_line(INT_9980A_LEVEL4, CLEAR_LINE);
 }
 
 
@@ -199,7 +196,7 @@ void supertnk_state::video_start()
 	{
 		UINT8 data = prom[i];
 
-		m_pens[i] = MAKE_RGB(pal1bit(data >> 2), pal1bit(data >> 5), pal1bit(data >> 6));
+		m_pens[i] = rgb_t(pal1bit(data >> 2), pal1bit(data >> 5), pal1bit(data >> 6));
 	}
 
 	m_videoram[0] = auto_alloc_array(machine(), UINT8, 0x2000);
@@ -416,7 +413,6 @@ static INPUT_PORTS_START( supertnk )
 INPUT_PORTS_END
 
 
-
 /*************************************
  *
  *  Machine driver
@@ -425,12 +421,9 @@ INPUT_PORTS_END
 
 static MACHINE_CONFIG_START( supertnk, supertnk_state )
 
-	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", TMS9980L, 2598750) /* ? to which frequency is the 20.79 Mhz crystal mapped down? */
-	MCFG_CPU_PROGRAM_MAP(supertnk_map)
-	MCFG_CPU_IO_MAP(supertnk_io_map)
+	// CPU TMS9980A; no line connections
+	MCFG_TMS99xx_ADD("maincpu", TMS9980A, 2598750, supertnk_map, supertnk_io_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", supertnk_state,  supertnk_interrupt)
-
 
 	/* video hardware */
 
@@ -469,12 +462,9 @@ ROM_START( supertnk )
 	ROM_CONTINUE(             0x13000, 0x0800)
 
 	ROM_REGION( 0x0060, "proms", 0 )
-		/* color PROM */
-	ROM_LOAD( "supertnk.clr",  0x0000, 0x0020, CRC(9ae1faee) SHA1(19de4bb8bc389d98c8f8e35c755fad96e1a6a0cd) )
-	/* unknown - sync? */
-	ROM_LOAD( "supertnk.s",    0x0020, 0x0020, CRC(91722fcf) SHA1(f77386014b459cc151d2990ac823b91c04e8d319) )
-	/* unknown - sync? */
-	ROM_LOAD( "supertnk.t",    0x0040, 0x0020, CRC(154390bd) SHA1(4dc0fd7bd8999d2670c8d93aaada835d2a84d4db) )
+	ROM_LOAD( "supertnk.clr",  0x0000, 0x0020, CRC(9ae1faee) SHA1(19de4bb8bc389d98c8f8e35c755fad96e1a6a0cd) )   /* color PROM */
+	ROM_LOAD( "supertnk.s",    0x0020, 0x0020, CRC(91722fcf) SHA1(f77386014b459cc151d2990ac823b91c04e8d319) )   /* unknown - sync? */
+	ROM_LOAD( "supertnk.t",    0x0040, 0x0020, CRC(154390bd) SHA1(4dc0fd7bd8999d2670c8d93aaada835d2a84d4db) )   /* unknown - sync? */
 ROM_END
 
 

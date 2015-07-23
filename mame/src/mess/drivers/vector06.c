@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         Vector06c driver by Miodrag Milanovic
@@ -7,6 +9,7 @@
 ****************************************************************************/
 
 #include "includes/vector06.h"
+#include "formats/vector06_dsk.h"
 
 
 /* Address maps */
@@ -21,10 +24,10 @@ static ADDRESS_MAP_START(vector06_io, AS_IO, 8, vector06_state)
 	AM_RANGE( 0x00, 0x03) AM_READWRITE(vector06_8255_1_r, vector06_8255_1_w )
 	AM_RANGE( 0x04, 0x07) AM_READWRITE(vector06_8255_2_r, vector06_8255_2_w )
 	AM_RANGE( 0x0C, 0x0C) AM_WRITE(vector06_color_set)
-	AM_RANGE( 0x18, 0x18) AM_DEVREADWRITE_LEGACY("wd1793", wd17xx_data_r,wd17xx_data_w)
-	AM_RANGE( 0x19, 0x19) AM_DEVREADWRITE_LEGACY("wd1793", wd17xx_sector_r,wd17xx_sector_w)
-	AM_RANGE( 0x1A, 0x1A) AM_DEVREADWRITE_LEGACY("wd1793", wd17xx_track_r,wd17xx_track_w)
-	AM_RANGE( 0x1B, 0x1B) AM_DEVREADWRITE_LEGACY("wd1793", wd17xx_status_r,wd17xx_command_w)
+	AM_RANGE( 0x18, 0x18) AM_DEVREADWRITE("wd1793", fd1793_t, data_r, data_w)
+	AM_RANGE( 0x19, 0x19) AM_DEVREADWRITE("wd1793", fd1793_t, sector_r, sector_w)
+	AM_RANGE( 0x1a, 0x1a) AM_DEVREADWRITE("wd1793", fd1793_t, track_r, track_w)
+	AM_RANGE( 0x1b, 0x1b) AM_DEVREADWRITE("wd1793", fd1793_t, status_r, cmd_w)
 	AM_RANGE( 0x1C, 0x1C) AM_WRITE(vector06_disc_w)
 ADDRESS_MAP_END
 
@@ -117,44 +120,15 @@ static INPUT_PORTS_START( vector06 )
 
 INPUT_PORTS_END
 
-static const cassette_interface vector_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED),
-	NULL,
-	NULL
-};
 
-static LEGACY_FLOPPY_OPTIONS_START(vector)
-	LEGACY_FLOPPY_OPTION(vector, "fdd", "Vector disk image", basicdsk_identify_default, basicdsk_construct_default, NULL,
-		HEADS([2])
-		TRACKS([82])
-		SECTORS([5])
-		SECTOR_LENGTH([1024])
-		FIRST_SECTOR_ID([1]))
-LEGACY_FLOPPY_OPTIONS_END
+FLOPPY_FORMATS_MEMBER( vector06_state::floppy_formats )
+	FLOPPY_VECTOR06_FORMAT
+FLOPPY_FORMATS_END
 
-static const floppy_interface vector_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_DSHD,
-	LEGACY_FLOPPY_OPTIONS_NAME(vector),
-	NULL,
-	NULL
-};
+static SLOT_INTERFACE_START( vector06_floppies )
+	SLOT_INTERFACE("qd", FLOPPY_525_QD)
+SLOT_INTERFACE_END
 
-const wd17xx_interface vector06_wd17xx_interface =
-{
-	DEVCB_LINE_VCC,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	{ FLOPPY_0, FLOPPY_1, NULL, NULL}
-};
 
 /* Machine driver */
 static MACHINE_CONFIG_START( vector06, vector06_state )
@@ -164,7 +138,7 @@ static MACHINE_CONFIG_START( vector06, vector06_state )
 	MCFG_CPU_PROGRAM_MAP(vector06_mem)
 	MCFG_CPU_IO_MAP(vector06_io)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", vector06_state,  vector06_interrupt)
-
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DRIVER(vector06_state,vector06_irq_callback)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -173,23 +147,40 @@ static MACHINE_CONFIG_START( vector06, vector06_state )
 	MCFG_SCREEN_SIZE(256+64, 256+64)
 	MCFG_SCREEN_VISIBLE_AREA(0, 256+64-1, 0, 256+64-1)
 	MCFG_SCREEN_UPDATE_DRIVER(vector06_state, screen_update_vector06)
-	MCFG_PALETTE_LENGTH(16)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_PALETTE_ADD("palette", 16)
+	MCFG_PALETTE_INIT_OWNER(vector06_state, vector06)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	/* Devices */
-	MCFG_I8255_ADD("ppi8255", vector06_ppi8255_interface)
-	MCFG_I8255_ADD("ppi8255_2", vector06_ppi8255_2_interface)
-	MCFG_CASSETTE_ADD("cassette", vector_cassette_interface)
-	MCFG_FD1793_ADD("wd1793", vector06_wd17xx_interface)
-	MCFG_LEGACY_FLOPPY_2_DRIVES_ADD(vector_floppy_interface)
+	/* devices */
+	MCFG_DEVICE_ADD("ppi8255", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(vector06_state, vector06_8255_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(vector06_state, vector06_8255_portb_r))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(vector06_state, vector06_8255_portb_w))
+	MCFG_I8255_IN_PORTC_CB(READ8(vector06_state, vector06_8255_portc_r))
+
+	MCFG_DEVICE_ADD("ppi8255_2", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(vector06_state, vector06_romdisk_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(vector06_state, vector06_romdisk_portb_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(vector06_state, vector06_romdisk_portc_w))
+
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_ENABLED)
+
+	MCFG_FD1793_ADD("wd1793", XTAL_1MHz)
+
+	MCFG_FLOPPY_DRIVE_ADD("wd1793:0", vector06_floppies, "qd", vector06_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("wd1793:1", vector06_floppies, "qd", vector06_state::floppy_formats)
 
 	/* cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("emr")
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "vector06_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,emr")
+
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "vector06_cart")
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -200,7 +191,7 @@ MACHINE_CONFIG_END
 /* ROM definition */
 
 ROM_START( vector06 )
-	ROM_REGION( 0x20000, "maincpu", ROMREGION_ERASEFF )
+	ROM_REGION( 0x18000, "maincpu", ROMREGION_ERASEFF )
 	ROM_SYSTEM_BIOS(0, "unboot32k", "Universal Boot 32K")
 	ROMX_LOAD( "unboot32k.rt", 0x10000, 0x8000, CRC(28c9b5cd) SHA1(8cd7fb658896a7066ae93b10eaafa0f12139ad81), ROM_BIOS(1))
 	ROM_SYSTEM_BIOS(1, "unboot2k", "Universal Boot 2K")
@@ -213,28 +204,24 @@ ROM_START( vector06 )
 	ROMX_LOAD( "bootos.rt",    0x10000, 0x0200, CRC(46bef038) SHA1(6732f4a360cd38112c53c458842d31f5b035cf59), ROM_BIOS(5))
 	ROM_SYSTEM_BIOS(5, "boot512", "Boot 512")
 	ROMX_LOAD( "boot512.rt",   0x10000, 0x0200, CRC(a0b1c6b2) SHA1(f6fe15cb0974aed30f9b7aa72133324a66d1ed3f), ROM_BIOS(6))
-	ROM_CART_LOAD("cart", 0x18000, 0x8000, ROM_OPTIONAL)
 ROM_END
 
 ROM_START( vec1200 )
-	ROM_REGION( 0x20000, "maincpu", ROMREGION_ERASEFF )
+	ROM_REGION( 0x18000, "maincpu", ROMREGION_ERASEFF )
 	ROM_LOAD( "vec1200.bin", 0x10000, 0x2000, CRC(37349224) SHA1(060fbb2c1a89040c929521cfd58cb6f1431a8b75))
-	ROM_CART_LOAD("cart", 0x18000, 0x8000, ROM_OPTIONAL)
 
 	ROM_REGION( 0x0200, "palette", 0 )
 	ROM_LOAD( "palette.bin", 0x0000, 0x0200, CRC(74b7376b) SHA1(fb56b60babd7e6ed68e5f4e791ad2800d7ef6729))
 ROM_END
 
 ROM_START( pk6128c )
-	ROM_REGION( 0x20000, "maincpu", ROMREGION_ERASEFF )
+	ROM_REGION( 0x18000, "maincpu", ROMREGION_ERASEFF )
 	ROM_LOAD( "6128.bin", 0x10000, 0x4000, CRC(d4f68433) SHA1(ef5ac75f9240ca8996689c23642d4e47e5e774d8))
-	ROM_CART_LOAD("cart", 0x18000, 0x8000, ROM_OPTIONAL)
 ROM_END
 
 ROM_START( krista2 )
-	ROM_REGION( 0x20000, "maincpu", ROMREGION_ERASEFF )
+	ROM_REGION( 0x18000, "maincpu", ROMREGION_ERASEFF )
 	ROM_LOAD( "krista2.epr", 0x10000, 0x0200, CRC(df5440b0) SHA1(bcbbb3cc10aeb17c1262b45111d20279266b9ba4))
-	ROM_CART_LOAD("cart", 0x18000, 0x8000, ROM_OPTIONAL)
 	ROM_LOAD( "krista2.pal", 0x0000, 0x0200, CRC(b243da33) SHA1(9af7873e6f8bf452c8d831833ffb02dce833c095))
 ROM_END
 /* Driver */

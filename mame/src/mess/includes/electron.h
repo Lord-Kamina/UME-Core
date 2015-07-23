@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /*****************************************************************************
  *
  * includes/electron.h
@@ -13,6 +15,9 @@
 
 #include "imagedev/cassette.h"
 #include "sound/beep.h"
+
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 
 /* Interrupts */
 #define INT_HIGH_TONE       0x40
@@ -67,7 +72,10 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_cassette(*this, "cassette"),
-		m_beeper(*this, "beeper")   { }
+		m_beeper(*this, "beeper"),
+		m_cart(*this, "cartslot"),
+		m_keybd(*this, "LINE")
+	{ }
 
 	ULA m_ula;
 	emu_timer *m_tape_timer;
@@ -86,7 +94,7 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(electron);
 	UINT32 screen_update_electron(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	TIMER_CALLBACK_MEMBER(electron_tape_timer_handler);
 	TIMER_CALLBACK_MEMBER(setup_beep);
@@ -94,6 +102,8 @@ public:
 	required_device<cpu_device> m_maincpu;
 	required_device<cassette_image_device> m_cassette;
 	required_device<beep_device> m_beeper;
+	required_device<generic_slot_device> m_cart;
+	required_ioport_array<14> m_keybd;
 	inline UINT8 read_vram( UINT16 addr );
 	inline void electron_plot_pixel(bitmap_ind16 &bitmap, int x, int y, UINT32 color);
 	void electron_interrupt_handler(int mode, int interrupt);

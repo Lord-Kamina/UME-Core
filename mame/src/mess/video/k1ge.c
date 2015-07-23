@@ -1,9 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /******************************************************************************
 
-K1GE/K2GE graphics emulation
+  K1GE/K2GE graphics emulation
 
-The K1GE graphics were used in the Neogeo pocket mono; the K2GE graphics were
-used in the Neogeo pocket color.
+  The K1GE graphics were used in the Neogeo pocket mono; the K2GE graphics were
+  used in the Neogeo pocket color.
 
 ******************************************************************************/
 
@@ -11,7 +13,7 @@ used in the Neogeo pocket color.
 #include "k1ge.h"
 
 
-PALETTE_INIT( k1ge )
+PALETTE_INIT_MEMBER(k1ge_device, k1ge)
 {
 	int i;
 
@@ -19,12 +21,12 @@ PALETTE_INIT( k1ge )
 	{
 		int j = ( i << 5 ) | ( i << 2 ) | ( i >> 1 );
 
-		palette_set_color_rgb( machine, 7-i, j, j, j );
+		palette.set_pen_color( 7-i, j, j, j );
 	}
 }
 
 
-PALETTE_INIT( k2ge )
+PALETTE_INIT_MEMBER(k2ge_device, k2ge)
 {
 	int r,g,b;
 
@@ -34,16 +36,18 @@ PALETTE_INIT( k2ge )
 		{
 			for ( r = 0; r < 16; r++ )
 			{
-				palette_set_color_rgb( machine, ( b << 8 ) | ( g << 4 ) | r, ( r << 4 ) | r, ( g << 4 ) | g, ( b << 4 ) | b );
+				palette.set_pen_color( ( b << 8 ) | ( g << 4 ) | r, ( r << 4 ) | r, ( g << 4 ) | g, ( b << 4 ) | b );
 			}
 		}
 	}
 }
 
 
-READ8_MEMBER( k1ge_device::reg_read )
+READ8_MEMBER( k1ge_device::read )
 {
-	UINT8   data = m_vram[offset & 0x7ff];
+	assert(offset < 0x4000);
+
+	UINT8 data = m_vram[offset];
 
 	switch( offset )
 	{
@@ -58,8 +62,10 @@ READ8_MEMBER( k1ge_device::reg_read )
 }
 
 
-WRITE8_MEMBER( k1ge_device::reg_write )
+WRITE8_MEMBER( k1ge_device::write )
 {
+	assert(offset < 0x4000);
+
 	switch( offset )
 	{
 	case 0x000:
@@ -77,7 +83,7 @@ WRITE8_MEMBER( k1ge_device::reg_write )
 		data &= 0x07;
 		break;
 	case 0x7e2:
-		if ( m_vram[0x7f0] != 0xAA )
+		if ( m_vram[0x7f0] != 0xaa )
 			return;
 		data &= 0x80;
 		break;
@@ -89,21 +95,7 @@ WRITE8_MEMBER( k1ge_device::reg_write )
 		data &= 0x0f;
 	}
 
-	m_vram[offset & 0x7ff] = data;
-}
-
-// TODO: these i/o handlers can probably be merged with the above...
-READ8_MEMBER( k1ge_device::vram_read )
-{
-	assert(offset < 0x3800);
-	return m_vram[0x800 + offset];
-}
-
-
-WRITE8_MEMBER( k1ge_device::vram_write )
-{
-	assert(offset < 0x3800);
-	m_vram[0x800 + offset] = data;
+	m_vram[offset] = data;
 }
 
 
@@ -810,7 +802,6 @@ void k1ge_device::device_start()
 
 	m_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(k1ge_device::timer_callback), this));
 	m_hblank_on_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(k1ge_device::hblank_on_timer_callback), this));
-	m_screen = machine().device<screen_device>(m_screen_tag);
 	m_vram = auto_alloc_array_clear(machine(), UINT8, 0x4000);
 	m_bitmap = auto_bitmap_ind16_alloc( machine(), m_screen->width(), m_screen->height() );
 
@@ -873,23 +864,55 @@ void k1ge_device::device_reset()
 const device_type K1GE = &device_creator<k1ge_device>;
 
 k1ge_device::k1ge_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, K1GE, "K1GE Monochrome Graphics + LCD", tag, owner, clock)
+	: device_t(mconfig, K1GE, "K1GE Monochrome Graphics + LCD", tag, owner, clock, "k1ge", __FILE__)
+	, device_video_interface(mconfig, *this)
 	, m_vblank_pin_w(*this)
 	, m_hblank_pin_w(*this)
 {
 }
 
-k1ge_device::k1ge_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, type, name, tag, owner, clock)
+k1ge_device::k1ge_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source)
+	: device_t(mconfig, type, name, tag, owner, clock, shortname, source)
+	, device_video_interface(mconfig, *this)
 	, m_vblank_pin_w(*this)
 	, m_hblank_pin_w(*this)
 {
+}
+
+static MACHINE_CONFIG_FRAGMENT( k1ge )
+	MCFG_PALETTE_ADD("palette", 8 )
+	MCFG_PALETTE_INIT_OWNER(k1ge_device, k1ge)
+MACHINE_CONFIG_END
+
+//-------------------------------------------------
+//  machine_config_additions - return a pointer to
+//  the device's machine fragment
+//-------------------------------------------------
+
+machine_config_constructor k1ge_device::device_mconfig_additions() const
+{
+	return MACHINE_CONFIG_NAME( k1ge );
 }
 
 
 const device_type K2GE = &device_creator<k2ge_device>;
 
 k2ge_device::k2ge_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: k1ge_device(mconfig, K2GE, "K2GE Color Graphics + LCD", tag, owner, clock)
+	: k1ge_device(mconfig, K2GE, "K2GE Color Graphics + LCD", tag, owner, clock, "k2ge", __FILE__)
 {
+}
+
+static MACHINE_CONFIG_FRAGMENT( k2ge )
+	MCFG_PALETTE_ADD("palette", 4096 )
+	MCFG_PALETTE_INIT_OWNER(k2ge_device, k2ge)
+MACHINE_CONFIG_END
+
+//-------------------------------------------------
+//  machine_config_additions - return a pointer to
+//  the device's machine fragment
+//-------------------------------------------------
+
+machine_config_constructor k2ge_device::device_mconfig_additions() const
+{
+	return MACHINE_CONFIG_NAME( k2ge );
 }

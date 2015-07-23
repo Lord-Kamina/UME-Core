@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese
 /*************************************************************************************************
 
 (Hologram) Time Traveler (c) 1991 Virtual Image Productions / Sega
@@ -24,7 +26,7 @@ CPU is an Intel 80188
 *************************************************************************************************/
 
 #include "emu.h"
-#include "cpu/i86/i86.h"
+#include "cpu/i86/i186.h"
 
 
 class timetrv_state : public driver_device
@@ -164,7 +166,7 @@ static MACHINE_CONFIG_START( timetrv, timetrv_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 512-1, 0*8, 512-1)
 	MCFG_SCREEN_UPDATE_DRIVER(timetrv_state, screen_update_timetrv)
 
-	MCFG_PALETTE_LENGTH(512)
+	MCFG_PALETTE_ADD("palette", 512)
 
 	/* sound hardware */
 MACHINE_CONFIG_END

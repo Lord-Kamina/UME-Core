@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     drivenum.c
 
     Driver enumeration helpers.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -89,7 +60,7 @@ bool driver_list::matches(const char *wildstring, const char *string)
 		return false;
 
 	// match everything else normally
-	return (wildstring == NULL || mame_strwildcmp(wildstring, string) == 0);
+	return (wildstring == NULL || core_strwildcmp(wildstring, string) == 0);
 }
 
 
@@ -102,7 +73,7 @@ int driver_list::driver_sort_callback(const void *elem1, const void *elem2)
 {
 	const game_driver * const *item1 = reinterpret_cast<const game_driver * const *>(elem1);
 	const game_driver * const *item2 = reinterpret_cast<const game_driver * const *>(elem2);
-	return mame_stricmp((*item1)->name, (*item2)->name);
+	return core_stricmp((*item1)->name, (*item2)->name);
 }
 
 
@@ -160,9 +131,11 @@ driver_enumerator::driver_enumerator(emu_options &options)
 	: m_current(-1),
 		m_filtered_count(0),
 		m_options(options),
-		m_included(global_alloc_array(UINT8, s_driver_count)),
-		m_config(global_alloc_array_clear(machine_config *, s_driver_count))
+		m_included(s_driver_count),
+		m_config(s_driver_count)
 {
+	memset(&m_included[0], 0, s_driver_count);
+	memset(&m_config[0], 0, s_driver_count*sizeof(m_config[0]));
 	include_all();
 }
 
@@ -171,9 +144,11 @@ driver_enumerator::driver_enumerator(emu_options &options, const char *string)
 	: m_current(-1),
 		m_filtered_count(0),
 		m_options(options),
-		m_included(global_alloc_array(UINT8, s_driver_count)),
-		m_config(global_alloc_array_clear(machine_config *, s_driver_count))
+		m_included(s_driver_count),
+		m_config(s_driver_count)
 {
+	memset(&m_included[0], 0, s_driver_count);
+	memset(&m_config[0], 0, s_driver_count*sizeof(m_config[0]));
 	filter(string);
 }
 
@@ -182,9 +157,11 @@ driver_enumerator::driver_enumerator(emu_options &options, const game_driver &dr
 	: m_current(-1),
 		m_filtered_count(0),
 		m_options(options),
-		m_included(global_alloc_array(UINT8, s_driver_count)),
-		m_config(global_alloc_array_clear(machine_config *, s_driver_count))
+		m_included(s_driver_count),
+		m_config(s_driver_count)
 {
+	memset(&m_included[0], 0, s_driver_count);
+	memset(&m_config[0], 0, s_driver_count*sizeof(m_config[0]));
 	filter(driver);
 }
 
@@ -195,13 +172,7 @@ driver_enumerator::driver_enumerator(emu_options &options, const game_driver &dr
 
 driver_enumerator::~driver_enumerator()
 {
-	// free any configs
-	for (int index = 0; index < s_driver_count; index++)
-		global_free(m_config[index]);
-
-	// free the arrays
-	global_free(m_included);
-	global_free(m_config);
+	// configs are freed by the cache
 }
 
 
@@ -277,7 +248,10 @@ int driver_enumerator::filter(const game_driver &driver)
 
 void driver_enumerator::include_all()
 {
-	memset(m_included, 1, sizeof(m_included[0]) * s_driver_count); m_filtered_count = s_driver_count;
+	memset(&m_included[0], 1, sizeof(m_included[0]) * s_driver_count);
+	m_filtered_count = s_driver_count;
+
+	// always exclude the empty driver
 	int empty = find("___empty");
 	assert(empty != -1);
 	m_included[empty] = 0;
@@ -292,6 +266,7 @@ void driver_enumerator::include_all()
 bool driver_enumerator::next()
 {
 	// always advance one
+	release_current();
 	m_current++;
 
 	// if we have a filter, scan forward to the next match
@@ -315,6 +290,7 @@ bool driver_enumerator::next()
 bool driver_enumerator::next_excluded()
 {
 	// always advance one
+	release_current();
 	m_current++;
 
 	// if we have a filter, scan forward to the next match
@@ -346,7 +322,7 @@ void driver_enumerator::find_approximate_matches(const char *string, int count, 
 		srand(osd_ticks());
 
 		// allocate a temporary list
-		int *templist = global_alloc_array(int, m_filtered_count);
+		std::vector<int> templist(m_filtered_count);
 		int arrayindex = 0;
 		for (int index = 0; index < s_driver_count; index++)
 			if (m_included[index])
@@ -366,13 +342,11 @@ void driver_enumerator::find_approximate_matches(const char *string, int count, 
 		// copy out the first few entries
 		for (int matchnum = 0; matchnum < count; matchnum++)
 			results[matchnum] = templist[matchnum % m_filtered_count];
-
-		global_free(templist);
 		return;
 	}
 
 	// allocate memory to track the penalty value
-	int *penalty = global_alloc_array(int, count);
+	std::vector<int> penalty(count);
 
 	// initialize everyone's states
 	for (int matchnum = 0; matchnum < count; matchnum++)
@@ -411,21 +385,27 @@ void driver_enumerator::find_approximate_matches(const char *string, int count, 
 				penalty[matchnum] = curpenalty;
 			}
 		}
-
-	// free our temp memory
-	global_free(penalty);
 }
 
 
-driver_enumerator::config_entry::config_entry(machine_config &config, int index)
-	: m_next(NULL),
-		m_config(&config),
-		m_index(index)
-{
-}
+//-------------------------------------------------
+//  release_current - release bulky memory
+//  structures from the current entry because
+//  we're done with it
+//-------------------------------------------------
 
-
-driver_enumerator::config_entry::~config_entry()
+void driver_enumerator::release_current()
 {
-	global_free(m_config);
+	// skip if no current entry
+	if (m_current < 0 || m_current >= s_driver_count)
+		return;
+
+	// skip if we haven't cached a config
+	if (m_config[m_current] == NULL)
+		return;
+
+	// iterate over software lists in this entry and reset
+	software_list_device_iterator deviter(m_config[m_current]->root_device());
+	for (software_list_device *swlistdev = deviter.first(); swlistdev != NULL; swlistdev = deviter.next())
+		swlistdev->release();
 }

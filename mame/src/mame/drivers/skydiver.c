@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Balfour
 /***************************************************************************
 
     Atari Sky Diver hardware
@@ -11,7 +13,7 @@
         * There is a problem with coin input not starting when in demo mode.
         * The NMI interrupt needs to be more accurate, to do 32V, adjusted
           to VBLANK.  This also affects sound.
-        * The cuurent value of 5 interrupts per frame, works pretty good,
+        * The current value of 5 interrupts per frame, works pretty good,
           but is not 100% accurate timing wise.
 
 ****************************************************************************
@@ -112,22 +114,22 @@ static const int colortable_source[] =
 	0x01, 0x02
 };
 
-void skydiver_state::palette_init()
+PALETTE_INIT_MEMBER(skydiver_state, skydiver)
 {
 	int i;
 
-	for (i = 0; i < sizeof(colortable_source) / sizeof(colortable_source[0]); i++)
+	for (i = 0; i < ARRAY_LENGTH(colortable_source); i++)
 	{
 		rgb_t color;
 
 		switch (colortable_source[i])
 		{
-		case 0:   color = RGB_BLACK; break;
-		case 1:   color = RGB_WHITE; break;
-		default:  color = MAKE_RGB(0xa0, 0xa0, 0xa0); break; /* grey */
+		case 0:   color = rgb_t::black; break;
+		case 1:   color = rgb_t::white; break;
+		default:  color = rgb_t(0xa0, 0xa0, 0xa0); break; /* grey */
 		}
 
-		palette_set_color(machine(), i, color);
+		palette.set_pen_color(i, color);
 	}
 }
 
@@ -139,21 +141,21 @@ void skydiver_state::palette_init()
  *
  *************************************/
 
-WRITE8_MEMBER(skydiver_state::skydiver_nmion_w)
+WRITE8_MEMBER(skydiver_state::nmion_w)
 {
 	m_nmion = offset;
 }
 
 
-INTERRUPT_GEN_MEMBER(skydiver_state::skydiver_interrupt)
+INTERRUPT_GEN_MEMBER(skydiver_state::interrupt)
 {
 	/* Convert range data to divide value and write to sound */
-	address_space &space = machine().firstcpu->space(AS_PROGRAM);
-	discrete_sound_w(m_discrete, space, SKYDIVER_RANGE_DATA, (0x01 << (~m_videoram[0x394] & 0x07)) & 0xff);   // Range 0-2
+	address_space &space = m_maincpu->space(AS_PROGRAM);
+	m_discrete->write(space, SKYDIVER_RANGE_DATA, (0x01 << (~m_videoram[0x394] & 0x07)) & 0xff);   // Range 0-2
 
-	discrete_sound_w(m_discrete, space, SKYDIVER_RANGE3_EN,  m_videoram[0x394] & 0x08);       // Range 3 - note disable
-	discrete_sound_w(m_discrete, space, SKYDIVER_NOTE_DATA, ~m_videoram[0x395] & 0xff);       // Note - freq
-	discrete_sound_w(m_discrete, space, SKYDIVER_NOISE_DATA,  m_videoram[0x396] & 0x0f);  // NAM - Noise Amplitude
+	m_discrete->write(space, SKYDIVER_RANGE3_EN,  m_videoram[0x394] & 0x08);       // Range 3 - note disable
+	m_discrete->write(space, SKYDIVER_NOTE_DATA, ~m_videoram[0x395] & 0xff);       // Note - freq
+	m_discrete->write(space, SKYDIVER_NOISE_DATA,  m_videoram[0x396] & 0x0f);  // NAM - Noise Amplitude
 
 	if (m_nmion)
 		device.execute().set_input_line(INPUT_LINE_NMI, PULSE_LINE);
@@ -167,14 +169,14 @@ INTERRUPT_GEN_MEMBER(skydiver_state::skydiver_interrupt)
  *
  *************************************/
 
-WRITE8_MEMBER(skydiver_state::skydiver_sound_enable_w)
+WRITE8_MEMBER(skydiver_state::sound_enable_w)
 {
-	discrete_sound_w(m_discrete, space, SKYDIVER_SOUND_EN, offset);
+	m_discrete->write(space, SKYDIVER_SOUND_EN, offset);
 }
 
-WRITE8_MEMBER(skydiver_state::skydiver_whistle_w)
+WRITE8_MEMBER(skydiver_state::whistle_w)
 {
-	discrete_sound_w(m_discrete, space, NODE_RELATIVE(SKYDIVER_WHISTLE1_EN, (offset >> 1)), offset & 0x01);
+	m_discrete->write(space, NODE_RELATIVE(SKYDIVER_WHISTLE1_EN, (offset >> 1)), offset & 0x01);
 }
 
 
@@ -187,22 +189,22 @@ WRITE8_MEMBER(skydiver_state::skydiver_whistle_w)
 
 static ADDRESS_MAP_START( skydiver_map, AS_PROGRAM, 8, skydiver_state )
 	ADDRESS_MAP_GLOBAL_MASK(0x7fff)
-	AM_RANGE(0x0000, 0x007f) AM_MIRROR(0x4300) AM_READWRITE(skydiver_wram_r, skydiver_wram_w)
+	AM_RANGE(0x0000, 0x007f) AM_MIRROR(0x4300) AM_READWRITE(wram_r, wram_w)
 	AM_RANGE(0x0080, 0x00ff) AM_MIRROR(0x4000) AM_RAM       /* RAM B1 */
-	AM_RANGE(0x0400, 0x07ff) AM_MIRROR(0x4000) AM_RAM_WRITE(skydiver_videoram_w) AM_SHARE("videoram")       /* RAMs K1,M1,P1,J1,N1,K/L1,L1,H/J1 */
-	AM_RANGE(0x0800, 0x0801) AM_MIRROR(0x47f0) AM_WRITE(skydiver_lamp_s_w)
-	AM_RANGE(0x0802, 0x0803) AM_MIRROR(0x47f0) AM_WRITE(skydiver_lamp_k_w)
-	AM_RANGE(0x0804, 0x0805) AM_MIRROR(0x47f0) AM_WRITE(skydiver_start_lamp_1_w)
-	AM_RANGE(0x0806, 0x0807) AM_MIRROR(0x47f0) AM_WRITE(skydiver_start_lamp_2_w)
-	AM_RANGE(0x0808, 0x0809) AM_MIRROR(0x47f0) AM_WRITE(skydiver_lamp_y_w)
-	AM_RANGE(0x080a, 0x080b) AM_MIRROR(0x47f0) AM_WRITE(skydiver_lamp_d_w)
-	AM_RANGE(0x080c, 0x080d) AM_MIRROR(0x47f0) AM_WRITE(skydiver_sound_enable_w)
-	// AM_RANGE(0x1000, 0x1001) AM_MIRROR(0x47f0) AM_WRITE(skydiver_jump1_lamps_w)
-	AM_RANGE(0x1002, 0x1003) AM_MIRROR(0x47f0) AM_WRITE(skydiver_coin_lockout_w)
-	// AM_RANGE(0x1006, 0x1007) AM_MIRROR(0x47f0) AM_WRITE(skydiver_jump2_lamps_w)
-	AM_RANGE(0x1008, 0x100b) AM_MIRROR(0x47f0) AM_WRITE(skydiver_whistle_w)
-	AM_RANGE(0x100c, 0x100d) AM_MIRROR(0x47f0) AM_WRITE(skydiver_nmion_w)
-	AM_RANGE(0x100e, 0x100f) AM_MIRROR(0x47f0) AM_WRITE(skydiver_width_w)
+	AM_RANGE(0x0400, 0x07ff) AM_MIRROR(0x4000) AM_RAM_WRITE(videoram_w) AM_SHARE("videoram")       /* RAMs K1,M1,P1,J1,N1,K/L1,L1,H/J1 */
+	AM_RANGE(0x0800, 0x0801) AM_MIRROR(0x47f0) AM_WRITE(lamp_s_w)
+	AM_RANGE(0x0802, 0x0803) AM_MIRROR(0x47f0) AM_WRITE(lamp_k_w)
+	AM_RANGE(0x0804, 0x0805) AM_MIRROR(0x47f0) AM_WRITE(start_lamp_1_w)
+	AM_RANGE(0x0806, 0x0807) AM_MIRROR(0x47f0) AM_WRITE(start_lamp_2_w)
+	AM_RANGE(0x0808, 0x0809) AM_MIRROR(0x47f0) AM_WRITE(lamp_y_w)
+	AM_RANGE(0x080a, 0x080b) AM_MIRROR(0x47f0) AM_WRITE(lamp_d_w)
+	AM_RANGE(0x080c, 0x080d) AM_MIRROR(0x47f0) AM_WRITE(sound_enable_w)
+	// AM_RANGE(0x1000, 0x1001) AM_MIRROR(0x47f0) AM_WRITE(jump1_lamps_w)
+	AM_RANGE(0x1002, 0x1003) AM_MIRROR(0x47f0) AM_WRITE(coin_lockout_w)
+	// AM_RANGE(0x1006, 0x1007) AM_MIRROR(0x47f0) AM_WRITE(jump2_lamps_w)
+	AM_RANGE(0x1008, 0x100b) AM_MIRROR(0x47f0) AM_WRITE(whistle_w)
+	AM_RANGE(0x100c, 0x100d) AM_MIRROR(0x47f0) AM_WRITE(nmion_w)
+	AM_RANGE(0x100e, 0x100f) AM_MIRROR(0x47f0) AM_WRITE(width_w)
 	AM_RANGE(0x1800, 0x1800) AM_MIRROR(0x47e0) AM_READ_PORT("IN0")
 	AM_RANGE(0x1801, 0x1801) AM_MIRROR(0x47e0) AM_READ_PORT("IN1")
 	AM_RANGE(0x1802, 0x1802) AM_MIRROR(0x47e0) AM_READ_PORT("IN2")
@@ -217,7 +219,7 @@ static ADDRESS_MAP_START( skydiver_map, AS_PROGRAM, 8, skydiver_state )
 	AM_RANGE(0x180b, 0x180b) AM_MIRROR(0x47e4) AM_READ_PORT("IN11")
 	AM_RANGE(0x1810, 0x1810) AM_MIRROR(0x47e4) AM_READ_PORT("IN12")
 	AM_RANGE(0x1811, 0x1811) AM_MIRROR(0x47e4) AM_READ_PORT("IN13")
-	AM_RANGE(0x2000, 0x201f) AM_MIRROR(0x47e0) AM_READ(watchdog_reset_r) AM_WRITE(skydiver_2000_201F_w)
+	AM_RANGE(0x2000, 0x201f) AM_MIRROR(0x47e0) AM_READ(watchdog_reset_r) AM_WRITE(_2000_201F_w)
 	AM_RANGE(0x2800, 0x2fff) AM_MIRROR(0x4000) AM_ROM
 	AM_RANGE(0x3000, 0x37ff) AM_MIRROR(0x4000) AM_ROM
 	AM_RANGE(0x3800, 0x3fff) AM_ROM
@@ -375,7 +377,7 @@ static MACHINE_CONFIG_START( skydiver, skydiver_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M6800,MASTER_CLOCK/16)     /* ???? */
 	MCFG_CPU_PROGRAM_MAP(skydiver_map)
-	MCFG_CPU_PERIODIC_INT_DRIVER(skydiver_state, skydiver_interrupt,  5*60)
+	MCFG_CPU_PERIODIC_INT_DRIVER(skydiver_state, interrupt,  5*60)
 	MCFG_WATCHDOG_VBLANK_INIT(8)    // 128V clocks the same as VBLANK
 
 
@@ -385,17 +387,19 @@ static MACHINE_CONFIG_START( skydiver, skydiver_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 28*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(skydiver_state, screen_update_skydiver)
+	MCFG_SCREEN_UPDATE_DRIVER(skydiver_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(skydiver)
-	MCFG_PALETTE_LENGTH(sizeof(colortable_source) / sizeof(colortable_source[0]))
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", skydiver)
+	MCFG_PALETTE_ADD("palette", ARRAY_LENGTH(colortable_source))
+	MCFG_PALETTE_INIT_OWNER(skydiver_state, skydiver)
 
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(skydiver)
+	MCFG_DISCRETE_INTF(skydiver)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -430,4 +434,4 @@ ROM_END
  *
  *************************************/
 
-GAMEL(1978, skydiver, 0, skydiver, skydiver, driver_device, 0, ROT0, "Atari", "Sky Diver", 0, layout_skydiver )
+GAMEL(1978, skydiver, 0, skydiver, skydiver, driver_device, 0, ROT0, "Atari", "Sky Diver", GAME_SUPPORTS_SAVE, layout_skydiver )

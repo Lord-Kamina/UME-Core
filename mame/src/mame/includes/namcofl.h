@@ -1,4 +1,7 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, ElSemi
 #include "namcos2.h"
+#include "video/c116.h"
 
 #define NAMCOFL_HTOTAL      (288)   /* wrong */
 #define NAMCOFL_HBSTART (288)
@@ -22,10 +25,12 @@ public:
 		: namcos2_shared_state(mconfig, type, tag),
 		m_maincpu(*this,"maincpu"),
 		m_mcu(*this,"mcu"),
-		m_shareram(*this, "shareram"){ }
+		m_c116(*this,"c116"),
+		m_shareram(*this, "shareram") { }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_mcu;
+	required_device<namco_c116_device> m_c116;
 	emu_timer *m_raster_interrupt_timer;
 	UINT32 *m_workram;
 	required_shared_ptr<UINT16> m_shareram;
@@ -36,7 +41,7 @@ public:
 	DECLARE_READ32_MEMBER(fl_network_r);
 	DECLARE_READ32_MEMBER(namcofl_sysreg_r);
 	DECLARE_WRITE32_MEMBER(namcofl_sysreg_w);
-	DECLARE_WRITE32_MEMBER(namcofl_paletteram_w);
+	DECLARE_WRITE8_MEMBER(namcofl_c116_w);
 	DECLARE_READ32_MEMBER(namcofl_share_r);
 	DECLARE_WRITE32_MEMBER(namcofl_share_w);
 	DECLARE_WRITE16_MEMBER(mcu_shared_w);
@@ -64,4 +69,5 @@ public:
 	TIMER_DEVICE_CALLBACK_MEMBER(mcu_irq0_cb);
 	TIMER_DEVICE_CALLBACK_MEMBER(mcu_irq2_cb);
 	TIMER_DEVICE_CALLBACK_MEMBER(mcu_adc_cb);
+	void common_init();
 };

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /*
 
     COSMICOS
@@ -21,7 +23,6 @@
 
     TODO:
 
-    - fix direct update handler to make system work again
     - display interface INH
     - 2 segment display
     - single step
@@ -44,6 +45,42 @@ enum
 };
 
 /* Read/Write Handlers */
+
+READ8_MEMBER( cosmicos_state::read )
+{
+	if (m_boot) offset |= 0xc0c0;
+
+	UINT8 data = 0;
+
+	if (offset < 0xc000)
+	{
+		// TODO
+	}
+	else if (offset < 0xd000)
+	{
+		data = m_rom->base()[offset & 0xfff];
+	}
+	else if (!m_ram_disable && (offset >= 0xff00))
+	{
+		data = m_ram->pointer()[offset & 0xff];
+	}
+
+	return data;
+}
+
+WRITE8_MEMBER( cosmicos_state::write )
+{
+	if (m_boot) offset |= 0xc0c0;
+
+	if (offset < 0xc000)
+	{
+		// TODO
+	}
+	else if (!m_ram_disable && !m_ram_protect && (offset >= 0xff00))
+	{
+		m_ram->pointer()[offset & 0xff] = data;
+	}
+}
 
 READ8_MEMBER( cosmicos_state::video_off_r )
 {
@@ -138,9 +175,7 @@ WRITE8_MEMBER( cosmicos_state::display_w )
 /* Memory Maps */
 
 static ADDRESS_MAP_START( cosmicos_mem, AS_PROGRAM, 8, cosmicos_state )
-	AM_RANGE(0x0000, 0xbfff) AM_RAM
-	AM_RANGE(0xc000, 0xcfff) AM_ROM AM_REGION(CDP1802_TAG, 0)
-	AM_RANGE(0xff00, 0xffff) AM_RAM
+	AM_RANGE(0x0000, 0xffff) AM_READWRITE(read, write)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( cosmicos_io, AS_IO, 8, cosmicos_state )
@@ -249,40 +284,14 @@ INPUT_CHANGED_MEMBER( cosmicos_state::clear_data )
 	clear_input_data();
 }
 
-void cosmicos_state::set_ram_mode()
-{
-	address_space &program = m_maincpu->space(AS_PROGRAM);
-	UINT8 *ram = m_ram->pointer();
-
-	if (m_ram_disable)
-	{
-		program.unmap_readwrite(0xff00, 0xffff);
-	}
-	else
-	{
-		if (m_ram_protect)
-		{
-			program.install_rom(0xff00, 0xffff, ram);
-		}
-		else
-		{
-			program.install_ram(0xff00, 0xffff, ram);
-		}
-	}
-}
-
 INPUT_CHANGED_MEMBER( cosmicos_state::memory_protect )
 {
 	m_ram_protect = newval;
-
-	set_ram_mode();
 }
 
 INPUT_CHANGED_MEMBER( cosmicos_state::memory_disable )
 {
 	m_ram_disable = newval;
-
-	set_ram_mode();
 }
 
 static INPUT_PORTS_START( cosmicos )
@@ -403,26 +412,6 @@ READ_LINE_MEMBER( cosmicos_state::ef4_r )
 	return BIT(m_buttons->read(), 0);
 }
 
-static COSMAC_SC_WRITE( cosmicos_sc_w )
-{
-	cosmicos_state *driver_state = device->machine().driver_data<cosmicos_state>();
-
-	int sc1 = BIT(sc, 1);
-
-	if (driver_state->m_sc1 && !sc1)
-	{
-		driver_state->clear_input_data();
-	}
-
-	if (sc1)
-	{
-		driver_state->m_maincpu->set_input_line(COSMAC_INPUT_LINE_INT, CLEAR_LINE);
-		driver_state->m_maincpu->set_input_line(COSMAC_INPUT_LINE_DMAIN, CLEAR_LINE);
-	}
-
-	driver_state->m_sc1 = sc1;
-}
-
 WRITE_LINE_MEMBER( cosmicos_state::q_w )
 {
 	/* cassette */
@@ -442,45 +431,30 @@ READ8_MEMBER( cosmicos_state::dma_r )
 	return m_data;
 }
 
-static COSMAC_INTERFACE( cosmicos_config )
+WRITE8_MEMBER( cosmicos_state::sc_w )
 {
-	DEVCB_DRIVER_LINE_MEMBER(cosmicos_state, wait_r),
-	DEVCB_DRIVER_LINE_MEMBER(cosmicos_state, clear_r),
-	DEVCB_DRIVER_LINE_MEMBER(cosmicos_state, ef1_r),
-	DEVCB_DRIVER_LINE_MEMBER(cosmicos_state, ef2_r),
-	DEVCB_DRIVER_LINE_MEMBER(cosmicos_state, ef3_r),
-	DEVCB_DRIVER_LINE_MEMBER(cosmicos_state, ef4_r),
-	DEVCB_DRIVER_LINE_MEMBER(cosmicos_state, q_w),
-	DEVCB_DRIVER_MEMBER(cosmicos_state, dma_r),
-	DEVCB_NULL,
-	cosmicos_sc_w,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
+	int sc1 = BIT(data, 1);
 
+	if (m_sc1 && !sc1)
+	{
+		clear_input_data();
+	}
+
+	if (sc1)
+	{
+		m_maincpu->set_input_line(COSMAC_INPUT_LINE_INT, CLEAR_LINE);
+		m_maincpu->set_input_line(COSMAC_INPUT_LINE_DMAIN, CLEAR_LINE);
+	}
+
+	m_sc1 = sc1;
+}
 
 /* Machine Initialization */
 
 void cosmicos_state::machine_start()
 {
-	address_space &program = m_maincpu->space(AS_PROGRAM);
-
 	/* initialize LED display */
 	m_led->rbi_w(1);
-
-	/* setup memory banking */
-	switch (m_ram->size())
-	{
-	case 256:
-		program.unmap_readwrite(0x0000, 0xbfff);
-		break;
-
-	case 4*1024:
-		program.unmap_readwrite(0x1000, 0xbfff);
-		break;
-	}
-
-	set_ram_mode();
 
 	// find keyboard rows
 	m_key_row[0] = m_y1;
@@ -526,32 +500,24 @@ QUICKLOAD_LOAD_MEMBER( cosmicos_state, cosmicos )
 
 /* Machine Driver */
 
-static const cassette_interface cosmicos_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_MUTED),
-	NULL,
-	NULL
-};
-
-static DM9368_INTERFACE( led_intf )
-{
-	0,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 static MACHINE_CONFIG_START( cosmicos, cosmicos_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD(CDP1802_TAG, CDP1802, XTAL_1_75MHz)
 	MCFG_CPU_PROGRAM_MAP(cosmicos_mem)
 	MCFG_CPU_IO_MAP(cosmicos_io)
-	MCFG_CPU_CONFIG(cosmicos_config)
+	MCFG_COSMAC_WAIT_CALLBACK(READLINE(cosmicos_state, wait_r))
+	MCFG_COSMAC_CLEAR_CALLBACK(READLINE(cosmicos_state, clear_r))
+	MCFG_COSMAC_EF1_CALLBACK(READLINE(cosmicos_state, ef1_r))
+	MCFG_COSMAC_EF2_CALLBACK(READLINE(cosmicos_state, ef2_r))
+	MCFG_COSMAC_EF3_CALLBACK(READLINE(cosmicos_state, ef3_r))
+	MCFG_COSMAC_EF4_CALLBACK(READLINE(cosmicos_state, ef4_r))
+	MCFG_COSMAC_Q_CALLBACK(WRITELINE(cosmicos_state, q_w))
+	MCFG_COSMAC_DMAR_CALLBACK(READ8(cosmicos_state, dma_r))
+	MCFG_COSMAC_SC_CALLBACK(WRITE8(cosmicos_state, sc_w))
 
 	/* video hardware */
 	MCFG_DEFAULT_LAYOUT( layout_cosmicos )
-	MCFG_DM9368_ADD(DM9368_TAG, led_intf)
+	MCFG_DEVICE_ADD(DM9368_TAG, DM9368, 0)
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("digit", cosmicos_state, digit_tick, attotime::from_hz(100))
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("interrupt", cosmicos_state, int_tick, attotime::from_hz(1000))
 
@@ -570,7 +536,8 @@ static MACHINE_CONFIG_START( cosmicos, cosmicos_state )
 
 	/* devices */
 	MCFG_QUICKLOAD_ADD("quickload", cosmicos_state, cosmicos, "bin", 0)
-	MCFG_CASSETTE_ADD("cassette", cosmicos_cassette_interface)
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_MUTED)
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -592,22 +559,5 @@ ROM_END
 
 /* System Drivers */
 
-DIRECT_UPDATE_MEMBER(cosmicos_state::cosmicos_direct_update_handler)
-{
-	if (m_boot)
-	{
-		/* force A6 and A7 high */
-		direct.explicit_configure(0x0000, 0xffff, 0x3f3f, m_rom->base() + 0xc0);
-		return ~0;
-	}
-
-	return address;
-}
-
-DRIVER_INIT_MEMBER(cosmicos_state,cosmicos)
-{
-	m_maincpu->space(AS_PROGRAM).set_direct_update_handler(direct_update_delegate(FUNC(cosmicos_state::cosmicos_direct_update_handler), this));
-}
-
 /*    YEAR  NAME        PARENT  COMPAT  MACHINE     INPUT       INIT        COMPANY             FULLNAME    FLAGS */
-COMP( 1979, cosmicos,   0,      0,      cosmicos,   cosmicos, cosmicos_state,   cosmicos,   "Radio Bulletin",   "Cosmicos", GAME_NOT_WORKING | GAME_SUPPORTS_SAVE | GAME_IMPERFECT_GRAPHICS )
+COMP( 1979, cosmicos,   0,      0,      cosmicos,   cosmicos, driver_device,   0,   "Radio Bulletin",   "Cosmicos", GAME_SUPPORTS_SAVE | GAME_IMPERFECT_GRAPHICS )

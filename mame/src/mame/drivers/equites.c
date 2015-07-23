@@ -1,8 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Acho A. Tang, Nicola Salmoria
 /*******************************************************************************
 
 Equites           (c) 1984 Alpha Denshi Co./Sega   8303
 Bull Fighter      (c) 1984 Alpha Denshi Co./Sega   8303
 Gekisou           (c) 1985 Eastern Corp.           8304
+Violent Run       (c) 1985 Eastern Corp.           8304? (probably on Equites HW)
 The Koukouyakyuh  (c) 1985 Alpha Denshi Co.        8304
 Splendor Blast    (c) 1985 Alpha Denshi Co.        8303
 High Voltage      (c) 1985 Alpha Denshi Co.        8304 (POST says 8404)
@@ -368,7 +371,6 @@ D                                                                               
 #include "cpu/alph8201/alph8201.h"
 #include "cpu/i8085/i8085.h"
 #include "sound/ay8910.h"
-#include "sound/msm5232.h"
 #include "sound/dac.h"
 #include "sound/samples.h"
 #include "machine/nvram.h"
@@ -404,22 +406,13 @@ TIMER_CALLBACK_MEMBER(equites_state::equites_frq_adjuster_callback)
 {
 	UINT8 frq = ioport(FRQ_ADJUSTER_TAG)->read();
 
-	msm5232_set_clock(m_msm, MSM5232_MIN_CLOCK + frq * (MSM5232_MAX_CLOCK - MSM5232_MIN_CLOCK) / 100);
+	m_msm->set_clock(MSM5232_MIN_CLOCK + frq * (MSM5232_MAX_CLOCK - MSM5232_MIN_CLOCK) / 100);
 //popmessage("8155: C %02x A %02x  AY: A %02x B %02x Unk:%x", m_eq8155_port_c, m_eq8155_port_a, m_ay_port_a, m_ay_port_b, m_eq_cymbal_ctrl & 15);
 
 	m_cymvol *= 0.94f;
 	m_hihatvol *= 0.94f;
 
-	m_msm->set_output_gain(10, m_hihatvol + m_cymvol * (m_ay_port_b & 3) * 0.33);   /* NO from msm5232 */
-}
-
-static SOUND_START(equites)
-{
-	equites_state *state = machine.driver_data<equites_state>();
-	state->m_nmi_timer = machine.scheduler().timer_alloc(timer_expired_delegate(FUNC(equites_state::equites_nmi_callback),state));
-
-	state->m_adjuster_timer = machine.scheduler().timer_alloc(timer_expired_delegate(FUNC(equites_state::equites_frq_adjuster_callback),state));
-	state->m_adjuster_timer->adjust(attotime::from_hz(60), 0, attotime::from_hz(60));
+	m_msm->set_output_gain(10, m_hihatvol + m_cymvol * (m_ay_port_b & 3) * 0.33f);   /* NO from msm5232 */
 }
 
 WRITE8_MEMBER(equites_state::equites_c0f8_w)
@@ -740,7 +733,7 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, equites_state )
 	AM_RANGE(0x0000, 0xbfff) AM_ROM
 	AM_RANGE(0xc000, 0xc000) AM_READ(soundlatch_byte_r)
-	AM_RANGE(0xc080, 0xc08d) AM_DEVWRITE_LEGACY("msm", msm5232_w)
+	AM_RANGE(0xc080, 0xc08d) AM_DEVWRITE("msm", msm5232_device, write)
 	AM_RANGE(0xc0a0, 0xc0a1) AM_DEVWRITE("aysnd", ay8910_device, data_address_w)
 	AM_RANGE(0xc0b0, 0xc0b0) AM_WRITENOP // n.c.
 	AM_RANGE(0xc0c0, 0xc0c0) AM_WRITE(equites_cymbal_ctrl_w)
@@ -1099,24 +1092,6 @@ GFXDECODE_END
 
 /******************************************************************************/
 
-static const msm5232_interface equites_5232intf =
-{
-	{ 0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6 }, // verified
-	DEVCB_DRIVER_LINE_MEMBER(equites_state,equites_msm5232_gate)
-};
-
-
-static const ay8910_interface equites_8910intf =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(equites_state,equites_8910porta_w),
-	DEVCB_DRIVER_MEMBER(equites_state,equites_8910portb_w)
-};
-
-
 static const char *const alphamc07_sample_names[] =
 {
 	"*equites",
@@ -1124,12 +1099,6 @@ static const char *const alphamc07_sample_names[] =
 	"bongo2",
 	"bongo3",
 	0
-};
-
-static const samples_interface alphamc07_samples_interface =
-{
-	3,  /* 3 channels */
-	alphamc07_sample_names
 };
 
 
@@ -1142,13 +1111,12 @@ static MACHINE_CONFIG_FRAGMENT( common_sound )
 	MCFG_CPU_PROGRAM_MAP(sound_map)
 	MCFG_CPU_IO_MAP(sound_portmap)
 
-	MCFG_SOUND_START(equites)
-
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("msm", MSM5232, MSM5232_MAX_CLOCK)   // will be adjusted at runtime through PORT_ADJUSTER
-	MCFG_SOUND_CONFIG(equites_5232intf)
+	MCFG_MSM5232_SET_CAPACITORS(0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6, 0.47e-6) // verified
+	MCFG_MSM5232_GATE_HANDLER_CB(WRITELINE(equites_state, equites_msm5232_gate))
 	MCFG_SOUND_ROUTE(0, "mono", MSM5232_BASE_VOLUME/2.2)    // pin 28  2'-1 : 22k resistor
 	MCFG_SOUND_ROUTE(1, "mono", MSM5232_BASE_VOLUME/1.5)    // pin 29  4'-1 : 15k resistor
 	MCFG_SOUND_ROUTE(2, "mono", MSM5232_BASE_VOLUME)        // pin 30  8'-1 : 10k resistor
@@ -1162,7 +1130,8 @@ static MACHINE_CONFIG_FRAGMENT( common_sound )
 	MCFG_SOUND_ROUTE(10,"mono", 0.12)       // pin 22 Noise Output (this actually feeds an analog section)
 
 	MCFG_SOUND_ADD("aysnd", AY8910, XTAL_6_144MHz/4) /* verified on pcb */
-	MCFG_SOUND_CONFIG(equites_8910intf)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(equites_state, equites_8910porta_w))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(equites_state, equites_8910portb_w))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.15)
 
 	MCFG_DAC_ADD("dac1")
@@ -1171,7 +1140,9 @@ static MACHINE_CONFIG_FRAGMENT( common_sound )
 	MCFG_DAC_ADD("dac2")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 
-	MCFG_SAMPLES_ADD("samples", alphamc07_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(3)
+	MCFG_SAMPLES_NAMES(alphamc07_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
 MACHINE_CONFIG_END
 
@@ -1199,6 +1170,11 @@ MACHINE_START_MEMBER(equites_state,equites)
 	save_item(NAME(m_hihat));
 	save_item(NAME(m_cymbal));
 #endif
+
+	m_nmi_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(equites_state::equites_nmi_callback), this));
+
+	m_adjuster_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(equites_state::equites_frq_adjuster_callback), this));
+	m_adjuster_timer->adjust(attotime::from_hz(60), 0, attotime::from_hz(60));
 }
 
 MACHINE_RESET_MEMBER(equites_state,equites)
@@ -1245,10 +1221,13 @@ static MACHINE_CONFIG_START( equites, equites_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 3*8, 29*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(equites_state, screen_update_equites)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(equites)
-	MCFG_PALETTE_LENGTH(0x180)
-	MCFG_PALETTE_INIT_OVERRIDE(equites_state,equites)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", equites)
+	MCFG_PALETTE_ADD("palette", 0x180)
+	MCFG_PALETTE_INDIRECT_ENTRIES(0x100)
+	MCFG_PALETTE_INIT_OWNER(equites_state,equites)
+
 	MCFG_VIDEO_START_OVERRIDE(equites_state,equites)
 
 	MCFG_MACHINE_START_OVERRIDE(equites_state,equites)
@@ -1282,10 +1261,13 @@ static MACHINE_CONFIG_START( splndrbt, equites_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 4*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(equites_state, screen_update_splndrbt)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(splndrbt)
-	MCFG_PALETTE_LENGTH(0x280)
-	MCFG_PALETTE_INIT_OVERRIDE(equites_state,splndrbt)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", splndrbt)
+	MCFG_PALETTE_ADD("palette", 0x280)
+	MCFG_PALETTE_INDIRECT_ENTRIES(0x100)
+	MCFG_PALETTE_INIT_OWNER(equites_state,splndrbt)
+
 	MCFG_VIDEO_START_OVERRIDE(equites_state,splndrbt)
 
 	MCFG_MACHINE_START_OVERRIDE(equites_state,equites)
@@ -1305,7 +1287,7 @@ Note: CPU - Main PCB
 
 Main processor   - 68000 2.988MHz
 
-Video processor  - ALPHA-8303 custom
+Protection processor  - ALPHA-8303 custom
 
 Sound processor  - 8085 3.073MHz
                  - TMP8155 RIOTs    (RAM & I/O Timers)
@@ -1330,7 +1312,7 @@ ROM_START( equites )
 	ROM_LOAD( "ev4.1h", 0x06000, 0x2000, CRC(b7917264) SHA1(e58345fda088b171fd348959de15082f3cb42514) )
 
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8303.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
+	ROM_LOAD( "alpha-8303__44801b42.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 ) // chars
 	ROM_LOAD( "ep9",  0x00000, 0x1000, CRC(0325be11) SHA1(d95667b439e3d97b08efeaf08022348546a4f385) )
@@ -1394,7 +1376,7 @@ ROM_START( equitess )
 	ROM_LOAD( "ev4.1h", 0x06000, 0x2000, CRC(b7917264) SHA1(e58345fda088b171fd348959de15082f3cb42514) )
 
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8303.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
+	ROM_LOAD( "alpha-8303__44801b42.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 ) // chars
 	ROM_LOAD( "epr-ep0.3e",  0x00000, 0x1000, CRC(3f5a81c3) SHA1(8fd5bc621f483bfa46be7e40e6480b25243bdf70) )
@@ -1452,7 +1434,7 @@ ROM_START( bullfgtr )
 	ROM_LOAD( "hv4vr.bin", 0x06000, 0x2000, CRC(62c7a25b) SHA1(237d3cbdfbf45b33c2f65d30faba151380866a93) )
 
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8303.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
+	ROM_LOAD( "alpha-8303__44801b42.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 ) // chars
 	ROM_LOAD( "h.bin", 0x000000, 0x1000, CRC(c6894c9a) SHA1(0d5a55cded4fd833211bdc733a78c6c8423897de) )
@@ -1534,7 +1516,7 @@ ROM_START( bullfgtrs )
 	ROM_LOAD( "hv4vr.bin", 0x06000, 0x2000, CRC(62c7a25b) SHA1(237d3cbdfbf45b33c2f65d30faba151380866a93) )
 
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8303.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
+	ROM_LOAD( "alpha-8303__44801b42.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
 
 	ROM_REGION( 0x1000, "gfx1", 0 ) // chars
 	ROM_LOAD( "h.bin", 0x000000, 0x1000, CRC(c6894c9a) SHA1(0d5a55cded4fd833211bdc733a78c6c8423897de) )
@@ -1732,7 +1714,7 @@ ROM_START( splndrbt )
 	ROM_LOAD( "4_v.1h", 0x06000, 0x2000, CRC(10f45af4) SHA1(00fa599bad8bf3ba6deee54165f381403096e8f9) )
 
 	ROM_REGION( 0x2000, "mcu", 0 )
-	ROM_LOAD( "8303.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
+	ROM_LOAD( "alpha-8303__44801b42.bin", 0x0000, 0x2000, CRC(66adcb37) SHA1(e1c72ecb161129dcbddc0b16dd90e716d0c79311) )
 
 	ROM_REGION( 0x2000, "gfx1", 0 ) // chars
 	ROM_LOAD( "10.8c",  0x00000, 0x2000, CRC(501887d4) SHA1(3cf4401d6fddff1500066219a71ac3b30ecbdd28) )
@@ -1796,6 +1778,9 @@ ROM_START( hvoltage )
 	ROM_LOAD( "5_v.1l", 0x00000, 0x4000, CRC(ed9bb6ea) SHA1(73b0251b86835368ec2a4e98a5f61e28e58fd234) )
 	ROM_LOAD( "6_v.1h", 0x04000, 0x4000, CRC(e9542211) SHA1(482f2c90e842fe5cc31cc6a39025adf65ba47ce9) )
 	ROM_LOAD( "7_v.1e", 0x08000, 0x4000, CRC(44d38554) SHA1(6765971376eafa218fda1accb1e173a7c1850cc8) )
+
+	ROM_REGION( 0x2000, "mcu", 0 )
+	ROM_LOAD( "alpha-8304__44801bxx.bin", 0x0000, 0x2000, NO_DUMP )
 
 	ROM_REGION( 0x2000, "gfx1", 0 ) // chars
 	ROM_LOAD( "5.8c",   0x00000, 0x2000, CRC(656d53cd) SHA1(9971ed7e7da0e8bf46e97e8f75a2c2201b33fc2f) )
@@ -1891,7 +1876,7 @@ DRIVER_INIT_MEMBER(equites_state,hvoltage)
 	unpack_region("gfx3");
 
 #if HVOLTAGE_DEBUG
-	m_maincpu->space(AS_PROGRAM).install_legacy_read_handler(0x000038, 0x000039, read16_delegate(FUNC(equites_state::hvoltage_debug_r),this));
+	m_maincpu->space(AS_PROGRAM).install_read_handler(0x000038, 0x000039, read16_delegate(FUNC(equites_state::hvoltage_debug_r),this));
 #endif
 }
 

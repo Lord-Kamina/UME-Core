@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia, Mike Coates, Nicola Salmoria, Miguel Angel Horna
 /***************************************************************************
 
 World Rally (c) 1993 Gaelco (Designed & Developed by Zigurat. Produced by Gaelco)
 
-Driver by Manuel Abadia, Mike Coates, Nicola Salmoria and Miguel Andel Horna
+Driver by Manuel Abadia, Mike Coates, Nicola Salmoria and Miguel Angel Horna
 
 Thanks to GAELCO SA for the DS5002FP code and information about the encryption
 
@@ -103,21 +105,21 @@ produces a high clock frequency, slow movements a low freq.
 
 static ADDRESS_MAP_START( wrally_map, AS_PROGRAM, 16, wrally_state )
 	AM_RANGE(0x000000, 0x0fffff) AM_ROM                                                         /* ROM */
-	AM_RANGE(0x100000, 0x103fff) AM_RAM_WRITE(wrally_vram_w) AM_SHARE("videoram")   /* encrypted Video RAM */
+	AM_RANGE(0x100000, 0x103fff) AM_RAM_WRITE(vram_w) AM_SHARE("videoram")   /* encrypted Video RAM */
 	AM_RANGE(0x108000, 0x108007) AM_RAM AM_SHARE("vregs")                                   /* Video Registers */
 	AM_RANGE(0x10800c, 0x10800d) AM_WRITENOP                                                /* CLR INT Video */
-	AM_RANGE(0x200000, 0x203fff) AM_RAM_WRITE(paletteram_xxxxBBBBRRRRGGGG_word_w) AM_SHARE("paletteram")    /* Palette */
+	AM_RANGE(0x200000, 0x203fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")    /* Palette */
 	AM_RANGE(0x440000, 0x440fff) AM_RAM AM_SHARE("spriteram")                               /* Sprite RAM */
 	AM_RANGE(0x700000, 0x700001) AM_READ_PORT("DSW")
 	AM_RANGE(0x700002, 0x700003) AM_READ_PORT("P1_P2")
 	AM_RANGE(0x700004, 0x700005) AM_READ_PORT("WHEEL")
 	AM_RANGE(0x700008, 0x700009) AM_READ_PORT("SYSTEM")
-	AM_RANGE(0x70000c, 0x70000d) AM_WRITE(OKIM6295_bankswitch_w)                                /* OKI6295 bankswitch */
+	AM_RANGE(0x70000c, 0x70000d) AM_WRITE(okim6295_bankswitch_w)                                /* OKI6295 bankswitch */
 	AM_RANGE(0x70000e, 0x70000f) AM_DEVREADWRITE8("oki", okim6295_device, read, write, 0x00ff)  /* OKI6295 status/data register */
 	AM_RANGE(0x70000a, 0x70001b) AM_WRITE(wrally_coin_lockout_w)                                /* Coin lockouts */
 	AM_RANGE(0x70002a, 0x70003b) AM_WRITE(wrally_coin_counter_w)                                /* Coin counters */
 	AM_RANGE(0x70004a, 0x70004b) AM_WRITENOP                                                /* Sound muting */
-	AM_RANGE(0x70005a, 0x70005b) AM_WRITE(wrally_flipscreen_w)                                  /* Flip screen */
+	AM_RANGE(0x70005a, 0x70005b) AM_WRITE(flipscreen_w)                                  /* Flip screen */
 	AM_RANGE(0x70006a, 0x70007b) AM_WRITENOP                                                /* ??? */
 	AM_RANGE(0xfec000, 0xfeffff) AM_RAM AM_SHARE("shareram")                                        /* Work RAM (shared with DS5002FP) */
 ADDRESS_MAP_END
@@ -126,14 +128,14 @@ READ8_MEMBER(wrally_state::dallas_share_r)
 {
 	UINT8 *shareram = (UINT8 *)m_shareram.target();
 
-	return shareram[BYTE_XOR_LE(offset) ^ 1];
+	return shareram[BYTE_XOR_BE(offset)];
 }
 
 WRITE8_MEMBER(wrally_state::dallas_share_w)
 {
 	UINT8 *shareram = (UINT8 *)m_shareram.target();
 
-	shareram[BYTE_XOR_LE(offset) ^ 1] = data;
+	shareram[BYTE_XOR_BE(offset)] = data;
 }
 
 static ADDRESS_MAP_START( dallas_rom, AS_PROGRAM, 8, wrally_state )
@@ -143,14 +145,6 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( dallas_ram, AS_IO, 8, wrally_state )
 	AM_RANGE(0x0000, 0xffff) AM_READWRITE(dallas_share_r, dallas_share_w)   AM_MASK(0x3fff)     /* Shared RAM with the main CPU */
 ADDRESS_MAP_END
-
-/* DS5002FP configuration */
-static const ds5002fp_config dallas_config =
-{
-	0x88,           /* bootstrap loader MCON register */
-	0x00,           /* bootstrap loader RPCTL register */
-	0x80            /* bootstrap loader CRC register */
-};
 
 static INPUT_PORTS_START( wrally )
 	PORT_START("DSW")
@@ -251,7 +245,7 @@ static MACHINE_CONFIG_START( wrally, wrally_state )
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", wrally_state,  irq6_line_hold)
 
 	MCFG_CPU_ADD("mcu", DS5002FP, XTAL_24MHz/2) /* verified on pcb */
-	MCFG_CPU_CONFIG(dallas_config)
+	MCFG_DS5002FP_CONFIG( 0x88, 0x00, 0x80 )
 	MCFG_CPU_PROGRAM_MAP(dallas_rom)
 	MCFG_CPU_IO_MAP(dallas_ram)
 
@@ -263,10 +257,12 @@ static MACHINE_CONFIG_START( wrally, wrally_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
 	MCFG_SCREEN_SIZE(64*16, 32*16)
 	MCFG_SCREEN_VISIBLE_AREA(8, 24*16-8-1, 16, 16*16-8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(wrally_state, screen_update_wrally)
+	MCFG_SCREEN_UPDATE_DRIVER(wrally_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(wrally)
-	MCFG_PALETTE_LENGTH(1024*8)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", wrally)
+	MCFG_PALETTE_ADD("palette", 1024*8)
+	MCFG_PALETTE_FORMAT(xxxxBBBBRRRRGGGG)
 
 
 	/* sound hardware */
@@ -358,6 +354,6 @@ ROM_START( wrallyb ) /* Board Marked 930217, Atari License */
 ROM_END
 
 
-GAME( 1993, wrally,  0,      wrally, wrally, driver_device, 0, ROT0, "Gaelco", "World Rally (set 1)", 0 ) /* Dallas DS5002FP power failure shows as: "Tension  baja " */
-GAME( 1993, wrallya, wrally, wrally, wrally, driver_device, 0, ROT0, "Gaelco", "World Rally (set 2)", 0 ) /* Dallas DS5002FP power failure shows as: "Power  Failure" */
-GAME( 1993, wrallyb, wrally, wrally, wrally, driver_device, 0, ROT0, "Gaelco (Atari license)", "World Rally (US, 930217)", 0 )
+GAME( 1993, wrally,  0,      wrally, wrally, driver_device, 0, ROT0, "Gaelco", "World Rally (set 1)", GAME_SUPPORTS_SAVE ) /* Dallas DS5002FP power failure shows as: "Tension  baja " */
+GAME( 1993, wrallya, wrally, wrally, wrally, driver_device, 0, ROT0, "Gaelco", "World Rally (set 2)", GAME_SUPPORTS_SAVE ) /* Dallas DS5002FP power failure shows as: "Power  Failure" */
+GAME( 1993, wrallyb, wrally, wrally, wrally, driver_device, 0, ROT0, "Gaelco (Atari license)", "World Rally (US, 930217)", GAME_SUPPORTS_SAVE )

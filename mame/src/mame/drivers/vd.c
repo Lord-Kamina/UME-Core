@@ -1,6 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /**************************************************************************************
 
-    Pinball
+    PINBALL
     Videodens
 
     PinMAME used as reference (unable to find any info at all on the net).
@@ -191,6 +193,6 @@ ROM_START(ator)
 ROM_END
 #endif
 
+//GAME(19??, ator,     0,    vd,  vd, driver_device, 0,  ROT0,  "Videodens", "Ator", GAME_IS_SKELETON_MECHANICAL)
 GAME(1986, break86,  0,    vd,  vd, driver_device, 0,  ROT0,  "Videodens", "Break '86", GAME_IS_SKELETON_MECHANICAL)
 GAME(1986, papillon, 0,    vd,  vd, driver_device, 0,  ROT0,  "Videodens", "Papillon", GAME_IS_SKELETON_MECHANICAL)
-//GAME(19??, ator,     0,    vd,  vd, driver_device, 0,  ROT0,  "Videodens", "Ator", GAME_IS_SKELETON_MECHANICAL)

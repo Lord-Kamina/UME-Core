@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
   Atari Tournament Table driver
@@ -20,11 +22,12 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu") { }
 
+	required_device<cpu_device> m_maincpu;
+
 	DECLARE_WRITE8_MEMBER(tourtabl_led_w);
 	DECLARE_READ16_MEMBER(tourtabl_read_input_port);
 	DECLARE_READ8_MEMBER(tourtabl_get_databus_contents);
 	DECLARE_WRITE8_MEMBER(watchdog_w);
-	required_device<cpu_device> m_maincpu;
 };
 
 
@@ -70,33 +73,6 @@ WRITE8_MEMBER(tourtabl_state::watchdog_w)
 {
 	machine().watchdog_reset();
 }
-
-static const riot6532_interface r6532_interface_0 =
-{
-	DEVCB_INPUT_PORT("RIOT0_SWA"),  /* Port 6 */
-	DEVCB_INPUT_PORT("RIOT0_SWB"),  /* Port 7 */
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(tourtabl_state,watchdog_w),
-	DEVCB_NULL
-};
-
-
-static const riot6532_interface r6532_interface_1 =
-{
-	DEVCB_INPUT_PORT("RIOT1_SWA"),  /* Port 8 */
-	DEVCB_INPUT_PORT("RIOT1_SWB"),  /* Port 9 */
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(tourtabl_state,tourtabl_led_w),
-	DEVCB_NULL
-};
-
-
-static const struct tia_interface tourtabl_tia_interface =
-{
-	DEVCB_DRIVER_MEMBER16(tourtabl_state,tourtabl_read_input_port),
-	DEVCB_DRIVER_MEMBER(tourtabl_state,tourtabl_get_databus_contents),
-	DEVCB_NULL
-};
 
 static INPUT_PORTS_START( tourtabl )
 
@@ -178,17 +154,25 @@ static MACHINE_CONFIG_START( tourtabl, tourtabl_state )
 	MCFG_CPU_ADD("maincpu", M6502, MASTER_CLOCK / 3)    /* actually M6507 */
 	MCFG_CPU_PROGRAM_MAP(main_map)
 
-	MCFG_RIOT6532_ADD("riot1", MASTER_CLOCK / 3, r6532_interface_0)
-	MCFG_RIOT6532_ADD("riot2", MASTER_CLOCK / 3, r6532_interface_1)
+	MCFG_DEVICE_ADD("riot1", RIOT6532, MASTER_CLOCK / 3)
+	MCFG_RIOT6532_IN_PA_CB(IOPORT("RIOT0_SWA"))
+	MCFG_RIOT6532_IN_PB_CB(IOPORT("RIOT0_SWB"))
+	MCFG_RIOT6532_OUT_PB_CB(WRITE8(tourtabl_state, watchdog_w))
 
-	MCFG_TIA_VIDEO_ADD("tia_video", tourtabl_tia_interface)
+	MCFG_DEVICE_ADD("riot2", RIOT6532, MASTER_CLOCK / 3)
+	MCFG_RIOT6532_IN_PA_CB(IOPORT("RIOT1_SWA"))
+	MCFG_RIOT6532_IN_PB_CB(IOPORT("RIOT1_SWB"))
+	MCFG_RIOT6532_OUT_PB_CB(WRITE8(tourtabl_state, tourtabl_led_w))
+
 	/* video hardware */
+	MCFG_DEVICE_ADD("tia_video", TIA_NTSC_VIDEO, 0)
+	MCFG_TIA_READ_INPUT_PORT_CB(READ16(tourtabl_state, tourtabl_read_input_port))
+	MCFG_TIA_DATABUS_CONTENTS_CB(READ8(tourtabl_state, tourtabl_get_databus_contents))
+
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS( MASTER_CLOCK, 228, 34, 34 + 160, 262, 46, 46 + 200 )
 	MCFG_SCREEN_UPDATE_DEVICE("tia_video", tia_video_device, screen_update)
-
-	MCFG_PALETTE_LENGTH(TIA_PALETTE_LENGTH)
-	MCFG_PALETTE_INIT(tia_NTSC)
+	MCFG_SCREEN_PALETTE("tia_video:palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -220,5 +204,5 @@ ROM_START( tourtab2 )
 ROM_END
 
 
-GAME( 1978, tourtabl, 0,        tourtabl, tourtabl, driver_device, 0, ROT0, "Atari", "Tournament Table (set 1)", 0 )
-GAME( 1978, tourtab2, tourtabl, tourtabl, tourtabl, driver_device, 0, ROT0, "Atari", "Tournament Table (set 2)", 0 )
+GAME( 1978, tourtabl, 0,        tourtabl, tourtabl, driver_device, 0, ROT0, "Atari", "Tournament Table (set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1978, tourtab2, tourtabl, tourtabl, tourtabl, driver_device, 0, ROT0, "Atari", "Tournament Table (set 2)", GAME_SUPPORTS_SAVE )

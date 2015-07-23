@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Fit of Fighting Video Hardware */
 
 #include "emu.h"
@@ -6,7 +8,7 @@
 
 void fitfight_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, int layer )
 {
-	gfx_element *gfx = machine().gfx[3];
+	gfx_element *gfx = m_gfxdecode->gfx(3);
 	UINT16 *source = m_spriteram;
 	UINT16 *finish = source + 0x800 / 2;
 
@@ -34,7 +36,7 @@ void fitfight_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 
 		if (end) break;
 		if (prio == layer)
-			drawgfx_transpen(bitmap, cliprect, gfx, number, colr, xflip, yflip, xpos, ypos, 0);
+				gfx->transpen(bitmap,cliprect, number, colr, xflip, yflip, xpos, ypos, 0);
 
 		source += 4;
 	}
@@ -93,13 +95,13 @@ WRITE16_MEMBER(fitfight_state::fof_txt_tileram_w)
 
 void fitfight_state::video_start()
 {
-	m_fof_bak_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(fitfight_state::get_fof_bak_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 128, 32);
+	m_fof_bak_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(fitfight_state::get_fof_bak_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 128, 32);
 	/* opaque */
 
-	m_fof_mid_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(fitfight_state::get_fof_mid_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 128, 32);
+	m_fof_mid_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(fitfight_state::get_fof_mid_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 128, 32);
 	m_fof_mid_tilemap->set_transparent_pen(0);
 
-	m_fof_txt_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(fitfight_state::get_fof_txt_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 128, 32);
+	m_fof_txt_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(fitfight_state::get_fof_txt_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 128, 32);
 	m_fof_txt_tilemap->set_transparent_pen(0);
 }
 
@@ -113,7 +115,7 @@ UINT32 fitfight_state::screen_update_fitfight(screen_device &screen, bitmap_ind1
 	vblank = (m_fof_700000[0] & 0x8000);
 
 	if (vblank > 0)
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 	else {
 //      if (machine().input().code_pressed(KEYCODE_Q))
 //          scrollbak = ((m_fof_a00000[0] & 0xff00) >> 5) - ((m_fof_700000[0] & 0x0038) >> 3);
@@ -127,7 +129,7 @@ UINT32 fitfight_state::screen_update_fitfight(screen_device &screen, bitmap_ind1
 		scrollbak = ((m_fof_a00000[0] & 0xffe0) >> 5);
 		m_fof_bak_tilemap->set_scrollx(0, scrollbak );
 		m_fof_bak_tilemap->set_scrolly(0, m_fof_a00000[0] & 0xff);
-		m_fof_bak_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fof_bak_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 		draw_sprites(bitmap, cliprect, 0);
 
@@ -144,11 +146,11 @@ UINT32 fitfight_state::screen_update_fitfight(screen_device &screen, bitmap_ind1
 		m_fof_mid_tilemap->set_scrollx(0, scrollmid );
 		m_fof_mid_tilemap->set_scrolly(0, m_fof_900000[0] & 0xff);
 //      if (!machine().input().code_pressed(KEYCODE_F))
-		m_fof_mid_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fof_mid_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 		draw_sprites(bitmap, cliprect, 1);
 
-		m_fof_txt_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_fof_txt_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	}
 /*  popmessage ("Regs %04x %04x %04x %04x %04x %04x",
             m_fof_100000[0], m_fof_600000[0], m_fof_700000[0],

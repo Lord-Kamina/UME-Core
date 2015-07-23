@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Dan Boris
 /***************************************************************************
 
     Atari Return of the Jedi hardware
@@ -20,14 +22,12 @@
  *
  *************************************/
 
-static SOUND_START( jedi )
+void jedi_state::sound_start()
 {
-	jedi_state *state = machine.driver_data<jedi_state>();
-
 	/* set up save state */
-	state->save_item(NAME(state->m_audio_latch));
-	state->save_item(NAME(state->m_audio_ack_latch));
-	state->save_item(NAME(state->m_speech_strobe_state));
+	save_item(NAME(m_audio_latch));
+	save_item(NAME(m_audio_ack_latch));
+	save_item(NAME(m_speech_strobe_state));
 }
 
 
@@ -38,16 +38,14 @@ static SOUND_START( jedi )
  *
  *************************************/
 
-static SOUND_RESET( jedi )
+void jedi_state::sound_reset()
 {
-	jedi_state *state = machine.driver_data<jedi_state>();
-
 	/* init globals */
-	state->m_audio_latch = 0;
-	state->m_audio_ack_latch = 0;
-	*state->m_audio_comm_stat = 0;
-	*state->m_speech_data = 0;
-	state->m_speech_strobe_state = 0;
+	m_audio_latch = 0;
+	m_audio_ack_latch = 0;
+	*m_audio_comm_stat = 0;
+	*m_speech_data = 0;
+	m_speech_strobe_state = 0;
 }
 
 
@@ -77,18 +75,16 @@ WRITE8_MEMBER(jedi_state::jedi_audio_reset_w)
 }
 
 
-static TIMER_CALLBACK( delayed_audio_latch_w )
+TIMER_CALLBACK_MEMBER(jedi_state::delayed_audio_latch_w)
 {
-	jedi_state *state = machine.driver_data<jedi_state>();
-
-	state->m_audio_latch = param;
-	*state->m_audio_comm_stat |= 0x80;
+	m_audio_latch = param;
+	*m_audio_comm_stat |= 0x80;
 }
 
 
 WRITE8_MEMBER(jedi_state::jedi_audio_latch_w)
 {
-	machine().scheduler().synchronize(FUNC(delayed_audio_latch_w), data);
+	machine().scheduler().synchronize(timer_expired_delegate(FUNC(jedi_state::delayed_audio_latch_w), this), data);
 }
 
 
@@ -198,26 +194,23 @@ MACHINE_CONFIG_FRAGMENT( jedi_audio )
 	MCFG_CPU_ADD("audiocpu", M6502, JEDI_AUDIO_CPU_CLOCK)
 	MCFG_CPU_PROGRAM_MAP(audio_map)
 
-	MCFG_SOUND_START(jedi)
-	MCFG_SOUND_RESET(jedi)
-
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	MCFG_POKEY_ADD("pokey1", JEDI_POKEY_CLOCK)
+	MCFG_SOUND_ADD("pokey1", POKEY, JEDI_POKEY_CLOCK)
 	MCFG_POKEY_OUTPUT_OPAMP(RES_K(1), 0.0, 5.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.30)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.30)
 
-	MCFG_POKEY_ADD("pokey2", JEDI_POKEY_CLOCK)
+	MCFG_SOUND_ADD("pokey2", POKEY, JEDI_POKEY_CLOCK)
 	MCFG_POKEY_OUTPUT_OPAMP(RES_K(1), 0.0, 5.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.30)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.30)
 
-	MCFG_POKEY_ADD("pokey3", JEDI_POKEY_CLOCK)
+	MCFG_SOUND_ADD("pokey3", POKEY, JEDI_POKEY_CLOCK)
 	MCFG_POKEY_OUTPUT_OPAMP(RES_K(1), 0.0, 5.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.30)
 
-	MCFG_POKEY_ADD("pokey4", JEDI_POKEY_CLOCK)
+	MCFG_SOUND_ADD("pokey4", POKEY, JEDI_POKEY_CLOCK)
 	MCFG_POKEY_OUTPUT_OPAMP(RES_K(1), 0.0, 5.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.30)
 

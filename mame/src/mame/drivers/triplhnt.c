@@ -1,12 +1,10 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
 Atari Triple Hunt Driver
 
   Calibrate controls in service mode the first time you run this game.
-
-To Do:
- The 3 different overlays need to be found, scanned and added as artwork
- to really make the game complete.
 
 ***************************************************************************/
 
@@ -67,9 +65,9 @@ void triplhnt_state::triplhnt_update_misc(address_space &space, int offset)
 	coin_lockout_w(machine(), 0, !(m_misc_flags & 0x08));
 	coin_lockout_w(machine(), 1, !(m_misc_flags & 0x08));
 
-	discrete_sound_w(m_discrete, space, TRIPLHNT_SCREECH_EN, m_misc_flags & 0x04); // screech
-	discrete_sound_w(m_discrete, space, TRIPLHNT_LAMP_EN, m_misc_flags & 0x02);    // Lamp is used to reset noise
-	discrete_sound_w(m_discrete, space, TRIPLHNT_BEAR_EN, m_misc_flags & 0x80);    // bear
+	m_discrete->write(space, TRIPLHNT_SCREECH_EN, m_misc_flags & 0x04); // screech
+	m_discrete->write(space, TRIPLHNT_LAMP_EN, m_misc_flags & 0x02);    // Lamp is used to reset noise
+	m_discrete->write(space, TRIPLHNT_BEAR_EN, m_misc_flags & 0x80);    // bear
 
 	is_witch_hunt = ioport("0C09")->read() == 0x40;
 	bit = ~m_misc_flags & 0x40;
@@ -289,16 +287,16 @@ static GFXDECODE_START( triplhnt )
 GFXDECODE_END
 
 
-void triplhnt_state::palette_init()
+PALETTE_INIT_MEMBER(triplhnt_state, triplhnt)
 {
-	palette_set_color(machine(), 0, MAKE_RGB(0xAF, 0xAF, 0xAF));  /* sprites */
-	palette_set_color(machine(), 1, MAKE_RGB(0x00, 0x00, 0x00));
-	palette_set_color(machine(), 2, MAKE_RGB(0xFF, 0xFF, 0xFF));
-	palette_set_color(machine(), 3, MAKE_RGB(0x50, 0x50, 0x50));
-	palette_set_color(machine(), 4, MAKE_RGB(0x00, 0x00, 0x00));  /* tiles */
-	palette_set_color(machine(), 5, MAKE_RGB(0x3F, 0x3F, 0x3F));
-	palette_set_color(machine(), 6, MAKE_RGB(0x00, 0x00, 0x00));
-	palette_set_color(machine(), 7, MAKE_RGB(0x3F, 0x3F, 0x3F));
+	palette.set_pen_color(0, rgb_t(0xAF, 0xAF, 0xAF));  /* sprites */
+	palette.set_pen_color(1, rgb_t(0x00, 0x00, 0x00));
+	palette.set_pen_color(2, rgb_t(0xFF, 0xFF, 0xFF));
+	palette.set_pen_color(3, rgb_t(0x50, 0x50, 0x50));
+	palette.set_pen_color(4, rgb_t(0x00, 0x00, 0x00));  /* tiles */
+	palette.set_pen_color(5, rgb_t(0x3F, 0x3F, 0x3F));
+	palette.set_pen_color(6, rgb_t(0x00, 0x00, 0x00));
+	palette.set_pen_color(7, rgb_t(0x3F, 0x3F, 0x3F));
 }
 
 
@@ -317,18 +315,22 @@ static MACHINE_CONFIG_START( triplhnt, triplhnt_state )
 	MCFG_SCREEN_SIZE(256, 262)
 	MCFG_SCREEN_VISIBLE_AREA(0, 255, 0, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(triplhnt_state, screen_update_triplhnt)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(triplhnt)
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", triplhnt)
+	MCFG_PALETTE_ADD("palette", 8)
+	MCFG_PALETTE_INIT_OWNER(triplhnt_state, triplhnt)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SAMPLES_ADD("samples", triplhnt_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(2)  /* 2 channels */
+	MCFG_SAMPLES_NAMES(triplhnt_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.20)
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(triplhnt)
+	MCFG_DISCRETE_INTF(triplhnt)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.90)
 MACHINE_CONFIG_END
 
@@ -354,4 +356,4 @@ ROM_START( triplhnt )
 ROM_END
 
 
-GAME( 1977, triplhnt, 0, triplhnt, triplhnt, triplhnt_state, triplhnt, 0, "Atari", "Triple Hunt", 0 )
+GAME( 1977, triplhnt, 0, triplhnt, triplhnt, triplhnt_state, triplhnt, 0, "Atari", "Triple Hunt", GAME_REQUIRES_ARTWORK )

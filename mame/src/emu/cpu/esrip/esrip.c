@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /***************************************************************************
 
     esrip.c
@@ -177,23 +179,21 @@ void esrip_device::make_ops()
 
 void esrip_device::device_start()
 {
-	esrip_config* _config = (esrip_config*)static_config();
-
 	/* Register configuration structure callbacks */
-	m_fdt_r = _config->fdt_r;
-	m_fdt_w = _config->fdt_w;
-	m_lbrm = (UINT8*)machine().root_device().memregion(_config->lbrm_prom)->base();
-	m_status_in = _config->status_in;
-	m_draw = _config->draw;
+	m_fdt_r.resolve_safe(0);
+	m_fdt_w.resolve_safe();
+	m_lbrm = (UINT8*)machine().root_device().memregion(m_lbrm_prom)->base();
+	m_status_in.resolve_safe(0);
+	m_draw.bind_relative_to(*owner());
 
 	/* Allocate image pointer table RAM */
-	m_ipt_ram = auto_alloc_array(machine(), UINT16, IPT_RAM_SIZE/2);
+	m_ipt_ram.resize(IPT_RAM_SIZE/2);
 
 	m_program = &space(AS_PROGRAM);
 	m_direct = &m_program->direct();
 
 	// register our state for the debugger
-	astring tempstr;
+	std::string tempstr;
 	state_add(STATE_GENPC,     "GENPC",     m_rip_pc).noshow();
 	state_add(STATE_GENFLAGS,  "GENFLAGS",  m_status).callimport().callexport().formatstr("%8s").noshow();
 	state_add(ESRIP_PC,        "PC:",       m_rip_pc).mask(0xffff);
@@ -291,7 +291,7 @@ void esrip_device::device_start()
 	save_item(NAME(m_ipt_cnt));
 	save_item(NAME(m_fig));
 	save_item(NAME(m_fig_cycles));
-	save_pointer(NAME(m_ipt_ram), IPT_RAM_SIZE / sizeof(UINT16));
+	save_item(NAME(m_ipt_ram));
 
 	// set our instruction counter
 	m_icountptr = &m_icount;
@@ -351,12 +351,12 @@ const address_space_config *esrip_device::memory_space_config(address_spacenum s
 //  for the debugger
 //-------------------------------------------------
 
-void esrip_device::state_string_export(const device_state_entry &entry, astring &string)
+void esrip_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case STATE_GENFLAGS:
-			string.printf("%c%c%c%c%c%c%c%c%c",
+			strprintf(str, "%c%c%c%c%c%c%c%c%c",
 				(m_status & 0x80) ? '3' : '.',
 				(m_status & 0x40) ? '2' : '.',
 				(m_status & 0x20) ? '1' : '.',
@@ -411,7 +411,7 @@ offs_t esrip_device::disasm_disassemble(char *buffer, offs_t pc, const UINT8 *op
 
 int esrip_device::get_hblank()
 {
-	return machine().primary_screen->hblank();
+	return machine().first_screen()->hblank();
 }
 
 /* Return the state of the LBRM line (Y-scaling related) */
@@ -514,7 +514,7 @@ enum
 	ACC,
 	Y_BUS,
 	STATUS,
-	RAM,
+	RAM
 };
 
 /*************************************
@@ -652,7 +652,7 @@ enum
 	SOI  = 0x7,
 	SOZ  = 0x8,
 	SOZE = 0x9,
-	SOSE = 0xa,
+	SOSE = 0xa
 };
 
 enum
@@ -660,7 +660,7 @@ enum
 	NRY  = 0,
 	NRA  = 1,
 	NRS  = 4,
-	NRAS = 5,
+	NRAS = 5
 };
 
 void esrip_device::sonr(UINT16 inst)
@@ -842,7 +842,7 @@ void esrip_device::tor1(UINT16 inst)
 		TODRY = 0xb,
 		TORAR = 0xc,
 		TORIR = 0xe,
-		TODRR = 0xf,
+		TODRR = 0xf
 	};
 
 	switch (SRC)
@@ -932,7 +932,7 @@ void esrip_device::tor2(UINT16 inst)
 	{
 		TODAR = 0x1,
 		TOAIR = 0x2,
-		TODIR = 0x5,
+		TODIR = 0x5
 	};
 
 	switch (SRC)
@@ -1072,7 +1072,7 @@ void esrip_device::bonr(UINT16 inst)
 		A2NDY  = 0x14,
 		S2NDY  = 0x15,
 		LD2NY  = 0x16,
-		LDC2NY = 0x17,
+		LDC2NY = 0x17
 	};
 
 	UINT16  res = 0;
@@ -1189,7 +1189,7 @@ void esrip_device::bor1(UINT16 inst)
 	{
 		SETNR  = 0xd,
 		RSTNR  = 0xe,
-		TSTNR  = 0xf,
+		TSTNR  = 0xf
 	};
 
 	UINT16  res = 0;
@@ -1234,7 +1234,7 @@ void esrip_device::bor2(UINT16 inst)
 		LD2NR  = 0xc,
 		LDC2NR = 0xd,
 		A2NR   = 0xe,
-		S2NR   = 0xf,
+		S2NR   = 0xf
 	};
 
 	UINT32 res = 0;
@@ -1300,7 +1300,7 @@ void esrip_device::rotr1(UINT16 inst)
 	{
 		RTRA = 0xc,
 		RTRY = 0xd,
-		RTRR = 0xf,
+		RTRR = 0xf
 	};
 
 	UINT16  u = 0;
@@ -1335,7 +1335,7 @@ void esrip_device::rotr2(UINT16 inst)
 	enum
 	{
 		RTAR = 0,
-		RTDR = 1,
+		RTDR = 1
 	};
 
 	UINT16  u = 0;
@@ -1364,7 +1364,7 @@ void esrip_device::rotnr(UINT16 inst)
 		RTDY = 0x18,
 		RTDA = 0x19,
 		RTAY = 0x1c,
-		RTAA = 0x1d,
+		RTAA = 0x1d
 	};
 
 	UINT16  u = 0;
@@ -1466,7 +1466,7 @@ enum
 	SHDN1  = 5,
 	SHDNL  = 6,
 	SHDNC  = 7,
-	SHDNOV = 8,
+	SHDNOV = 8
 };
 
 #define SET_LINK_flag(x)    (m_new_status &= ~L_FLAG); \
@@ -1522,7 +1522,7 @@ void esrip_device::shftr(UINT16 inst)
 	enum
 	{
 		SHRR = 6,
-		SHDR = 7,
+		SHDR = 7
 	};
 
 	UINT16  u = 0;
@@ -1547,7 +1547,7 @@ void esrip_device::shftnr(UINT16 inst)
 	enum
 	{
 		SHA = 6,
-		SHD = 7,
+		SHD = 7
 	};
 
 	UINT16  u = 0;
@@ -1591,7 +1591,7 @@ void esrip_device::rstst(UINT16 inst)
 		RL    = 0x5,
 		RF1   = 0x6,
 		RF2   = 0x9,
-		RF3   = 0xa,
+		RF3   = 0xa
 	};
 
 	switch (inst & 0x1f)
@@ -1614,7 +1614,7 @@ void esrip_device::setst(UINT16 inst)
 		SL    = 0x5,
 		SF1   = 0x6,
 		SF2   = 0x9,
-		SF3   = 0xa,
+		SF3   = 0xa
 	};
 
 	switch (inst & 0x1f)
@@ -1692,25 +1692,16 @@ const device_type ESRIP = &device_creator<esrip_device>;
 //-------------------------------------------------
 
 esrip_device::esrip_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: cpu_device(mconfig, ESRIP, "ESRIP", tag, owner, clock),
-		m_program_config("program", ENDIANNESS_BIG, 64, 9, -3)
+	: cpu_device(mconfig, ESRIP, "ESRIP", tag, owner, clock, "esrip", __FILE__),
+		m_program_config("program", ENDIANNESS_BIG, 64, 9, -3),
+		m_fdt_r(*this),
+		m_fdt_w(*this),
+		m_status_in(*this),
+		m_lbrm_prom(NULL)
 {
 	// build the opcode table
 	for (int op = 0; op < 24; op++)
 		m_opcode[op] = s_opcodetable[op];
-}
-
-
-//-------------------------------------------------
-//  static_set_config - set the configuration
-//  structure
-//-------------------------------------------------
-
-void esrip_device::static_set_config(device_t &device, const esrip_config &config)
-{
-	esrip_device &esrip = downcast<esrip_device &>(device);
-	static_cast<esrip_config &>(esrip) = config;
-	static_set_static_config(device, &config);
 }
 
 
@@ -1799,7 +1790,7 @@ void esrip_device::execute_run()
 	UINT8 status;
 
 	/* I think we can get away with placing this outside of the loop */
-	status = m_status_in(machine());
+	status = m_status_in(*m_program, 0);
 
 	/* Core execution loop */
 	do
@@ -1832,7 +1823,7 @@ void esrip_device::execute_run()
 
 			/* FDT RAM: /Enable, Direction and /RAM OE */
 			else if (!bl44 && !_BIT(m_l2, 3) && bl46)
-				y_bus = m_fdt_r(this, *m_program, m_fdt_cnt, 0);
+				y_bus = m_fdt_r(*m_program, m_fdt_cnt, 0xffff);
 
 			/* IPT RAM: /Enable and /READ */
 			else if (!_BIT(m_l2, 6) && !_BIT(m_l4, 5))
@@ -1859,7 +1850,7 @@ void esrip_device::execute_run()
 
 		/* FDT RAM */
 		if (!bl44)
-			x_bus = m_fdt_r(this, *m_program, m_fdt_cnt, 0);
+			x_bus = m_fdt_r(*m_program, m_fdt_cnt, 0xffff);
 
 		/* Buffer is enabled - write direction */
 		else if (!BIT(m_l2, 3) && !bl46)
@@ -1884,7 +1875,7 @@ void esrip_device::execute_run()
 
 		/* Write FDT RAM: /Enable, Direction and WRITE */
 		if (!BIT(m_l2, 3) && !bl46 && !BIT(m_l4, 3))
-			m_fdt_w(this, *m_program, m_fdt_cnt, x_bus, 0);
+			m_fdt_w(*m_program, m_fdt_cnt, x_bus, 0xffff);
 
 		/* Write IPT RAM: /Enable and /WR */
 		if (!BIT(m_l2, 7) && !BIT(m_l4, 5))
@@ -1910,7 +1901,7 @@ void esrip_device::execute_run()
 		m_pl7 = m_l7;
 
 		/* Latch instruction */
-		inst = m_direct->read_decrypted_qword(RIP_PC << 3);
+		inst = m_direct->read_qword(RIP_PC << 3);
 
 		in_h = inst >> 32;
 		in_l = inst & 0xffffffff;
@@ -1942,7 +1933,7 @@ void esrip_device::execute_run()
 			m_attr_latch = x_bus;
 
 			m_fig = 1;
-			m_fig_cycles = m_draw(machine(), m_adl_latch, m_adr_latch, m_fig_latch, m_attr_latch, m_iaddr_latch, m_c_latch, m_x_scale, m_img_bank);
+			m_fig_cycles = m_draw(m_adl_latch, m_adr_latch, m_fig_latch, m_attr_latch, m_iaddr_latch, m_c_latch, m_x_scale, m_img_bank);
 		}
 
 		/* X-scale */

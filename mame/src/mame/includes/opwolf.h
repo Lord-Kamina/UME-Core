@@ -1,10 +1,13 @@
+// license:???
+// copyright-holders:David Graves, Jarek Burczynski
 /*************************************************************************
 
     Operation Wolf
 
 *************************************************************************/
 #include "sound/msm5205.h"
-#include "video/taitoic.h"
+#include "video/pc080sn.h"
+#include "video/pc090oj.h"
 
 class opwolf_state : public driver_device
 {
@@ -43,6 +46,8 @@ public:
 	int          m_opwolf_gun_yoffs;
 
 	/* c-chip */
+	emu_timer   *m_cchip_timer;
+
 	int          m_opwolf_region;
 
 	UINT8        m_current_bank;

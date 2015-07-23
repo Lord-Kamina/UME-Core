@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /***************************************************************************
 
     micropolis.c
@@ -28,7 +30,6 @@ BE02 and BE03 - read data, write data
 
 
 #include "emu.h"
-#include "imagedev/flopdrv.h"
 #include "machine/micropolis.h"
 
 
@@ -46,6 +47,7 @@ BE02 and BE03 - read data, write data
 
 /* structure describing a single density track */
 #define TRKSIZE_SD      16*270
+
 #if 0
 static const UINT8 track_SD[][2] = {
 	{ 1, 0xff},     /*  1 * FF (marker)                      */
@@ -57,62 +59,87 @@ static const UINT8 track_SD[][2] = {
 };
 #endif
 
-
 /***************************************************************************
-    TYPE DEFINITIONS
+    MAME DEVICE INTERFACE
 ***************************************************************************/
 
-struct micropolis_state
+const device_type MICROPOLIS = &device_creator<micropolis_device>;
+
+micropolis_device::micropolis_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
+	: device_t(mconfig, MICROPOLIS, "MICROPOLIS", tag, owner, clock, "micropolis", __FILE__),
+	m_read_dden(*this),
+	m_write_intrq(*this),
+	m_write_drq(*this),
+	m_data(0),
+	m_drive_num(0),
+	m_track(0),
+	m_sector(0),
+	m_command(0),
+	m_status(0),
+	m_write_cmd(0),
+	m_data_offset(0),
+	m_data_count(0),
+	m_sector_length(0),
+	m_drive(NULL)
 {
-	/* register */
-	UINT8 data;
-	UINT8 drive_num;
-	UINT8 track;
-	UINT8 sector;
-	UINT8 command;
-	UINT8 status;
+	for (int i = 0; i < 6144; i++)
+		m_buffer[i] = 0;
 
-	UINT8   write_cmd;              /* last write command issued */
+	for (int i = 0; i < 4; i++)
+		m_floppy_drive_tags[i] = NULL;
+}
 
-	UINT8   buffer[6144];           /* I/O buffer (holds up to a whole track) */
-	UINT32  data_offset;            /* offset into I/O buffer */
-	INT32   data_count;             /* transfer count from/into I/O buffer */
+//-------------------------------------------------
+//  device_start - device-specific startup
+//-------------------------------------------------
 
-	UINT32  sector_length;          /* sector length (byte) */
-
-	/* this is the drive currently selected */
-	device_t *drive;
-
-	/* Pointer to interface */
-	const micropolis_interface *intf;
-};
-
-
-/***************************************************************************
-    DEFAULT INTERFACES
-***************************************************************************/
-
-const micropolis_interface default_micropolis_interface =
+void micropolis_device::device_start()
 {
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, { FLOPPY_0, FLOPPY_1, FLOPPY_2, FLOPPY_3}
-};
+	m_read_dden.resolve_safe(1);
+	m_write_intrq.resolve_safe();
+	m_write_drq.resolve_safe();
 
-const micropolis_interface default_micropolis_interface_2_drives =
+	save_item(NAME(m_data));
+	save_item(NAME(m_drive_num));
+	save_item(NAME(m_track));
+	save_item(NAME(m_sector));
+	save_item(NAME(m_command));
+	save_item(NAME(m_status));
+	save_item(NAME(m_write_cmd));
+	save_item(NAME(m_buffer));
+	save_item(NAME(m_data_offset));
+	save_item(NAME(m_data_count));
+	save_item(NAME(m_sector_length));
+}
+
+//-------------------------------------------------
+//  device_reset - device-specific reset
+//-------------------------------------------------
+
+void micropolis_device::device_reset()
 {
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, { FLOPPY_0, FLOPPY_1, NULL, NULL}
-};
+	for (int i = 0; i < 4; i++)
+	{
+		if (m_floppy_drive_tags[i])
+		{
+			legacy_floppy_image_device *img = siblingdevice<legacy_floppy_image_device>(m_floppy_drive_tags[i]);
 
+			if (img)
+			{
+				img->floppy_drive_set_controller(this);
+				//img->floppy_drive_set_index_pulse_callback(wd17xx_index_pulse_callback);
+				img->floppy_drive_set_rpm(300.);
+			}
+		}
+	}
 
-/*****************************************************************************
-    INLINE FUNCTIONS
-*****************************************************************************/
+	set_drive(0);
 
-INLINE micropolis_state *get_safe_token(device_t *device)
-{
-	assert(device != NULL);
-	assert(device->type() == MICROPOLIS);
-
-	return (micropolis_state *)downcast<micropolis_device *>(device)->token();
+	m_drive_num = 0;
+	m_sector = 0;
+	m_track = 0;
+	m_sector_length = 270;
+	m_status = STAT_TRACK0;
 }
 
 
@@ -122,31 +149,29 @@ INLINE micropolis_state *get_safe_token(device_t *device)
 
 
 /* read a sector */
-static void micropolis_read_sector(device_t *device)
+void micropolis_device::read_sector()
 {
-	micropolis_state *w = get_safe_token(device);
-	w->data_offset = 0;
-	w->data_count = w->sector_length;
+	m_data_offset = 0;
+	m_data_count = m_sector_length;
 
 	/* read data */
-	floppy_drive_read_sector_data(w->drive, 0, w->sector, (char *)w->buffer, w->sector_length);
+	m_drive->floppy_drive_read_sector_data(0, m_sector, (char *)m_buffer, m_sector_length);
 }
 
 
-static void micropolis_write_sector(device_t *device)
+void micropolis_device::write_sector()
 {
 #if 0
-	micropolis_state *w = get_safe_token(device);
 	/* at this point, the disc is write enabled, and data
 	 * has been transfered into our buffer - now write it to
 	 * the disc image or to the real disc
 	 */
 
 	/* find sector */
-	w->data_count = w->sector_length;
+	m_data_count = m_sector_length;
 
 	/* write data */
-	floppy_drive_write_sector_data(w->drive, 0, w->sector, (char *)w->buffer, w->sector_length, w->write_cmd & 0x01);
+	m_drive->floppy_drive_write_sector_data(0, m_sector, (char *)m_buffer, m_sector_length, m_write_cmd & 0x01);
 #endif
 }
 
@@ -158,15 +183,13 @@ static void micropolis_write_sector(device_t *device)
 ***************************************************************************/
 
 /* select a drive */
-void micropolis_set_drive(device_t *device, UINT8 drive)
+void micropolis_device::set_drive(UINT8 drive)
 {
-	micropolis_state *w = get_safe_token(device);
-
 	if (VERBOSE)
 		logerror("micropolis_set_drive: $%02x\n", drive);
 
-	if (w->intf->floppy_drive_tags[drive])
-		w->drive = device->siblingdevice(w->intf->floppy_drive_tags[drive]);
+	if (m_floppy_drive_tags[drive])
+		m_drive = siblingdevice<legacy_floppy_image_device>(m_floppy_drive_tags[drive]);
 }
 
 
@@ -176,37 +199,34 @@ void micropolis_set_drive(device_t *device, UINT8 drive)
 
 
 /* read the FDC status register. */
-READ8_DEVICE_HANDLER( micropolis_status_r )
+READ8_MEMBER( micropolis_device::status_r )
 {
-	micropolis_state *w = get_safe_token(device);
 	static int inv = 0;
 
 	if (offset)
-		return w->status | w->drive_num;
+		return m_status | m_drive_num;
 	else
 	{
 		// FIXME - find out what controls current sector
-		w->sector = (w->sector + 3 + inv) & 15;
-		micropolis_read_sector(device);
+		m_sector = (m_sector + 3 + inv) & 15;
+		read_sector();
 		inv ^= 1;
-		return (w->status & STAT_READY) | w->sector;
+		return (m_status & STAT_READY) | m_sector;
 	}
 }
 
 
 /* read the FDC data register */
-READ8_DEVICE_HANDLER( micropolis_data_r )
+READ8_MEMBER( micropolis_device::data_r )
 {
-	micropolis_state *w = get_safe_token(device);
+	if (m_data_offset >= m_sector_length)
+		m_data_offset = 0;
 
-	if (w->data_offset >= w->sector_length)
-		w->data_offset = 0;
-
-	return w->buffer[w->data_offset++];
+	return m_buffer[m_data_offset++];
 }
 
 /* write the FDC command register */
-WRITE8_DEVICE_HANDLER( micropolis_command_w )
+WRITE8_MEMBER( micropolis_device::command_w )
 {
 /* List of commands:
 Command (bits 5,6,7)      Options (bits 0,1,2,3,4)
@@ -219,33 +239,32 @@ Command (bits 5,6,7)      Options (bits 0,1,2,3,4)
 6    Not used
 7    Not used */
 
-	micropolis_state *w = get_safe_token(device);
 	int direction = 0;
 
 	switch (data >> 5)
 	{
 	case 1:
-		w->drive_num = data & 3;
-		floppy_mon_w(w->drive, 1); // turn off the old drive
-		micropolis_set_drive(device, w->drive_num); // select new drive
-		floppy_mon_w(w->drive, 0); // turn it on
+		m_drive_num = data & 3;
+		m_drive->floppy_mon_w(1); // turn off the old drive
+		set_drive(m_drive_num); // select new drive
+		m_drive->floppy_mon_w(0); // turn it on
 		break;
 	case 2:  // not emulated, not used in sorcerer
 		break;
 	case 3:
 		if (BIT(data, 0))
 		{
-			if (w->track < 77)
+			if (m_track < 77)
 			{
-				w->track++;
+				m_track++;
 				direction = 1;
 			}
 		}
 		else
 		{
-			if (w->track)
+			if (m_track)
 			{
-				w->track--;
+				m_track--;
 				direction = -1;
 			}
 		}
@@ -257,39 +276,37 @@ Command (bits 5,6,7)      Options (bits 0,1,2,3,4)
 	}
 
 
-	w->status = STAT_RFC;
+	m_status = STAT_RFC;
 
 	if (BIT(data, 5))
-		w->status |= STAT_READY;
+		m_status |= STAT_READY;
 
-	floppy_drive_set_ready_state(w->drive, 1,0);
+	m_drive->floppy_drive_set_ready_state(1,0);
 
 
-	if (!w->track)
-		w->status |= STAT_TRACK0;
+	if (!m_track)
+		m_status |= STAT_TRACK0;
 
-	floppy_drive_seek(w->drive, direction);
+	m_drive->floppy_drive_seek(direction);
 }
 
 
 /* write the FDC data register */
-WRITE8_DEVICE_HANDLER( micropolis_data_w )
+WRITE8_MEMBER( micropolis_device::data_w )
 {
-	micropolis_state *w = get_safe_token(device);
-
-	if (w->data_count > 0)
+	if (m_data_count > 0)
 	{
 		/* put byte into buffer */
 		if (VERBOSE_DATA)
-			logerror("micropolis_info buffered data: $%02X at offset %d.\n", data, w->data_offset);
+			logerror("micropolis_info buffered data: $%02X at offset %d.\n", data, m_data_offset);
 
-		w->buffer[w->data_offset++] = data;
+		m_buffer[m_data_offset++] = data;
 
-		if (--w->data_count < 1)
+		if (--m_data_count < 1)
 		{
-			micropolis_write_sector(device);
+			write_sector();
 
-			w->data_offset = 0;
+			m_data_offset = 0;
 		}
 	}
 	else
@@ -297,117 +314,31 @@ WRITE8_DEVICE_HANDLER( micropolis_data_w )
 		if (VERBOSE)
 			logerror("%s: micropolis_data_w $%02X\n", space.machine().describe_context(), data);
 	}
-	w->data = data;
+	m_data = data;
 }
 
-READ8_DEVICE_HANDLER( micropolis_r )
+READ8_MEMBER( micropolis_device::read )
 {
 	UINT8 data = 0;
 
 	switch (offset & 0x03)
 	{
-	case 0: data = micropolis_status_r(device, space, 0); break;
-	case 1: data = micropolis_status_r(device, space, 1); break;
+	case 0: data = status_r(space, 0); break;
+	case 1: data = status_r(space, 1); break;
 	case 2:
-	case 3: data = micropolis_data_r(device, space, 0); break;
+	case 3: data = data_r(space, 0); break;
 	}
 
 	return data;
 }
 
-WRITE8_DEVICE_HANDLER( micropolis_w )
+WRITE8_MEMBER( micropolis_device::write )
 {
 	switch (offset & 0x03)
 	{
 	case 0:
-	case 1: micropolis_command_w(device, space, 0, data); break;
+	case 1: command_w(space, 0, data); break;
 	case 2:
-	case 3: micropolis_data_w(device, space, 0, data);    break;
+	case 3: data_w(space, 0, data);    break;
 	}
-}
-
-
-/***************************************************************************
-    MAME DEVICE INTERFACE
-***************************************************************************/
-
-static DEVICE_START( micropolis )
-{
-	micropolis_state *w = get_safe_token(device);
-
-	assert(device->static_config() != NULL);
-
-	w->intf = (const micropolis_interface*)device->static_config();
-}
-
-static DEVICE_RESET( micropolis )
-{
-	micropolis_state *w = get_safe_token(device);
-	int i;
-
-	for (i = 0; i < 4; i++)
-	{
-		if(w->intf->floppy_drive_tags[i])
-		{
-			device_t *img = NULL;
-
-			img = device->siblingdevice(w->intf->floppy_drive_tags[i]);
-
-			if (img)
-			{
-				floppy_drive_set_controller(img,device);
-				//floppy_drive_set_index_pulse_callback(img, wd17xx_index_pulse_callback);
-				floppy_drive_set_rpm( img, 300.);
-			}
-		}
-	}
-
-	micropolis_set_drive(device, 0);
-
-	w->drive_num = 0;
-	w->sector = 0;
-	w->track = 0;
-	w->sector_length = 270;
-	w->status = STAT_TRACK0;
-}
-
-void micropolis_reset(device_t *device)
-{
-	DEVICE_RESET_CALL( micropolis );
-}
-
-const device_type MICROPOLIS = &device_creator<micropolis_device>;
-
-micropolis_device::micropolis_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MICROPOLIS, "MICROPOLIS", tag, owner, clock)
-{
-	m_token = global_alloc_clear(micropolis_state);
-}
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void micropolis_device::device_config_complete()
-{
-}
-
-//-------------------------------------------------
-//  device_start - device-specific startup
-//-------------------------------------------------
-
-void micropolis_device::device_start()
-{
-	DEVICE_START_NAME( micropolis )(this);
-}
-
-//-------------------------------------------------
-//  device_reset - device-specific reset
-//-------------------------------------------------
-
-void micropolis_device::device_reset()
-{
-	DEVICE_RESET_NAME( micropolis )(this);
 }

@@ -1,12 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Aaron Giles
 /*********************************************************************
 
     debugger.c
 
     Front-end debugger interfaces.
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
-
 *********************************************************************/
 
 #include "emu.h"
@@ -17,7 +15,6 @@
 #include "debug/debugcon.h"
 #include "debug/express.h"
 #include "debug/debugvw.h"
-#include "debugint/debugint.h"
 #include <ctype.h>
 
 
@@ -67,13 +64,10 @@ void debugger_init(running_machine &machine)
 		machine_entry *entry;
 
 		/* initialize the submodules */
-		machine.m_debug_view = auto_alloc(machine, debug_view_manager(machine));
+		machine.m_debug_view.reset(global_alloc(debug_view_manager(machine)));
 		debug_cpu_init(machine);
 		debug_command_init(machine);
 		debug_console_init(machine);
-
-		/* always initialize the internal render debugger */
-		debugint_init(machine);
 
 		/* allocate a new entry for our global list */
 		machine.add_notifier(MACHINE_NOTIFY_EXIT, machine_notify_delegate(FUNC(debugger_exit), &machine));

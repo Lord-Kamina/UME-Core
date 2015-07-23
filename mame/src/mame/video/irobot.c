@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Dan Boris
 /***************************************************************************
 
     Atari I, Robot hardware
@@ -37,7 +39,7 @@
 
 ***************************************************************************/
 
-void irobot_state::palette_init()
+PALETTE_INIT_MEMBER(irobot_state, irobot)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
@@ -53,7 +55,7 @@ void irobot_state::palette_init()
 
 		int swapped_i = BITSWAP8(i,7,6,5,4,3,0,1,2);
 
-		palette_set_color(machine(), swapped_i + 64, MAKE_RGB(r, g, b));
+		palette.set_pen_color(swapped_i + 64, rgb_t(r, g, b));
 	}
 }
 
@@ -72,13 +74,13 @@ WRITE8_MEMBER(irobot_state::irobot_paletteram_w)
 	g = 12 * bits * intensity;
 	bits = (color >> 7) & 0x03;
 	r = 12 * bits * intensity;
-	palette_set_color(machine(),(offset >> 1) & 0x3F,MAKE_RGB(r,g,b));
+	m_palette->set_pen_color((offset >> 1) & 0x3F,rgb_t(r,g,b));
 }
 
 
 void irobot_state::_irobot_poly_clear(UINT8 *bitmap_base)
 {
-	memset(bitmap_base, 0, BITMAP_WIDTH * machine().primary_screen->height());
+	memset(bitmap_base, 0, BITMAP_WIDTH * m_screen->height());
 }
 
 void irobot_state::irobot_poly_clear()
@@ -96,7 +98,7 @@ void irobot_state::irobot_poly_clear()
 void irobot_state::video_start()
 {
 	/* Setup 2 bitmaps for the polygon generator */
-	int height = machine().primary_screen->height();
+	int height = m_screen->height();
 	m_polybitmap1 = auto_alloc_array(machine(), UINT8, BITMAP_WIDTH * height);
 	m_polybitmap2 = auto_alloc_array(machine(), UINT8, BITMAP_WIDTH * height);
 
@@ -106,8 +108,8 @@ void irobot_state::video_start()
 
 	/* Set clipping */
 	m_ir_xmin = m_ir_ymin = 0;
-	m_ir_xmax = machine().primary_screen->width();
-	m_ir_ymax = machine().primary_screen->height();
+	m_ir_xmax = m_screen->width();
+	m_ir_ymax = m_screen->height();
 }
 
 
@@ -360,7 +362,7 @@ UINT32 irobot_state::screen_update_irobot(screen_device &screen, bitmap_ind16 &b
 			int code = videoram[offs] & 0x3f;
 			int color = ((videoram[offs] & 0xc0) >> 6) | (m_alphamap >> 3);
 
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 					code, color,
 					0,0,
 					8*x,8*y,0);

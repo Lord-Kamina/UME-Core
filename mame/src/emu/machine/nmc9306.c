@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     National Semiconductor NMC9306 256-Bit Serial EEPROM emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -36,7 +35,7 @@ enum
 	EWDS = 0,       // erase/write disable
 	WRAL,           // write all registers
 	ERAL,           // erase all registers
-	EWEN,           // erase/write enable
+	EWEN            // erase/write enable
 };
 
 // states
@@ -105,7 +104,7 @@ inline void nmc9306_device::erase(offs_t offset)
 //-------------------------------------------------
 
 nmc9306_device::nmc9306_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, NMC9306, "NMC9306", tag, owner, clock),
+	: device_t(mconfig, NMC9306, "NMC9306", tag, owner, clock, "nmc9306", __FILE__),
 		device_nvram_interface(mconfig, *this),
 		m_state(STATE_IDLE),
 		m_ewen(false)

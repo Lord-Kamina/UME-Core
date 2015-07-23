@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Atari GT hardware
@@ -54,23 +56,11 @@
 #include "machine/atarigen.h"
 #include "video/atarirle.h"
 #include "cpu/m68000/m68000.h"
-#include "audio/cage.h"
 #include "includes/atarigt.h"
 
 
 #define LOG_PROTECTION      (0)
 #define HACK_TMEK_CONTROLS  (0)
-
-
-
-/*************************************
- *
- *  Statics
- *
- *************************************/
-
-static void cage_irq_callback(running_machine &machine, int reason);
-
 
 
 /*************************************
@@ -90,7 +80,7 @@ void atarigt_state::update_interrupts()
 MACHINE_RESET_MEMBER(atarigt_state,atarigt)
 {
 	atarigen_state::machine_reset();
-	scanline_timer_reset(*machine().primary_screen, 8);
+	scanline_timer_reset(*m_screen, 8);
 }
 
 
@@ -101,18 +91,13 @@ MACHINE_RESET_MEMBER(atarigt_state,atarigt)
  *
  *************************************/
 
-static void cage_irq_callback(running_machine &machine, int reason)
+WRITE8_MEMBER(atarigt_state::cage_irq_callback)
 {
-	atarigen_state *atarigen = machine.driver_data<atarigen_state>();
-	address_space &space = atarigen->m_maincpu->space(AS_PROGRAM);
-
-	if (reason)
-		atarigen->sound_int_gen(atarigen->m_maincpu);
+	if (data)
+		sound_int_gen(m_maincpu);
 	else
-		atarigen->sound_int_ack_w(space,0,0);
+		sound_int_ack_w(space,0,0);
 }
-
-
 
 /*************************************
  *
@@ -219,7 +204,7 @@ WRITE32_MEMBER(atarigt_state::latch_w)
 	if (ACCESSING_BITS_24_31)
 	{
 		/* bits 13-11 are the MO control bits */
-		atarirle_control_w(m_rle, (data >> 27) & 7);
+		m_rle->control_write(space, offset, (data >> 27) & 7);
 	}
 
 	if (ACCESSING_BITS_16_23)
@@ -235,7 +220,7 @@ WRITE32_MEMBER(atarigt_state::mo_command_w)
 {
 	COMBINE_DATA(m_mo_command);
 	if (ACCESSING_BITS_0_15)
-		atarirle_command_w(m_rle, ((data & 0xffff) == 2) ? ATARIRLE_COMMAND_CHECKSUM : ATARIRLE_COMMAND_DRAW);
+		m_rle->command_write(space, offset, ((data & 0xffff) == 2) ? ATARIRLE_COMMAND_CHECKSUM : ATARIRLE_COMMAND_DRAW);
 }
 
 
@@ -257,9 +242,9 @@ READ32_MEMBER(atarigt_state::sound_data_r)
 	UINT32 result = 0;
 
 	if (ACCESSING_BITS_0_15)
-		result |= cage_control_r(machine());
+		result |= m_cage->control_r();
 	if (ACCESSING_BITS_16_31)
-		result |= cage_main_r(space) << 16;
+		result |= m_cage->main_r() << 16;
 	return result;
 }
 
@@ -267,9 +252,9 @@ READ32_MEMBER(atarigt_state::sound_data_r)
 WRITE32_MEMBER(atarigt_state::sound_data_w)
 {
 	if (ACCESSING_BITS_0_15)
-		cage_control_w(machine(), data);
+		m_cage->control_w(data);
 	if (ACCESSING_BITS_16_31)
-		cage_main_w(space, data >> 16);
+		m_cage->main_w(data >> 16);
 }
 
 
@@ -327,7 +312,7 @@ void atarigt_state::tmek_protection_r(address_space &space, offs_t offset, UINT1
 		/* status register; the code spins on this waiting for the high bit to be set */
 		case 0xdb8700:
 		case 0xdb87c0:
-//          if (state->m_protmode != 0)
+//          if (m_protmode != 0)
 			{
 				*data = -1;//0x8000;
 			}
@@ -616,11 +601,11 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 32, atarigt_state )
 	AM_RANGE(0xc00000, 0xc00003) AM_READWRITE(sound_data_r, sound_data_w)
 	AM_RANGE(0xd00014, 0xd00017) AM_READ(analog_port0_r)
 	AM_RANGE(0xd0001c, 0xd0001f) AM_READ(analog_port1_r)
-	AM_RANGE(0xd20000, 0xd20fff) AM_READWRITE(eeprom_upper32_r, eeprom32_w) AM_SHARE("eeprom")
-	AM_RANGE(0xd40000, 0xd4ffff) AM_WRITE16(eeprom_enable_w, 0xffffffff)
-	AM_RANGE(0xd72000, 0xd75fff) AM_WRITE(playfield32_w) AM_SHARE("playfield32")
-	AM_RANGE(0xd76000, 0xd76fff) AM_WRITE(alpha32_w) AM_SHARE("alpha32")
-	AM_RANGE(0xd78000, 0xd78fff) AM_DEVREADWRITE_LEGACY("rle", atarirle_spriteram32_r, atarirle_spriteram32_w)
+	AM_RANGE(0xd20000, 0xd20fff) AM_DEVREADWRITE8("eeprom", atari_eeprom_device, read, write, 0xff00ff00)
+	AM_RANGE(0xd40000, 0xd4ffff) AM_DEVWRITE("eeprom", atari_eeprom_device, unlock_write)
+	AM_RANGE(0xd72000, 0xd75fff) AM_DEVWRITE("playfield", tilemap_device, write) AM_SHARE("playfield")
+	AM_RANGE(0xd76000, 0xd76fff) AM_DEVWRITE("alpha", tilemap_device, write) AM_SHARE("alpha")
+	AM_RANGE(0xd78000, 0xd78fff) AM_RAM AM_SHARE("rle")
 	AM_RANGE(0xd7a200, 0xd7a203) AM_WRITE(mo_command_w) AM_SHARE("mo_command")
 	AM_RANGE(0xd70000, 0xd7ffff) AM_RAM
 	AM_RANGE(0xd80000, 0xdfffff) AM_READWRITE(colorram_protection_r, colorram_protection_w) AM_SHARE("colorram")
@@ -790,15 +775,11 @@ static GFXDECODE_START( atarigt )
 GFXDECODE_END
 
 
-static const atarirle_desc modesc =
+static const atari_rle_objects_config modesc =
 {
-	"gfx3",     /* region where the GFX data lives */
-	256,        /* number of entries in sprite RAM */
 	0,          /* left clip coordinate */
 	0,          /* right clip coordinate */
-
 	0x0000,     /* base palette entry */
-	0x1000,     /* maximum number of colors */
 
 	{{ 0x7fff,0,0,0,0,0,0,0 }}, /* mask for the code index */
 	{{ 0,0x0ff0,0,0,0,0,0,0 }}, /* mask for the color */
@@ -828,29 +809,49 @@ static MACHINE_CONFIG_START( atarigt, atarigt_state )
 	MCFG_CPU_PERIODIC_INT_DRIVER(atarigen_state, scanline_int_gen, 250)
 
 	MCFG_MACHINE_RESET_OVERRIDE(atarigt_state,atarigt)
-	MCFG_NVRAM_ADD_1FILL("eeprom")
+
+	MCFG_ATARI_EEPROM_2816_ADD("eeprom")
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
-	MCFG_GFXDECODE(atarigt)
-	MCFG_PALETTE_LENGTH(32768)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", atarigt)
+	MCFG_PALETTE_ADD("palette", 32768)
+
+	MCFG_TILEMAP_ADD_CUSTOM("playfield", "gfxdecode", 2, atarigt_state, get_playfield_tile_info, 8,8, atarigt_playfield_scan, 128,64)
+	MCFG_TILEMAP_ADD_STANDARD("alpha", "gfxdecode", 2, atarigt_state, get_alpha_tile_info, 8,8, SCAN_ROWS, 64, 32)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
 	/* note: these parameters are from published specs, not derived */
 	/* the board uses a pair of GALs to determine H and V parameters */
 	MCFG_SCREEN_RAW_PARAMS(ATARI_CLOCK_14MHz/2, 456, 0, 336, 262, 0, 240)
 	MCFG_SCREEN_UPDATE_DRIVER(atarigt_state, screen_update_atarigt)
-	MCFG_SCREEN_VBLANK_DRIVER(atarigt_state, screen_eof_atarigt)
 
 	MCFG_VIDEO_START_OVERRIDE(atarigt_state,atarigt)
 
 	MCFG_ATARIRLE_ADD("rle", modesc)
 
-	/* sound hardware */
-	MCFG_FRAGMENT_ADD(cage)
 MACHINE_CONFIG_END
 
+static MACHINE_CONFIG_DERIVED( tmek, atarigt )
+	/* sound hardware */
+	MCFG_DEVICE_ADD("cage", ATARI_CAGE, 0)
+	MCFG_ATARI_CAGE_SPEEDUP(0x4fad)
+	MCFG_ATARI_CAGE_IRQ_CALLBACK(WRITE8(atarigt_state,cage_irq_callback))
+MACHINE_CONFIG_END
 
+static MACHINE_CONFIG_DERIVED( primrage, atarigt )
+	/* sound hardware */
+	MCFG_DEVICE_ADD("cage", ATARI_CAGE, 0)
+	MCFG_ATARI_CAGE_SPEEDUP(0x42f2)
+	MCFG_ATARI_CAGE_IRQ_CALLBACK(WRITE8(atarigt_state,cage_irq_callback))
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_DERIVED( primrage20, atarigt )
+	/* sound hardware */
+	MCFG_DEVICE_ADD("cage", ATARI_CAGE, 0)
+	MCFG_ATARI_CAGE_SPEEDUP(0x48a4)
+	MCFG_ATARI_CAGE_IRQ_CALLBACK(WRITE8(atarigt_state,cage_irq_callback))
+MACHINE_CONFIG_END
 
 /*************************************
  *
@@ -888,7 +889,7 @@ ROM_START( tmek )
 	ROM_REGION( 0x020000, "gfx2", 0 )
 	ROM_LOAD( "0045a", 0x000000, 0x20000, CRC(057a5304) SHA1(d44c0cf885a1324888b7e8118f124c0dae616859) ) /* alphanumerics */
 
-	ROM_REGION16_BE( 0x1000000, "gfx3", 0 )
+	ROM_REGION16_BE( 0x1000000, "rle", 0 )
 	ROM_LOAD16_BYTE( "0300", 0x000001, 0x100000, CRC(8367ddac) SHA1(9ca77962259284cef8a261b652ab1327817ee8d0) )
 	ROM_LOAD16_BYTE( "0301", 0x000000, 0x100000, CRC(94524b5b) SHA1(db401fd7ba56658fcb614406672c02569d845930) )
 	ROM_LOAD16_BYTE( "0302", 0x200001, 0x100000, CRC(c03f1aa7) SHA1(c68b52280d0695629c843b9c90f7a39713e063b0) )
@@ -943,7 +944,7 @@ ROM_START( tmek51p )
 	ROM_REGION( 0x020000, "gfx2", 0 )
 	ROM_LOAD( "0045a", 0x000000, 0x20000, CRC(057a5304) SHA1(d44c0cf885a1324888b7e8118f124c0dae616859) ) /* alphanumerics */
 
-	ROM_REGION16_BE( 0x1000000, "gfx3", 0 )
+	ROM_REGION16_BE( 0x1000000, "rle", 0 )
 	ROM_LOAD16_BYTE( "0300", 0x000001, 0x100000, CRC(8367ddac) SHA1(9ca77962259284cef8a261b652ab1327817ee8d0) )
 	ROM_LOAD16_BYTE( "0301", 0x000000, 0x100000, CRC(94524b5b) SHA1(db401fd7ba56658fcb614406672c02569d845930) )
 	ROM_LOAD16_BYTE( "0302", 0x200001, 0x100000, CRC(c03f1aa7) SHA1(c68b52280d0695629c843b9c90f7a39713e063b0) )
@@ -998,7 +999,7 @@ ROM_START( tmek45 )
 	ROM_REGION( 0x020000, "gfx2", 0 )
 	ROM_LOAD( "0045a", 0x000000, 0x20000, CRC(057a5304) SHA1(d44c0cf885a1324888b7e8118f124c0dae616859) ) /* alphanumerics */
 
-	ROM_REGION16_BE( 0x1000000, "gfx3", 0 )
+	ROM_REGION16_BE( 0x1000000, "rle", 0 )
 	ROM_LOAD16_BYTE( "0300", 0x000001, 0x100000, CRC(8367ddac) SHA1(9ca77962259284cef8a261b652ab1327817ee8d0) )
 	ROM_LOAD16_BYTE( "0301", 0x000000, 0x100000, CRC(94524b5b) SHA1(db401fd7ba56658fcb614406672c02569d845930) )
 	ROM_LOAD16_BYTE( "0302", 0x200001, 0x100000, CRC(c03f1aa7) SHA1(c68b52280d0695629c843b9c90f7a39713e063b0) )
@@ -1053,7 +1054,7 @@ ROM_START( tmek44 )
 	ROM_REGION( 0x020000, "gfx2", 0 )
 	ROM_LOAD( "0045a", 0x000000, 0x20000, CRC(057a5304) SHA1(d44c0cf885a1324888b7e8118f124c0dae616859) ) /* alphanumerics */
 
-	ROM_REGION16_BE( 0x1000000, "gfx3", 0 )
+	ROM_REGION16_BE( 0x1000000, "rle", 0 )
 	ROM_LOAD16_BYTE( "0300", 0x000001, 0x100000, CRC(8367ddac) SHA1(9ca77962259284cef8a261b652ab1327817ee8d0) )
 	ROM_LOAD16_BYTE( "0301", 0x000000, 0x100000, CRC(94524b5b) SHA1(db401fd7ba56658fcb614406672c02569d845930) )
 	ROM_LOAD16_BYTE( "0302", 0x200001, 0x100000, CRC(c03f1aa7) SHA1(c68b52280d0695629c843b9c90f7a39713e063b0) )
@@ -1108,7 +1109,7 @@ ROM_START( tmek20 )
 	ROM_REGION( 0x020000, "gfx2", 0 )
 	ROM_LOAD( "alpha", 0x000000, 0x20000, CRC(8f57a604) SHA1(f076636430ff73ea11e4687ef7b21a7bac1d8e34) ) /* alphanumerics */
 
-	ROM_REGION16_BE( 0x1000000, "gfx3", 0 )
+	ROM_REGION16_BE( 0x1000000, "rle", 0 )
 	ROM_LOAD16_BYTE( "0300", 0x000001, 0x100000, CRC(8367ddac) SHA1(9ca77962259284cef8a261b652ab1327817ee8d0) )
 	ROM_LOAD16_BYTE( "0301", 0x000000, 0x100000, CRC(94524b5b) SHA1(db401fd7ba56658fcb614406672c02569d845930) )
 	ROM_LOAD16_BYTE( "0302", 0x200001, 0x100000, CRC(c03f1aa7) SHA1(c68b52280d0695629c843b9c90f7a39713e063b0) )
@@ -1155,7 +1156,7 @@ ROM_START( primrage )
 	ROM_REGION( 0x020000, "gfx2", 0 )
 	ROM_LOAD( "136102-1045b.23p", 0x000000, 0x20000, CRC(1d3260bf) SHA1(85d9db8499cbe180c8d52710f3cfe64453a530ff) ) /* alphanumerics */
 
-	ROM_REGION16_BE( 0x2000000, "gfx3", 0 )
+	ROM_REGION16_BE( 0x2000000, "rle", 0 )
 	ROM_LOAD16_BYTE( "136102-1100a.2v",    0x0000001, 0x080000, CRC(6e9c80b5) SHA1(ec724011527dd8707c733211b1a6c51b22f580c7) )
 	ROM_LOAD16_BYTE( "136102-1101a.2w",    0x0000000, 0x080000, CRC(bb7ee624) SHA1(0de6385aee7d25b41fd5bf232e44e5da536504ac) )
 	ROM_LOAD16_BYTE( "136102-0332.mol1.0", 0x0800001, 0x100000, CRC(610cfcb4) SHA1(bed1bd0d11c0a7cc48d020fc0acec34daf48c5ac) )
@@ -1241,7 +1242,7 @@ ROM_START( primrage20 )
 	ROM_REGION( 0x020000, "gfx2", 0 )
 	ROM_LOAD( "136102-0045a.23p", 0x000000, 0x20000, CRC(c8b39b1c) SHA1(836c0ccf96b2beccacf6d8ac23981fc2d1f09803) ) /* alphanumerics */
 
-	ROM_REGION16_BE( 0x2000000, "gfx3", 0 )
+	ROM_REGION16_BE( 0x2000000, "rle", 0 )
 	ROM_LOAD16_BYTE( "136102-0100a.2v",    0x0000001, 0x080000, CRC(5299fb2a) SHA1(791378215ab6ffff3ab2ae7192ce9f88dae4090d) )
 	ROM_LOAD16_BYTE( "136102-0101a.2w",    0x0000000, 0x080000, CRC(3e234711) SHA1(6a9f19db2b4c8c34d3d7b4984206e3d5c4398d7f) )
 	ROM_LOAD16_BYTE( "136102-0332.mol1.0", 0x0800001, 0x100000, CRC(610cfcb4) SHA1(bed1bd0d11c0a7cc48d020fc0acec34daf48c5ac) )
@@ -1299,16 +1300,12 @@ WRITE32_MEMBER(atarigt_state::tmek_pf_w)
 	if (pc == 0x25834 || pc == 0x25860)
 		logerror("%06X:PFW@%06X = %08X & %08X (src=%06X)\n", space.device().safe_pc(), 0xd72000 + offset*4, data, mem_mask, (UINT32)space.device().state().state_int(M68K_A3) - 2);
 
-	playfield32_w(space, offset, data, mem_mask);
+	m_playfield_tilemap->write(space, offset, data, mem_mask);
 }
 
 DRIVER_INIT_MEMBER(atarigt_state,tmek)
 {
-	m_eeprom_default = NULL;
 	m_is_primrage = 0;
-
-	cage_init(machine(), 0x4fad);
-	cage_set_irq_handler(cage_irq_callback);
 
 	/* setup protection */
 	m_protection_r = &atarigt_state::tmek_protection_r;
@@ -1319,21 +1316,14 @@ DRIVER_INIT_MEMBER(atarigt_state,tmek)
 }
 
 
-void atarigt_state::primrage_init_common(offs_t cage_speedup)
+DRIVER_INIT_MEMBER(atarigt_state,primrage)
 {
-	m_eeprom_default = NULL;
 	m_is_primrage = 1;
-
-	cage_init(machine(), cage_speedup);
-	cage_set_irq_handler(cage_irq_callback);
 
 	/* install protection */
 	m_protection_r = &atarigt_state::primrage_protection_r;
 	m_protection_w = &atarigt_state::primrage_protection_w;
 }
-
-DRIVER_INIT_MEMBER(atarigt_state,primrage)  { primrage_init_common(0x42f2); }
-DRIVER_INIT_MEMBER(atarigt_state,primrage20) { primrage_init_common(0x48a4); }
 
 /*************************************
  *
@@ -1341,10 +1331,10 @@ DRIVER_INIT_MEMBER(atarigt_state,primrage20) { primrage_init_common(0x48a4); }
  *
  *************************************/
 
-GAME( 1994, tmek,       0,        atarigt,  tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v5.1, The Warlords)", GAME_UNEMULATED_PROTECTION )
-GAME( 1994, tmek51p,    tmek,     atarigt,  tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v5.1, prototype)", GAME_UNEMULATED_PROTECTION )
-GAME( 1994, tmek45,     tmek,     atarigt,  tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v4.5)", GAME_UNEMULATED_PROTECTION )
-GAME( 1994, tmek44,     tmek,     atarigt,  tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v4.4)", GAME_UNEMULATED_PROTECTION )
-GAME( 1994, tmek20,     tmek,     atarigt,  tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v2.0, prototype)", 0 )
-GAME( 1994, primrage,   0,        atarigt,  primrage, atarigt_state, primrage,   ROT0, "Atari Games", "Primal Rage (version 2.3)", GAME_UNEMULATED_PROTECTION )
-GAME( 1994, primrage20, primrage, atarigt,  primrage, atarigt_state, primrage20, ROT0, "Atari Games", "Primal Rage (version 2.0)", GAME_UNEMULATED_PROTECTION )
+GAME( 1994, tmek,       0,        tmek,      tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v5.1, The Warlords)", GAME_UNEMULATED_PROTECTION )
+GAME( 1994, tmek51p,    tmek,     tmek,      tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v5.1, prototype)", GAME_UNEMULATED_PROTECTION )
+GAME( 1994, tmek45,     tmek,     tmek,      tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v4.5)", GAME_UNEMULATED_PROTECTION )
+GAME( 1994, tmek44,     tmek,     tmek,      tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v4.4)", GAME_UNEMULATED_PROTECTION )
+GAME( 1994, tmek20,     tmek,     tmek,      tmek, atarigt_state,     tmek,       ROT0, "Atari Games", "T-MEK (v2.0, prototype)", 0 )
+GAME( 1994, primrage,   0,        primrage,  primrage, atarigt_state, primrage,   ROT0, "Atari Games", "Primal Rage (version 2.3)", GAME_UNEMULATED_PROTECTION )
+GAME( 1994, primrage20, primrage, primrage20,primrage, atarigt_state, primrage, ROT0, "Atari Games", "Primal Rage (version 2.0)", GAME_UNEMULATED_PROTECTION )

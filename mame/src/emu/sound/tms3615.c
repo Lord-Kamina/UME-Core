@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Juergen Buchmueller
 #include "emu.h"
 #include "tms3615.h"
 
@@ -16,11 +18,11 @@ const device_type TMS3615 = &device_creator<tms3615_device>;
 //**************************************************************************
 
 //-------------------------------------------------
-//  qsound_device - constructor
+//  tms3615_device - constructor
 //-------------------------------------------------
 
 tms3615_device::tms3615_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, TMS3615, "TMS3615", tag, owner, clock),
+	: device_t(mconfig, TMS3615, "TMS3615", tag, owner, clock, "tms3615", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_channel(0),
 		m_samplerate(0),

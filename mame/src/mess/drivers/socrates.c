@@ -1,17 +1,29 @@
+// license:BSD-3-Clause
+// copyright-holders:Jonathan Gevaryahu
 /******************************************************************************
 *
 *  V-tech Socrates Driver
-*  By Jonathan Gevaryahu AKA Lord Nightmare
+*  Copyright (C) 2009-2013 Jonathan Gevaryahu AKA Lord Nightmare
 *  with dumping help from Kevin 'kevtris' Horton
 *
-*  (driver structure copied from vtech1.c)
+*
 TODO:
-    fix glitches with keyboard input (double keys still don't work, super painter letter entry still doesn't work)
-    hook up hblank
-    hook up mouse
-    add waitstates for ram access (lack of this causes the system to run way too fast)
-    find and hook up any timers/interrupt controls
-    keyboard IR decoder MCU is HLE'd for now, needs decap and cpu core (it is rather tms1000 or CIC-like)
+    * The speech chip is a Toshiba tc8802AF (which is pin and speech
+      compatible with the older Toshiba t6803, but adds vsm rom read mode and
+      apparently does away with the melody mode); the chip is running at
+      800khz clock/10khz output with between 1 and 4 t6684F vsm roms
+      attached; create a sound driver for this!
+    * fix glitches with keyboard input (double keys still don't work, super painter letter entry still doesn't work)
+    * hook up hblank (m_hblankstate is inited 0 right now and never changed)
+    * hook up mouse
+    * add waitstates for ram access (lack of this causes the system to run
+      way too fast)
+      This will require some probing with the LA and the fluke to figure out
+      how many cycles the waitstates are for for rom/ram/etc access.
+    * figure out what bit 6 of the status register actually does; is this an
+      ir mcu flag?
+    * keyboard IR decoder MCU is HLE'd for now, needs decap and cpu core (it
+      is rather tms1000 or CIC-like iirc)
 
 
   Socrates Educational Video System
@@ -73,8 +85,8 @@ TODO:
 #include "emu.h"
 #include "cpu/z80/z80.h"
 #include "audio/socrates.h"
-#include "imagedev/cartslot.h"
-
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 
 class socrates_state : public driver_device
 {
@@ -88,20 +100,27 @@ public:
 	socrates_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
+		m_sound(*this, "soc_snd"),
 		m_screen(*this, "screen"),
-		m_sound(*this, "soc_snd")
+		m_cart(*this, "cartslot"),
+		m_bios_reg(*this, "maincpu"),
+		m_vram_reg(*this, "vram")
 		{ }
 	required_device<cpu_device> m_maincpu;
-	required_device<screen_device> m_screen;
 	required_device<socrates_snd_device> m_sound;
+	required_device<screen_device> m_screen;
+	required_device<generic_slot_device> m_cart;
 
-	rgb_t m_palette[256];
+	rgb_t m_palette_val[256];
+
+	required_memory_region m_bios_reg;
+	required_memory_region m_vram_reg;
+	memory_region *m_cart_reg;
 
 	UINT8 m_data[8];
 	UINT8 m_rom_bank;
 	UINT8 m_ram_bank;
 	UINT16 m_scroll_offset;
-	UINT8* m_videoram;
 	UINT8 m_kb_latch_low[2];
 	UINT8 m_kb_latch_high[2];
 	UINT8 m_kb_latch_mouse;
@@ -132,7 +151,7 @@ public:
 	DECLARE_DRIVER_INIT(socrates);
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(socrates);
 	UINT32 screen_update_socrates(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(assert_irq);
 	TIMER_CALLBACK_MEMBER(clear_speech_cb);
@@ -148,21 +167,75 @@ protected:
 };
 
 
+class iqunlim_state : public socrates_state
+{
+public:
+	iqunlim_state(const machine_config &mconfig, device_type type, const char *tag)
+		: socrates_state(mconfig, type, tag),
+			m_bank1(*this, "bank1"),
+			m_bank2(*this, "bank2"),
+			m_bank3(*this, "bank3"),
+			m_bank4(*this, "bank4")
+		{ }
+
+	required_memory_bank m_bank1;
+	required_memory_bank m_bank2;
+	required_memory_bank m_bank3;
+	required_memory_bank m_bank4;
+
+	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+	DECLARE_WRITE8_MEMBER( colors_w );
+	DECLARE_READ8_MEMBER( rombank_r );
+	DECLARE_WRITE8_MEMBER( rombank_w );
+	DECLARE_READ8_MEMBER( rambank_r );
+	DECLARE_WRITE8_MEMBER( rambank_w );
+	DECLARE_READ8_MEMBER( keyboard_r );
+	DECLARE_WRITE8_MEMBER( keyboard_clear );
+	DECLARE_READ8_MEMBER( video_regs_r );
+	DECLARE_WRITE8_MEMBER( video_regs_w );
+	DECLARE_READ8_MEMBER( status_r );
+	DECLARE_INPUT_CHANGED_MEMBER( send_input );
+
+protected:
+	virtual void machine_start();
+	virtual void machine_reset();
+	int get_color(int index, int y);
+
+private:
+	UINT8   m_rombank[2];
+	UINT8   m_rambank;
+	UINT8   m_colors[8];
+	UINT8   m_video_regs[4];
+
+	struct
+	{
+		UINT8   buffer[8];
+		int     head;
+		int     tail;
+	} m_kb_queue;
+};
+
 /* Defines */
 
 /* Components */
 
 /* Devices */
 
-void socrates_state::socrates_set_rom_bank(  )
+void socrates_state::socrates_set_rom_bank()
 {
-	membank( "bank1" )->set_base( memregion("maincpu")->base() + ( m_rom_bank * 0x4000 ));
+	if (m_cart_reg && m_rom_bank >= 0x10)
+	{
+		int bank =  m_rom_bank % (m_cart->get_rom_size() / 0x4000);
+		membank("bank1")->set_base(m_cart_reg->base() + (bank * 0x4000));
+	}
+	else
+		membank("bank1")->set_base(m_bios_reg->base() + (m_rom_bank * 0x4000));
 }
 
-void socrates_state::socrates_set_ram_bank(  )
+void socrates_state::socrates_set_ram_bank()
 {
-	membank( "bank2" )->set_base( memregion("vram")->base() + ( (m_ram_bank&0x3) * 0x4000 )); // window 0
-	membank( "bank3" )->set_base( memregion("vram")->base() + ( ((m_ram_bank&0xC)>>2) * 0x4000 )); // window 1
+	membank("bank2")->set_base(m_vram_reg->base() + ( (m_ram_bank & 0x3) * 0x4000)); // window 0
+	membank("bank3")->set_base(m_vram_reg->base() + (((m_ram_bank & 0xc) >> 2) * 0x4000)); // window 1
 }
 
 void socrates_state::socrates_update_kb(  )
@@ -223,6 +296,9 @@ void socrates_state::socrates_check_kb_latch(  ) // if kb[1] is full and kb[0] i
 
 void socrates_state::machine_reset()
 {
+	std::string region_tag;
+	m_cart_reg = memregion(region_tag.assign(m_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
+
 	m_rom_bank = 0xF3; // actually set semi-randomly on real console but we need to initialize it somewhere...
 	socrates_set_rom_bank();
 	m_ram_bank = 0;  // the actual console sets it semi randomly on power up, and the bios cleans it up.
@@ -262,9 +338,9 @@ void socrates_state::device_timer(emu_timer &timer, device_timer_id id, int para
 DRIVER_INIT_MEMBER(socrates_state,socrates)
 {
 	UINT8 *gfx = memregion("vram")->base();
-	int i;
+
 	/* fill vram with its init powerup bit pattern, so startup has the checkerboard screen */
-	for (i = 0; i < 0x10000; i++)
+	for (int i = 0; i < 0x10000; i++)
 		gfx[i] = (((i&0x1)?0x00:0xFF)^((i&0x100)?0x00:0xff));
 // init sound channels to both be on lowest pitch and max volume
 	m_maincpu->set_clock_scale(0.45f); /* RAM access waitstates etc. aren't emulated - slow the CPU to compensate */
@@ -366,11 +442,22 @@ TIMER_CALLBACK_MEMBER(socrates_state::clear_speech_cb)
 	m_speech_load_settings_count = 0;
 }
 
-WRITE8_MEMBER(socrates_state::speech_command)// write 0x4x, some sort of bitfield; speech chip is probably hitachi hd38880 related but not exact, w/4 bit interface
+WRITE8_MEMBER(socrates_state::speech_command) // write 0x4x
 {
+	/*
+	 * 76543210
+	 * |||||||\-- SEL0
+	 * ||||||\--- SEL1
+	 * |||||\---- SEL2
+	 * ||||\----- SEL3
+	 * |||\------ SEL4
+	 * ||\------- SEL5
+	 * |\-------- 64UP (if LOW the chip is in 'dumb' mode and can only play 64 fixed phrases; if HIGH the chip is in 'cpu controlled' mode and commands work) (not 100% sure about this but suspect it is correct)
+	 * \--------- START (in cpu mode must be toggled from low->high for a cpu command to 'take'; in 'dumb' mode must be toggled low->high to start that 'word')
+	 */
 	logerror("write to i/o 0x4x of %x\n", data);
 /*
-// the high 4 bits of the write control which 'register' is written to, the low 4 bits are data (this is based on a readback test)
+// old readback test, probably get rid of this junk:
 // 00-0f: readback: 70-7f
 // 10-1f: readback: 70-7f
 // 20-2f: readback: 70-7f
@@ -388,84 +475,73 @@ WRITE8_MEMBER(socrates_state::speech_command)// write 0x4x, some sort of bitfiel
 // e0-ef: readback ALL 76
 // f0-ff: 70-7f
 */
-/* all this really tells us is: 0x80 is the speech start command;
-   all commands are open bus on readback of 4 bits EXCEPT for 0x60 and 0xE0, which are the CTP active and inactive versions of the same command */
-/*  following is hd38880 info:
-    microcomputer interface of hd38880 is usually 7 wires:
-    FP      frame pulse, involved with READ command somehow
-    SYBS1   data line bit 0, bidirectional
-    SYBS2   data line bit 1, "
-    SYBS3   data line bit 2, "
-    SYBS4   data line bit 3, "
-    CTP     Command pulse line, sort of a 'write' line
-    CMV     More or less the 'command is being written' line which is active whenenever any command sequence is being written and during readback.
+/* The speech chip is a toshiba tc8802, it is NOT a t6803 since the t6803
+   does not have the rom read mode, which the socrates definitely uses! */
+/* Commands (tc8802):
+SEL 5 4 3 2 1 0
+    0 0 n n n n -  ADLD - ADdress LoaD - writes one nybble to the address
+                          of vsm rom selected (internal or external) starting
+                          from the low 4 bits; each subsequent write writes to
+                          the next higher 4 bits; resetting the chip resets
+                          the position
+    0 1 n n n n -  CNDT - CoNDiTion (aka 'setup') - writes one nybble to the
+                          setting register, starting from the low 4 bits; the
+                          subsequent write will be to the high 4 bits;
+                          resetting the chip will reset the position
 
-    The instructions which the hd38880 can be sent are: (msb first/to the left), blank instructions are invalid
-    0000    (nop?, used as a dummy read/write during direction change??? invalid when used alone?)
-    0001
-    0010    ADSET (Transfer address to "vsm-alike serial roms") <followed by 5 nybbles>
-    0011    READ (read nybble) <bus changes from cpu->speechchip to speechchip->sys and you get as many nybbles as you pulse the CTP line for, address auto-increments>
-    0100    INT1 (initialize 1) <followed by one nybble>
-    0101
-    0110    INT2 (initialize 2) <followed by one nybble>
-    0111
-    1000    SYSPD (set speed) <followed by one nybble>
-    1001
-    1010    STOP
-    1011    CONDT (Read state P1) <bus changes from cpu->speechchip to speechchip->sys and you get one nybble>
-    1100    START
-    1101
-    1110    SSTART (same as start but syspd speed is ignored and forced to be set to 9 (scale = 1.0))
-    1111
-end hd38880 info.*/
-/* the socrates speech chip does not QUITE match the hd38880 though, but is very similar */
-	switch(data&0xF0)
+                          CNDT bits (? are from T6803 datasheet, which could be wrong on the tc8802AF here):
+                           * 76543210
+                           * |||||||\-- ?bits/frame bit 1 (0 = see bit 2; 1 = 98bits/frame (these may be backwards))
+                           * ||||||\--- ?melody mode select if high
+                           * |||||\---- speech rom select; 0 is internal 8k mask, 1 is external vsm bus
+                           * ||||\----- ?voiced source select (0 = A; 1 = B)
+                           * |||\------ ?filter stages (0 = lpc-10; 1 = lpc-8)
+                           * ||\------- ?always 0
+                           * |\-------- ?frame length (0 = 20ms; 1 = 10ms)
+                           * \--------- ?bits/frame bit 2 (if bit 1 is not set: 0 = 56 bits/frame; 1 = 50 bits/frame)
+                           *
+    1 0 x x x x -  DTRD - DaTa ReaD - reads a nybble from the address as loaded
+                          and increments the address by one nybble. The first
+                          DTRD command after any other commands is a 'dummy
+                          read' which serves to reset the bus direction of the
+                          low 4 SEL lines, identical to the way the TMS5100
+                          does things. it doesn't affect the bus direction of
+                          the high two SEL lines.
+    1 1 0 x x x - START - Starts speech at the address as loaded.
+    1 1 1 x x x - RESET - Resets the internal chip state (clears shifters and
+                          counters) and forces speech to end/silence
+                          immediately.
+*/
+	switch(data&0xF8)
 	{
-		case 0x80:
-			if (data==0x80)
-			{
-				/* write me: start talking */
-				m_speech_running = 1;
-				timer_set(attotime::from_seconds(4), TIMER_CLEAR_SPEECH); // hack
-			}
+		case 0x80: case 0x88: case 0x90: case 0x98: case 0xA0: case 0xA8: case 0xB0: case 0xB8:
+			/* 'dumb' mode speech command: write me: start talking */
+			m_speech_running = 1;
+			timer_set(attotime::from_seconds(4), TIMER_CLEAR_SPEECH); // hack
 			break;
-		case 0x90: // unknown, one of these is probably read and branch
-			break;
-		case 0xA0: // unknown
-			break;
-		case 0xB0: // unknown
-			break;
-		case 0xC0: // load address to vsm
+		case 0xC0: case 0xC8: // ADLD: load address to vsm
 			m_speech_address |= (((int)data&0xF)<<(m_speech_load_address_count*4))<<1;
 			m_speech_load_address_count++;
 			logerror("loaded address nybble %X, byte address is currently %5X with %d nybbles loaded\n", data&0xF, m_speech_address>>1, m_speech_load_address_count);
 			break;
-		case 0xD0: // load settings
+		case 0xD0: case 0xD8: // CNDT: load settings
 			m_speech_settings |= ((data&0xF)<<(m_speech_load_settings_count*4));
 			m_speech_load_settings_count++;
 			break;
-		case 0xE0: // read byte, handled elsewhere
+		case 0xE0: case 0xE8: // DTRD: read byte, handled elsewhere
 			break;
-		case 0xF0: // command: sub 0 is speak, sub 8 is reset
-			if ((data&0xF) == 0) // speak
-			{
-				m_speech_running = 1;
-				timer_set(attotime::from_seconds(4), TIMER_CLEAR_SPEECH); // hack
-			}
-			else if ((data&0xF) == 8) // reset
-			{
-				m_speech_running = 0;
-				m_speech_address = 0;
-				m_speech_settings = 0;
-				m_speech_dummy_read = 0;
-				m_speech_load_address_count = 0;
-				m_speech_load_settings_count = 0;
-				m_io40_latch &= 0x0f; // set last command to 0 to prevent problems
-			}
-			else // other
-			{
-			logerror("speech command 0xF%x is unknown!\n",data&0xF);
-			}
+		case 0xF0: // SPEAK
+			m_speech_running = 1;
+			timer_set(attotime::from_seconds(4), TIMER_CLEAR_SPEECH); // hack
+			break;
+		case 0xF8: // RESET
+			m_speech_running = 0;
+			m_speech_address = 0;
+			m_speech_settings = 0;
+			m_speech_dummy_read = 0;
+			m_speech_load_address_count = 0;
+			m_speech_load_settings_count = 0;
+			m_io40_latch &= 0x0f; // set last command to 0 to prevent problems
 			break;
 		default: // 00 through 70 are packets without the write bit set, ignore them
 			break;
@@ -616,24 +692,23 @@ rgb_t socrates_state::socrates_create_color(UINT8 color)
 	finalR = pow(finalR, 1/GAMMA)*255;
 	finalG = pow(finalG, 1/GAMMA)*255;
 	finalB = pow(finalB, 1/GAMMA)*255;
-composedcolor = MAKE_RGB((int)finalR,(int)finalG,(int)finalB);
+composedcolor = rgb_t((int)finalR,(int)finalG,(int)finalB);
 return composedcolor;
 }
 
 
-void socrates_state::palette_init()
+PALETTE_INIT_MEMBER(socrates_state, socrates)
 {
 	int i; // iterator
 	for (i = 0; i < 256; i++)
 	{
-		m_palette[i] = socrates_create_color(i);
+		m_palette_val[i] = socrates_create_color(i);
 	}
-	palette_set_colors(machine(), 0, m_palette, ARRAY_LENGTH(m_palette));
+	palette.set_pen_colors(0, m_palette_val, ARRAY_LENGTH(m_palette_val));
 }
 
 void socrates_state::video_start()
 {
-	m_videoram = memregion("vram")->base();
 	m_scroll_offset = 0;
 }
 
@@ -643,6 +718,7 @@ UINT32 socrates_state::screen_update_socrates(screen_device &screen, bitmap_ind1
 	{
 	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0xF7
 	};
+	UINT8 *videoram = m_vram_reg->base();
 	int x, y, colidx, color;
 	int lineoffset = 0; // if display ever tries to display data at 0xfxxx, offset line displayed by 0x1000
 	for (y = 0; y < 228; y++)
@@ -652,19 +728,19 @@ UINT32 socrates_state::screen_update_socrates(screen_device &screen, bitmap_ind1
 		{
 			if (x < 256)
 			{
-				colidx = m_videoram[(((y+m_scroll_offset)*128)+(x>>1)+lineoffset)&0xffff];
+				colidx =videoram[(((y+m_scroll_offset)*128)+(x>>1)+lineoffset)&0xffff];
 				if (x&1) colidx >>=4;
 				colidx &= 0xF;
-				if (colidx > 7) color=m_videoram[0xF000+(colidx<<8)+((y+m_scroll_offset)&0xFF)];
+				if (colidx > 7) color=videoram[0xF000+(colidx<<8)+((y+m_scroll_offset)&0xFF)];
 				else color=fixedcolors[colidx];
 				bitmap.pix16(y, x) = color;
 			}
 			else
 			{
-				colidx = m_videoram[(((y+m_scroll_offset)*128)+(127)+lineoffset)&0xffff];
+				colidx = videoram[(((y+m_scroll_offset)*128)+(127)+lineoffset)&0xffff];
 				colidx >>=4;
 				colidx &= 0xF;
-				if (colidx > 7) color=m_videoram[0xF000+(colidx<<8)+((y+m_scroll_offset)&0xFF)];
+				if (colidx > 7) color=videoram[0xF000+(colidx<<8)+((y+m_scroll_offset)&0xFF)];
 				else color=fixedcolors[colidx];
 				bitmap.pix16(y, x) = color;
 			}
@@ -697,6 +773,214 @@ WRITE8_MEMBER(socrates_state::socrates_sound_w)
 	}
 }
 
+
+
+//-----------------------------------------------------------------------------
+//
+//        IQ Unlimited
+//
+//-----------------------------------------------------------------------------
+
+int iqunlim_state::get_color(int index, int y)
+{
+	if (index < 8)
+		return m_colors[index];
+	else
+		return m_vram_reg->u8(0xf000 + ((index & 0x0f) << 8) + ((m_scroll_offset + y + 1) & 0xff));
+}
+
+UINT32 iqunlim_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+{
+	UINT8 *videoram = m_vram_reg->base();
+
+	// bitmap layer
+	for (int y=0; y<224; y++)
+	{
+		if (y >= m_video_regs[0x03])    break;
+		for (int x=0; x<128; x++)
+		{
+			UINT8 data = videoram[(m_scroll_offset + y) * 0x80 + x];
+
+			for(int b=0; b<2; b++)
+			{
+				bitmap.pix16(y, x*2 + b) = get_color(data & 0x0f, y);
+				data >>= 4;
+			}
+		}
+	}
+
+	// text layer
+	bool mode_80 = m_video_regs[0x02] & 0x02;   // 80 chars mode
+	int line_len = mode_80 ? 80 : 40;
+	for (int y=0; y<28; y++)
+	{
+		for (int x=0; x<line_len; x++)
+		{
+			UINT8 c = videoram[0x8400 + (y - 1) * (mode_80 ? 0x80 : 0x40) + x];
+			UINT8 *gfx = &videoram[0x8000 + (c & 0x7f) * 8];
+
+			for (int cy=0; cy<8; cy++)
+			{
+				int py = y * 8 + cy;
+				if ((m_video_regs[0x02] & 0x01) || py >= m_video_regs[0x03])
+				{
+					UINT8 col0 = get_color(0x0e, py);
+					UINT8 col1 = get_color(0x0f, py);
+					UINT8 data = 0;
+
+					if (BIT(m_video_regs[0x02],4) && m_video_regs[0x00] == x && m_video_regs[0x01] == ((y - 1) + (0x400 / (mode_80 ? 0x80 : 0x40)))) // cursor position start at 0x8000
+						data = 0xff;
+					else if (y > 0 && y < 26)
+						data = gfx[cy] ^ (c & 0x80 ? 0xff : 0);
+
+					if (x == 0) bitmap.plot_box(0, py, 8 + line_len*6 + 8, 1, col0);
+					for (int cx=0; cx<6; cx++)
+					{
+						int px = 8 + x*6 + cx;
+						bitmap.pix16(py, px) = BIT(data, 7) ? col1 : col0;
+						data <<= 1;
+					}
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
+READ8_MEMBER( iqunlim_state::status_r )
+{
+	// ---x ----    main battery status
+	// --x- ----    backup battery status
+
+	return 0x30;
+}
+
+READ8_MEMBER( iqunlim_state::video_regs_r )
+{
+	return m_video_regs[offset];
+}
+
+WRITE8_MEMBER( iqunlim_state::video_regs_w )
+{
+	if (offset == 2 && ((m_video_regs[offset] ^ data) & 0x02))
+	{
+		rectangle visarea = m_screen->visible_area();
+		visarea.set(0, (data & 0x02 ? 496 : 256) - 1, 0, 224 - 1);
+		m_screen->configure(data & 0x02 ? 496 : 256 , 224, visarea, m_screen->frame_period().attoseconds);
+	}
+
+	m_video_regs[offset] = data;
+}
+
+void iqunlim_state::machine_start()
+{
+	std::string region_tag;
+	m_cart_reg = memregion(region_tag.assign(m_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
+
+	UINT8 *bios = m_bios_reg->base();
+	UINT8 *cart = m_cart_reg ? m_cart_reg->base() : m_bios_reg->base();
+	UINT8 *ram  = m_vram_reg->base();
+
+	m_bank1->configure_entries(0x00, 0x10, bios, 0x4000);
+	m_bank1->configure_entries(0x10, 0x10, cart , 0x4000);
+	m_bank1->configure_entries(0x20, 0x10, bios + 0x40000, 0x4000);
+	m_bank1->configure_entries(0x30, 0x10, cart + 0x40000, 0x4000);
+
+	m_bank2->configure_entries(0x00, 0x10, bios, 0x4000);
+	m_bank2->configure_entries(0x10, 0x10, cart , 0x4000);
+	m_bank2->configure_entries(0x20, 0x10, bios + 0x40000, 0x4000);
+	m_bank2->configure_entries(0x30, 0x10, cart + 0x40000, 0x4000);
+
+	m_bank3->configure_entries(0x00, 0x08, ram, 0x4000);
+	m_bank4->configure_entries(0x00, 0x08, ram, 0x4000);
+}
+
+void iqunlim_state::machine_reset()
+{
+	socrates_state::machine_reset();
+
+	m_rambank = m_rombank[0] = m_rombank[1] = 0;
+	memset(m_colors, 0, 8);
+	memset(m_video_regs, 0, 4);
+	m_kb_queue.head = m_kb_queue.tail = 0;
+
+	m_bank1->set_entry(0x00);
+	m_bank2->set_entry(0x00);
+	m_bank3->set_entry(0x00);
+	m_bank4->set_entry(0x00);
+}
+
+READ8_MEMBER( iqunlim_state::rombank_r )
+{
+	return m_rombank[offset];
+}
+
+WRITE8_MEMBER( iqunlim_state::rombank_w )
+{
+	memory_bank *bank = offset ? m_bank1 : m_bank2;
+	bank->set_entry(data & 0x3f);
+
+	m_rombank[offset] = data;
+}
+
+READ8_MEMBER( iqunlim_state::rambank_r )
+{
+	return m_rambank;
+}
+
+WRITE8_MEMBER( iqunlim_state::rambank_w )
+{
+	m_bank3->set_entry(((data>>2) & 0x0c) | ((data>>0) & 0x03));
+	m_bank4->set_entry(((data>>4) & 0x0c) | ((data>>2) & 0x03));
+	m_rambank = data;
+}
+
+WRITE8_MEMBER( iqunlim_state::colors_w )
+{
+	m_colors[offset] = data;
+}
+
+
+// IQ Unlimited keyboard MCU simulation
+
+INPUT_CHANGED_MEMBER( iqunlim_state::send_input )
+{
+	UINT8 data = (UINT8)(FPTR)param;
+
+	if (newval)
+	{
+		m_kb_queue.buffer[m_kb_queue.tail] = data;
+		m_kb_queue.tail = (m_kb_queue.tail + 1) % sizeof(m_kb_queue.buffer);
+	}
+}
+
+WRITE8_MEMBER( iqunlim_state::keyboard_clear )
+{
+	if(m_kb_queue.head != m_kb_queue.tail)
+		m_kb_queue.head = (m_kb_queue.head + 1) % sizeof(m_kb_queue.buffer);
+}
+
+READ8_MEMBER( iqunlim_state::keyboard_r )
+{
+	UINT8 data = 0;
+
+	switch(offset)
+	{
+		case 0:
+			if(m_kb_queue.head != m_kb_queue.tail)
+				data = m_kb_queue.buffer[m_kb_queue.head];
+			break;
+		case 1:
+			data = (m_kb_queue.head != m_kb_queue.tail ? 0x80 : 0) | (ioport("IN0")->read() & 0x7f);
+			if (m_screen->vblank()) data |= 0x80;   // FIXME
+			break;
+	}
+
+	return data;
+}
+
+
 /******************************************************************************
  Address Maps
 ******************************************************************************/
@@ -715,7 +999,7 @@ static ADDRESS_MAP_START(z80_io, AS_IO, 8, socrates_state )
 	AM_RANGE(0x00, 0x00) AM_READWRITE(socrates_rom_bank_r, socrates_rom_bank_w) AM_MIRROR(0x7) /* rom bank select - RW - 8 bits */
 	AM_RANGE(0x08, 0x08) AM_READWRITE(socrates_ram_bank_r, socrates_ram_bank_w) AM_MIRROR(0x7) /* ram banks select - RW - 4 low bits; Format: 0b****HHLL where LL controls whether window 0 points at ram area: 0b00: 0x0000-0x3fff; 0b01: 0x4000-0x7fff; 0b10: 0x8000-0xbfff; 0b11: 0xc000-0xffff. HH controls the same thing for window 1 */
 	AM_RANGE(0x10, 0x17) AM_READWRITE(read_f3, socrates_sound_w) AM_MIRROR (0x8) /* sound section:
-        0x10 - W - frequency control for channel 1 (louder channel) - 01=high pitch, ff=low; time between 1->0/0->1 transitions = (XTAL_21_4772MHz/(512+256) / (freq_reg+1)) (note that this is double the actual frequency since each full low and high squarewave pulse is two transitions)
+    0x10 - W - frequency control for channel 1 (louder channel) - 01=high pitch, ff=low; time between 1->0/0->1 transitions = (XTAL_21_4772MHz/(512+256) / (freq_reg+1)) (note that this is double the actual frequency since each full low and high squarewave pulse is two transitions)
     0x11 - W - frequency control for channel 2 (softer channel) - 01=high pitch, ff=low; same equation as above
     0x12 - W - 0b***EVVVV enable, volume control for channel 1
     0x13 - W - 0b***EVVVV enable, volume control for channel 2
@@ -738,6 +1022,30 @@ static ADDRESS_MAP_START(z80_io, AS_IO, 8, socrates_state )
 	AM_RANGE(0x60, 0x60) AM_READWRITE(read_f3, reset_speech) AM_MIRROR(0xF) /* reset the speech module, or perhaps fire an NMI?  */
 	AM_RANGE(0x70, 0xFF) AM_READ(read_f3) // nothing mapped here afaik
 ADDRESS_MAP_END
+
+static ADDRESS_MAP_START(iqunlim_mem, AS_PROGRAM, 8, iqunlim_state)
+	ADDRESS_MAP_UNMAP_HIGH
+	AM_RANGE(0x0000, 0x3fff) AM_ROMBANK("bank1")
+	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank2")
+	AM_RANGE(0x8000, 0xbfff) AM_RAMBANK("bank3")
+	AM_RANGE(0xc000, 0xffff) AM_RAMBANK("bank4")
+ADDRESS_MAP_END
+
+static ADDRESS_MAP_START( iqunlim_io , AS_IO, 8, iqunlim_state)
+	ADDRESS_MAP_UNMAP_HIGH
+	ADDRESS_MAP_GLOBAL_MASK(0xff)
+	AM_RANGE(0x00, 0x01) AM_READWRITE(rombank_r, rombank_w) AM_MIRROR(0x06)
+	AM_RANGE(0x08, 0x08) AM_READWRITE(rambank_r, rambank_w) AM_MIRROR(0x07)
+	AM_RANGE(0x10, 0x17) AM_WRITE(socrates_sound_w) AM_MIRROR (0x08)
+	AM_RANGE(0x20, 0x21) AM_WRITE(socrates_scroll_w) AM_MIRROR (0x0e)
+	AM_RANGE(0x50, 0x51) AM_READWRITE(keyboard_r, keyboard_clear)
+	AM_RANGE(0x70, 0x73) AM_READWRITE(video_regs_r, video_regs_w) AM_MIRROR (0x0c)
+	AM_RANGE(0x80, 0x81) AM_WRITENOP // LCD
+	AM_RANGE(0xb1, 0xb1) AM_WRITENOP
+	AM_RANGE(0xa0, 0xa0) AM_READ(status_r) AM_MIRROR(0x0f)
+	AM_RANGE(0xe0, 0xe7) AM_WRITE(colors_w) AM_MIRROR(0x08)
+ADDRESS_MAP_END
+
 
 
 /******************************************************************************
@@ -926,6 +1234,115 @@ static INPUT_PORTS_START( socrates )
 INPUT_PORTS_END
 
 
+static INPUT_PORTS_START( iqunlimz )
+	PORT_START( "IN0" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_LSHIFT )  PORT_CODE( KEYCODE_RSHIFT )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_LCONTROL )  PORT_CODE( KEYCODE_RCONTROL )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_LALT )  PORT_CODE( KEYCODE_RALT )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_CAPSLOCK )
+	PORT_BIT( 0xf0, IP_ACTIVE_HIGH, IPT_UNUSED )
+
+	PORT_START( "IN1" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_N ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x10 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_M ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x11 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_COMMA ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x12 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_B ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x13 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_C ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x14 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_Z ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x15 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_V ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x16 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_X ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x17 )
+
+	PORT_START( "IN2" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x20 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_2_PAD ) PORT_CODE( KEYCODE_DOWN ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x21 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_5_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x22 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_DEL_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x23 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_SLASH_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x24 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_8_PAD ) PORT_CODE( KEYCODE_UP ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x25 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_ASTERISK ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x26 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_7_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x27 )
+
+	PORT_START( "IN3" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x30 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x31 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x32 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x33 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_F1 ) PORT_NAME( "Help" ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x34 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_9 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x35 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_BACKSPACE ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x36 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_0 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x37 )
+
+	PORT_START( "IN4" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_H ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x40 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_J ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x41 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_K ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x42 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_G ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x43 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_D ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x44 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_A ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x45 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_F ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x46 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_S ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x47 )
+
+	PORT_START( "IN5" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x50 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x51 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x52 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x53 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_EQUALS ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x54 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_O ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x55 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_NUMLOCK ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x56 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_P ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x57 )
+
+	PORT_START( "IN6" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_Y ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x60 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_U ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x61 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_I ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x62 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_T ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x63 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_E ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x64 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_Q ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x65 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_R ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x66 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_W ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x67 )
+
+	PORT_START( "IN7" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_MINUS ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x70 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_SLASH ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x71 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x72 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_STOP ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x73 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_QUOTE ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x74 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_L ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x75 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_ENTER ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x76 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_COLON ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x77 )
+
+	PORT_START( "IN8" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_6 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x80 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_7 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x81 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_8 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x82 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_5 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x83 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_3 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x84 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_1 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x85 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_4 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x86 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_2 ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x87 )
+
+	PORT_START( "IN9" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_4_PAD ) PORT_CODE( KEYCODE_LEFT ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x90 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_3_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x91 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_6_PAD ) PORT_CODE( KEYCODE_RIGHT ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x92 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_PLUS_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x93 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_0_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x94 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_9_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x95 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_MINUS_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x96 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_1_PAD ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0x97 )
+
+	PORT_START( "INA" )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0xa0 )
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0xa1 )
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0xa2 )
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED ) // PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0xa3 )
+	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_F2 ) PORT_NAME("Answer") PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0xa4 )
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_ESC ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0xa5 )
+	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_SPACE ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0xa6 )
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_CODE( KEYCODE_TAB ) PORT_CHANGED_MEMBER( DEVICE_SELF, iqunlim_state, send_input, 0xa7 )
+INPUT_PORTS_END
+
 /******************************************************************************
  Machine Drivers
 ******************************************************************************/
@@ -960,19 +1377,17 @@ static MACHINE_CONFIG_START( socrates, socrates_state )
 	MCFG_SCREEN_SIZE(264, 228) // technically the screen size is 256x228 but super painter abuses what I suspect is a hardware bug to display repeated pixels of the very last pixel beyond this horizontal space, well into hblank
 	MCFG_SCREEN_VISIBLE_AREA(0, 263, 0, 219) // the last few rows are usually cut off by the screen bottom but are indeed displayed if you mess with v-hold
 	MCFG_SCREEN_UPDATE_DRIVER(socrates_state, screen_update_socrates)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(256)
-
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(socrates_state, socrates)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("soc_snd", SOCRATES_SOUND, XTAL_21_4772MHz/(512+256)) // this is correct, as strange as it sounds.
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("socrates_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "socrates_cart")
 
 	/* Software lists */
 	MCFG_SOFTWARE_LIST_ADD("cart_list", "socrates")
@@ -994,19 +1409,17 @@ static MACHINE_CONFIG_START( socrates_pal, socrates_state )
 	MCFG_SCREEN_SIZE(264, 238) // technically the screen size is 256x228 but super painter abuses what I suspect is a hardware bug to display repeated pixels of the very last pixel beyond this horizontal space, well into hblank
 	MCFG_SCREEN_VISIBLE_AREA(0, 263, 0, 229) // the last few rows are usually cut off by the screen bottom but are indeed displayed if you mess with v-hold
 	MCFG_SCREEN_UPDATE_DRIVER(socrates_state, screen_update_socrates)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(256)
-
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(socrates_state, socrates)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("soc_snd", SOCRATES_SOUND, XTAL_26_601712MHz/(512+256)) // TODO: verify divider for pal mode
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("socrates_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "socrates_cart")
 
 	/* Software lists */
 	MCFG_SOFTWARE_LIST_ADD("cart_list", "socrates")
@@ -1025,6 +1438,34 @@ static MACHINE_CONFIG_DERIVED( socrates_pal, socrates )
     MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 MACHINE_CONFIG_END
 */
+
+static MACHINE_CONFIG_START( iqunlimz, iqunlim_state )
+	/* basic machine hardware */
+	MCFG_CPU_ADD("maincpu", Z80, XTAL_4MHz) /* not accurate */
+	MCFG_CPU_PROGRAM_MAP(iqunlim_mem)
+	MCFG_CPU_IO_MAP(iqunlim_io)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", iqunlim_state,  assert_irq)
+
+	/* video hardware */
+	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_REFRESH_RATE(60)
+	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)) /* not accurate */
+	MCFG_SCREEN_UPDATE_DRIVER(iqunlim_state, screen_update)
+	MCFG_SCREEN_SIZE(256, 224)
+	MCFG_SCREEN_VISIBLE_AREA(0, 256-1, 0, 224-1)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_INIT_OWNER(socrates_state, socrates)
+
+	/* sound hardware */
+	MCFG_SPEAKER_STANDARD_MONO("mono")
+	MCFG_SOUND_ADD("soc_snd", SOCRATES_SOUND, XTAL_21_4772MHz/(512+256))
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
+
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, NULL)
+MACHINE_CONFIG_END
+
 /******************************************************************************
  ROM Definitions
 ******************************************************************************/
@@ -1053,7 +1494,8 @@ ROM_START(socrates)
 	  ? ?? 34  3 ?? ?
 	/CE -> 35  2 ?? ?
 	GND -- 36  1 -- GND
-	Note that a17 goes to what would be pin 2 if a 32 pin rom were installed, which is not the case. (pins 1, 31 and 32 would be tied to vcc)
+	Note that a17 goes to what would be pin 2 on a rom chip if a 32 pin rom were installed, which is not the case. (pins 1, 31 and 32 would be tied to vcc)
+	It is likely that at least one of the 6 unknown lines is R/W from the z80, and another may be phi1/m1/clock etc to allow for ram to live in cart space
 
 	Cartridge check procedure by socrates is, after screen init and check for speech synth,
 	bankswitch to bank 0x10 (i.e. first 0x4000 of cart appears at 4000-7fff in z80 space),
@@ -1065,7 +1507,6 @@ ROM_START(socrates)
 	if all tests passed, jump to 0x4000 (0x0000 in cart rom)
 	*/
 	ROM_LOAD("27-00817-000-000.u1", 0x00000, 0x40000, CRC(80f5aa20) SHA1(4fd1ff7f78b5dd2582d5de6f30633e4e4f34ca8f)) // Label: "(Vtech) 27-00817-000-000 // (C)1987 VIDEO TECHNOLOGY // 8811 D"
-	ROM_CART_LOAD( "cart", 0x40000, 0x20000, 0 )
 
 	ROM_REGION(0x10000, "vram", ROMREGION_ERASEFF) /* fill with ff, driver_init changes this to the 'correct' startup pattern */
 
@@ -1074,12 +1515,12 @@ ROM_START(socrates)
 
 	/* english speech cart has a green QC sticker */
 	ROM_REGION(0x2000, "speechint", ROMREGION_ERASE00) // speech data inside of the speech chip; fill with 00, if no speech cart is present socrates will see this
-	ROM_LOAD_OPTIONAL("speech_internal.bin", 0x0000, 0x2000, CRC(edc1fb3f) SHA1(78b4631fc3b1c038e14911047f9edd6c4e8bae58)) // 8k on the speech chip itself
+	ROM_LOAD_OPTIONAL("speech_eng_internal.bin", 0x0000, 0x2000, CRC(edc1fb3f) SHA1(78b4631fc3b1c038e14911047f9edd6c4e8bae58)) // 8k on the speech chip itself
 
 	ROM_REGION(0x10000, "speechext", ROMREGION_ERASE00) // speech serial modules outside of the speech chip but still on speech cart
-	ROM_LOAD_OPTIONAL("speech_eng_vsm1.bin", 0x0000, 0x4000, CRC(888e3ddd) SHA1(33AF6A21BA6D826071C9D48557B1C9012752570B)) // 16k in serial rom
-	ROM_LOAD_OPTIONAL("speech_eng_vsm2.bin", 0x4000, 0x4000, CRC(de4ac89d) SHA1(3DFA853B02DF756A9B72DEF94A39310992EE11C7)) // 16k in serial rom
-	ROM_LOAD_OPTIONAL("speech_eng_vsm3.bin", 0x8000, 0x4000, CRC(972384aa) SHA1(FFCB1D633CA6BFFC7F481EC505DA447E5B847F16)) // 16k in serial rom
+	ROM_LOAD_OPTIONAL("speech_eng_vsm1.bin", 0x0000, 0x4000, CRC(888e3ddd) SHA1(33af6a21ba6d826071c9d48557b1c9012752570b)) // 16k in serial rom
+	ROM_LOAD_OPTIONAL("speech_eng_vsm2.bin", 0x4000, 0x4000, CRC(de4ac89d) SHA1(3dfa853b02df756a9b72def94a39310992ee11c7)) // 16k in serial rom
+	ROM_LOAD_OPTIONAL("speech_eng_vsm3.bin", 0x8000, 0x4000, CRC(972384aa) SHA1(ffcb1d633ca6bffc7f481ec505da447e5b847f16)) // 16k in serial rom
 	ROM_FILL(0xC000, 0x4000, 0xff) // last vsm isn't present, FF fill
 ROM_END
 
@@ -1087,7 +1528,6 @@ ROM_START(socratfc)
 	ROM_REGION(0x80000, "maincpu", ROMREGION_ERASEVAL(0xF3))
 	/* Socrates SAITOUT (French Canadian) NTSC */
 	ROM_LOAD("27-00884-001-000.u1", 0x00000, 0x40000, CRC(042d9d21) SHA1(9ffc67b2721683b2536727d0592798fbc4d061cb)) // Label: "(Vtech) 27-00884-001-000 // (C)1988 VIDEO TECHNOLOGY // 8911 D"
-	ROM_CART_LOAD( "cart", 0x40000, 0x20000, 0 )
 
 	ROM_REGION(0x10000, "vram", ROMREGION_ERASEFF) /* fill with ff, driver_init changes this to the 'correct' startup pattern */
 
@@ -1095,7 +1535,7 @@ ROM_START(socratfc)
 	ROM_LOAD("tmp42c40p1844.u2", 0x000, 0x200, NO_DUMP) /* keyboard IR decoder MCU */
 
 	ROM_REGION(0x2000, "speechint", ROMREGION_ERASE00) // speech data inside of the speech chip; fill with 00, if no speech cart is present socrates will see this
-	ROM_LOAD_OPTIONAL("speech_fra_internal.bin", 0x0000, 0x2000, BAD_DUMP CRC(edc1fb3f) SHA1(78b4631fc3b1c038e14911047f9edd6c4e8bae58)) // probably same on french and english speech carts
+	ROM_LOAD_OPTIONAL("speech_fra_internal.bin", 0x0000, 0x2000, NO_DUMP)
 
 	ROM_REGION(0x10000, "speechext", ROMREGION_ERASE00) // speech serial modules outside of the speech chip but still on speech cart
 	ROM_LOAD_OPTIONAL("speech_fra_vsm1.bin", 0x0000, 0x4000, NO_DUMP) // 16k in serial rom
@@ -1111,7 +1551,6 @@ ROM_START(profweis)
 	ROMX_LOAD("lh53216d.u1", 0x00000, 0x40000, CRC(6e801762) SHA1(b80574a3abacf18133dacb9d3a8d9e2916730423), ROM_BIOS(1)) // Label: "(Vtech) LH53216D // (C)1989 VIDEO TECHNOLOGY // 9119 D"
 	ROM_SYSTEM_BIOS(1, "88", "1988")
 	ROMX_LOAD("27-00885-001-000.u1", 0x00000, 0x40000, CRC(fcaf8850) SHA1(a99011ee6a1ef63461c00d062278951252f117db), ROM_BIOS(2)) // Label: "(Vtech) 27-00884-001-000 // (C)1988 VIDEO TECHNOLOGY // 8911 D"
-	ROM_CART_LOAD( "cart", 0x40000, 0x20000, 0 )
 
 	ROM_REGION(0x10000, "vram", ROMREGION_ERASEFF) /* fill with ff, driver_init changes this to the 'correct' startup pattern */
 
@@ -1119,15 +1558,19 @@ ROM_START(profweis)
 	ROM_LOAD("tmp42c40p1844.u2", 0x000, 0x200, NO_DUMP) /* keyboard IR decoder MCU */
 
 	ROM_REGION(0x2000, "speechint", ROMREGION_ERASE00) // speech data inside of the speech chip; fill with 00, if no speech cart is present socrates will see this
-	ROM_LOAD_OPTIONAL("speech_ger_internal.bin", 0x0000, 0x2000, BAD_DUMP CRC(edc1fb3f) SHA1(78b4631fc3b1c038e14911047f9edd6c4e8bae58)) // probably same on french and english speech carts
+	ROM_LOAD_OPTIONAL("speech_ger_internal.bin", 0x0000, 0x2000, CRC(5ff0fdc6) SHA1(8ef128561a846762a20e3fe9513a4a22aaadc7f6))
 
 	ROM_REGION(0x10000, "speechext", ROMREGION_ERASE00) // speech serial modules outside of the speech chip but still on speech cart
-	ROM_LOAD_OPTIONAL("speech_ger_vsm1.bin", 0x0000, 0x4000, NO_DUMP) // 16k in serial rom
-	ROM_LOAD_OPTIONAL("speech_ger_vsm2.bin", 0x4000, 0x4000, NO_DUMP) // 16k in serial rom
-	ROM_LOAD_OPTIONAL("speech_ger_vsm3.bin", 0x8000, 0x4000, NO_DUMP) // 16k in serial rom
-	ROM_FILL(0xC000, 0x4000, 0xff) // last vsm isn't present, FF fill
+	ROM_LOAD_OPTIONAL("speech_ger_vsm1.bin", 0x0000, 0x4000, CRC(a979a00b) SHA1(0290844619dbdf336757003aaab3ffd0a75b7ee9)) // 16k in serial rom
+	ROM_FILL(0x4000, 0xc000, 0xff) // last 3 vsms aren't present, FF fill
 ROM_END
 
+ROM_START( iqunlimz )
+	ROM_REGION( 0x80000, "maincpu", 0 )
+	ROM_LOAD( "vtech.bin", 0x000000, 0x080000, CRC(f100c8a7) SHA1(6ad2a8accae2dd5c5c46ae953eef33cdd1ea3cf9) )
+
+	ROM_REGION( 0x20000, "vram", ROMREGION_ERASE )
+ROM_END
 
 
 /******************************************************************************
@@ -1140,3 +1583,5 @@ COMP( 1988, socratfc,   socrates,   0,      socrates,   socrates, socrates_state
 COMP( 1988, profweis,   socrates,   0,      socrates_pal,   socrates, socrates_state, socrates, "Video Technology/Yeno",        "Professor Weiss-Alles", GAME_NOT_WORKING | GAME_IMPERFECT_SOUND ) // German PAL, 1988 title copyright
 // Yeno Professeur Saitout goes here (french SECAM)
 // ? goes here (spanish PAL)
+
+COMP( 1991, iqunlimz, 0,       0,     iqunlimz,  iqunlimz, driver_device, 0,  "Video Technology", "IQ Unlimited (Z80)", GAME_NOT_WORKING | GAME_NO_SOUND)

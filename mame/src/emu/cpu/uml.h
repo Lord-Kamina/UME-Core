@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     uml.h
 
     Universal machine language definitions and classes.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -268,7 +239,7 @@ namespace uml
 		code_handle *next() const { return m_next; }
 		drccodeptr codeptr() const { return *m_code; }
 		drccodeptr *codeptr_addr() { return m_code; }
-		const char *string() const { return m_string; }
+		const char *string() const { return m_string.c_str(); }
 
 		// setters
 		void set_codeptr(drccodeptr code);
@@ -276,7 +247,7 @@ namespace uml
 	private:
 		// internal state
 		drccodeptr *            m_code;             // pointer in the cache to the associated code
-		astring                 m_string;           // pointer to string attached to handle
+		std::string             m_string;           // pointer to string attached to handle
 		code_handle *           m_next;             // link to next handle in the list
 		drcuml_state &          m_drcuml;           // pointer to owning object
 	};
@@ -438,7 +409,7 @@ namespace uml
 		void set_mapvar(int paramnum, UINT32 value) { assert(paramnum < m_numparams); assert(m_param[paramnum].is_mapvar()); m_param[paramnum] = value; }
 
 		// misc
-		const char *disasm(astring &string, drcuml_state *drcuml = NULL) const;
+		const char *disasm(std::string &str, drcuml_state *drcuml = NULL) const;
 		UINT8 input_flags() const;
 		UINT8 output_flags() const;
 		UINT8 modified_flags() const;
@@ -684,7 +655,7 @@ namespace uml
 	const parameter M7(parameter::make_mapvar(MAPVAR_M0 + 7));
 	const parameter M8(parameter::make_mapvar(MAPVAR_M0 + 8));
 	const parameter M9(parameter::make_mapvar(MAPVAR_M0 + 9));
-};
+}
 
 
 #endif /* __UML_H__ */

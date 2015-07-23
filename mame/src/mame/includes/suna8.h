@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 #include "sound/samples.h"
 
 #define TILEMAPS 0
@@ -13,7 +15,16 @@ public:
 		m_wram(*this, "wram"),
 		m_banked_paletteram(*this, "paletteram"),
 		m_audiocpu(*this, "audiocpu"),
-		m_samples(*this, "samples") { }
+		m_samples(*this, "samples"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette"),
+		m_bank0d(*this, "bank0d"),
+		m_bank1(*this, "bank1"),
+		m_bank1d(*this, "bank1d"),
+		m_prot_opcode_toggle(0),
+		m_remap_sound(0)
+		{ }
 
 	required_device<cpu_device> m_maincpu;
 	optional_shared_ptr<UINT8> m_hardhead_ip;
@@ -22,6 +33,12 @@ public:
 	optional_shared_ptr<UINT8> m_banked_paletteram;
 	required_device<cpu_device> m_audiocpu;
 	optional_device<samples_device> m_samples;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
+	optional_memory_bank m_bank0d;
+	required_memory_bank m_bank1;
+	optional_memory_bank m_bank1d;
 
 	UINT8 m_rombank;
 	UINT8 m_rombank_latch;
@@ -35,6 +52,9 @@ public:
 	UINT8 m_nmi_enable;
 	UINT8 m_spritebank_latch;
 	UINT8 m_write_disable;
+	UINT8 m_prot_opcode_toggle;
+	UINT8 m_remap_sound;
+	UINT8* m_decrypt;
 
 	enum GFXBANK_TYPE_T
 	{
@@ -48,7 +68,7 @@ public:
 
 	// samples
 	INT16 *m_samplebuf;
-	int m_sample;
+	int m_sample, m_play;
 	int m_numsamples;
 
 #if TILEMAPS
@@ -71,14 +91,17 @@ public:
 
 	// brickzn
 	DECLARE_READ8_MEMBER(brickzn_cheats_r);
-	DECLARE_WRITE8_MEMBER(brickzn_multi_w);
-	DECLARE_WRITE8_MEMBER(brickzn_prot_w);
-	DECLARE_WRITE8_MEMBER(brickzn_prot2_w);
+	DECLARE_WRITE8_MEMBER(brickzn_leds_w);
+	DECLARE_WRITE8_MEMBER(brickzn_palbank_w);
+	DECLARE_WRITE8_MEMBER(brickzn_sprbank_w);
 	DECLARE_WRITE8_MEMBER(brickzn_rombank_w);
-	DECLARE_WRITE8_MEMBER(brickzn_enab_palram_w);
-	DECLARE_WRITE8_MEMBER(brickzn_disab_palram_w);
 	DECLARE_WRITE8_MEMBER(brickzn_pcm_w);
 	DECLARE_WRITE8_MEMBER(brickzn_banked_paletteram_w);
+	// brickzn (newer sets)
+	DECLARE_WRITE8_MEMBER(brickzn_prot2_w);
+	DECLARE_WRITE8_MEMBER(brickzn_multi_w);
+	DECLARE_WRITE8_MEMBER(brickzn_enab_palram_w);
+	DECLARE_WRITE8_MEMBER(brickzn_disab_palram_w);
 
 	// hardhea2
 	DECLARE_WRITE8_MEMBER(hardhea2_nmi_w);
@@ -113,12 +136,15 @@ public:
 	DECLARE_READ8_MEMBER(suna8_banked_spriteram_r);
 	DECLARE_WRITE8_MEMBER(suna8_spriteram_w);
 	DECLARE_WRITE8_MEMBER(suna8_banked_spriteram_w);
+	DECLARE_DRIVER_INIT(brickzn_common);
+	DECLARE_DRIVER_INIT(brickznv5);
 	DECLARE_DRIVER_INIT(brickznv4);
 	DECLARE_DRIVER_INIT(starfigh);
 	DECLARE_DRIVER_INIT(hardhea2);
 	DECLARE_DRIVER_INIT(hardhedb);
 	DECLARE_DRIVER_INIT(sparkman);
 	DECLARE_DRIVER_INIT(brickzn);
+	DECLARE_DRIVER_INIT(brickzn11);
 	DECLARE_DRIVER_INIT(hardhead);
 	DECLARE_DRIVER_INIT(suna8);
 
@@ -140,12 +166,9 @@ public:
 	DECLARE_WRITE8_MEMBER(rranger_play_samples_w);
 	DECLARE_WRITE8_MEMBER(suna8_samples_number_w);
 	void play_sample(int index);
+	SAMPLES_START_CB_MEMBER(sh_start);
+
 	void draw_normal_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect, int which);
 	void draw_text_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect);
 	UINT8 *brickzn_decrypt();
-	DECLARE_WRITE_LINE_MEMBER(soundirq);
 };
-
-/*----------- defined in audio/suna8.c -----------*/
-
-SAMPLES_START( suna8_sh_start );

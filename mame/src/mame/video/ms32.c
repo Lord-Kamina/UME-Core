@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood,Paul Priest
 /* Jaleco MegaSystem 32 Video Hardware */
 
 /* The Video Hardware is Similar to the Non-MS32 Version of Tetris Plus 2 */
@@ -24,8 +26,8 @@ TILE_GET_INFO_MEMBER(ms32_state::get_ms32_tx_tile_info)
 {
 	int tileno, colour;
 
-	tileno = m_txram_16[tile_index *2]   & 0xffff;
-	colour = m_txram_16[tile_index *2+1] & 0x000f;
+	tileno = m_txram[tile_index *2]   & 0xffff;
+	colour = m_txram[tile_index *2+1] & 0x000f;
 
 	SET_TILE_INFO_MEMBER(3,tileno,colour,0);
 }
@@ -34,8 +36,8 @@ TILE_GET_INFO_MEMBER(ms32_state::get_ms32_roz_tile_info)
 {
 	int tileno,colour;
 
-	tileno = m_rozram_16[tile_index *2]   & 0xffff;
-	colour = m_rozram_16[tile_index *2+1] & 0x000f;
+	tileno = m_rozram[tile_index *2]   & 0xffff;
+	colour = m_rozram[tile_index *2+1] & 0x000f;
 
 	SET_TILE_INFO_MEMBER(1,tileno,colour,0);
 }
@@ -44,8 +46,8 @@ TILE_GET_INFO_MEMBER(ms32_state::get_ms32_bg_tile_info)
 {
 	int tileno,colour;
 
-	tileno = m_bgram_16[tile_index *2]   & 0xffff;
-	colour = m_bgram_16[tile_index *2+1] & 0x000f;
+	tileno = m_bgram[tile_index *2]   & 0xffff;
+	colour = m_bgram[tile_index *2+1] & 0x000f;
 
 	SET_TILE_INFO_MEMBER(2,tileno,colour,0);
 }
@@ -54,8 +56,8 @@ TILE_GET_INFO_MEMBER(ms32_state::get_ms32_extra_tile_info)
 {
 	int tileno,colour;
 
-	tileno = m_f1superb_extraram_16[tile_index *2]   & 0xffff;
-	colour = m_f1superb_extraram_16[tile_index *2+1] & 0x000f;
+	tileno = m_f1superb_extraram[tile_index *2]   & 0xffff;
+	colour = m_f1superb_extraram[tile_index *2+1] & 0x000f;
 
 	SET_TILE_INFO_MEMBER(4,tileno,colour+0x50,0);
 }
@@ -64,24 +66,16 @@ TILE_GET_INFO_MEMBER(ms32_state::get_ms32_extra_tile_info)
 
 void ms32_state::video_start()
 {
-	m_priram_8   = auto_alloc_array_clear(machine(), UINT8, 0x2000);
-	m_palram_16  = auto_alloc_array_clear(machine(), UINT16, 0x20000);
-	m_rozram_16  = auto_alloc_array_clear(machine(), UINT16, 0x10000);
-	m_lineram_16 = auto_alloc_array_clear(machine(), UINT16, 0x1000);
-	m_sprram_16  = auto_alloc_array_clear(machine(), UINT16, 0x20000);
-	m_bgram_16   = auto_alloc_array_clear(machine(), UINT16, 0x4000);
-	m_txram_16   = auto_alloc_array_clear(machine(), UINT16, 0x4000);
-
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_tx_tile_info),this),TILEMAP_SCAN_ROWS,8, 8,64,64);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_bg_tile_info),this),TILEMAP_SCAN_ROWS,16,16,64,64);
-	m_bg_tilemap_alt = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_bg_tile_info),this),TILEMAP_SCAN_ROWS,16,16,256,16); // alt layout, controller by register?
-	m_roz_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_roz_tile_info),this),TILEMAP_SCAN_ROWS,16,16,128,128);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_tx_tile_info),this),TILEMAP_SCAN_ROWS,8, 8,64,64);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_bg_tile_info),this),TILEMAP_SCAN_ROWS,16,16,64,64);
+	m_bg_tilemap_alt = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_bg_tile_info),this),TILEMAP_SCAN_ROWS,16,16,256,16); // alt layout, controller by register?
+	m_roz_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_roz_tile_info),this),TILEMAP_SCAN_ROWS,16,16,128,128);
 
 
 	/* set up tile layers */
-	machine().primary_screen->register_screen_bitmap(m_temp_bitmap_tilemaps);
-	machine().primary_screen->register_screen_bitmap(m_temp_bitmap_sprites);
-	machine().primary_screen->register_screen_bitmap(m_temp_bitmap_sprites_pri); // not actually being used for rendering, we embed pri info in the raw colour bitmap
+	m_screen->register_screen_bitmap(m_temp_bitmap_tilemaps);
+	m_screen->register_screen_bitmap(m_temp_bitmap_sprites);
+	m_screen->register_screen_bitmap(m_temp_bitmap_sprites_pri); // not actually being used for rendering, we embed pri info in the raw colour bitmap
 
 	m_temp_bitmap_tilemaps.fill(0);
 	m_temp_bitmap_sprites.fill(0);
@@ -105,15 +99,25 @@ void ms32_state::video_start()
 
 	// tp2m32 doesn't set the brightness registers so we need sensible defaults
 	m_brt[0] = m_brt[1] = 0xffff;
+
+	save_item(NAME(m_irqreq));
+	save_item(NAME(m_temp_bitmap_tilemaps));
+	save_item(NAME(m_temp_bitmap_sprites));
+	save_item(NAME(m_temp_bitmap_sprites_pri));
+	save_item(NAME(m_tilemaplayoutcontrol));
+	save_item(NAME(m_reverse_sprite_order));
+	save_item(NAME(m_flipscreen));
+	save_item(NAME(m_brt));
+	save_item(NAME(m_brt_r));
+	save_item(NAME(m_brt_g));
+	save_item(NAME(m_brt_b));
 }
 
 VIDEO_START_MEMBER(ms32_state,f1superb)
 {
 	ms32_state::video_start();
 
-	m_f1superb_extraram_16  = auto_alloc_array_clear(machine(), UINT16, 0x10000);
-	m_extra_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_extra_tile_info),this),TILEMAP_SCAN_ROWS,2048,1,1,0x400);
-
+	m_extra_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ms32_state::get_ms32_extra_tile_info),this),TILEMAP_SCAN_ROWS,2048,1,1,0x400);
 }
 
 /********** PALETTE WRITES **********/
@@ -129,18 +133,18 @@ void ms32_state::update_color(int color)
 	 */
 	if (~color & 0x4000)
 	{
-		r = ((m_palram_16[color*2] & 0xff00) >>8 ) * m_brt_r / 0x100;
-		g = ((m_palram_16[color*2] & 0x00ff) >>0 ) * m_brt_g / 0x100;
-		b = ((m_palram_16[color*2+1] & 0x00ff) >>0 ) * m_brt_b / 0x100;
+		r = ((m_palram[color*2] & 0xff00) >>8 ) * m_brt_r / 0x100;
+		g = ((m_palram[color*2] & 0x00ff) >>0 ) * m_brt_g / 0x100;
+		b = ((m_palram[color*2+1] & 0x00ff) >>0 ) * m_brt_b / 0x100;
 	}
 	else
 	{
-		r = ((m_palram_16[color*2] & 0xff00) >>8 );
-		g = ((m_palram_16[color*2] & 0x00ff) >>0 );
-		b = ((m_palram_16[color*2+1] & 0x00ff) >>0 );
+		r = ((m_palram[color*2] & 0xff00) >>8 );
+		g = ((m_palram[color*2] & 0x00ff) >>0 );
+		b = ((m_palram[color*2+1] & 0x00ff) >>0 );
 	}
 
-	palette_set_color(machine(),color,MAKE_RGB(r,g,b));
+	m_palette->set_pen_color(color,rgb_t(r,g,b));
 }
 
 WRITE32_MEMBER(ms32_state::ms32_brightness_w)
@@ -200,7 +204,7 @@ void ms32_state::draw_sprites(bitmap_ind16 &bitmap, bitmap_ind8 &bitmap_pri, con
 	int code, attr, color, size;
 	int pri;
 	int xzoom, yzoom;
-	gfx_element *gfx = machine().gfx[gfxnum];
+	gfx_element *gfx = m_gfxdecode->gfx(gfxnum);
 
 	UINT16      *source =   sprram_top;
 	UINT16  *finish =   sprram_top + (sprram_size - 0x10) / 2;
@@ -252,7 +256,7 @@ void ms32_state::draw_sprites(bitmap_ind16 &bitmap, bitmap_ind8 &bitmap_pri, con
 		{
 			// passes the priority as the upper bits of the colour
 			// for post-processing in mixer instead
-			pdrawgfxzoom_transpen_raw(bitmap, cliprect, gfx,
+			gfx->prio_zoom_transpen_raw(bitmap,cliprect,
 					code,
 					color<<8 | pri<<8,
 					flipx, flipy,
@@ -263,7 +267,7 @@ void ms32_state::draw_sprites(bitmap_ind16 &bitmap, bitmap_ind8 &bitmap_pri, con
 }
 
 
-void ms32_state::draw_roz(bitmap_ind16 &bitmap, const rectangle &cliprect,int priority)
+void ms32_state::draw_roz(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect,int priority)
 {
 	/* TODO: registers 0x40/4 / 0x44/4 and 0x50/4 / 0x54/4 are used, meaning unknown */
 
@@ -280,7 +284,7 @@ void ms32_state::draw_roz(bitmap_ind16 &bitmap, const rectangle &cliprect,int pr
 
 		while (y <= maxy)
 		{
-			UINT16 *lineaddr = m_lineram_16 + 8 * (y & 0xff);
+			UINT16 *lineaddr = m_lineram + 8 * (y & 0xff);
 
 			int start2x = (lineaddr[0x00/4] & 0xffff) | ((lineaddr[0x04/4] & 3) << 16);
 			int start2y = (lineaddr[0x08/4] & 0xffff) | ((lineaddr[0x0c/4] & 3) << 16);
@@ -304,7 +308,7 @@ void ms32_state::draw_roz(bitmap_ind16 &bitmap, const rectangle &cliprect,int pr
 			if (incxx & 0x10000) incxx |= ~0x1ffff;
 			if (incxy & 0x10000) incxy |= ~0x1ffff;
 
-			m_roz_tilemap->draw_roz(bitmap, my_clip,
+			m_roz_tilemap->draw_roz(screen, bitmap, my_clip,
 					(start2x+startx+offsx)<<16, (start2y+starty+offsy)<<16,
 					incxx<<8, incxy<<8, 0, 0,
 					1, // Wrap
@@ -335,7 +339,7 @@ void ms32_state::draw_roz(bitmap_ind16 &bitmap, const rectangle &cliprect,int pr
 		if (incyy & 0x10000) incyy |= ~0x1ffff;
 		if (incyx & 0x10000) incyx |= ~0x1ffff;
 
-		m_roz_tilemap->draw_roz(bitmap, cliprect,
+		m_roz_tilemap->draw_roz(screen, bitmap, cliprect,
 				(startx+offsx)<<16, (starty+offsy)<<16,
 				incxx<<8, incxy<<8, incyx<<8, incyy<<8,
 				1, // Wrap
@@ -378,7 +382,7 @@ UINT32 ms32_state::screen_update_ms32(screen_device &screen, bitmap_rgb32 &bitma
 	m_bg_tilemap_alt->set_scrolly(0, scrolly);
 
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 
 
@@ -390,69 +394,69 @@ UINT32 ms32_state::screen_update_ms32(screen_device &screen, bitmap_rgb32 &bitma
 	m_temp_bitmap_sprites.fill(0, cliprect);
 	m_temp_bitmap_sprites_pri.fill(0, cliprect);
 
-	draw_sprites(m_temp_bitmap_sprites, m_temp_bitmap_sprites_pri, cliprect, m_sprram_16, 0x20000, 0, m_reverse_sprite_order);
+	draw_sprites(m_temp_bitmap_sprites, m_temp_bitmap_sprites_pri, cliprect, m_sprram, 0x20000, 0, m_reverse_sprite_order);
 
 
 
 
 	asc_pri = scr_pri = rot_pri = 0;
 
-	if((m_priram_8[0x2b00 / 2] & 0x00ff) == 0x0034)
+	if((m_priram[0x2b00 / 2] & 0x00ff) == 0x0034)
 		asc_pri++;
 	else
 		rot_pri++;
 
-	if((m_priram_8[0x2e00 / 2] & 0x00ff) == 0x0034)
+	if((m_priram[0x2e00 / 2] & 0x00ff) == 0x0034)
 		asc_pri++;
 	else
 		scr_pri++;
 
-	if((m_priram_8[0x3a00 / 2] & 0x00ff) == 0x000c)
+	if((m_priram[0x3a00 / 2] & 0x00ff) == 0x000c)
 		scr_pri++;
 	else
 		rot_pri++;
 
 	if (rot_pri == 0)
-		draw_roz(m_temp_bitmap_tilemaps, cliprect, 1 << 1);
+		draw_roz(screen, m_temp_bitmap_tilemaps, cliprect, 1 << 1);
 	else if (scr_pri == 0)
 		if (m_tilemaplayoutcontrol&1)
 		{
-			m_bg_tilemap_alt->draw(m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
+			m_bg_tilemap_alt->draw(screen, m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
 		}
 		else
 		{
-			m_bg_tilemap->draw(m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
+			m_bg_tilemap->draw(screen, m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
 		}
 	else if (asc_pri == 0)
-		m_tx_tilemap->draw(m_temp_bitmap_tilemaps, cliprect, 0, 1 << 2);
+		m_tx_tilemap->draw(screen, m_temp_bitmap_tilemaps, cliprect, 0, 1 << 2);
 
 	if (rot_pri == 1)
-		draw_roz(m_temp_bitmap_tilemaps, cliprect, 1 << 1);
+		draw_roz(screen, m_temp_bitmap_tilemaps, cliprect, 1 << 1);
 	else if (scr_pri == 1)
 		if (m_tilemaplayoutcontrol&1)
 		{
-			m_bg_tilemap_alt->draw(m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
+			m_bg_tilemap_alt->draw(screen, m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
 		}
 		else
 		{
-			m_bg_tilemap->draw(m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
+			m_bg_tilemap->draw(screen, m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
 		}
 	else if (asc_pri == 1)
-		m_tx_tilemap->draw(m_temp_bitmap_tilemaps, cliprect, 0, 1 << 2);
+		m_tx_tilemap->draw(screen, m_temp_bitmap_tilemaps, cliprect, 0, 1 << 2);
 
 	if (rot_pri == 2)
-		draw_roz(m_temp_bitmap_tilemaps, cliprect, 1 << 1);
+		draw_roz(screen, m_temp_bitmap_tilemaps, cliprect, 1 << 1);
 	else if (scr_pri == 2)
 		if (m_tilemaplayoutcontrol&1)
 		{
-			m_bg_tilemap_alt->draw(m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
+			m_bg_tilemap_alt->draw(screen, m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
 		}
 		else
 		{
-			m_bg_tilemap->draw(m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
+			m_bg_tilemap->draw(screen, m_temp_bitmap_tilemaps, cliprect, 0, 1 << 0);
 		}
 	else if (asc_pri == 2)
-		m_tx_tilemap->draw(m_temp_bitmap_tilemaps, cliprect, 0, 1 << 2);
+		m_tx_tilemap->draw(screen, m_temp_bitmap_tilemaps, cliprect, 0, 1 << 2);
 
 	/* MIX it! */
 	/* this mixing isn't 100% accurate, it should be using ALL the data in
@@ -462,7 +466,7 @@ UINT32 ms32_state::screen_update_ms32(screen_device &screen, bitmap_rgb32 &bitma
 		int xx, yy;
 		int width = screen.width();
 		int height = screen.height();
-		const pen_t *paldata = machine().pens;
+		const pen_t *paldata = m_palette->pens();
 
 		UINT16* srcptr_tile;
 		UINT8* srcptr_tilepri;
@@ -476,7 +480,7 @@ UINT32 ms32_state::screen_update_ms32(screen_device &screen, bitmap_rgb32 &bitma
 		for (yy=0;yy<height;yy++)
 		{
 			srcptr_tile =     &m_temp_bitmap_tilemaps.pix16(yy);
-			srcptr_tilepri =  &machine().priority_bitmap.pix8(yy);
+			srcptr_tilepri =  &screen.priority().pix8(yy);
 			srcptr_spri =     &m_temp_bitmap_sprites.pix16(yy);
 			//srcptr_spripri =  &m_temp_bitmap_sprites_pri.pix8(yy);
 			dstptr_bitmap  =  &bitmap.pix32(yy);
@@ -491,14 +495,14 @@ UINT32 ms32_state::screen_update_ms32(screen_device &screen, bitmap_rgb32 &bitma
 				int primask = 0;
 
 				// get sprite priority value back out of bitmap/colour data (this is done in draw_sprite for standalone hw)
-				if (m_priram_8[(spritepri | 0x0a00 | 0x1500) / 2] & 0x38) primask |= 1 << 0;
-				if (m_priram_8[(spritepri | 0x0a00 | 0x1400) / 2] & 0x38) primask |= 1 << 1;
-				if (m_priram_8[(spritepri | 0x0a00 | 0x1100) / 2] & 0x38) primask |= 1 << 2;
-				if (m_priram_8[(spritepri | 0x0a00 | 0x1000) / 2] & 0x38) primask |= 1 << 3;
-				if (m_priram_8[(spritepri | 0x0a00 | 0x0500) / 2] & 0x38) primask |= 1 << 4;
-				if (m_priram_8[(spritepri | 0x0a00 | 0x0400) / 2] & 0x38) primask |= 1 << 5;
-				if (m_priram_8[(spritepri | 0x0a00 | 0x0100) / 2] & 0x38) primask |= 1 << 6;
-				if (m_priram_8[(spritepri | 0x0a00 | 0x0000) / 2] & 0x38) primask |= 1 << 7;
+				if (m_priram[(spritepri | 0x0a00 | 0x1500) / 2] & 0x38) primask |= 1 << 0;
+				if (m_priram[(spritepri | 0x0a00 | 0x1400) / 2] & 0x38) primask |= 1 << 1;
+				if (m_priram[(spritepri | 0x0a00 | 0x1100) / 2] & 0x38) primask |= 1 << 2;
+				if (m_priram[(spritepri | 0x0a00 | 0x1000) / 2] & 0x38) primask |= 1 << 3;
+				if (m_priram[(spritepri | 0x0a00 | 0x0500) / 2] & 0x38) primask |= 1 << 4;
+				if (m_priram[(spritepri | 0x0a00 | 0x0400) / 2] & 0x38) primask |= 1 << 5;
+				if (m_priram[(spritepri | 0x0a00 | 0x0100) / 2] & 0x38) primask |= 1 << 6;
+				if (m_priram[(spritepri | 0x0a00 | 0x0000) / 2] & 0x38) primask |= 1 << 7;
 
 
 				if (primask == 0x00)

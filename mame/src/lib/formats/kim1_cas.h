@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /*********************************************************************
 
     kim1_cas.h
 
-    Format code for KIM-1 casette files.
+    Format code for KIM-1 cassette files.
 
 *********************************************************************/
 

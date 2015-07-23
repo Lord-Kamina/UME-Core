@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:hap
 /**********************************************************************
 
     IDT7200 series 9-bit Asynchronous FIFO Emulation
@@ -7,8 +9,6 @@
     - cascaded width expansion mode (when needed)
 
 **********************************************************************/
-
-#include "emu.h"
 
 #include "machine/7200fifo.h"
 
@@ -20,7 +20,7 @@ const device_type FIFO7200 = &device_creator<fifo7200_device>;
 //-------------------------------------------------
 
 fifo7200_device::fifo7200_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, FIFO7200, "IDT7200 FIFO", tag, owner, clock),
+	: device_t(mconfig, FIFO7200, "IDT7200 FIFO", tag, owner, clock, "fifo7200", __FILE__),
 		m_ram_size(0),
 		m_ef_handler(*this),
 		m_ff_handler(*this),
@@ -35,14 +35,15 @@ fifo7200_device::fifo7200_device(const machine_config &mconfig, const char *tag,
 void fifo7200_device::device_start()
 {
 	assert(m_ram_size > 1 && ~m_ram_size & 1);
-	m_buffer = auto_alloc_array(machine(), UINT16, m_ram_size);
+	m_buffer.resize(m_ram_size);
 
 	// resolve callbacks
-	m_ef_handler.resolve();
-	m_ff_handler.resolve();
-	m_hf_handler.resolve();
+	m_ef_handler.resolve_safe();
+	m_ff_handler.resolve_safe();
+	m_hf_handler.resolve_safe();
 
 	// state save
+	save_item(NAME(m_buffer));
 	save_item(NAME(m_read_ptr));
 	save_item(NAME(m_write_ptr));
 	save_item(NAME(m_ef));
@@ -57,7 +58,7 @@ void fifo7200_device::device_start()
 void fifo7200_device::device_reset()
 {
 	// master reset
-	memset(m_buffer, 0, m_ram_size * sizeof(UINT16));
+	m_buffer.clear();
 	m_read_ptr = 0;
 	m_write_ptr = 0;
 
@@ -65,9 +66,9 @@ void fifo7200_device::device_reset()
 	m_ff = 0;
 	m_hf = 0;
 
-	if (!m_ef_handler.isnull()) m_ef_handler(m_ef);
-	if (!m_ff_handler.isnull()) m_ff_handler(m_ff);
-	if (!m_hf_handler.isnull()) m_hf_handler(m_hf);
+	m_ef_handler(!m_ef);
+	m_ff_handler(!m_ff);
+	m_hf_handler(!m_hf);
 }
 
 
@@ -87,19 +88,19 @@ void fifo7200_device::fifo_write(UINT16 data)
 	if (m_ef)
 	{
 		m_ef = 0;
-		if (!m_ef_handler.isnull()) m_ef_handler(m_ef);
+		m_ef_handler(!m_ef);
 	}
 
 	else if (m_read_ptr == m_write_ptr)
 	{
 		m_ff = 1;
-		if (!m_ff_handler.isnull()) m_ff_handler(m_ff);
+		m_ff_handler(!m_ff);
 	}
 
 	else if (((m_read_ptr + 1 + m_ram_size / 2) % m_ram_size) == m_write_ptr)
 	{
 		m_hf = 1;
-		if (!m_hf_handler.isnull()) m_hf_handler(m_hf);
+		m_hf_handler(!m_hf);
 	}
 }
 
@@ -118,19 +119,19 @@ UINT16 fifo7200_device::fifo_read()
 	if (m_ff)
 	{
 		m_ff = 0;
-		if (!m_ff_handler.isnull()) m_ff_handler(m_ff);
+		m_ff_handler(!m_ff);
 	}
 
 	else if (m_read_ptr == m_write_ptr)
 	{
 		m_ef = 1;
-		if (!m_ef_handler.isnull()) m_ef_handler(m_ef);
+		m_ef_handler(!m_ef);
 	}
 
 	else if (((m_read_ptr + m_ram_size / 2) % m_ram_size) == m_write_ptr)
 	{
 		m_hf = 0;
-		if (!m_hf_handler.isnull()) m_hf_handler(m_hf);
+		m_hf_handler(!m_hf);
 	}
 
 	return ret;

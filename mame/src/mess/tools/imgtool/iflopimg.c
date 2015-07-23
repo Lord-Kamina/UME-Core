@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /*********************************************************************
 
     iflopimg.c
@@ -6,8 +8,8 @@
 
 *********************************************************************/
 
-#include "formats/flopimg.h"
 #include "imgtool.h"
+#include "formats/flopimg.h"
 #include "library.h"
 #include "iflopimg.h"
 
@@ -310,28 +312,23 @@ static imgtoolerr_t imgtool_floppy_transfer_sector_tofrom_stream(imgtool_image *
 {
 	floperr_t err;
 	floppy_image_legacy *floppy;
-	void *buffer = NULL;
+	dynamic_buffer buffer;
 
 	floppy = imgtool_floppy(img);
 
-	buffer = malloc(length);
-	if (!buffer)
-	{
-		err = FLOPPY_ERROR_OUTOFMEMORY;
-		goto done;
-	}
+	buffer.resize(length);
 
 	if (direction)
 	{
-		err = floppy_read_sector(floppy, head, track, sector, offset, buffer, length);
+		err = floppy_read_sector(floppy, head, track, sector, offset, &buffer[0], length);
 		if (err)
 			goto done;
-		stream_write(f, buffer, length);
+		stream_write(f, &buffer[0], length);
 	}
 	else
 	{
-		stream_read(f, buffer, length);
-		err = floppy_write_sector(floppy, head, track, sector, offset, buffer, length, 0);  /* TODO: pass ddam argument from imgtool */
+		stream_read(f, &buffer[0], length);
+		err = floppy_write_sector(floppy, head, track, sector, offset, &buffer[0], length, 0);  /* TODO: pass ddam argument from imgtool */
 		if (err)
 			goto done;
 	}
@@ -339,8 +336,6 @@ static imgtoolerr_t imgtool_floppy_transfer_sector_tofrom_stream(imgtool_image *
 	err = FLOPPY_ERROR_SUCCESS;
 
 done:
-	if (buffer)
-		free(buffer);
 	return imgtool_floppy_error(err);
 }
 

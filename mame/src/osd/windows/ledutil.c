@@ -1,42 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles,Paul Priest
 //============================================================
 //
 //  ledutil.c - Win32 example code that tracks changing
 //  outputs and updates the keyboard LEDs in response
-//
-//============================================================
-//
-//  Copyright Aaron Giles
-//  All rights reserved.
-//
-//  Redistribution and use in source and binary forms, with or
-//  without modification, are permitted provided that the
-//  following conditions are met:
-//
-//    * Redistributions of source code must retain the above
-//      copyright notice, this list of conditions and the
-//      following disclaimer.
-//    * Redistributions in binary form must reproduce the
-//      above copyright notice, this list of conditions and
-//      the following disclaimer in the documentation and/or
-//      other materials provided with the distribution.
-//    * Neither the name 'MAME' nor the names of its
-//      contributors may be used to endorse or promote
-//      products derived from this software without specific
-//      prior written permission.
-//
-//  THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND
-//  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-//  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
-//  FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
-//  EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-//  INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-//  DAMAGE (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-//  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-//  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-//  ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-//  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-//  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-//  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 //============================================================
 //
@@ -104,7 +71,6 @@ typedef int running_machine;
 // LED methods
 #define LED_METHOD_PS2                      0
 #define LED_METHOD_USB                      1
-#define LED_METHOD_WIN9X                    2
 
 // window parameters
 #define WINDOW_CLASS                        TEXT("LEDSample")
@@ -508,17 +474,10 @@ static LRESULT handle_update_state(WPARAM wparam, LPARAM lparam)
 
 static void output_startup(const char *commandline)
 {
-	OSVERSIONINFO osinfo = { sizeof(OSVERSIONINFO) };
-
 	// default to PS/2, override if USB is specified as a parameter
 	ledmethod = LED_METHOD_PS2;
 	if (commandline != NULL && strcmp(commandline, "-usb") == 0)
 		ledmethod = LED_METHOD_USB;
-
-	// force Win9x method if we're on Win 9x
-	GetVersionEx(&osinfo);
-	if (osinfo.dwPlatformId == VER_PLATFORM_WIN32_WINDOWS)
-		ledmethod = LED_METHOD_WIN9X;
 
 	// output the method
 	switch (ledmethod)
@@ -529,10 +488,6 @@ static void output_startup(const char *commandline)
 
 		case LED_METHOD_USB:
 			DEBUG_PRINTF(("Using USB method\n"));
-			break;
-
-		case LED_METHOD_WIN9X:
-			DEBUG_PRINTF(("Using Win9x method\n"));
 			break;
 	}
 }
@@ -653,7 +608,6 @@ static int led_get_state(void)
 
 	switch (ledmethod)
 	{
-		case LED_METHOD_WIN9X:
 		case LED_METHOD_USB:
 		{
 			BYTE key_states[256];
@@ -704,23 +658,6 @@ static void led_set_state(int state)
 
 	switch (ledmethod)
 	{
-		case LED_METHOD_WIN9X:
-		{
-			// thanks to Lee Taylor for the original version of this code
-			BYTE key_states[256];
-
-			// get the current state
-			GetKeyboardState(&key_states[0]);
-
-			// mask states and set new states
-			key_states[VK_NUMLOCK] = (key_states[VK_NUMLOCK] & ~1) | ((state >> 0) & 1);
-			key_states[VK_CAPITAL] = (key_states[VK_CAPITAL] & ~1) | ((state >> 1) & 1);
-			key_states[VK_SCROLL] = (key_states[VK_SCROLL] & ~1) | ((state >> 2) & 1);
-
-			SetKeyboardState(&key_states[0]);
-			break;
-		}
-
 		case LED_METHOD_USB:
 		{
 			static const BYTE vk[3] = { VK_NUMLOCK, VK_CAPITAL, VK_SCROLL };

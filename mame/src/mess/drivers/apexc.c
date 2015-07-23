@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Raphael Nabet, Robbbert
 /*
     drivers/apexc.c : APEXC driver
 
@@ -15,7 +17,10 @@ class apexc_state : public driver_device
 public:
 	apexc_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag) ,
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette"),
+		m_screen(*this, "screen")  { }
 
 	UINT32 m_panel_data_reg;    /* value of a data register on the control panel which can
                                 be edited - the existence of this register is a personnal
@@ -31,7 +36,7 @@ public:
 	DECLARE_DRIVER_INIT(apexc);
 	virtual void machine_start();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(apexc);
 	UINT32 screen_update_apexc(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(apexc_interrupt);
 	DECLARE_READ8_MEMBER(tape_read);
@@ -43,6 +48,9 @@ public:
 	void apexc_teletyper_linefeed();
 	void apexc_teletyper_putchar(int character);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+	required_device<screen_device> m_screen;
 };
 
 void apexc_state::machine_start()
@@ -93,7 +101,7 @@ private:
 const device_type APEXC_CYLINDER = &device_creator<apexc_cylinder_image_device>;
 
 apexc_cylinder_image_device::apexc_cylinder_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, APEXC_CYLINDER, "APEXC Cylinder", tag, owner, clock),
+	: device_t(mconfig, APEXC_CYLINDER, "APEXC Cylinder", tag, owner, clock, "apexc_cylinder_image", __FILE__),
 		device_image_interface(mconfig, *this)
 {
 }
@@ -109,12 +117,9 @@ bool apexc_cylinder_image_device::call_load()
 	fread( machine().root_device().memregion("maincpu")->base(), 0x1000);
 #ifdef LSB_FIRST
 	{   /* fix endianness */
-		UINT32 *RAM;
-		int i;
+		UINT32 *RAM = (UINT32 *)(machine().root_device().memregion("maincpu")->base());
 
-		RAM = (UINT32 *)(*machine().root_device().memregion("maincpu"));
-
-		for (i=0; i < 0x0400; i++)
+		for (int i=0; i < 0x0400; i++)
 			RAM[i] = BIG_ENDIANIZE_INT32(RAM[i]);
 	}
 #endif
@@ -133,12 +138,9 @@ void apexc_cylinder_image_device::call_unload()
 		fseek(0, SEEK_SET);
 #ifdef LSB_FIRST
 		{   /* fix endianness */
-			UINT32 *RAM;
-			int i;
+			UINT32 *RAM = (UINT32 *)(machine().root_device().memregion("maincpu")->base());
 
-			RAM = (UINT32 *)(*machine().root_device().memregion("maincpu"));
-
-			for (i=0; i < /*0x2000*/0x0400; i++)
+			for (int i=0; i < /*0x2000*/0x0400; i++)
 				RAM[i] = BIG_ENDIANIZE_INT32(RAM[i]);
 		}
 #endif
@@ -223,7 +225,7 @@ protected:
 const device_type APEXC_TAPE_PUNCHER = &device_creator<apexc_tape_puncher_image_device>;
 
 apexc_tape_puncher_image_device::apexc_tape_puncher_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, APEXC_TAPE_PUNCHER, "APEXC Tape Puncher", tag, owner, clock),
+	: device_t(mconfig, APEXC_TAPE_PUNCHER, "APEXC Tape Puncher", tag, owner, clock, "apexc_tape_puncher_image", __FILE__),
 		device_image_interface(mconfig, *this)
 {
 }
@@ -257,7 +259,7 @@ protected:
 const device_type APEXC_TAPE_READER = &device_creator<apexc_tape_reader_image_device>;
 
 apexc_tape_reader_image_device::apexc_tape_reader_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, APEXC_TAPE_READER, "APEXC Tape Reader", tag, owner, clock),
+	: device_t(mconfig, APEXC_TAPE_READER, "APEXC Tape Reader", tag, owner, clock, "apexc_tape_reader_image", __FILE__),
 		device_image_interface(mconfig, *this)
 {
 }
@@ -508,16 +510,18 @@ INTERRUPT_GEN_MEMBER(apexc_state::apexc_interrupt)
 
 static const rgb_t apexc_palette[] =
 {
-	RGB_WHITE,
-	RGB_BLACK,
-	MAKE_RGB(255, 0, 0),
-	MAKE_RGB(50, 0, 0)
+	rgb_t::white,
+	rgb_t::black,
+	rgb_t(255, 0, 0),
+	rgb_t(50, 0, 0)
 };
 
+#if 0
 static const unsigned short apexc_colortable[] =
 {
 	0, 1
 };
+#endif
 
 #define APEXC_PALETTE_SIZE ARRAY_LENGTH(apexc_palette)
 #define APEXC_COLORTABLE_SIZE sizeof(apexc_colortable)/2
@@ -552,18 +556,17 @@ static const rectangle teletyper_scroll_clear_window(
 	teletyper_window_offset_x,  teletyper_window_offset_x+teletyper_window_width-1, /* min_x, max_x */
 	teletyper_window_offset_y+teletyper_window_height-teletyper_scroll_step,    teletyper_window_offset_y+teletyper_window_height-1 /* min_y, max_y */
 );
-static const int var_teletyper_scroll_step = - teletyper_scroll_step;
+//static const int var_teletyper_scroll_step = - teletyper_scroll_step;
 
-void apexc_state::palette_init()
+PALETTE_INIT_MEMBER(apexc_state, apexc)
 {
-	palette_set_colors(machine(), 0, apexc_palette, APEXC_PALETTE_SIZE);
+	palette.set_pen_colors(0, apexc_palette, APEXC_PALETTE_SIZE);
 }
 
 void apexc_state::video_start()
 {
-	screen_device *screen = machine().first_screen();
-	int width = screen->width();
-	int height = screen->height();
+	int width = m_screen->width();
+	int height = m_screen->height();
 
 	m_bitmap = auto_bitmap_ind16_alloc(machine(), width, height);
 	m_bitmap->fill(0, /*machine().visible_area*/teletyper_window);
@@ -582,7 +585,7 @@ void apexc_state::apexc_draw_led(bitmap_ind16 &bitmap, int x, int y, int state)
 /* write a single char on screen */
 void apexc_state::apexc_draw_char(bitmap_ind16 &bitmap, char character, int x, int y, int color)
 {
-	drawgfx_transpen(bitmap, bitmap.cliprect(), machine().gfx[0], character-32, color, 0, 0,
+	m_gfxdecode->gfx(0)->transpen(bitmap,bitmap.cliprect(), character-32, color, 0, 0,
 				x+1, y, 0);
 }
 
@@ -644,7 +647,7 @@ void apexc_state::apexc_teletyper_linefeed()
 	for (y=teletyper_window_offset_y; y<teletyper_window_offset_y+teletyper_window_height-teletyper_scroll_step; y++)
 	{
 		extract_scanline8(*m_bitmap, teletyper_window_offset_x, y+teletyper_scroll_step, teletyper_window_width, buf);
-		draw_scanline8(*m_bitmap, teletyper_window_offset_x, y, teletyper_window_width, buf, machine().pens);
+		draw_scanline8(*m_bitmap, teletyper_window_offset_x, y, teletyper_window_width, buf, m_palette->pens());
 	}
 
 	m_bitmap->fill(0, teletyper_scroll_clear_window);
@@ -873,7 +876,6 @@ static MACHINE_CONFIG_START( apexc, apexc_state )
 	MCFG_CPU_IO_MAP(apexc_io_map)
 	/* dummy interrupt: handles the control panel */
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", apexc_state,  apexc_interrupt)
-	/*MCFG_CPU_PERIODIC_INT(func, rate)*/
 
 
 	/* video hardware does not exist, but we display a control panel and the typewriter output */
@@ -883,9 +885,11 @@ static MACHINE_CONFIG_START( apexc, apexc_state )
 	MCFG_SCREEN_SIZE(256, 192)
 	MCFG_SCREEN_VISIBLE_AREA(0, 256-1, 0, 192-1)
 	MCFG_SCREEN_UPDATE_DRIVER(apexc_state, screen_update_apexc)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(apexc)
-	MCFG_PALETTE_LENGTH(APEXC_PALETTE_SIZE)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", apexc)
+	MCFG_PALETTE_ADD("palette", APEXC_PALETTE_SIZE)
+	MCFG_PALETTE_INIT_OWNER(apexc_state, apexc)
 
 
 	MCFG_APEXC_CYLINDER_ADD("cylinder")

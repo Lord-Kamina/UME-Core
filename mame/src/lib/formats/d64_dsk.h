@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /*********************************************************************
 
     formats/d64_dsk.h
 
-    Commodore 2040/1541/1571 sector disk image format
+    Commodore 4040/1541/1551 sector disk image format
 
 *********************************************************************/
 
@@ -17,12 +19,12 @@ public:
 		UINT32 form_factor;      // See floppy_image for possible values
 		UINT32 variant;          // See floppy_image for possible values
 
-		int sector_count;
-		int track_count;
-		int head_count;
-		int sector_base_size;
-		int gap_1;
-		int gap_2;
+		UINT16 sector_count;
+		UINT8 track_count;
+		UINT8 head_count;
+		UINT16 sector_base_size;
+		UINT8 gap_1;
+		UINT8 gap_2;
 	};
 
 	d64_format();
@@ -35,7 +37,7 @@ public:
 	virtual int identify(io_generic *io, UINT32 form_factor);
 	virtual bool load(io_generic *io, UINT32 form_factor, floppy_image *image);
 	virtual bool save(io_generic *io, floppy_image *image);
-	virtual bool supports_save() const;
+	virtual bool supports_save() const { return true; }
 
 protected:
 	enum
@@ -51,20 +53,24 @@ protected:
 		ERROR_27,       /* checksum error in header block */
 		ERROR_28,       /* write error UNIMPLEMENTED */
 		ERROR_29,       /* disk ID mismatch */
-		ERROR_74,       /* disk not ready (no device 1) UNIMPLEMENTED */
+		ERROR_74        /* disk not ready (no device 1) UNIMPLEMENTED */
 	};
 
 	const format *formats;
 
 	int find_size(io_generic *io, UINT32 form_factor);
-	virtual int get_physical_track(const format &f, int track);
+	virtual int get_physical_track(const format &f, int head, int track);
 	virtual UINT32 get_cell_size(const format &f, int track);
 	virtual int get_sectors_per_track(const format &f, int track);
 	virtual int get_disk_id_offset(const format &f);
 	void get_disk_id(const format &f, io_generic *io, UINT8 &id1, UINT8 &id2);
-	floppy_image_format_t::desc_e* get_sector_desc(const format &f, int &current_size, int track, int sector_count, UINT8 id1, UINT8 id2, int gap_2);
-	void build_sector_description(const format &f, UINT8 *sectdata, desc_s *sectors, int sector_count, UINT8 *errordata) const;
-	void extract_sectors(floppy_image *image, const format &f, desc_s *sdesc, int track, int head);
+	virtual int get_image_offset(const format &f, int head, int track);
+	int compute_track_size(const format &f, int track);
+	virtual int get_gap2(const format &f, int head, int track) { return f.gap_2; }
+	virtual floppy_image_format_t::desc_e* get_sector_desc(const format &f, int &current_size, int sector_count, UINT8 id1, UINT8 id2, int gap_2);
+	void build_sector_description(const format &f, UINT8 *sectdata, UINT32 sect_offs, UINT32 error_offs, desc_s *sectors, int sector_count) const;
+	virtual void fix_end_gap(floppy_image_format_t::desc_e* desc, int remaining_size);
+	void extract_sectors(floppy_image *image, const format &f, desc_s *sdesc, int track, int head, int sector_count);
 
 	static const format file_formats[];
 
@@ -76,12 +82,5 @@ protected:
 extern const floppy_format_type FLOPPY_D64_FORMAT;
 
 
-FLOPPY_IDENTIFY( d64_dsk_identify );
-FLOPPY_IDENTIFY( d67_dsk_identify );
-FLOPPY_IDENTIFY( d71_dsk_identify );
-FLOPPY_IDENTIFY( d80_dsk_identify );
-FLOPPY_IDENTIFY( d82_dsk_identify );
-
-FLOPPY_CONSTRUCT( d64_dsk_construct );
 
 #endif

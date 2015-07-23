@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /*****************************************************************************
 
     Irem M90 system.  There is 1 video chip - NANAO GA-25, it produces
@@ -37,8 +39,7 @@ inline void m90_state::get_tile_info(tile_data &tileinfo,int tile_index,int laye
 
 	tile=m_video_data[tile_index];
 	color=m_video_data[tile_index+1];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile,
 			color&0xf,
 			TILE_FLIPYX((color & 0xc0) >> 6));
@@ -52,8 +53,7 @@ inline void m90_state::bomblord_get_tile_info(tile_data &tileinfo,int tile_index
 
 	tile=m_video_data[tile_index];
 	color=m_video_data[tile_index+1];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile,
 			color&0xf,
 			TILE_FLIPYX((color & 0xc0) >> 6));
@@ -67,8 +67,7 @@ inline void m90_state::dynablsb_get_tile_info(tile_data &tileinfo,int tile_index
 
 	tile=m_video_data[tile_index];
 	color=m_video_data[tile_index+1];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile,
 			color&0xf,
 			TILE_FLIPYX((color & 0xc0) >> 6));
@@ -92,10 +91,10 @@ TILE_GET_INFO_MEMBER(m90_state::dynablsb_get_pf2w_tile_info){ dynablsb_get_tile_
 
 void m90_state::video_start()
 {
-	m_pf1_layer =      &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::get_pf1_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
-	m_pf1_wide_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::get_pf1w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
-	m_pf2_layer =      &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::get_pf2_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
-	m_pf2_wide_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::get_pf2w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
+	m_pf1_layer =      &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::get_pf1_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_pf1_wide_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::get_pf1w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
+	m_pf2_layer =      &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::get_pf2_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_pf2_wide_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::get_pf2w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
 
 	m_pf1_layer->set_transparent_pen(0);
 	m_pf1_wide_layer->set_transparent_pen(0);
@@ -107,10 +106,10 @@ void m90_state::video_start()
 
 VIDEO_START_MEMBER(m90_state,bomblord)
 {
-	m_pf1_layer =      &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::bomblord_get_pf1_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
-	m_pf1_wide_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::bomblord_get_pf1w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
-	m_pf2_layer =      &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::bomblord_get_pf2_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
-	m_pf2_wide_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::bomblord_get_pf2w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
+	m_pf1_layer =      &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::bomblord_get_pf1_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_pf1_wide_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::bomblord_get_pf1w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
+	m_pf2_layer =      &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::bomblord_get_pf2_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_pf2_wide_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::bomblord_get_pf2w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
 
 	m_pf2_layer->set_transparent_pen(0);
 	m_pf2_wide_layer->set_transparent_pen(0);
@@ -122,10 +121,10 @@ VIDEO_START_MEMBER(m90_state,bomblord)
 
 VIDEO_START_MEMBER(m90_state,dynablsb)
 {
-	m_pf1_layer =      &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::dynablsb_get_pf1_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
-	m_pf1_wide_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::dynablsb_get_pf1w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
-	m_pf2_layer =      &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::dynablsb_get_pf2_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
-	m_pf2_wide_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m90_state::dynablsb_get_pf2w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
+	m_pf1_layer =      &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::dynablsb_get_pf1_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_pf1_wide_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::dynablsb_get_pf1w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
+	m_pf2_layer =      &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::dynablsb_get_pf2_tile_info),this), TILEMAP_SCAN_ROWS,8,8,64,64);
+	m_pf2_wide_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m90_state::dynablsb_get_pf2w_tile_info),this),TILEMAP_SCAN_ROWS,8,8,128,64);
 
 	m_pf2_layer->set_transparent_pen(0);
 	m_pf2_wide_layer->set_transparent_pen(0);
@@ -133,7 +132,7 @@ VIDEO_START_MEMBER(m90_state,dynablsb)
 	save_item(NAME(m_video_control_data));
 }
 
-void m90_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
+void m90_state::draw_sprites(screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect)
 {
 	UINT16 *spriteram = m_video_data + 0xee00/2;;
 	int offs;
@@ -160,33 +159,33 @@ void m90_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 		for (i = 0;i < y_multi;i++)
 
 			if (m_video_control_data[7] & 0x01)
-				pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+				m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 					sprite + (fy ? y_multi-1 - i : i),
 					colour,
 					fx,fy,
 					x,y+i*16,
-					machine().priority_bitmap,
+					screen.priority(),
 					(colour & 0x08) ? 0x00 : 0x02,0);
 			else if (m_video_control_data[7] & 0x02)
-				pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+				m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 					sprite + (fy ? y_multi-1 - i : i),
 					colour,
 					fx,fy,
 					x,y+i*16,
-					machine().priority_bitmap,
+					screen.priority(),
 					((colour & 0x0c)==0x0c) ? 0x00 : 0x02,0);
 			else
-				pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+				m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 					sprite + (fy ? y_multi-1 - i : i),
 					colour,
 					fx,fy,
 					x,y+i*16,
-					machine().priority_bitmap,
+					screen.priority(),
 					0x02,0);
 	}
 }
 
-void m90_state::bomblord_draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
+void m90_state::bomblord_draw_sprites(screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect)
 {
 	UINT16 *spriteram16 = m_spriteram;
 	int offs = 0, last_sprite = 0;
@@ -215,17 +214,17 @@ void m90_state::bomblord_draw_sprites(bitmap_ind16 &bitmap,const rectangle &clip
 		fx = (spriteram16[offs+3] >> 8) & 0x02;
 		fy = (spriteram16[offs+2] >> 8) & 0x80;
 
-		pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 				sprite,
 				colour,
 				fx,fy,
 				x,y,
-				machine().priority_bitmap,
+				screen.priority(),
 				(colour & 0x08) ? 0x00 : 0x02,0);
 	}
 }
 
-void m90_state::dynablsb_draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
+void m90_state::dynablsb_draw_sprites(screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect)
 {
 	UINT16 *spriteram16 = m_spriteram;
 	int offs = 0, last_sprite = 0;
@@ -253,12 +252,12 @@ void m90_state::dynablsb_draw_sprites(bitmap_ind16 &bitmap,const rectangle &clip
 		fx = (spriteram16[offs+3] >> 8) & 0x02;
 		fy = (spriteram16[offs+2] >> 8) & 0x80;
 
-		pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+		m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 				sprite,
 				colour,
 				fx,fy,
 				x,y,
-				machine().priority_bitmap,
+				screen.priority(),
 				(colour & 0x08) ? 0x00 : 0x02,0);
 	}
 }
@@ -351,7 +350,7 @@ UINT32 m90_state::screen_update_m90(screen_device &screen, bitmap_ind16 &bitmap,
 		m_pf2_wide_layer->set_scrollx(0, m_video_control_data[3]+256-2 );
 	}
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	if (video_enable)
 	{
@@ -372,12 +371,12 @@ UINT32 m90_state::screen_update_m90(screen_device &screen, bitmap_ind16 &bitmap,
 					if (m_video_control_data[6] & 0x4)
 					{
 						m_pf2_wide_layer->set_scrolly(0, 0x200 + m_video_data[0xfc00/2 + line]);
-						m_pf2_wide_layer->draw(bitmap, clip, 0,0);
-						m_pf2_wide_layer->draw(bitmap, clip, 1,1);
+						m_pf2_wide_layer->draw(screen, bitmap, clip, 0,0);
+						m_pf2_wide_layer->draw(screen, bitmap, clip, 1,1);
 					} else {
 						m_pf2_layer->set_scrolly(0, 0x200 + m_video_data[0xfc00/2 + line]);
-						m_pf2_layer->draw(bitmap, clip, 0,0);
-						m_pf2_layer->draw(bitmap, clip, 1,1);
+						m_pf2_layer->draw(screen, bitmap, clip, 0,0);
+						m_pf2_layer->draw(screen, bitmap, clip, 1,1);
 					}
 				}
 			}
@@ -386,12 +385,12 @@ UINT32 m90_state::screen_update_m90(screen_device &screen, bitmap_ind16 &bitmap,
 				if (m_video_control_data[6] & 0x4)
 				{
 					m_pf2_wide_layer->set_scrolly(0, m_video_control_data[2] );
-					m_pf2_wide_layer->draw(bitmap, cliprect, 0,0);
-					m_pf2_wide_layer->draw(bitmap, cliprect, 1,1);
+					m_pf2_wide_layer->draw(screen, bitmap, cliprect, 0,0);
+					m_pf2_wide_layer->draw(screen, bitmap, cliprect, 1,1);
 				} else {
 					m_pf2_layer->set_scrolly(0, m_video_control_data[2] );
-					m_pf2_layer->draw(bitmap, cliprect, 0,0);
-					m_pf2_layer->draw(bitmap, cliprect, 1,1);
+					m_pf2_layer->draw(screen, bitmap, cliprect, 0,0);
+					m_pf2_layer->draw(screen, bitmap, cliprect, 1,1);
 				}
 			}
 		}
@@ -417,12 +416,12 @@ UINT32 m90_state::screen_update_m90(screen_device &screen, bitmap_ind16 &bitmap,
 					if (m_video_control_data[5] & 0x4)
 					{
 						m_pf1_wide_layer->set_scrolly(0, 0x200 + m_video_data[0xf800/2 + line]);
-						m_pf1_wide_layer->draw(bitmap, clip, 0,0);
-						m_pf1_wide_layer->draw(bitmap, clip, 1,1);
+						m_pf1_wide_layer->draw(screen, bitmap, clip, 0,0);
+						m_pf1_wide_layer->draw(screen, bitmap, clip, 1,1);
 					} else {
 						m_pf1_layer->set_scrolly(0, 0x200 + m_video_data[0xf800/2 + line]);
-						m_pf1_layer->draw(bitmap, clip, 0,0);
-						m_pf1_layer->draw(bitmap, clip, 1,1);
+						m_pf1_layer->draw(screen, bitmap, clip, 0,0);
+						m_pf1_layer->draw(screen, bitmap, clip, 1,1);
 					}
 				}
 			}
@@ -431,20 +430,20 @@ UINT32 m90_state::screen_update_m90(screen_device &screen, bitmap_ind16 &bitmap,
 				if (m_video_control_data[5] & 0x4)
 				{
 					m_pf1_wide_layer->set_scrolly(0, m_video_control_data[0] );
-					m_pf1_wide_layer->draw(bitmap, cliprect, 0,0);
-					m_pf1_wide_layer->draw(bitmap, cliprect, 1,1);
+					m_pf1_wide_layer->draw(screen, bitmap, cliprect, 0,0);
+					m_pf1_wide_layer->draw(screen, bitmap, cliprect, 1,1);
 				} else {
 					m_pf1_layer->set_scrolly(0, m_video_control_data[0] );
-					m_pf1_layer->draw(bitmap, cliprect, 0,0);
-					m_pf1_layer->draw(bitmap, cliprect, 1,1);
+					m_pf1_layer->draw(screen, bitmap, cliprect, 0,0);
+					m_pf1_layer->draw(screen, bitmap, cliprect, 1,1);
 				}
 			}
 		}
 
-		draw_sprites(bitmap,cliprect);
+		draw_sprites(screen,bitmap,cliprect);
 
 	} else {
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 	}
 
 	return 0;
@@ -453,8 +452,8 @@ UINT32 m90_state::screen_update_m90(screen_device &screen, bitmap_ind16 &bitmap,
 UINT32 m90_state::screen_update_bomblord(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int i;
-	machine().priority_bitmap.fill(0, cliprect);
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	screen.priority().fill(0, cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	/* Setup scrolling */
 	if (m_video_control_data[6]&0x20) {
@@ -475,52 +474,52 @@ UINT32 m90_state::screen_update_bomblord(screen_device &screen, bitmap_ind16 &bi
 		m_pf2_wide_layer->mark_all_dirty();
 		m_pf2_wide_layer->set_scrollx(0, m_video_data[0xf000/2]-16 );
 		m_pf2_wide_layer->set_scrolly(0, m_video_data[0xf008/2]+388 );
-		m_pf2_wide_layer->draw(bitmap, cliprect, 0,0);
-		m_pf2_wide_layer->draw(bitmap, cliprect, 1,1);
+		m_pf2_wide_layer->draw(screen, bitmap, cliprect, 0,0);
+		m_pf2_wide_layer->draw(screen, bitmap, cliprect, 1,1);
 	} else {
 		m_pf2_layer->mark_all_dirty();
 		m_pf2_layer->set_scrollx(0, m_video_data[0xf000/2]-16 );
 		m_pf2_layer->set_scrolly(0, m_video_data[0xf008/2]-120 );
-		m_pf2_layer->draw(bitmap, cliprect, 0,0);
-		m_pf2_layer->draw(bitmap, cliprect, 1,1);
+		m_pf2_layer->draw(screen, bitmap, cliprect, 0,0);
+		m_pf2_layer->draw(screen, bitmap, cliprect, 1,1);
 	}
 
 	if (m_video_control_data[6] & 0x04) {
 		m_pf1_wide_layer->mark_all_dirty();
 		m_pf1_wide_layer->set_scrolly(0, m_video_data[0xf00c/2]+392 );
-		m_pf1_wide_layer->draw(bitmap, cliprect, 0,0);
-		m_pf1_wide_layer->draw(bitmap, cliprect, 1,1);
+		m_pf1_wide_layer->draw(screen, bitmap, cliprect, 0,0);
+		m_pf1_wide_layer->draw(screen, bitmap, cliprect, 1,1);
 	} else {
 		m_pf1_layer->mark_all_dirty();
 		m_pf1_layer->set_scrolly(0, m_video_data[0xf00c/2]-116 );
-		m_pf1_layer->draw(bitmap, cliprect, 0,0);
-		m_pf1_layer->draw(bitmap, cliprect, 1,1);
+		m_pf1_layer->draw(screen, bitmap, cliprect, 0,0);
+		m_pf1_layer->draw(screen, bitmap, cliprect, 1,1);
 	}
 
-	bomblord_draw_sprites(bitmap,cliprect);
+	bomblord_draw_sprites(screen,bitmap,cliprect);
 
 	return 0;
 }
 
 UINT32 m90_state::screen_update_dynablsb(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	machine().priority_bitmap.fill(0, cliprect);
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	screen.priority().fill(0, cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	if (!(m_video_data[0xf008/2] & 0x4000)) {
 		m_pf1_wide_layer->mark_all_dirty();
 		m_pf1_wide_layer->set_scroll_rows(1);
 		m_pf1_wide_layer->set_scrollx(0, m_video_data[0xf004/2]+64);
 		m_pf1_wide_layer->set_scrolly(0, m_video_data[0xf006/2]+512);
-		m_pf1_wide_layer->draw(bitmap, cliprect, 0,0);
-		m_pf1_wide_layer->draw(bitmap, cliprect, 1,1);
+		m_pf1_wide_layer->draw(screen, bitmap, cliprect, 0,0);
+		m_pf1_wide_layer->draw(screen, bitmap, cliprect, 1,1);
 	} else {
 		m_pf1_layer->mark_all_dirty();
 		m_pf1_layer->set_scroll_rows(1);
 		m_pf1_layer->set_scrollx(0, m_video_data[0xf004/2]+64);
 		m_pf1_layer->set_scrolly(0, m_video_data[0xf006/2]+4);
-		m_pf1_layer->draw(bitmap, cliprect, 0,0);
-		m_pf1_layer->draw(bitmap, cliprect, 1,1);
+		m_pf1_layer->draw(screen, bitmap, cliprect, 0,0);
+		m_pf1_layer->draw(screen, bitmap, cliprect, 1,1);
 	}
 
 	if (!(m_video_data[0xf008/2] & 0x8000)) {
@@ -528,18 +527,18 @@ UINT32 m90_state::screen_update_dynablsb(screen_device &screen, bitmap_ind16 &bi
 		m_pf2_wide_layer->set_scroll_rows(1);
 		m_pf2_wide_layer->set_scrollx(0, m_video_data[0xf000/2]+68);
 		m_pf2_wide_layer->set_scrolly(0, m_video_data[0xf002/2]+512);
-		m_pf2_wide_layer->draw(bitmap, cliprect, 0,0);
-		m_pf2_wide_layer->draw(bitmap, cliprect, 1,1);
+		m_pf2_wide_layer->draw(screen, bitmap, cliprect, 0,0);
+		m_pf2_wide_layer->draw(screen, bitmap, cliprect, 1,1);
 	} else {
 		m_pf2_layer->mark_all_dirty();
 		m_pf2_layer->set_scroll_rows(1);
 		m_pf2_layer->set_scrollx(0, m_video_data[0xf000/2]+68);
 		m_pf2_layer->set_scrolly(0, m_video_data[0xf002/2]+4);
-		m_pf2_layer->draw(bitmap, cliprect, 0,0);
-		m_pf2_layer->draw(bitmap, cliprect, 1,1);
+		m_pf2_layer->draw(screen, bitmap, cliprect, 0,0);
+		m_pf2_layer->draw(screen, bitmap, cliprect, 1,1);
 	}
 
-	dynablsb_draw_sprites(bitmap,cliprect);
+	dynablsb_draw_sprites(screen,bitmap,cliprect);
 
 	return 0;
 }

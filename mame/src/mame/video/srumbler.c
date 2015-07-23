@@ -1,6 +1,8 @@
+// license:???
+// copyright-holders:Paul Leaman
 /***************************************************************************
 
-  video.c
+  srumbler.c
 
   Functions to emulate the video hardware of the machine.
 
@@ -19,8 +21,7 @@
 TILE_GET_INFO_MEMBER(srumbler_state::get_fg_tile_info)
 {
 	UINT8 attr = m_foregroundram[2*tile_index];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			m_foregroundram[2*tile_index + 1] + ((attr & 0x03) << 8),
 			(attr & 0x3c) >> 2,
 			(attr & 0x40) ? TILE_FORCE_LAYER0 : 0);
@@ -29,8 +30,7 @@ TILE_GET_INFO_MEMBER(srumbler_state::get_fg_tile_info)
 TILE_GET_INFO_MEMBER(srumbler_state::get_bg_tile_info)
 {
 	UINT8 attr = m_backgroundram[2*tile_index];
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			m_backgroundram[2*tile_index + 1] + ((attr & 0x07) << 8),
 			(attr & 0xe0) >> 5,
 			((attr & 0x08) ? TILE_FLIPY : 0));
@@ -47,13 +47,15 @@ TILE_GET_INFO_MEMBER(srumbler_state::get_bg_tile_info)
 
 void srumbler_state::video_start()
 {
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(srumbler_state::get_fg_tile_info),this),TILEMAP_SCAN_COLS,8,8,64,32);
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(srumbler_state::get_bg_tile_info),this),TILEMAP_SCAN_COLS,    16,16,64,64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(srumbler_state::get_fg_tile_info),this),TILEMAP_SCAN_COLS,8,8,64,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(srumbler_state::get_bg_tile_info),this),TILEMAP_SCAN_COLS,    16,16,64,64);
 
 	m_fg_tilemap->set_transparent_pen(3);
 
 	m_bg_tilemap->set_transmask(0,0xffff,0x0000); /* split type 0 is totally transparent in front half */
 	m_bg_tilemap->set_transmask(1,0x07ff,0xf800); /* split type 1 has pens 0-10 transparent in front half */
+
+	save_item(NAME(m_scroll));
 }
 
 
@@ -64,20 +66,20 @@ void srumbler_state::video_start()
 
 ***************************************************************************/
 
-WRITE8_MEMBER(srumbler_state::srumbler_foreground_w)
+WRITE8_MEMBER(srumbler_state::foreground_w)
 {
 	m_foregroundram[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset/2);
 }
 
-WRITE8_MEMBER(srumbler_state::srumbler_background_w)
+WRITE8_MEMBER(srumbler_state::background_w)
 {
 	m_backgroundram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset/2);
 }
 
 
-WRITE8_MEMBER(srumbler_state::srumbler_4009_w)
+WRITE8_MEMBER(srumbler_state::_4009_w)
 {
 	/* bit 0 flips screen */
 	flip_screen_set(data & 1);
@@ -90,7 +92,7 @@ WRITE8_MEMBER(srumbler_state::srumbler_4009_w)
 }
 
 
-WRITE8_MEMBER(srumbler_state::srumbler_scroll_w)
+WRITE8_MEMBER(srumbler_state::scroll_w)
 {
 	m_scroll[offset] = data;
 
@@ -144,7 +146,7 @@ void srumbler_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 			flipy = !flipy;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+		m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 				code,
 				colour,
 				flip_screen(),flipy,
@@ -153,11 +155,11 @@ void srumbler_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 }
 
 
-UINT32 srumbler_state::screen_update_srumbler(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 srumbler_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1,0);
 	draw_sprites(bitmap,cliprect);
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
-	m_fg_tilemap->draw(bitmap, cliprect, 0,0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0,0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	return 0;
 }

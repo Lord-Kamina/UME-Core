@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Atari Food Fight hardware
@@ -17,7 +19,7 @@
 
 TILE_GET_INFO_MEMBER(foodf_state::get_playfield_tile_info)
 {
-	UINT16 data = m_playfield[tile_index];
+	UINT16 data = tilemap.basemem_read(tile_index);
 	int code = (data & 0xff) | ((data >> 7) & 0x100);
 	int color = (data >> 8) & 0x3f;
 	SET_TILE_INFO_MEMBER(0, code, color, m_playfield_flip ? (TILE_FLIPX | TILE_FLIPY) : 0);
@@ -34,10 +36,6 @@ TILE_GET_INFO_MEMBER(foodf_state::get_playfield_tile_info)
 VIDEO_START_MEMBER(foodf_state,foodf)
 {
 	static const int resistances[3] = { 1000, 470, 220 };
-
-	/* initialize the playfield */
-	m_playfield_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(foodf_state::get_playfield_tile_info),this), TILEMAP_SCAN_COLS,  8,8, 32,32);
-	m_playfield_tilemap->set_transparent_pen(0);
 
 	/* adjust the playfield for the 8 pixel offset */
 	m_playfield_tilemap->set_scrollx(0, -8);
@@ -100,7 +98,7 @@ WRITE16_MEMBER(foodf_state::foodf_paletteram_w)
 	bit1 = (newword >> 7) & 0x01;
 	b = combine_2_weights(m_bweights, bit0, bit1);
 
-	palette_set_color(machine(), offset, MAKE_RGB(r, g, b));
+	m_palette->set_pen_color(offset, rgb_t(r, g, b));
 }
 
 
@@ -114,16 +112,16 @@ WRITE16_MEMBER(foodf_state::foodf_paletteram_w)
 UINT32 foodf_state::screen_update_foodf(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int offs;
-	gfx_element *gfx = machine().gfx[1];
-	bitmap_ind8 &priority_bitmap = machine().priority_bitmap;
+	gfx_element *gfx = m_gfxdecode->gfx(1);
+	bitmap_ind8 &priority_bitmap = screen.priority();
 	UINT16 *spriteram16 = m_spriteram;
 
 	/* first draw the playfield opaquely */
-	m_playfield_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+	m_playfield_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
 
 	/* then draw the non-transparent parts with a priority of 1 */
 	priority_bitmap.fill(0);
-	m_playfield_tilemap->draw(bitmap, cliprect, 0, 1);
+	m_playfield_tilemap->draw(screen, bitmap, cliprect, 0, 1);
 
 	/* draw the motion objects front-to-back */
 	for (offs = 0x80-2; offs >= 0x20; offs -= 2)
@@ -139,11 +137,11 @@ UINT32 foodf_state::screen_update_foodf(screen_device &screen, bitmap_ind16 &bit
 		int vflip = (data1 >> 14) & 1;
 		int pri = (data1 >> 13) & 1;
 
-		pdrawgfx_transpen(bitmap, cliprect, gfx, pict, color, hflip, vflip,
+		gfx->prio_transpen(bitmap,cliprect, pict, color, hflip, vflip,
 				xpos, ypos, priority_bitmap, pri * 2, 0);
 
 		/* draw again with wraparound (needed to get the end of level animation right) */
-		pdrawgfx_transpen(bitmap, cliprect, gfx, pict, color, hflip, vflip,
+		gfx->prio_transpen(bitmap,cliprect, pict, color, hflip, vflip,
 				xpos - 256, ypos, priority_bitmap, pri * 2, 0);
 	}
 

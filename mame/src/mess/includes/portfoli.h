@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 #pragma once
 
 #ifndef __PORTFOLIO__
@@ -5,16 +7,16 @@
 
 #include "emu.h"
 #include "cpu/i86/i86.h"
-#include "imagedev/cartslot.h"
-#include "imagedev/printer.h"
-#include "machine/ctronics.h"
+#include "bus/centronics/ctronics.h"
 #include "machine/i8255.h"
 #include "machine/ins8250.h"
 #include "machine/nvram.h"
 #include "machine/ram.h"
-#include "machine/serial.h"
 #include "sound/speaker.h"
 #include "video/hd61830.h"
+
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 
 #define M80C88A_TAG     "u1"
 #define M82C55A_TAG     "hpc101_u1"
@@ -57,8 +59,8 @@ public:
 	required_device<ins8250_device> m_uart;
 	required_device<speaker_sound_device> m_speaker;
 	required_device<timer_device> m_timer_tick;
-	required_memory_region m_rom;
-	required_memory_region m_char_rom;
+	required_region_ptr<UINT8> m_rom;
+	required_region_ptr<UINT8> m_char_rom;
 	required_ioport m_y0;
 	required_ioport m_y1;
 	required_ioport m_y2;
@@ -108,7 +110,7 @@ public:
 
 	/* peripheral state */
 	UINT8 m_pid;                        /* peripheral identification */
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(portfolio);
 	TIMER_DEVICE_CALLBACK_MEMBER(keyboard_tick);
 	TIMER_DEVICE_CALLBACK_MEMBER(system_tick);
 	TIMER_DEVICE_CALLBACK_MEMBER(counter_tick);

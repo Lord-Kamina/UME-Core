@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Frank Palazzolo, Jarek Burczynski, Aaron Giles, Jonathan Gevaryahu, Couriersud
 /**********************************************************************************************
 
      TMS5110 simulator (modified from TMS5220 by Jarek Burczynski)
@@ -8,6 +10,7 @@
      Various fixes by Lord Nightmare
      Additional enhancements by Couriersud
      Sub-interpolation-cycle parameter updating added by Lord Nightmare
+     Read-bit and Output fixes by Lord Nightmare
 
      Todo:
         - implement CS
@@ -65,26 +68,33 @@
 
 #define MAX_SAMPLE_CHUNK        512
 
-/* Variants */
+/* 6 Variants, from tms5110r.inc */
 
-#define TMS5110_IS_5110A    (1)
-#define TMS5110_IS_5100     (2)
-#define TMS5110_IS_5110     (3)
+#define TMS5110_IS_TMC0281  (1)
+#define TMS5110_IS_TMC0281D (2)
+#define TMS5110_IS_CD2801   (3)
+#define TMS5110_IS_CD2802   (4)
+#define TMS5110_IS_TMS5110A (5)
+#define TMS5110_IS_M58817   (6)
 
-#define TMS5110_IS_CD2801   TMS5110_IS_5100
-#define TMS5110_IS_TMC0281  TMS5110_IS_5100
-
-#define TMS5110_IS_CD2802   TMS5110_IS_5110
-#define TMS5110_IS_M58817   TMS5110_IS_5110
 
 /* States for CTL */
 
-#define CTL_STATE_INPUT         (0)
-#define CTL_STATE_OUTPUT        (1)
-#define CTL_STATE_NEXT_OUTPUT   (2)
+// ctl bus is input to tms51xx
+#define CTL_STATE_INPUT               (0)
+// ctl bus is outputting a test talk command on CTL1(bit 0)
+#define CTL_STATE_TTALK_OUTPUT        (1)
+// ctl bus is switching direction, next will be above
+#define CTL_STATE_NEXT_TTALK_OUTPUT   (2)
+// ctl bus is outputting a read nybble 'output' command on CTL1,2,4,8 (bits 0-3)
+#define CTL_STATE_OUTPUT              (3)
+// ctl bus is switching direction, next will be above
+#define CTL_STATE_NEXT_OUTPUT         (4)
+
+
 
 /* Pull in the ROM tables */
-#include "tms5110r.c"
+#include "tms5110r.inc"
 
 #define DEBUG_5110  0
 
@@ -92,14 +102,23 @@ void tms5110_device::set_variant(int variant)
 {
 	switch (variant)
 	{
-		case TMS5110_IS_5110A:
+		case TMS5110_IS_TMC0281:
+			m_coeff = &T0280B_0281A_coeff;
+			break;
+		case TMS5110_IS_TMC0281D:
+			m_coeff = &T0280D_0281D_coeff;
+			break;
+		case TMS5110_IS_CD2801:
+			m_coeff = &T0280F_2801A_coeff;
+			break;
+		case TMS5110_IS_M58817:
+			m_coeff = &M58817_coeff;
+			break;
+		case TMS5110_IS_CD2802:
+			m_coeff = &T0280F_2802_coeff;
+			break;
+		case TMS5110_IS_TMS5110A:
 			m_coeff = &tms5110a_coeff;
-			break;
-		case TMS5110_IS_5100:
-			m_coeff = &pat4209836_coeff;
-			break;
-		case TMS5110_IS_5110:
-			m_coeff = &pat4403965_coeff;
 			break;
 		default:
 			fatalerror("Unknown variant in tms5110_create\n");
@@ -110,35 +129,36 @@ void tms5110_device::set_variant(int variant)
 
 void tms5110_device::new_int_write(UINT8 rc, UINT8 m0, UINT8 m1, UINT8 addr)
 {
-	if (!m_m0_func.isnull())
-		m_m0_func(m0);
-	if (!m_m1_func.isnull())
-		m_m1_func(m1);
-	if (!m_addr_func.isnull())
-		m_addr_func(0, addr);
-	if (!m_romclk_func.isnull())
+	if (!m_m0_cb.isnull())
+		m_m0_cb(m0);
+	if (!m_m1_cb.isnull())
+		m_m1_cb(m1);
+	if (!m_addr_cb.isnull())
+		m_addr_cb((offs_t)0, addr);
+	if (!m_romclk_cb.isnull())
 	{
 		//printf("rc %d\n", rc);
-		m_romclk_func(rc);
+		m_romclk_cb(rc);
 	}
 }
 
 void tms5110_device::new_int_write_addr(UINT8 addr)
 {
-	new_int_write(1, 0, 1, addr);
-	new_int_write(0, 0, 1, addr);
-	new_int_write(1, 0, 0, addr);
-	new_int_write(0, 0, 0, addr);
+	new_int_write(1, 0, 1, addr); // romclk 1, m0 0, m1 1, addr bus nybble = xxxx
+	new_int_write(0, 0, 1, addr); // romclk 0, m0 0, m1 1, addr bus nybble = xxxx
+	new_int_write(1, 0, 0, addr); // romclk 1, m0 0, m1 0, addr bus nybble = xxxx
+	new_int_write(0, 0, 0, addr); // romclk 0, m0 0, m1 0, addr bus nybble = xxxx
 }
 
 UINT8 tms5110_device::new_int_read()
 {
-	new_int_write(1, 1, 0, 0);
-	new_int_write(0, 1, 0, 0);
-	new_int_write(1, 0, 0, 0);
-	new_int_write(0, 0, 0, 0);
-	if (!m_data_func.isnull())
-		return m_data_func();
+	new_int_write(1, 1, 0, 0); // romclk 1, m0 1, m1 0, addr bus nybble = 0/open bus
+	new_int_write(0, 1, 0, 0); // romclk 0, m0 1, m1 0, addr bus nybble = 0/open bus
+	new_int_write(1, 0, 0, 0); // romclk 1, m0 0, m1 0, addr bus nybble = 0/open bus
+	new_int_write(0, 0, 0, 0); // romclk 0, m0 0, m1 0, addr bus nybble = 0/open bus
+	if (!m_data_cb.isnull())
+		return m_data_cb();
+	if (DEBUG_5110) logerror("WARNING: CALLBACK MISSING, RETURNING 0!\n");
 	return 0;
 }
 
@@ -179,6 +199,7 @@ void tms5110_device::register_for_save_states()
 	save_item(NAME(m_address));
 	save_item(NAME(m_schedule_dummy_read));
 	save_item(NAME(m_addr_bit));
+	save_item(NAME(m_CTL_buffer));
 
 	save_item(NAME(m_x));
 
@@ -220,31 +241,24 @@ void tms5110_device::FIFO_data_write(int data)
 int tms5110_device::extract_bits(int count)
 {
 	int val = 0;
-
+	if (DEBUG_5110) logerror("requesting %d bits from fifo: ", count);
 	while (count--)
 	{
 		val = (val << 1) | (m_fifo[m_fifo_head] & 1);
 		m_fifo_count--;
 		m_fifo_head = (m_fifo_head + 1) % FIFO_SIZE;
 	}
+	if (DEBUG_5110) logerror("returning: %02x\n", val);
 	return val;
 }
 
 void tms5110_device::request_bits(int no)
 {
-	for (int i=0; i<no; i++)
+	for (int i = 0; i < no; i++)
 	{
-		if (m_M0_callback)
-		{
-			int data = (*m_M0_callback)(this);
-			FIFO_data_write(data);
-		}
-		else
-		{
-			//if (DEBUG_5110) logerror("-->ERROR: TMS5110 missing M0 callback function\n");
-			UINT8 data = new_int_read();
-			FIFO_data_write(data);
-		}
+		UINT8 data = new_int_read();
+		if (DEBUG_5110) logerror("bit added to fifo: %d\n", data);
+		FIFO_data_write(data);
 	}
 }
 
@@ -252,19 +266,8 @@ void tms5110_device::perform_dummy_read()
 {
 	if (m_schedule_dummy_read)
 	{
-		if (m_M0_callback)
-		{
-			int data = (*m_M0_callback)(this);
-
-			if (DEBUG_5110) logerror("TMS5110 performing dummy read; value read = %1i\n", data&1);
-		}
-		else
-		{
-			int data = new_int_read();
-
-			if (DEBUG_5110) logerror("TMS5110 performing dummy read; value read = %1i\n", data&1);
-			//if (DEBUG_5110) logerror("-->ERROR: TMS5110 missing M0 callback function\n");
-		}
+		int data = new_int_read();
+		if (DEBUG_5110) logerror("TMS5110 performing dummy read; value read = %1i\n", data & 1);
 		m_schedule_dummy_read = FALSE;
 	}
 }
@@ -494,21 +497,17 @@ void tms5110_device::process(INT16 *buffer, unsigned int size)
 		}
 		else
 		{
-						/* generate voiced samples here */
+			// generate voiced samples here
 			/* US patent 4331836 Figure 14B shows, and logic would hold, that a pitch based chirp
 			 * function has a chirp/peak and then a long chain of zeroes.
-			 * The last entry of the chirp rom is at address 0b110011 (50d), the 51st sample,
+			 * The last entry of the chirp rom is at address 0b110011 (51d), the 52nd sample,
 			 * and if the address reaches that point the ADDRESS incrementer is
-			 * disabled, forcing all samples beyond 50d to be == 50d
-			 * (address 50d holds zeroes)
+			 * disabled, forcing all samples beyond 51d to be == 51d
 			 */
-
-		/*if (m_coeff->subtype & (SUBTYPE_TMS5100 | SUBTYPE_M58817))*/
-
-		if (m_pitch_count > 50)
-			current_val = m_coeff->chirptable[50];
-		else
-			current_val = m_coeff->chirptable[m_pitch_count];
+			if (m_pitch_count >= 51)
+				current_val = (INT8)m_coeff->chirptable[51];
+			else /*m_pitch_count < 51*/
+				current_val = (INT8)m_coeff->chirptable[m_pitch_count];
 		}
 
 		/* Update LFSR *20* times every sample, like patent shows */
@@ -601,61 +600,91 @@ void tms5110_device::PDC_set(int data)
 		m_PDC = data & 0x1;
 		if (m_PDC == 0) /* toggling 1->0 processes command on CTL_pins */
 		{
+			if (DEBUG_5110) logerror("PDC falling edge: ");
 			/* first pdc toggles output, next toggles input */
 			switch (m_state)
 			{
 			case CTL_STATE_INPUT:
 				/* continue */
 				break;
+			case CTL_STATE_NEXT_TTALK_OUTPUT:
+				if (DEBUG_5110) logerror("Switching CTL bus direction to output for Test Talk\n");
+				m_state = CTL_STATE_TTALK_OUTPUT;
+				return;
+			case CTL_STATE_TTALK_OUTPUT:
+				if (DEBUG_5110) logerror("Switching CTL bus direction back to input from Test Talk\n");
+				m_state = CTL_STATE_INPUT;
+				return;
 			case CTL_STATE_NEXT_OUTPUT:
+				if (DEBUG_5110) logerror("Switching CTL bus direction for Read Bit Buffer Output\n");
 				m_state = CTL_STATE_OUTPUT;
 				return;
 			case CTL_STATE_OUTPUT:
+				if (DEBUG_5110) logerror("Switching CTL bus direction back to input from Read Bit Buffer Output\n");
 				m_state = CTL_STATE_INPUT;
 				return;
 			}
 			/* the only real commands we handle now are SPEAK and RESET */
 			if (m_next_is_address)
 			{
+				if (DEBUG_5110) logerror("Loading address nybble %02x to VSMs\n", m_CTL_pins);
 				m_next_is_address = FALSE;
 				m_address = m_address | ((m_CTL_pins & 0x0F)<<m_addr_bit);
 				m_addr_bit = (m_addr_bit + 4) % 12;
 				m_schedule_dummy_read = TRUE;
-				if (m_set_load_address)
-					m_set_load_address(this, m_address);
 				new_int_write_addr(m_CTL_pins & 0x0F);
 			}
 			else
 			{
+				if (DEBUG_5110) logerror("Got command nybble %02x: ", m_CTL_pins);
 				switch (m_CTL_pins & 0xe) /*CTL1 - don't care*/
 				{
-				case TMS5110_CMD_SPEAK:
-					perform_dummy_read();
-					m_speaking_now = 1;
-
-					//should FIFO be cleared now ?????
-					break;
-
 				case TMS5110_CMD_RESET:
+					if (DEBUG_5110) logerror("RESET\n");
 					perform_dummy_read();
 					reset();
 					break;
 
+				case TMS5110_CMD_LOAD_ADDRESS:
+					if (DEBUG_5110) logerror("LOAD ADDRESS\n");
+					m_next_is_address = TRUE;
+					break;
+
+				case TMS5110_CMD_OUTPUT:
+					if (DEBUG_5110) logerror("OUTPUT (from read-bit buffer)\n");
+					m_state = CTL_STATE_NEXT_OUTPUT;
+					break;
+
+				case TMS5110_CMD_SPKSLOW:
+					if (DEBUG_5110) logerror("SPKSLOW (todo: this isn't implemented right yet)\n");
+					perform_dummy_read();
+					m_speaking_now = 1;
+					//should FIFO be cleared now ????? there is no fifo! the fifo is a lie!
+					break;
+
 				case TMS5110_CMD_READ_BIT:
+					if (DEBUG_5110) logerror("READ BIT\n");
 					if (m_schedule_dummy_read)
 						perform_dummy_read();
 					else
 					{
+						if (DEBUG_5110) logerror("actually reading a bit now\n");
 						request_bits(1);
-						m_CTL_pins = (m_CTL_pins & 0x0E) | extract_bits(1);
+						m_CTL_buffer >>= 1;
+						m_CTL_buffer |= (extract_bits(1)<<3);
+						m_CTL_buffer &= 0xF;
 					}
 					break;
 
-				case TMS5110_CMD_LOAD_ADDRESS:
-					m_next_is_address = TRUE;
+				case TMS5110_CMD_SPEAK:
+					if (DEBUG_5110) logerror("SPEAK\n");
+					perform_dummy_read();
+					m_speaking_now = 1;
+					//should FIFO be cleared now ????? there is no fifo! the fifo is a lie!
 					break;
 
 				case TMS5110_CMD_READ_BRANCH:
+					if (DEBUG_5110) logerror("READ AND BRANCH\n");
 					new_int_write(0,1,1,0);
 					new_int_write(1,1,1,0);
 					new_int_write(0,1,1,0);
@@ -666,7 +695,8 @@ void tms5110_device::PDC_set(int data)
 					break;
 
 				case TMS5110_CMD_TEST_TALK:
-					m_state = CTL_STATE_NEXT_OUTPUT;
+					if (DEBUG_5110) logerror("TEST TALK\n");
+					m_state = CTL_STATE_NEXT_TTALK_OUTPUT;
 					break;
 
 				default:
@@ -838,82 +868,25 @@ static const unsigned int example_word_TEN[619]={
 #endif
 
 
-static int speech_rom_read_bit(device_t *device)
-{
-	tms5110_device *tms5110 = (tms5110_device *) device;
-	return tms5110->_speech_rom_read_bit();
-}
-
-int tms5110_device::_speech_rom_read_bit()
-{
-	int r;
-
-	if (m_speech_rom_bitnum<0)
-		r = 0;
-	else
-		r = (m_table[m_speech_rom_bitnum >> 3] >> (0x07 - (m_speech_rom_bitnum & 0x07))) & 1;
-
-	m_speech_rom_bitnum++;
-
-	return r;
-}
-
-static void speech_rom_set_addr(device_t *device, int addr)
-{
-	tms5110_device *tms5110 = (tms5110_device *) device;
-	tms5110->_speech_rom_set_addr(addr);
-}
-
-void tms5110_device::_speech_rom_set_addr(int addr)
-{
-	m_speech_rom_bitnum = addr * 8 - 1;
-}
-
-/******************************************************************************
-
-     DEVICE_START( tms5110 ) -- allocate buffers and reset the 5110
-
-******************************************************************************/
-
-
 //-------------------------------------------------
 //  device_start - device-specific startup
 //-------------------------------------------------
 
 void tms5110_device::device_start()
 {
-	static const tms5110_interface dummy = { NULL, NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL};
+	m_table = region()->base();
 
-	assert_always(static_config() != NULL, "No config");
-
-	m_intf = static_config() ? (const tms5110_interface *)static_config() : &dummy;
-	m_table = *region();
-
-	set_variant(TMS5110_IS_5110A);
+	set_variant(TMS5110_IS_TMS5110A);
 
 	/* resolve lines */
-	m_m0_func.resolve(m_intf->m0_func, *this);
-	m_m1_func.resolve(m_intf->m1_func, *this);
-	m_romclk_func.resolve(m_intf->romclk_func, *this);
-	m_addr_func.resolve(m_intf->addr_func, *this);
-	m_data_func.resolve(m_intf->data_func, *this);
+	m_m0_cb.resolve();
+	m_m1_cb.resolve();
+	m_romclk_cb.resolve();
+	m_addr_cb.resolve();
+	m_data_cb.resolve();
 
 	/* initialize a stream */
 	m_stream = machine().sound().stream_alloc(*this, 0, 1, clock() / 80);
-
-	if (m_table == NULL)
-	{
-#if 0
-		assert_always(m_intf->M0_callback != NULL, "Missing _mandatory_ 'M0_callback' function pointer in the TMS5110 interface\n  This function is used by TMS5110 to call for a single bits\n  needed to generate the speech\n  Aborting startup...\n");
-#endif
-		m_M0_callback = m_intf->M0_callback;
-		m_set_load_address = m_intf->load_address;
-	}
-	else
-	{
-		m_M0_callback = speech_rom_read_bit;
-		m_set_load_address = speech_rom_set_addr;
-	}
 
 	m_state = CTL_STATE_INPUT; /* most probably not defined */
 	m_romclk_hack_timer = timer_alloc(0);
@@ -928,27 +901,7 @@ void tms5110_device::device_start()
 void tms5100_device::device_start()
 {
 	tms5110_device::device_start();
-	set_variant(TMS5110_IS_5100);
-}
-
-//-------------------------------------------------
-//  device_start - device-specific startup
-//-------------------------------------------------
-
-void tms5110a_device::device_start()
-{
-	tms5110_device::device_start();
-	set_variant(TMS5110_IS_5110A);
-}
-
-//-------------------------------------------------
-//  device_start - device-specific startup
-//-------------------------------------------------
-
-void cd2801_device::device_start()
-{
-	tms5110_device::device_start();
-	set_variant(TMS5110_IS_CD2801);
+	set_variant(TMS5110_IS_TMC0281);
 }
 
 //-------------------------------------------------
@@ -965,10 +918,50 @@ void tmc0281_device::device_start()
 //  device_start - device-specific startup
 //-------------------------------------------------
 
+void tms5100a_device::device_start()
+{
+	tms5110_device::device_start();
+	set_variant(TMS5110_IS_TMC0281D);
+}
+
+//-------------------------------------------------
+//  device_start - device-specific startup
+//-------------------------------------------------
+
+void tmc0281d_device::device_start()
+{
+	tms5110_device::device_start();
+	set_variant(TMS5110_IS_TMC0281D);
+}
+
+//-------------------------------------------------
+//  device_start - device-specific startup
+//-------------------------------------------------
+
+void cd2801_device::device_start()
+{
+	tms5110_device::device_start();
+	set_variant(TMS5110_IS_CD2801);
+}
+
+//-------------------------------------------------
+//  device_start - device-specific startup
+//-------------------------------------------------
+
 void cd2802_device::device_start()
 {
 	tms5110_device::device_start();
 	set_variant(TMS5110_IS_CD2802);
+}
+
+//-------------------------------------------------
+//  device_start - device-specific startup
+//-------------------------------------------------
+
+void tms5110a_device::device_start()
+{
+	tms5110_device::device_start();
+	set_variant(TMS5110_IS_TMS5110A);
 }
 
 //-------------------------------------------------
@@ -995,7 +988,9 @@ void tms5110_device::device_reset()
 	/* initialize the chip state */
 	m_speaking_now = m_talk_status = 0;
 	m_CTL_pins = 0;
-		m_RNG = 0x1fff;
+	m_RNG = 0x1fff;
+	m_CTL_buffer = 0;
+	m_PDC = 0;
 
 	/* initialize the energy/pitch/k states */
 	m_old_energy = m_new_energy = m_current_energy = m_target_energy = 0;
@@ -1010,11 +1005,10 @@ void tms5110_device::device_reset()
 	memset(m_x, 0, sizeof(m_x));
 	m_next_is_address = FALSE;
 	m_address = 0;
-	if (m_table != NULL || m_M0_callback != NULL)
+	if (m_table != NULL)
 	{
 		/* legacy interface */
 		m_schedule_dummy_read = TRUE;
-
 	}
 	else
 	{
@@ -1060,16 +1054,18 @@ WRITE_LINE_MEMBER( tms5110_device::pdc_w )
 
 /******************************************************************************
 
-     tms5110_ctl_r -- read status from the sound chip
-
-        bit 0 = TS - Talk Status is active (high) when the VSP is processing speech data.
+     tms5110_ctl_r -- read from the VSP (51xx) control bus
+        The CTL bus can be in three states:
+        1. Test talk output:
+            bit 0 = TS - Talk Status is active (high) when the VSP is processing speech data.
                 Talk Status goes active at the initiation of a SPEAK command.
                 It goes inactive (low) when the stop code (Energy=1111) is processed, or
                 immediately(?????? not TMS5110) by a RESET command.
-        TMS5110 datasheets mention this is only available as a result of executing
-                TEST TALK command.
-
-                FIXME: data read not implemented, CTL1 only available after TALK command
+            other bits may be open bus
+        2. 'read bit' buffer contents output:
+            bits 0-3 = buffer contents
+        3. Input 'open bus' state:
+            bits 0-3 = high-z
 
 ******************************************************************************/
 
@@ -1077,15 +1073,20 @@ READ8_MEMBER( tms5110_device::ctl_r )
 {
 	/* bring up to date first */
 	m_stream->update();
-	if (m_state == CTL_STATE_OUTPUT)
+	if (m_state == CTL_STATE_TTALK_OUTPUT)
 	{
-		//if (DEBUG_5110) logerror("Status read (status=%2d)\n", m_talk_status);
+		if (DEBUG_5110) logerror("Status read while outputting Test Talk (status=%2d)\n", m_talk_status);
 		return (m_talk_status << 0); /*CTL1 = still talking ? */
 	}
-	else
+	else if (m_state == CTL_STATE_OUTPUT)
 	{
-		//if (DEBUG_5110) logerror("Status read (not in output mode)\n");
-		return (0);
+		if (DEBUG_5110) logerror("Status read while outputting buffer (buffer=%2d)\n", m_CTL_buffer);
+		return (m_CTL_buffer);
+	}
+	else // we're reading with the bus in input mode! just return the last thing written to the bus
+	{
+		if (DEBUG_5110) logerror("Status read (not in output mode), returning %02x\n", m_CTL_pins);
+		return (m_CTL_pins);
 	}
 }
 
@@ -1174,6 +1175,8 @@ void tms5110_device::sound_stream_update(sound_stream &stream, stream_sample_t *
 /******************************************************************************
 
      tms5110_set_frequency -- adjusts the playback frequency
+     TODO: kill this function; we should be adjusting the tms51xx device clock itself,
+     not setting it here!
 
 ******************************************************************************/
 
@@ -1181,6 +1184,10 @@ void tms5110_device::set_frequency(int frequency)
 {
 	m_stream->set_sample_rate(frequency / 80);
 }
+
+
+
+/* from here on in this file is a VSM 'Emulator' circuit used by bagman and ad2083 */
 
 /*
  *
@@ -1222,7 +1229,7 @@ void tms5110_device::set_frequency(int frequency)
 
 /******************************************************************************
 
-     DEVICE_START( tmsprom ) -- allocate buffers initialize
+     device_start( tmsprom ) -- allocate buffers initialize
 
 ******************************************************************************/
 
@@ -1239,7 +1246,7 @@ void tmsprom_device::register_for_save_states()
 void tmsprom_device::update_prom_cnt()
 {
 	UINT8 prev_val = m_prom[m_prom_cnt] | 0x0200;
-	if (m_enable && (prev_val & (1<<m_intf->stop_bit)))
+	if (m_enable && (prev_val & (1<<m_stop_bit)))
 		m_prom_cnt |= 0x10;
 	else
 		m_prom_cnt &= 0x0f;
@@ -1263,13 +1270,13 @@ void tmsprom_device::device_timer(emu_timer &timer, device_timer_id id, int para
 	//if (m_enable && m_prom_cnt < 0x10) printf("ctrl %04x, enable %d cnt %d\n", ctrl, m_enable, m_prom_cnt);
 	m_prom_cnt = ((m_prom_cnt + 1) & 0x0f) | (m_prom_cnt & 0x10);
 
-	if (ctrl & (1 << m_intf->reset_bit))
+	if (ctrl & (1 << m_reset_bit))
 		m_address = 0;
 
-	m_ctl_func(0, BITSWAP8(ctrl,0,0,0,0,m_intf->ctl8_bit,
-			m_intf->ctl4_bit,m_intf->ctl2_bit,m_intf->ctl1_bit));
+	m_ctl_cb((offs_t)0, BITSWAP8(ctrl,0,0,0,0,m_ctl8_bit,
+			m_ctl4_bit,m_ctl2_bit,m_ctl1_bit));
 
-	m_pdc_func((ctrl >> m_intf->pdc_bit) & 0x01);
+	m_pdc_cb((ctrl >> m_pdc_bit) & 0x01);
 }
 
 //-------------------------------------------------
@@ -1278,22 +1285,17 @@ void tmsprom_device::device_timer(emu_timer &timer, device_timer_id id, int para
 
 void tmsprom_device::device_start()
 {
-	m_intf = (const tmsprom_interface *) static_config();
-	assert_always(m_intf != NULL, "Error creating TMSPROM chip: No configuration");
-
 	/* resolve lines */
-	m_pdc_func.resolve(m_intf->pdc_func, *this);
-	m_ctl_func.resolve(m_intf->ctl_func, *this);
+	m_pdc_cb.resolve_safe();
+	m_ctl_cb.resolve_safe();
 
-	m_rom = *region();
+	m_rom = region()->base();
 	assert_always(m_rom != NULL, "Error creating TMSPROM chip: No rom region found");
-	m_prom = machine().root_device().memregion(m_intf->prom_region)->base();
-	assert_always(m_rom != NULL, "Error creating TMSPROM chip: No prom region found");
-
-	m_clock = clock();
+	m_prom = owner()->memregion(m_prom_region)->base();
+	assert_always(m_prom != NULL, "Error creating TMSPROM chip: No prom region found");
 
 	m_romclk_timer = timer_alloc(0);
-	m_romclk_timer->adjust(attotime::zero, 0, attotime::from_hz(m_clock));
+	m_romclk_timer->adjust(attotime::zero, 0, attotime::from_hz(clock()));
 
 	m_bit = 0;
 	m_base_address = 0;
@@ -1311,7 +1313,7 @@ WRITE_LINE_MEMBER( tmsprom_device::m0_w )
 	if (m_m0 && !state)
 	{
 		m_address += 1;
-		m_address &= (m_intf->rom_size-1);
+		m_address &= (m_rom_size-1);
 	}
 	m_m0 = state;
 }
@@ -1325,7 +1327,7 @@ READ_LINE_MEMBER( tmsprom_device::data_r )
 WRITE8_MEMBER( tmsprom_device::rom_csq_w )
 {
 	if (!data)
-		m_base_address = offset * m_intf->rom_size;
+		m_base_address = offset * m_rom_size;
 }
 
 WRITE8_MEMBER( tmsprom_device::bit_w )
@@ -1362,72 +1364,81 @@ WRITE_LINE_MEMBER( tmsprom_device::enable_w )
 const device_type TMS5110 = &device_creator<tms5110_device>;
 
 tms5110_device::tms5110_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, TMS5110, "TMS5110", tag, owner, clock),
-		device_sound_interface(mconfig, *this)
+	: device_t(mconfig, TMS5110, "TMS5110", tag, owner, clock, "tms5110", __FILE__),
+		device_sound_interface(mconfig, *this),
+		m_m0_cb(*this),
+		m_m1_cb(*this),
+		m_addr_cb(*this),
+		m_data_cb(*this),
+		m_romclk_cb(*this)
 {
 }
 
-tms5110_device::tms5110_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, type, name, tag, owner, clock),
-		device_sound_interface(mconfig, *this)
+tms5110_device::tms5110_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source)
+	: device_t(mconfig, type, name, tag, owner, clock, shortname, source),
+		device_sound_interface(mconfig, *this),
+		m_m0_cb(*this),
+		m_m1_cb(*this),
+		m_addr_cb(*this),
+		m_data_cb(*this),
+		m_romclk_cb(*this)
 {
 }
 
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void tms5110_device::device_config_complete()
-{
-}
 
 const device_type TMS5100 = &device_creator<tms5100_device>;
 
-
 tms5100_device::tms5100_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: tms5110_device(mconfig, TMS5100, "TMS5100", tag, owner, clock)
+	: tms5110_device(mconfig, TMS5100, "TMS5100", tag, owner, clock, "tms5100", __FILE__)
 {
 }
-
-
-const device_type TMS5110A = &device_creator<tms5110a_device>;
-
-tms5110a_device::tms5110a_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: tms5110_device(mconfig, TMS5110A, "TMS5110A", tag, owner, clock)
-{
-}
-
-
-const device_type CD2801 = &device_creator<cd2801_device>;
-
-cd2801_device::cd2801_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: tms5110_device(mconfig, CD2801, "CD2801", tag, owner, clock)
-{
-}
-
 
 const device_type TMC0281 = &device_creator<tmc0281_device>;
 
 tmc0281_device::tmc0281_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: tms5110_device(mconfig, TMC0281, "TMC0281", tag, owner, clock)
+	: tms5110_device(mconfig, TMC0281, "TMC0281", tag, owner, clock, "tmc0281", __FILE__)
 {
 }
 
+const device_type TMS5100A = &device_creator<tms5100a_device>;
+
+tms5100a_device::tms5100a_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
+	: tms5110_device(mconfig, TMS5100A, "TMS5100A", tag, owner, clock, "tms5100a", __FILE__)
+{
+}
+
+const device_type TMC0281D = &device_creator<tmc0281d_device>;
+
+tmc0281d_device::tmc0281d_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
+	: tms5110_device(mconfig, TMC0281D, "TMC0281D", tag, owner, clock, "tmc0281d", __FILE__)
+{
+}
+
+const device_type CD2801 = &device_creator<cd2801_device>;
+
+cd2801_device::cd2801_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
+	: tms5110_device(mconfig, CD2801, "CD2801", tag, owner, clock, "cd2801", __FILE__)
+{
+}
 
 const device_type CD2802 = &device_creator<cd2802_device>;
 
 cd2802_device::cd2802_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: tms5110_device(mconfig, CD2802, "CD2802", tag, owner, clock)
+	: tms5110_device(mconfig, CD2802, "CD2802", tag, owner, clock, "cd2802", __FILE__)
 {
 }
 
+const device_type TMS5110A = &device_creator<tms5110a_device>;
+
+tms5110a_device::tms5110a_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
+	: tms5110_device(mconfig, TMS5110A, "TMS5110A", tag, owner, clock, "tms5110a", __FILE__)
+{
+}
 
 const device_type M58817 = &device_creator<m58817_device>;
 
 m58817_device::m58817_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: tms5110_device(mconfig, M58817, "M58817", tag, owner, clock)
+	: tms5110_device(mconfig, M58817, "M58817", tag, owner, clock, "m58817", __FILE__)
 {
 }
 
@@ -1435,16 +1446,17 @@ m58817_device::m58817_device(const machine_config &mconfig, const char *tag, dev
 const device_type TMSPROM = &device_creator<tmsprom_device>;
 
 tmsprom_device::tmsprom_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, TMSPROM, "TMSPROM", tag, owner, clock)
-{
-}
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void tmsprom_device::device_config_complete()
+	: device_t(mconfig, TMSPROM, "TMSPROM", tag, owner, clock, "tmsprom", __FILE__),
+		m_prom_region(""),
+		m_rom_size(0),
+		m_pdc_bit(0),
+		m_ctl1_bit(0),
+		m_ctl2_bit(0),
+		m_ctl4_bit(0),
+		m_ctl8_bit(0),
+		m_reset_bit(0),
+		m_stop_bit(0),
+		m_pdc_cb(*this),
+		m_ctl_cb(*this)
 {
 }

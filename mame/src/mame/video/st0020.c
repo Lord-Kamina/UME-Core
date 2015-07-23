@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia,David Haywood
 /* ST0020 - Seta Zooming Sprites + Blitter
 
   (gdfs also has a tilemap, I don't know if this chip supplies that)
@@ -13,10 +15,32 @@
 const device_type ST0020_SPRITES = &device_creator<st0020_device>;
 
 st0020_device::st0020_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, ST0020_SPRITES, "st0020_device", tag, owner, clock)
+	: device_t(mconfig, ST0020_SPRITES, "Seta ST0020 Sprites", tag, owner, clock, "st0020", __FILE__),
+		m_gfxdecode(*this),
+		m_palette(*this)
 {
 	m_is_st0032 = 0;
 	m_is_jclub2 = 0;
+}
+
+//-------------------------------------------------
+//  static_set_gfxdecode_tag: Set the tag of the
+//  gfx decoder
+//-------------------------------------------------
+
+void st0020_device::static_set_gfxdecode_tag(device_t &device, const char *tag)
+{
+	downcast<st0020_device &>(device).m_gfxdecode.set_tag(tag);
+}
+
+//-------------------------------------------------
+//  static_set_palette_tag: Set the tag of the
+//  palette device
+//-------------------------------------------------
+
+void st0020_device::static_set_palette_tag(device_t &device, const char *tag)
+{
+	downcast<st0020_device &>(device).m_palette.set_tag(tag);
 }
 
 void st0020_device::set_is_st0032(device_t &device, int is_st0032)
@@ -53,16 +77,17 @@ void st0020_device::device_start()
 	m_st0020_blitram = auto_alloc_array_clear(machine(), UINT16, 0x100 / 2);
 
 	for (m_gfx_index = 0; m_gfx_index < MAX_GFX_ELEMENTS; m_gfx_index++)
-		if (machine().gfx[m_gfx_index] == 0)
+		if (m_gfxdecode->gfx(m_gfx_index) == 0)
 			break;
 
-	machine().gfx[m_gfx_index] = auto_alloc(machine(), gfx_element(machine(), layout_16x8x8_2, (UINT8 *)m_st0020_gfxram, machine().total_colors() / 64, 0));
+	m_gfxdecode->set_gfx(m_gfx_index, global_alloc(gfx_element(m_palette, layout_16x8x8_2, (UINT8 *)m_st0020_gfxram, 0, m_palette->entries() / 64, 0)));
 
-	machine().gfx[m_gfx_index]->set_granularity(64); /* 256 colour sprites with palette selectable on 64 colour boundaries */
+	m_gfxdecode->gfx(m_gfx_index)->set_granularity(64); /* 256 colour sprites with palette selectable on 64 colour boundaries */
 
 	save_pointer(NAME(m_st0020_gfxram), 4 * 0x100000/2);
 	save_pointer(NAME(m_st0020_spriteram), 0x80000/2);
 	save_pointer(NAME(m_st0020_blitram), 0x100/2);
+	save_item(NAME(m_st0020_gfxram_bank));
 }
 
 void st0020_device::device_reset()
@@ -89,7 +114,7 @@ WRITE16_MEMBER(st0020_device::st0020_gfxram_w)
 
 	offset += m_st0020_gfxram_bank * 0x100000/2;
 	COMBINE_DATA(&m_st0020_gfxram[offset]);
-	machine().gfx[m_gfx_index]->mark_dirty(offset / (16*8/2));
+	m_gfxdecode->gfx(m_gfx_index)->mark_dirty(offset / (16*8/2));
 }
 
 READ16_MEMBER(st0020_device::st0020_sprram_r)
@@ -178,7 +203,7 @@ WRITE16_MEMBER(st0020_device::st0020_blit_w)
 				dst /= 16*8;
 				while (len--)
 				{
-					machine().gfx[m_gfx_index]->mark_dirty(dst);
+					m_gfxdecode->gfx(m_gfx_index)->mark_dirty(dst);
 					dst++;
 				}
 			}
@@ -254,7 +279,7 @@ WRITE16_MEMBER(st0020_device::st0020_blitram_w)
         E.h                             Unused
 
 */
-void st0020_device::st0020_draw_zooming_sprites(running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect, int priority)
+void st0020_device::st0020_draw_zooming_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, int priority)
 {
 	/* Sprites list */
 	UINT16 *spriteram16_2 = m_st0020_spriteram;
@@ -371,7 +396,7 @@ void st0020_device::st0020_draw_zooming_sprites(running_machine &machine, bitmap
 			{
 				for (y = ystart; y != yend; y += yinc)
 				{
-					drawgfxzoom_transpen( bitmap, cliprect, machine.gfx[m_gfx_index],
+					m_gfxdecode->gfx(m_gfx_index)->zoom_transpen(bitmap,cliprect,
 									code++,
 									color,
 									flipx, flipy,
@@ -383,11 +408,11 @@ void st0020_device::st0020_draw_zooming_sprites(running_machine &machine, bitmap
 
 
 #if 0 /* doesn't compile in a device context (can't use ui_draw_text? */
-			if (machine.input().code_pressed(KEYCODE_Z))    /* Display some info on each sprite */
+			if (machine().input().code_pressed(KEYCODE_Z))    /* Display some info on each sprite */
 			{
 				char buf[10];
 				sprintf(buf, "%X",size);
-				ui_draw_text(&machine.render().ui_container(), buf, sx / 0x10000, sy / 0x10000);
+				ui_draw_text(&machine().render().ui_container(), buf, sx / 0x10000, sy / 0x10000);
 			}
 #endif
 		}   /* single-sprites */
@@ -399,8 +424,8 @@ void st0020_device::st0020_draw_zooming_sprites(running_machine &machine, bitmap
 
 
 
-void st0020_device::st0020_draw_all(running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect)
+void st0020_device::st0020_draw_all(bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	for (int pri = 0; pri <= 0xf; pri++)
-		st0020_draw_zooming_sprites(machine, bitmap, cliprect, pri);
+		st0020_draw_zooming_sprites(bitmap, cliprect, pri);
 }

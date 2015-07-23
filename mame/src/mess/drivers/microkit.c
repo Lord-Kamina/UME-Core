@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /*
 
     RCA COSMAC Microkit
@@ -27,28 +29,12 @@ ADDRESS_MAP_END
 static INPUT_PORTS_START( microkit )
 INPUT_PORTS_END
 
-static COSMAC_INTERFACE( cosmac_intf )
-{
-	DEVCB_LINE_VCC,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 static MACHINE_CONFIG_START( microkit, microkit_state )
 	// basic machine hardware
 	MCFG_CPU_ADD("maincpu", CDP1801, 2000000)
 	MCFG_CPU_PROGRAM_MAP(microkit_mem)
 	MCFG_CPU_IO_MAP(microkit_io)
-	MCFG_CPU_CONFIG(cosmac_intf)
+	MCFG_COSMAC_WAIT_CALLBACK(VCC)
 MACHINE_CONFIG_END
 
 ROM_START( microkit )
@@ -57,4 +43,4 @@ ROM_START( microkit )
 	ROM_LOAD( "4.2a", 0x100, 0x100, CRC(27267bad) SHA1(838df9be2dc175584a1a6ee1770039118e49482e) )
 ROM_END
 
-COMP( 1975, microkit,    0,      0,      microkit,        microkit, driver_device, 0,      "RCA",  "COSMAC Microkit",  GAME_NOT_WORKING | GAME_NO_SOUND )
+COMP( 1975, microkit,    0,      0,      microkit,        microkit, driver_device, 0,      "RCA",  "COSMAC Microkit",  GAME_IS_SKELETON | GAME_NOT_WORKING | GAME_NO_SOUND )

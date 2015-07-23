@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Paul Leaman
 #include "emu.h"
 #include "includes/blktiger.h"
 
@@ -30,15 +32,14 @@ TILE_GET_INFO_MEMBER(blktiger_state::get_bg_tile_info)
 	   was not derived from a PROM so it could be wrong. */
 	static const UINT8 split_table[16] =
 	{
-		3,3,0,0,
-		0,0,0,0,
+		3,3,2,2,
+		1,1,0,0,
 		0,0,0,0,
 		0,0,0,0
 	};
 	UINT8 attr = m_scroll_ram[2 * tile_index + 1];
 	int color = (attr & 0x78) >> 3;
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			m_scroll_ram[2 * tile_index] + ((attr & 0x07) << 8),
 			color,
 			(attr & 0x80) ? TILE_FLIPX : 0);
@@ -48,8 +49,7 @@ TILE_GET_INFO_MEMBER(blktiger_state::get_bg_tile_info)
 TILE_GET_INFO_MEMBER(blktiger_state::get_tx_tile_info)
 {
 	UINT8 attr = m_txvideoram[tile_index + 0x400];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			m_txvideoram[tile_index] + ((attr & 0xe0) << 3),
 			attr & 0x1f,
 			0);
@@ -71,9 +71,9 @@ void blktiger_state::video_start()
 
 	m_scroll_ram = auto_alloc_array(machine(), UINT8, BGRAM_BANK_SIZE * BGRAM_BANKS);
 
-	m_tx_tilemap =    &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blktiger_state::get_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_bg_tilemap8x4 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blktiger_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(blktiger_state::bg8x4_scan),this), 16, 16, 128, 64);
-	m_bg_tilemap4x8 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blktiger_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(blktiger_state::bg4x8_scan),this), 16, 16, 64, 128);
+	m_tx_tilemap =    &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blktiger_state::get_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap8x4 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blktiger_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(blktiger_state::bg8x4_scan),this), 16, 16, 128, 64);
+	m_bg_tilemap4x8 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blktiger_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(blktiger_state::bg4x8_scan),this), 16, 16, 64, 128);
 
 	m_tx_tilemap->set_transparent_pen(3);
 
@@ -207,7 +207,7 @@ void blktiger_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			flipx = !flipx;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+		m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 				code,
 				color,
 				flipx,flip_screen(),
@@ -220,16 +220,16 @@ UINT32 blktiger_state::screen_update_blktiger(screen_device &screen, bitmap_ind1
 	bitmap.fill(1023, cliprect);
 
 	if (m_bgon)
-		(m_screen_layout ? m_bg_tilemap8x4 : m_bg_tilemap4x8)->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+		(m_screen_layout ? m_bg_tilemap8x4 : m_bg_tilemap4x8)->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
 
 	if (m_objon)
 		draw_sprites(bitmap, cliprect);
 
 	if (m_bgon)
-		(m_screen_layout ? m_bg_tilemap8x4 : m_bg_tilemap4x8)->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
+		(m_screen_layout ? m_bg_tilemap8x4 : m_bg_tilemap4x8)->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
 
 	if (m_chon)
-		m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }

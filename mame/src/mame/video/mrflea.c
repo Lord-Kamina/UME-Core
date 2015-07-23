@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
 /******************************************************************
 
 Mr. F. Lea
@@ -41,10 +43,10 @@ WRITE8_MEMBER(mrflea_state::mrflea_spriteram_w)
 
 void mrflea_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 	const UINT8 *source = m_spriteram;
 	const UINT8 *finish = source + 0x100;
-	rectangle clip = machine().primary_screen->visible_area();
+	rectangle clip = m_screen->visible_area();
 
 	clip.max_x -= 24;
 	clip.min_x += 16;
@@ -55,12 +57,12 @@ void mrflea_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect
 		int ypos = source[0] - 16 + 3;
 		int tile_number = source[2] + source[3] * 0x100;
 
-		drawgfx_transpen( bitmap, clip,gfx,
+		gfx->transpen(bitmap,clip,
 			tile_number,
 			0, /* color */
 			0,0, /* no flip */
 			xpos,ypos,0 );
-		drawgfx_transpen( bitmap, clip,gfx,
+		gfx->transpen(bitmap,clip,
 			tile_number,
 			0, /* color */
 			0,0, /* no flip */
@@ -72,7 +74,7 @@ void mrflea_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect
 void mrflea_state::draw_background( bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
 	const UINT8 *source = m_videoram;
-	gfx_element *gfx = machine().gfx[1];
+	gfx_element *gfx = m_gfxdecode->gfx(1);
 	int sx, sy;
 	int base = 0;
 
@@ -88,8 +90,8 @@ void mrflea_state::draw_background( bitmap_ind16 &bitmap, const rectangle &clipr
 		{
 			int tile_number = base + source[0] + source[0x400] * 0x100;
 			source++;
-			drawgfx_opaque( bitmap, cliprect,
-				gfx,
+
+				gfx->opaque(bitmap,cliprect,
 				tile_number,
 				0, /* color */
 				0,0, /* no flip */

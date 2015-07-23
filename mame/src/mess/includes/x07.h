@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /*********************************************************************
 
     includes/x07.h
@@ -7,12 +9,14 @@
 #include "emu.h"
 #include "cpu/z80/z80.h"
 #include "sound/beep.h"
+#include "machine/nvram.h"
 #include "machine/ram.h"
 #include "sound/wave.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/cassette.h"
 #include "imagedev/printer.h"
 #include "formats/x07_cas.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 #include "rendlay.h"
 
 //default value for user defined keys, taken for official documentation
@@ -162,14 +166,21 @@ public:
 			m_printer(*this, "printer"),
 			m_beep(*this, "beeper"),
 			m_ram(*this, RAM_TAG),
-			m_cassette(*this, "cassette")
+			m_nvram1(*this, "nvram1"),
+			m_nvram2(*this, "nvram2"),
+			m_cassette(*this, "cassette"),
+			m_card(*this, "cardslot"),
+			m_warm_start(1)
 	{ }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<printer_image_device> m_printer;
 	required_device<beep_device> m_beep;
 	required_device<ram_device> m_ram;
+	required_device<nvram_device> m_nvram1;
+	required_device<nvram_device> m_nvram2;
 	required_device<cassette_image_device> m_cassette;
+	required_device<generic_slot_device> m_card;
 
 	void machine_start();
 	void machine_reset();
@@ -181,6 +192,9 @@ public:
 	DECLARE_INPUT_CHANGED_MEMBER( kb_func_keys );
 	DECLARE_INPUT_CHANGED_MEMBER( kb_break );
 	DECLARE_INPUT_CHANGED_MEMBER( kb_update_udk );
+
+	DECLARE_DRIVER_INIT(x07);
+	void nvram_init(nvram_device &nvram, void *data, size_t size);
 
 	void t6834_cmd(UINT8 cmd);
 	void t6834_r();
@@ -261,7 +275,7 @@ public:
 	UINT8 m_prn_char_code;
 	UINT8 m_prn_buffer[0x100];
 	UINT8 m_prn_size;
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(x07);
 	TIMER_CALLBACK_MEMBER(cassette_tick);
 	TIMER_CALLBACK_MEMBER(cassette_poll);
 	TIMER_CALLBACK_MEMBER(rsta_clear);

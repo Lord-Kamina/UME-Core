@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles, Nathan Woods
 /***************************************************************************
 
     v9938 / v9958 emulation
@@ -17,25 +19,15 @@
 
 #define MCFG_V9938_ADD(_tag, _screen, _vramsize) \
 	MCFG_DEVICE_ADD(_tag, V9938, 0) \
-	v9938_device::static_set_screen(*device, _screen); \
+	MCFG_VIDEO_SET_SCREEN(_screen) \
 	v9938_device::static_set_vram_size(*device, _vramsize);
 #define MCFG_V9958_ADD(_tag, _screen, _vramsize) \
 	MCFG_DEVICE_ADD(_tag, V9958, 0) \
-	v9938_device::static_set_screen(*device, _screen); \
+	MCFG_VIDEO_SET_SCREEN(_screen) \
 	v9938_device::static_set_vram_size(*device, _vramsize);
 
 #define MCFG_V99X8_INTERRUPT_CALLBACK(_irq) \
-	downcast<v99x8_device *>(device)->set_interrupt_callback(DEVCB2_##_irq);
-
-// init functions
-
-#define MODEL_V9938 (0)
-#define MODEL_V9958 (1)
-
-// resolutions
-#define RENDER_HIGH (0)
-#define RENDER_LOW  (1)
-#define RENDER_AUTO (2)
+	downcast<v99x8_device *>(device)->set_interrupt_callback(DEVCB_##_irq);
 
 
 //**************************************************************************
@@ -48,17 +40,16 @@ extern const device_type V9958;
 
 
 
-
 //**************************************************************************
 //  TYPE DEFINITIONS
 //**************************************************************************
 
 // ======================> v99x8_device
 
-class v99x8_device : public device_t, public device_memory_interface
+class v99x8_device :    public device_t,
+						public device_memory_interface,
+						public device_video_interface
 {
-	friend PALETTE_INIT( v9958 );
-
 protected:
 	// construction/destruction
 	v99x8_device(const machine_config &mconfig, device_type type, const char *name, const char *shortname, const char *tag, device_t *owner, UINT32 clock);
@@ -68,7 +59,6 @@ public:
 		m_int_callback.set_callback(irq);
 	}
 	int interrupt ();
-	void set_resolution (int);
 	int get_transpen();
 	bitmap_ind16 &get_bitmap() { return m_bitmap; }
 	void update_mouse_state(int mx_delta, int my_delta, int button_state);
@@ -85,7 +75,6 @@ public:
 	void command_w(UINT8 data);
 	void register_w(UINT8 data);
 
-	static void static_set_screen(device_t &device, const char *screen_name);
 	static void static_set_vram_size(device_t &device, UINT32 vram_size);
 
 	/* RESET pin */
@@ -112,24 +101,24 @@ private:
 	void check_int();
 	void register_write(int reg, int data);
 
-	template<typename _PixelType, int _Width> void default_border(const pen_t *pens, _PixelType *ln);
-	template<typename _PixelType, int _Width> void graphic7_border(const pen_t *pens, _PixelType *ln);
-	template<typename _PixelType, int _Width> void graphic5_border(const pen_t *pens, _PixelType *ln);
-	template<typename _PixelType, int _Width> void mode_text1(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void mode_text2(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void mode_multi(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void mode_graphic1(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void mode_graphic23(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void mode_graphic4(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void mode_graphic5(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void mode_graphic6(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void mode_graphic7(const pen_t *pens, _PixelType *ln, int line);
+	void default_border(const pen_t *pens, UINT16 *ln);
+	void graphic7_border(const pen_t *pens, UINT16 *ln);
+	void graphic5_border(const pen_t *pens, UINT16 *ln);
+	void mode_text1(const pen_t *pens, UINT16 *ln, int line);
+	void mode_text2(const pen_t *pens, UINT16 *ln, int line);
+	void mode_multi(const pen_t *pens, UINT16 *ln, int line);
+	void mode_graphic1(const pen_t *pens, UINT16 *ln, int line);
+	void mode_graphic23(const pen_t *pens, UINT16 *ln, int line);
+	void mode_graphic4(const pen_t *pens, UINT16 *ln, int line);
+	void mode_graphic5(const pen_t *pens, UINT16 *ln, int line);
+	void mode_graphic6(const pen_t *pens, UINT16 *ln, int line);
+	void mode_graphic7(const pen_t *pens, UINT16 *ln, int line);
 //  template<typename _PixelType, int _Width> void mode_yae(const pen_t *pens, _PixelType *ln, int line);
 //  template<typename _PixelType, int _Width> void mode_yjk(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void mode_unknown(const pen_t *pens, _PixelType *ln, int line);
-	template<typename _PixelType, int _Width> void default_draw_sprite(const pen_t *pens, _PixelType *ln, UINT8 *col);
-	template<typename _PixelType, int _Width> void graphic5_draw_sprite(const pen_t *pens, _PixelType *ln, UINT8 *col);
-	template<typename _PixelType, int _Width> void graphic7_draw_sprite(const pen_t *pens, _PixelType *ln, UINT8 *col);
+	void mode_unknown(const pen_t *pens, UINT16 *ln, int line);
+	void default_draw_sprite(const pen_t *pens, UINT16 *ln, UINT8 *col);
+	void graphic5_draw_sprite(const pen_t *pens, UINT16 *ln, UINT8 *col);
+	void graphic7_draw_sprite(const pen_t *pens, UINT16 *ln, UINT8 *col);
 
 	void sprite_mode1(int line, UINT8 *col);
 	void sprite_mode2(int line, UINT8 *col);
@@ -184,6 +173,7 @@ private:
 	int m_pal_write_first, m_cmd_write_first;
 	UINT8 m_pal_write, m_cmd_write;
 	UINT8 m_pal_reg[32], m_stat_reg[10], m_cont_reg[48], m_read_ahead;
+	UINT8 m_v9958_sp_mode;
 
 	// memory
 	UINT16 m_address_latch;
@@ -191,12 +181,10 @@ private:
 
 	// interrupt
 	UINT8 m_int_state;
-	devcb2_write_line   m_int_callback;
+	devcb_write_line   m_int_callback;
 	int m_scanline;
 	// blinking
 	int m_blink, m_blink_count;
-	// size
-	int m_size, m_size_old, m_size_auto, m_size_now;
 	// mouse
 	UINT8 m_mx_delta, m_my_delta;
 	// mouse & lightpen
@@ -204,9 +192,6 @@ private:
 	// palette
 	UINT16 m_pal_ind16[16];
 	UINT16 m_pal_ind256[256];
-	// render screen
-	screen_device *m_screen;
-	const char *m_screen_name;
 	// render bitmap
 	bitmap_ind16 m_bitmap;
 	// Command unit
@@ -229,16 +214,14 @@ private:
 	{
 		UINT8 m;
 		void (v99x8_device::*visible_16)(const pen_t *, UINT16*, int);
-		void (v99x8_device::*visible_16s)(const pen_t *, UINT16*, int);
 		void (v99x8_device::*border_16)(const pen_t *, UINT16*);
-		void (v99x8_device::*border_16s)(const pen_t *, UINT16*);
 		void (v99x8_device::*sprites)(int, UINT8*);
 		void (v99x8_device::*draw_sprite_16)(const pen_t *, UINT16*, UINT8*);
-		void (v99x8_device::*draw_sprite_16s)(const pen_t *, UINT16*, UINT8*);
 	} ;
 	static const v99x8_mode s_modes[];
-
-	static UINT16 *s_pal_indYJK;
+	required_device<palette_device> m_palette;
+protected:
+	static UINT16 s_pal_indYJK[0x20000];
 };
 
 
@@ -246,16 +229,22 @@ class v9938_device : public v99x8_device
 {
 public:
 	v9938_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+	DECLARE_PALETTE_INIT(v9938);
+protected:
+	virtual machine_config_constructor device_mconfig_additions() const;
 };
 
 class v9958_device : public v99x8_device
 {
 public:
 	v9958_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-};
 
-PALETTE_INIT( v9938 );
-PALETTE_INIT( v9958 );
+	DECLARE_PALETTE_INIT(v9958);
+
+protected:
+	virtual machine_config_constructor device_mconfig_additions() const;
+};
 
 
 #endif

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 #include "emu.h"
 #include "sound/speaker.h"
 #include "cpu/upd7810/upd7810.h"
@@ -136,6 +138,10 @@ void gamepock_state::machine_reset()
 	hd44102ch_init( 0 );
 	hd44102ch_init( 1 );
 	hd44102ch_init( 2 );
+
+	if (m_cart->exists())
+		m_maincpu->space(AS_PROGRAM).install_read_handler(0x4000,0xbfff, read8_delegate(FUNC(generic_slot_device::read_rom),(generic_slot_device*)m_cart));
+
 }
 
 UINT32 gamepock_state::screen_update_gamepock(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
@@ -212,12 +218,7 @@ UINT32 gamepock_state::screen_update_gamepock(screen_device &screen, bitmap_ind1
 }
 
 /* This is called whenever the T0 pin switches state */
-int gamepock_io_callback( device_t *device, int ioline, int state )
+WRITE_LINE_MEMBER(gamepock_state::gamepock_to_w)
 {
-	gamepock_state *driver_state = device->machine().driver_data<gamepock_state>();
-	if ( ioline == UPD7810_TO )
-	{
-		driver_state->m_speaker->level_w(state & 1);
-	}
-	return 0;
+	m_speaker->level_w(state & 1);
 }

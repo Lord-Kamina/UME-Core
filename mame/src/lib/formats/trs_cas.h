@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /*********************************************************************
 
     trs_cas.h
 
-    Format code for TRS80 (level 2) casette files.
+    Format code for TRS80 (level 2) cassette files.
 
 *********************************************************************/
 

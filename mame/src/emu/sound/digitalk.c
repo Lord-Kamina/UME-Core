@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #include "emu.h"
 #include "digitalk.h"
 
@@ -262,7 +264,7 @@ static const int pitch_vals[32] = {
 const device_type DIGITALKER = &device_creator<digitalker_device>;
 
 digitalker_device::digitalker_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, DIGITALKER, "Digitalker", tag, owner, clock),
+	: device_t(mconfig, DIGITALKER, "Digitalker", tag, owner, clock, "digitalker", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_rom(NULL),
 		m_stream(NULL),

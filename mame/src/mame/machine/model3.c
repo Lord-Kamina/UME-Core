@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Andrew Gardner, R. Belmont, Ville Linde
 /*
 
   machine/model3.c: functions emulating various aspects of the Model 3 hardware
@@ -19,7 +21,7 @@
  * 167 of the 3D-RAM manual.
  */
 
-#define NEXT(new_state) fsm[state->m_tap_state][new_state]
+#define NEXT(new_state) fsm[m_tap_state][new_state]
 
 static const INT32 fsm[][2] = {
 							{  1,  0 },  // 0  Test-Logic/Reset
@@ -64,12 +66,10 @@ static void insert_bit(UINT8 *buf, INT32 bit_num, INT32 bit)
  * Inserts a 32-bit ID code into the ID bit field.
  */
 
-static void insert_id(model3_state *state, UINT32 id, INT32 start_bit)
+void model3_state::insert_id(UINT32 id, INT32 start_bit)
 {
-	INT32 i;
-
-	for (i = 31; i >= 0; i--)
-		insert_bit(state->m_id_data, start_bit++, (id >> i) & 1);
+	for (int i = 31; i >= 0; i--)
+		insert_bit(m_id_data, start_bit++, (id >> i) & 1);
 }
 
 /*
@@ -122,10 +122,9 @@ static int shift(UINT8 *data, INT32 num_bits)
  *      TDO.
  */
 
-int model3_tap_read(running_machine &machine)
+int model3_state::tap_read()
 {
-	model3_state *state = machine.driver_data<model3_state>();
-	return state->m_tdo;
+	return m_tdo;
 }
 
 /*
@@ -141,73 +140,42 @@ int model3_tap_read(running_machine &machine)
  *      trst = Reset.
  */
 
-void model3_tap_write(running_machine &machine, int tck, int tms, int tdi, int trst)
+void model3_state::tap_write(int tck, int tms, int tdi, int trst)
 {
-	model3_state *state = machine.driver_data<model3_state>();
 	if (!tck)
 		return;
 
-	state->m_tap_state = NEXT(tms);
+	m_tap_state = NEXT(tms);
 
-	switch (state->m_tap_state)
+	switch (m_tap_state)
 	{
 	case 3:     // Capture-DR
+		//printf("capture dr (IR = %08X%08X\n", (UINT32)(m_ir >> 32),(UINT32)(m_ir));
 
-		/*
-		 * Read ASIC IDs.
-		 *
-		 * The ID Sequence is:
-		 *  - Jupiter
-		 *  - Mercury
-		 *  - Venus
-		 *  - Earth
-		 *  - Mars
-		 *  - Mars (again)
-		 *
-		 * Note that different Model 3 steps have different chip
-		 * revisions, hence the different IDs returned below.
-		 *
-		 * On Step 1.5 and 1.0, instruction 0x0C631F8C7FFE is used to retrieve
-		 * the ID codes but Step 2.0 is a little weirder. It seems to use this
-		 * and either the state of the TAP after reset or other instructions
-		 * to read the IDs as well. This can be emulated in one of 2 ways:
-		 * Ignore the instruction and always load up the data or load the
-		 * data on TAP reset and when the instruction is issued.
-		 */
+		if (m_ir == U64(0x000023fffffffffe))
+		{
+			for (int i=0; i < 32; i++)
+			{
+				m_id_data[i] = 0;
+			}
 
-		if (state->m_m3_step == 0x10)
-		{
-			insert_id(state, 0x116C7057, 1 + 0 * 32);
-			insert_id(state, 0x216C3057, 1 + 1 * 32);
-			insert_id(state, 0x116C4057, 1 + 2 * 32);
-			insert_id(state, 0x216C5057, 1 + 3 * 32);
-			insert_id(state, 0x116C6057, 1 + 4 * 32 + 1);
-			insert_id(state, 0x116C6057, 1 + 5 * 32 + 1);
-		}
-		else if (state->m_m3_step == 0x15)
-		{
-			insert_id(state, 0x316C7057, 1 + 0 * 32);
-			insert_id(state, 0x316C3057, 1 + 1 * 32);
-			insert_id(state, 0x216C4057, 1 + 2 * 32);      // Lost World may to use 0x016C4057
-			insert_id(state, 0x316C5057, 1 + 3 * 32);
-			insert_id(state, 0x216C6057, 1 + 4 * 32 + 1);
-			insert_id(state, 0x216C6057, 1 + 5 * 32 + 1);
-		}
-		else if (state->m_m3_step >= 0x20)
-		{
-			insert_id(state, 0x416C7057, 1 + 0 * 32);
-			insert_id(state, 0x416C3057, 1 + 1 * 32);
-			insert_id(state, 0x316C4057, 1 + 2 * 32);
-			insert_id(state, 0x416C5057, 1 + 3 * 32);
-			insert_id(state, 0x316C6057, 1 + 4 * 32 + 1);
-			insert_id(state, 0x316C6057, 1 + 5 * 32 + 1);
-		}
+			m_id_size = 41;
 
+			UINT64 res = 0x0040000000;
+
+			int start_bit = 0;
+			for (int i = 41; i >= 0; i--)
+				insert_bit(m_id_data, start_bit++, ((UINT64)(1 << i) & res) ? 1 : 0);
+		}
+		else if (m_ir == U64(0x00000c631f8c7ffe))
+		{
+			tap_set_asic_ids();
+		}
 		break;
 
 	case 4:     // Shift-DR
 
-		state->m_tdo = shift(state->m_id_data, state->m_id_size);
+		m_tdo = shift(m_id_data, m_id_size);
 		break;
 
 	case 10:    // Capture-IR
@@ -216,7 +184,7 @@ void model3_tap_write(running_machine &machine, int tck, int tms, int tdi, int t
 		 * Load lower 2 bits with 01 as per IEEE 1149.1-1990
 		 */
 
-		state->m_ir = 1;
+		m_ir = 1;
 		break;
 
 	case 11:    // Shift-IR
@@ -225,9 +193,9 @@ void model3_tap_write(running_machine &machine, int tck, int tms, int tdi, int t
 		 * Shift IR towards output and load in new data from TDI
 		 */
 
-		state->m_tdo = state->m_ir & 1;   // shift LSB to output
-		state->m_ir >>= 1;
-		state->m_ir |= ((UINT64) tdi << 45);
+		m_tdo = m_ir & 1;   // shift LSB to output
+		m_ir >>= 1;
+		m_ir |= ((UINT64) tdi << 45);
 		break;
 
 	case 15:    // Update-IR
@@ -237,12 +205,72 @@ void model3_tap_write(running_machine &machine, int tck, int tms, int tdi, int t
 		 * TCK)
 		 */
 
-		state->m_ir &= U64(0x3fffffffffff);
+		m_ir &= U64(0x3fffffffffff);
 		break;
 
 	default:
 		break;
 	}
+}
+
+void model3_state::tap_set_asic_ids()
+{
+	/*
+	 * Read ASIC IDs.
+	 *
+	 * The ID Sequence is:
+	 *  - Jupiter
+	 *  - Mercury
+	 *  - Venus
+	 *  - Earth
+	 *  - Mars
+	 *  - Mars (again)
+	 *
+	 * Note that different Model 3 steps have different chip
+	 * revisions, hence the different IDs returned below.
+	 *
+	 * On Step 1.5 and 1.0, instruction 0x0C631F8C7FFE is used to retrieve
+	 * the ID codes but Step 2.0 is a little weirder. It seems to use this
+	 * and either the state of the TAP after reset or other instructions
+	 * to read the IDs as well. This can be emulated in one of 2 ways:
+	 * Ignore the instruction and always load up the data or load the
+	 * data on TAP reset and when the instruction is issued.
+	 */
+
+	for (int i=0; i < 32; i++)
+	{
+		m_id_data[i] = 0;
+	}
+
+	if (m_m3_step == 0x10)
+	{
+		insert_id(0x116C7057, 1 + 0 * 32);
+		insert_id(0x216C3057, 1 + 1 * 32);
+		insert_id(0x116C4057, 1 + 2 * 32);
+		insert_id(0x216C5057, 1 + 3 * 32);
+		insert_id(0x116C6057, 1 + 4 * 32 + 1);
+		insert_id(0x116C6057, 1 + 5 * 32 + 1);
+	}
+	else if (m_m3_step == 0x15)
+	{
+		insert_id(0x316C7057, 1 + 0 * 32);
+		insert_id(0x316C3057, 1 + 1 * 32);
+		insert_id(0x216C4057, 1 + 2 * 32);      // Lost World may to use 0x016C4057
+		insert_id(0x316C5057, 1 + 3 * 32);
+		insert_id(0x216C6057, 1 + 4 * 32 + 1);
+		insert_id(0x216C6057, 1 + 5 * 32 + 1);
+	}
+	else if (m_m3_step >= 0x20)
+	{
+		insert_id(0x416C7057, 1 + 0 * 32);
+		insert_id(0x416C3057, 1 + 1 * 32);
+		insert_id(0x316C4057, 1 + 2 * 32);
+		insert_id(0x416C5057, 1 + 3 * 32);
+		insert_id(0x316C6057, 1 + 4 * 32 + 1);
+		insert_id(0x316C6057, 1 + 5 * 32 + 1);
+	}
+
+	m_id_size = 197;  // 197 bits
 }
 
 
@@ -252,25 +280,11 @@ void model3_tap_write(running_machine &machine, int tck, int tms, int tdi, int t
  * Resets the TAP (simulating a power up or SCAN_RST signal.)
  */
 
-void model3_tap_reset(running_machine &machine)
+void model3_state::tap_reset()
 {
-	model3_state *state = machine.driver_data<model3_state>();
-	state->m_id_size = 197;  // 197 bits
+	m_tap_state = 0;  // test-logic/reset
 
-	state->m_tap_state = 0;  // test-logic/reset
-}
-
-/*
- * void model3_machine_init(int step)
- *
- * step = BCD hardware rev.  0x10 for 1.0, 0x15 for 1.5, 0x20 for 2.0, etc.
- *
- */
-
-void model3_machine_init(running_machine &machine, int step)
-{
-	model3_state *state = machine.driver_data<model3_state>();
-	state->m_m3_step = step;
+	tap_set_asic_ids();
 }
 
 /*****************************************************************************/
@@ -334,7 +348,6 @@ static UINT8 rtc_get_reg(running_machine &machine, int reg)
 
 		default:
 			fatalerror("RTC-72421: Unknown reg %02X\n", reg);
-			return 0;
 	}
 }
 

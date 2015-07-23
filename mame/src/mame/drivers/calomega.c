@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Roberto Fresca
 /**********************************************************************************
 
     .----------------------------------------.
@@ -648,7 +650,6 @@
 #include "cpu/m6502/m65c02.h"
 #include "video/mc6845.h"
 #include "machine/6821pia.h"
-#include "machine/6850acia.h"
 #include "machine/nvram.h"
 #include "sound/ay8910.h"
 #include "includes/calomega.h"
@@ -658,28 +659,24 @@
 *               Read/Write Handlers               *
 **************************************************/
 
-WRITE_LINE_MEMBER(calomega_state::tx_rx_clk)
+WRITE_LINE_MEMBER(calomega_state::update_aciabaud_scale)
 {
-	int trx_clk;
-	UINT8 dsw2 = ioport("SW2")->read();
-	trx_clk = UART_CLOCK * dsw2 / 128;
-	acia6850_device *acia = machine().device<acia6850_device>("acia6850_0");
-	acia->set_rx_clock(trx_clk);
-	acia->set_tx_clock(trx_clk);
-}
+	UINT8 dsw2 = m_sw2->read();
 
+	m_aciabaud->set_clock_scale((double)dsw2 / 128);
+}
 
 READ8_MEMBER(calomega_state::s903_mux_port_r)
 {
 	switch( m_s903_mux_data & 0xf0 )    /* bits 4-7 */
 	{
-		case 0x10: return ioport("IN0-0")->read();
-		case 0x20: return ioport("IN0-1")->read();
-		case 0x40: return ioport("IN0-2")->read();
-		case 0x80: return ioport("IN0-3")->read();
+		case 0x10: return m_in0_0->read();
+		case 0x20: return m_in0_1->read();
+		case 0x40: return m_in0_2->read();
+		case 0x80: return m_in0_3->read();
 	}
 
-	return ioport("FRQ")->read();   /* bit7 used for 50/60 Hz selector */
+	return m_frq->read();   /* bit7 used for 50/60 Hz selector */
 }
 
 WRITE8_MEMBER(calomega_state::s903_mux_w)
@@ -693,13 +690,13 @@ READ8_MEMBER(calomega_state::s905_mux_port_r)
 {
 	switch( m_s905_mux_data & 0x0f )    /* bits 0-3 */
 	{
-		case 0x01: return ioport("IN0-0")->read();
-		case 0x02: return ioport("IN0-1")->read();
-		case 0x04: return ioport("IN0-2")->read();
-		case 0x08: return ioport("IN0-3")->read();
+		case 0x01: return m_in0_0->read();
+		case 0x02: return m_in0_1->read();
+		case 0x04: return m_in0_2->read();
+		case 0x08: return m_in0_3->read();
 	}
 
-	return ioport("FRQ")->read();   /* bit6 used for 50/60 Hz selector */
+	return m_frq->read();   /* bit6 used for 50/60 Hz selector */
 }
 
 WRITE8_MEMBER(calomega_state::s905_mux_w)
@@ -714,7 +711,7 @@ READ8_MEMBER(calomega_state::pia0_ain_r)
 {
 	/* Valid input port. Each polled value is stored at $0538 */
 	logerror("PIA0: Port A in\n");
-	return ioport("IN0")->read();
+	return m_in0->read();
 }
 
 READ8_MEMBER(calomega_state::pia0_bin_r)
@@ -733,10 +730,10 @@ WRITE8_MEMBER(calomega_state::pia0_bout_w)
 	logerror("PIA0: Port B out: %02X\n", data);
 }
 
-WRITE8_MEMBER(calomega_state::pia0_ca2_w)
+WRITE_LINE_MEMBER(calomega_state::pia0_ca2_w)
 {
 	/* Seems a kind of "heartbit" watchdog, switching 1's and 0's */
-	logerror("PIA0: CA2: %02X\n", data);
+	logerror("PIA0: CA2: %02X\n", state);
 }
 
 
@@ -761,17 +758,6 @@ WRITE8_MEMBER(calomega_state::pia1_aout_w)
 WRITE8_MEMBER(calomega_state::pia1_bout_w)
 {
 	logerror("PIA1: Port B out: %02X\n", data);
-}
-
-
-WRITE8_MEMBER(calomega_state::ay_aout_w)
-{
-	logerror("AY8910: Port A out: %02X\n", data);
-}
-
-WRITE8_MEMBER(calomega_state::ay_bout_w)
-{
-	logerror("AY8910: Port B out: %02X\n", data);
 }
 
 
@@ -840,8 +826,8 @@ static ADDRESS_MAP_START( sys903_map, AS_PROGRAM, 8, calomega_state )
 	AM_RANGE(0x0881, 0x0881) AM_DEVREADWRITE("crtc", mc6845_device, register_r, register_w)
 	AM_RANGE(0x08c4, 0x08c7) AM_DEVREADWRITE("pia0", pia6821_device, read, write)
 	AM_RANGE(0x08c8, 0x08cb) AM_DEVREADWRITE("pia1", pia6821_device, read, write)
-	AM_RANGE(0x08d0, 0x08d0) AM_DEVREADWRITE("acia6850_0", acia6850_device, status_read, control_write)
-	AM_RANGE(0x08d1, 0x08d1) AM_DEVREADWRITE("acia6850_0", acia6850_device, data_read, data_write)
+	AM_RANGE(0x08d0, 0x08d0) AM_DEVREADWRITE("acia6850_0", acia6850_device, status_r, control_w)
+	AM_RANGE(0x08d1, 0x08d1) AM_DEVREADWRITE("acia6850_0", acia6850_device, data_r, data_w)
 	AM_RANGE(0x1000, 0x13ff) AM_RAM_WRITE(calomega_videoram_w) AM_SHARE("videoram")
 	AM_RANGE(0x1400, 0x17ff) AM_RAM_WRITE(calomega_colorram_w) AM_SHARE("colorram")
 	AM_RANGE(0x1800, 0x3fff) AM_ROM
@@ -1538,12 +1524,11 @@ static INPUT_PORTS_START( arcadebj )
 	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )  PORT_DIPLOCATION("SW2:2")
 	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x40, 0x40, DEF_STR( Unknown ) )  PORT_DIPLOCATION("SW2:3")
-	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x80, 0x80, DEF_STR( Unknown ) )  PORT_DIPLOCATION("SW2:4")
-	PORT_DIPSETTING(    0x80, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0xC0, 0x80, "Maximum Bet")        PORT_DIPLOCATION("SW2:3,4")
+	PORT_DIPSETTING(    0x00, "5" )
+	PORT_DIPSETTING(    0x40, "10" )
+	PORT_DIPSETTING(    0x80, "20" )
+	PORT_DIPSETTING(    0xC0, "50" )
 
 	PORT_START("SW2")   /* baud (serial 6850-4024), SW1 in schematics */
 	PORT_DIPNAME( 0x3f, 0x08, "Baud Rate" )         PORT_DIPLOCATION("SW1:1,2,3,4,5,6")
@@ -1663,13 +1648,13 @@ static INPUT_PORTS_START( comg074 )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )        /* L7 */
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNKNOWN )        /* L8 */
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN )        /* L9 */
-	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Unknown ) )  PORT_DIPLOCATION("SW2:1")
 	PORT_DIPSETTING(    0x10, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )  PORT_DIPLOCATION("SW2:2")
 	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0xC0, 0x80, "Maximum Bet")
+	PORT_DIPNAME( 0xC0, 0x80, "Maximum Bet")        PORT_DIPLOCATION("SW2:3,4")
 	PORT_DIPSETTING(    0x00, "5" )
 	PORT_DIPSETTING(    0x40, "10" )
 	PORT_DIPSETTING(    0x80, "40" )
@@ -1793,12 +1778,12 @@ static INPUT_PORTS_START( comg076 )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )        /* L7 */
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNKNOWN )        /* L8 */
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN )        /* L9 */
-	PORT_DIPNAME( 0x30, 0x00, "Minimum Winning Hand")
+	PORT_DIPNAME( 0x30, 0x00, "Minimum Winning Hand") PORT_DIPLOCATION("SW2:1,2")
 	PORT_DIPSETTING(    0x00, "Jacks or Better" )
 	PORT_DIPSETTING(    0x20, "Queens or Better" )
 	PORT_DIPSETTING(    0x30, "Kings or Better" )
 	PORT_DIPSETTING(    0x10, "Pair of Aces" )
-	PORT_DIPNAME( 0xC0, 0x80, "Maximum Bet")
+	PORT_DIPNAME( 0xC0, 0x80, "Maximum Bet")        PORT_DIPLOCATION("SW2:3,4")
 	PORT_DIPSETTING(    0x00, "1" )
 	PORT_DIPSETTING(    0x80, "10" )
 	PORT_DIPSETTING(    0xC0, "20" )
@@ -1922,13 +1907,13 @@ static INPUT_PORTS_START( comg128 )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )        /* L7 */
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNKNOWN )        /* L8 */
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN )        /* L9 */
-	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Unknown ) )   PORT_DIPLOCATION("SW2:1")
 	PORT_DIPSETTING(    0x10, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )   PORT_DIPLOCATION("SW2:2")
 	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0xC0, 0x40, "Hands per Coin")
+	PORT_DIPNAME( 0xC0, 0x40, "Hands per Coin")      PORT_DIPLOCATION("SW2:3,4")
 	PORT_DIPSETTING(    0x00, "2" )
 	PORT_DIPSETTING(    0x40, "3" )
 	PORT_DIPSETTING(    0x80, "4" )
@@ -2053,9 +2038,11 @@ static INPUT_PORTS_START( elgrande )
 	PORT_DIPNAME( 0x04, 0x04, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x04, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x08, 0x08, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x08, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x08, 0x08, DEF_STR( Coin_B ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( 1C_1C ) )           PORT_CONDITION("FRQ",0x40,EQUALS,0x00)
+	PORT_DIPSETTING(    0x08, "1 Coin/10 Credits" )        PORT_CONDITION("FRQ",0x40,EQUALS,0x00)
+	PORT_DIPSETTING(    0x00, "1 Coin/25 Credits" )        PORT_CONDITION("FRQ",0x40,EQUALS,0x40)
+	PORT_DIPSETTING(    0x08, "1 Coin/50 Credits" )        PORT_CONDITION("FRQ",0x40,EQUALS,0x40)
 	PORT_DIPNAME( 0x30, 0x20, "Minimum Winning Hand")
 	PORT_DIPSETTING(    0x20, "Jacks or Better" )
 	PORT_DIPSETTING(    0x30, "Queens or Better" )
@@ -2086,7 +2073,7 @@ static INPUT_PORTS_START( elgrande )
 	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x40, 0x40, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x40, 0x40, "Coin B Modifer" )
 	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 	PORT_DIPNAME( 0x80, 0x80, "Frequency" )         PORT_DIPLOCATION("FRQ:1")
@@ -2146,8 +2133,10 @@ static INPUT_PORTS_START( jjpoker )
 	PORT_DIPSETTING(    0x04, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 	PORT_DIPNAME( 0x08, 0x08, DEF_STR( Coinage ) )
-	PORT_DIPSETTING(    0x08, "1 coin 50 credits" )
-	PORT_DIPSETTING(    0x00, "1 coin 25 credits" )
+	PORT_DIPSETTING(    0x00, DEF_STR( 1C_1C ) )           PORT_CONDITION("FRQ",0x40,EQUALS,0x00)
+	PORT_DIPSETTING(    0x08, "1 Coin/10 Credits" )        PORT_CONDITION("FRQ",0x40,EQUALS,0x00)
+	PORT_DIPSETTING(    0x00, "1 Coin/25 Credits" )        PORT_CONDITION("FRQ",0x40,EQUALS,0x40)
+	PORT_DIPSETTING(    0x08, "1 Coin/50 Credits" )        PORT_CONDITION("FRQ",0x40,EQUALS,0x40)
 	PORT_DIPNAME( 0x30, 0x20, "Minimum Winning Hand")
 	PORT_DIPSETTING(    0x20, "Jacks or Better" )
 	PORT_DIPSETTING(    0x30, "Queens or Better" )
@@ -2178,7 +2167,7 @@ static INPUT_PORTS_START( jjpoker )
 	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x40, 0x40, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x40, 0x40, "Coinage Modifer" )
 	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 	PORT_DIPNAME( 0x80, 0x80, "Frequency" )         PORT_DIPLOCATION("FRQ:1")
@@ -2238,8 +2227,10 @@ static INPUT_PORTS_START( ssipkr )
 	PORT_DIPSETTING(    0x04, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 	PORT_DIPNAME( 0x08, 0x08, DEF_STR( Coinage ) )
-	PORT_DIPSETTING(    0x08, "1 coin 1 credits" )
-	PORT_DIPSETTING(    0x00, "1 coin 10 credits" )
+	PORT_DIPSETTING(    0x08, "1 Coin/1 Point" )          PORT_CONDITION("FRQ",0x40,EQUALS,0x40)
+	PORT_DIPSETTING(    0x08, "1 Coin/5 Points" )         PORT_CONDITION("FRQ",0x40,EQUALS,0x00)
+	PORT_DIPSETTING(    0x00, "1 Coin/10 Points" )        PORT_CONDITION("FRQ",0x40,EQUALS,0x40)
+	PORT_DIPSETTING(    0x00, "1 Coin/25 Points" )        PORT_CONDITION("FRQ",0x40,EQUALS,0x00)
 	PORT_DIPNAME( 0x30, 0x20, "Minimum Winning Hand")
 	PORT_DIPSETTING(    0x20, "Jacks or Better" )
 	PORT_DIPSETTING(    0x30, "Queens or Better" )
@@ -2270,7 +2261,7 @@ static INPUT_PORTS_START( ssipkr )
 	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x40, 0x40, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x40, 0x40, "Coinage Modifer" )
 	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 	PORT_DIPNAME( 0x80, 0x80, "Frequency" )         PORT_DIPLOCATION("FRQ:1")
@@ -2350,13 +2341,13 @@ static const gfx_layout tilelayout =
 *************************************************/
 
 static GFXDECODE_START( calomega )
-	GFXDECODE_ENTRY( "gfx1", 0, charlayout, 0, 16 )
-	GFXDECODE_ENTRY( "gfx2", 0, tilelayout, (8 * 3) + 128, 16 )
+	GFXDECODE_ENTRY( "gfx1", 0, charlayout, 0, 32 )
+	GFXDECODE_ENTRY( "gfx2", 0, tilelayout, 0, 32 )
 GFXDECODE_END
 
 static GFXDECODE_START( sys906 )
-	GFXDECODE_ENTRY( "gfx1", 0, tilelayout, 0, 16 )
-	GFXDECODE_ENTRY( "gfx1", 0x1000, tilelayout, (8 * 3) + 128, 16 )
+	GFXDECODE_ENTRY( "gfx1", 0, tilelayout, 0, 32 )
+	GFXDECODE_ENTRY( "gfx1", 0x1000, tilelayout, 0, 32 )
 GFXDECODE_END
 
 
@@ -2410,21 +2401,6 @@ GFXDECODE_END
    40  |      CA1       | U34 (556, pin 5)
 
 */
-static const pia6821_interface sys903_pia0_intf =
-{
-	DEVCB_DRIVER_MEMBER(calomega_state,s903_mux_port_r),        /* port A in */
-	DEVCB_NULL,     /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_NULL,     /* port A out */
-	DEVCB_DRIVER_MEMBER(calomega_state,lamps_903a_w),       /* port B out */
-	DEVCB_NULL,     /* line CA2 out */
-	DEVCB_NULL,     /* port CB2 out */
-	DEVCB_NULL,     /* IRQA */
-	DEVCB_NULL      /* IRQB */
-};
 
 /********** Systems 903/904 PIA-1 (U39) wiring **********
 
@@ -2472,21 +2448,6 @@ static const pia6821_interface sys903_pia0_intf =
    40  |      CA1       | GND
 
 */
-static const pia6821_interface sys903_pia1_intf =
-{
-	DEVCB_INPUT_PORT("SW1"),        /* port A in */
-	DEVCB_NULL,                     /* port B in */
-	DEVCB_NULL,                     /* line CA1 in */
-	DEVCB_NULL,                     /* line CB1 in */
-	DEVCB_NULL,                     /* line CA2 in */
-	DEVCB_NULL,                     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(calomega_state,lamps_903b_w),   /* port A out */
-	DEVCB_DRIVER_MEMBER(calomega_state,s903_mux_w),     /* port B out */
-	DEVCB_NULL,                     /* line CA2 out */
-	DEVCB_NULL,                     /* port CB2 out */
-	DEVCB_NULL,                     /* IRQA */
-	DEVCB_NULL                      /* IRQB */
-};
 
 /********** System 905 PIA-0 (U48) wiring **********
 
@@ -2534,21 +2495,6 @@ static const pia6821_interface sys903_pia1_intf =
    40  |      CA1       | N/C
 
 */
-static const pia6821_interface sys905_pia0_intf =
-{
-	DEVCB_DRIVER_MEMBER(calomega_state,s905_mux_port_r),    /* port A in */
-	DEVCB_NULL,                     /* port B in */
-	DEVCB_NULL,                     /* line CA1 in */
-	DEVCB_NULL,                     /* line CB1 in */
-	DEVCB_NULL,                     /* line CA2 in */
-	DEVCB_NULL,                     /* line CB2 in */
-	DEVCB_NULL,                     /* port A out */
-	DEVCB_DRIVER_MEMBER(calomega_state,lamps_905_w),        /* port B out */
-	DEVCB_NULL,                     /* line CA2 out */
-	DEVCB_NULL,                     /* port CB2 out */
-	DEVCB_NULL,                     /* IRQA */
-	DEVCB_NULL                      /* IRQB */
-};
 
 /********** Systems 905 PIA-1 (U63) wiring **********
 
@@ -2596,139 +2542,23 @@ static const pia6821_interface sys905_pia0_intf =
    40  |      CA1       | GND
 
 */
-static const pia6821_interface sys905_pia1_intf =
-{
-	DEVCB_INPUT_PORT("SW1"),    /* port A in */
-	DEVCB_NULL,                 /* port B in */
-	DEVCB_NULL,                 /* line CA1 in */
-	DEVCB_NULL,                 /* line CB1 in */
-	DEVCB_NULL,                 /* line CA2 in */
-	DEVCB_NULL,                 /* line CB2 in */
-	DEVCB_NULL,                 /* port A out */
-	DEVCB_DRIVER_MEMBER(calomega_state,s905_mux_w), /* port B out */
-	DEVCB_NULL,                 /* line CA2 out */
-	DEVCB_NULL,                 /* port CB2 out */
-	DEVCB_NULL,                 /* IRQA */
-	DEVCB_NULL                  /* IRQB */
-};
-
-
-/********** System 906 PIA-0  **********/
-static const pia6821_interface sys906_pia0_intf =
-{
-	DEVCB_DRIVER_MEMBER(calomega_state,pia0_ain_r),     /* port A in */     /* Valid input port. Each polled value is stored at $0538 */
-	DEVCB_DRIVER_MEMBER(calomega_state,pia0_bin_r),     /* port B in */
-	DEVCB_NULL,                     /* line CA1 in */
-	DEVCB_NULL,                     /* line CB1 in */
-	DEVCB_NULL,                     /* line CA2 in */
-	DEVCB_NULL,                     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(calomega_state,pia0_aout_w),        /* port A out */
-	DEVCB_DRIVER_MEMBER(calomega_state,pia0_bout_w),        /* port B out */
-	DEVCB_DRIVER_MEMBER(calomega_state,pia0_ca2_w),     /* line CA2 out */  /* Seems a kind of "heartbit" watchdog, switching 1's and 0's */
-	DEVCB_NULL,                     /* port CB2 out */
-	DEVCB_NULL,                     /* IRQA */
-	DEVCB_NULL                      /* IRQB */
-};
-
-/********** System 906 PIA-1  **********/
-static const pia6821_interface sys906_pia1_intf =
-{
-	DEVCB_DRIVER_MEMBER(calomega_state,pia1_ain_r),     /* port A in */
-	DEVCB_DRIVER_MEMBER(calomega_state,pia1_bin_r),     /* port B in */
-	DEVCB_NULL,                     /* line CA1 in */
-	DEVCB_NULL,                     /* line CB1 in */
-	DEVCB_NULL,                     /* line CA2 in */
-	DEVCB_NULL,                     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(calomega_state,pia1_aout_w),        /* port A out */
-	DEVCB_DRIVER_MEMBER(calomega_state,pia1_bout_w),        /* port B out */
-	DEVCB_NULL,                     /* line CA2 out */
-	DEVCB_NULL,                     /* port CB2 out */
-	DEVCB_NULL,                     /* IRQA */
-	DEVCB_NULL                      /* IRQB */
-};
-
 
 /*************************************************
 *                 ACIA Interface                 *
 *************************************************/
 
-READ_LINE_MEMBER(calomega_state::acia_rx_r)
-{
-	return m_rx_line;
-}
-
-WRITE_LINE_MEMBER(calomega_state::acia_tx_w)
+WRITE_LINE_MEMBER(calomega_state::write_acia_tx)
 {
 	m_tx_line = state;
 }
 
-static ACIA6850_INTERFACE( acia6850_intf )
+WRITE_LINE_MEMBER(calomega_state::write_acia_clock)
 {
-	UART_CLOCK,
-	UART_CLOCK,
-	DEVCB_DRIVER_LINE_MEMBER(calomega_state,acia_rx_r), /*&rx_line,*/
-	DEVCB_DRIVER_LINE_MEMBER(calomega_state,acia_tx_w), /*&tx_line,*/
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(calomega_state,tx_rx_clk)
-};
+	m_acia6850_0->write_txc(state);
+	m_acia6850_0->write_rxc(state);
 
-
-/*************************************************
-*                Sound Interfaces                *
-*************************************************/
-
-static const ay8910_interface sys903_ay8912_intf =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("SW3"),                /* from schematics */
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static const ay8910_interface sys905_ay8912_intf =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static const ay8910_interface sys906_ay8912_intf =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("SW2"),    /* From PCB pic. Value is stored at $0539 */
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(calomega_state,ay_aout_w),
-	DEVCB_DRIVER_MEMBER(calomega_state,ay_bout_w)
-};
-
-
-/*************************************************
-*                CRTC Interface                  *
-*************************************************/
-
-static MC6845_INTERFACE( mc6845_intf )
-{
-	"screen",   /* screen we are acting on */
-	false,      /* show border area */
-	8,          /* number of pixels per video memory address */
-	NULL,       /* before pixel update callback */
-	NULL,       /* row update callback */
-	NULL,       /* after pixel update callback */
-	DEVCB_NULL, /* callback for display state changes */
-	DEVCB_NULL, /* callback for cursor state changes */
-	DEVCB_NULL, /* HSYNC callback */
-	DEVCB_NULL, /* VSYNC callback */
-	NULL        /* update address callback */
-};
-
+	update_aciabaud_scale(0);
+}
 
 /*************************************************
 *                Machine Drivers                 *
@@ -2742,8 +2572,14 @@ static MACHINE_CONFIG_START( sys903, calomega_state )
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
-	MCFG_PIA6821_ADD("pia0", sys903_pia0_intf)
-	MCFG_PIA6821_ADD("pia1", sys903_pia1_intf)
+	MCFG_DEVICE_ADD("pia0", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(calomega_state,s903_mux_port_r))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(calomega_state,lamps_903a_w))
+
+	MCFG_DEVICE_ADD("pia1", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(IOPORT("SW1"))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(calomega_state, lamps_903b_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(calomega_state, s903_mux_w))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -2752,21 +2588,28 @@ static MACHINE_CONFIG_START( sys903, calomega_state )
 	MCFG_SCREEN_SIZE((39+1)*8, (31+1)*8)                  /* Taken from MC6845 init, registers 00 & 04. Normally programmed with (value-1) */
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 31*8-1)    /* Taken from MC6845 init, registers 01 & 06 */
 	MCFG_SCREEN_UPDATE_DRIVER(calomega_state, screen_update_calomega)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(calomega)
-	MCFG_PALETTE_LENGTH(1024)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", calomega)
+	MCFG_PALETTE_ADD("palette", 256) /* or 128? is the upper half of the PROMs really valid colors? */
+	MCFG_PALETTE_INIT_OWNER(calomega_state, calomega)
 
-
-	MCFG_MC6845_ADD("crtc", MC6845, CPU_CLOCK, mc6845_intf) /* 6845 @ CPU clock */
+	MCFG_MC6845_ADD("crtc", MC6845, "screen", CPU_CLOCK) /* 6845 @ CPU clock */
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("ay8912", AY8912, SND_CLOCK) /* confirmed */
-	MCFG_SOUND_CONFIG(sys903_ay8912_intf)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("SW3"))                /* from schematics */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.75)
 
 	/* acia */
-	MCFG_ACIA6850_ADD("acia6850_0", acia6850_intf)
+	MCFG_DEVICE_ADD("acia6850_0", ACIA6850, 0)
+	MCFG_ACIA6850_TXD_HANDLER(WRITELINE(calomega_state, write_acia_tx))
+
+	MCFG_DEVICE_ADD("aciabaud", CLOCK, UART_CLOCK)
+	MCFG_CLOCK_SIGNAL_HANDLER(WRITELINE(calomega_state, write_acia_clock))
 MACHINE_CONFIG_END
 
 
@@ -2779,9 +2622,11 @@ static MACHINE_CONFIG_DERIVED( s903mod, sys903 )
 
 	/* sound hardware */
 	MCFG_SOUND_MODIFY("ay8912")
-	MCFG_SOUND_CONFIG(sys905_ay8912_intf)
+	MCFG_AY8910_PORT_A_READ_CB(NULL)
 
 	MCFG_DEVICE_REMOVE("acia6850_0")
+
+	MCFG_DEVICE_REMOVE("aciabaud")
 MACHINE_CONFIG_END
 
 
@@ -2792,14 +2637,20 @@ static MACHINE_CONFIG_DERIVED( sys905, sys903 )
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(sys905_map)
 
-	MCFG_PIA6821_MODIFY("pia0", sys905_pia0_intf)
-	MCFG_PIA6821_MODIFY("pia1", sys905_pia1_intf)
+	MCFG_DEVICE_MODIFY("pia0")
+	MCFG_PIA_READPA_HANDLER(READ8(calomega_state,s905_mux_port_r))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(calomega_state,lamps_905_w))
+
+	MCFG_DEVICE_MODIFY("pia1")
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(calomega_state, s905_mux_w))
 
 	/* sound hardware */
 	MCFG_SOUND_MODIFY("ay8912")
-	MCFG_SOUND_CONFIG(sys905_ay8912_intf)
+	MCFG_AY8910_PORT_A_READ_CB(NULL)
 
 	MCFG_DEVICE_REMOVE("acia6850_0")
+
+	MCFG_DEVICE_REMOVE("aciabaud")
 MACHINE_CONFIG_END
 
 
@@ -2810,16 +2661,28 @@ static MACHINE_CONFIG_DERIVED( sys906, sys903 )
 	MCFG_CPU_REPLACE("maincpu", M65C02, CPU_CLOCK)  /* guess */
 	MCFG_CPU_PROGRAM_MAP(sys906_map)
 
-	MCFG_PIA6821_MODIFY("pia0", sys906_pia0_intf)
-	MCFG_PIA6821_MODIFY("pia1", sys906_pia1_intf)
+	MCFG_DEVICE_MODIFY("pia0")
+	MCFG_PIA_READPA_HANDLER(READ8(calomega_state, pia0_ain_r))
+	MCFG_PIA_READPB_HANDLER(READ8(calomega_state, pia0_bin_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(calomega_state, pia0_aout_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(calomega_state, pia0_bout_w))
+	MCFG_PIA_CA2_HANDLER(WRITELINE(calomega_state, pia0_ca2_w))
 
-	MCFG_GFXDECODE(sys906)
+	MCFG_DEVICE_MODIFY("pia1")
+	MCFG_PIA_READPA_HANDLER(READ8(calomega_state, pia1_ain_r))
+	MCFG_PIA_READPB_HANDLER(READ8(calomega_state, pia1_bin_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(calomega_state, pia1_aout_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(calomega_state, pia1_bout_w))
+
+	MCFG_GFXDECODE_MODIFY("gfxdecode", sys906)
 
 	/* sound hardware */
 	MCFG_SOUND_MODIFY("ay8912")
-	MCFG_SOUND_CONFIG(sys906_ay8912_intf)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("SW2"))    /* From PCB pic. Value is stored at $0539 */
 
 	MCFG_DEVICE_REMOVE("acia6850_0")
+
+	MCFG_DEVICE_REMOVE("aciabaud")
 MACHINE_CONFIG_END
 
 
@@ -2850,11 +2713,8 @@ ROM_START( comg074 )    /* Cal Omega v7.4 (Gaming Poker) */
 	ROM_LOAD( "poker_cg2b.u69", 0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "poker_cg2a.u68", 0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 ) /* from other set */
+	ROM_REGION( 0x100, "proms", 0 ) /* from other set */
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, BAD_DUMP CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg076 )    /* Cal Omega v7.6 (Arcade Poker) */
@@ -2873,11 +2733,8 @@ ROM_START( comg076 )    /* Cal Omega v7.6 (Arcade Poker) */
 	ROM_LOAD( "pkcgb.u69",  0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "pkcga.u68",  0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg079 )    /* Cal Omega v7.9 (Arcade Poker) */
@@ -2900,11 +2757,8 @@ ROM_START( comg079 )    /* Cal Omega v7.9 (Arcade Poker) */
 	ROM_LOAD( "pkcgb.u69",  0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "pkcga.u68",  0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg080 )    /* Cal Omega v8.0 (Arcade Black Jack) */
@@ -2923,11 +2777,8 @@ ROM_START( comg080 )    /* Cal Omega v8.0 (Arcade Black Jack) */
 	ROM_LOAD( "gpkcgb.u69", 0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "gpkcga.u68", 0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg094 )    /* Cal Omega v9.4 (Keno) */
@@ -2946,11 +2797,8 @@ ROM_START( comg094 )    /* Cal Omega v9.4 (Keno) */
 	ROM_LOAD( "kcgb.u69",   0x0800, 0x0800, CRC(2b9205d9) SHA1(48ed4dcef38e9567246f09bd9bea5bf291e7e1b9) )
 	ROM_LOAD( "kcga.u68",   0x1000, 0x0800, CRC(c4491e35) SHA1(44acb8bd7af287350b99d159b6f83015fcdbd93c) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg107 )    /* Cal Omega v10.7c (Big Game) */
@@ -2972,11 +2820,8 @@ ROM_START( comg107 )    /* Cal Omega v10.7c (Big Game) */
 	ROM_REGION( 0x0800, "user1", 0 )    /* keyboard interfase ROM */
 	ROM_LOAD( "lotkbd.sub", 0x0000, 0x0800, CRC(c1636ab5) SHA1(5a3ad24918751ca6a6640807e421e80f6b4cc844) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "bclr.u28",   0x0000, 0x0100, CRC(0ec45d01) SHA1(da73ae7e1c74913921dc378a97795c6da47dcbfb) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg123 )    /* Cal Omega v12.3 (Ticket Poker) */
@@ -2995,11 +2840,8 @@ ROM_START( comg123 )    /* Cal Omega v12.3 (Ticket Poker) */
 	ROM_LOAD( "pkcgb.u69",  0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "pkcga.u68",  0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg125 )    /* Cal Omega v12.5 (Bingo) */
@@ -3018,11 +2860,8 @@ ROM_START( comg125 )    /* Cal Omega v12.5 (Bingo) */
 	ROM_LOAD( "nbcgb.u69",  0x1000, 0x1000, CRC(9d409932) SHA1(d3ffca50a059278777238d206895a0d188f4ff6f) )
 	ROM_LOAD( "nbcga.u68",  0x2000, 0x1000, CRC(afe1a666) SHA1(c1530700a283d18e7136754d45904930ef424bcf) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "bclr.u28",   0x0000, 0x0100, CRC(0ec45d01) SHA1(da73ae7e1c74913921dc378a97795c6da47dcbfb) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg127 )    /* Cal Omega v12.7 (Keno) */
@@ -3041,11 +2880,8 @@ ROM_START( comg127 )    /* Cal Omega v12.7 (Keno) */
 	ROM_LOAD( "kcgb.u69",   0x0800, 0x0800, CRC(2b9205d9) SHA1(48ed4dcef38e9567246f09bd9bea5bf291e7e1b9) )
 	ROM_LOAD( "kcga.u68",   0x1000, 0x0800, CRC(c4491e35) SHA1(44acb8bd7af287350b99d159b6f83015fcdbd93c) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg128 )    /* Cal Omega v12.8 (Arcade Game) */
@@ -3064,11 +2900,8 @@ ROM_START( comg128 )    /* Cal Omega v12.8 (Arcade Game) */
 	ROM_LOAD( "pkcgb.u69",  0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "pkcga.u68",  0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg134 )    /* Cal Omega 13.4 (Nudge Keno) */
@@ -3087,11 +2920,8 @@ ROM_START( comg134 )    /* Cal Omega 13.4 (Nudge Keno) */
 	ROM_LOAD( "nbcgb.u69",  0x1000, 0x1000, CRC(9d409932) SHA1(d3ffca50a059278777238d206895a0d188f4ff6f) )
 	ROM_LOAD( "nbcga.u68",  0x2000, 0x1000, CRC(afe1a666) SHA1(c1530700a283d18e7136754d45904930ef424bcf) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "bclr.u28",   0x0000, 0x0100, CRC(0ec45d01) SHA1(da73ae7e1c74913921dc378a97795c6da47dcbfb) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg145 )    /* Cal Omega v14.5 (Pixels) */
@@ -3110,11 +2940,8 @@ ROM_START( comg145 )    /* Cal Omega v14.5 (Pixels) */
 	ROM_LOAD( "pxcgb.u69",  0x1000, 0x1000, CRC(a3bed6b1) SHA1(078cface4af9720bee3288f5f0236725c8bfb575) )
 	ROM_LOAD( "pxcga.u68",  0x2000, 0x1000, CRC(d80f064a) SHA1(1b22ca3e446ed3c6fb49a90c463394dec96bc4ec) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pixclr.u28", 0x0000, 0x0100, CRC(67d23e76) SHA1(826cf77ca5a4d492d66e45ee96a7780a94fbe634) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg157 )    /* Cal Omega v15.7 (Double-Draw Poker) */
@@ -3133,11 +2960,8 @@ ROM_START( comg157 )    /* Cal Omega v15.7 (Double-Draw Poker) */
 	ROM_LOAD( "gpkcgb.u69", 0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "gpkcga.u68", 0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg159 )    /* Cal Omega v15.9 (Wild Double-Up) */
@@ -3156,11 +2980,8 @@ ROM_START( comg159 )    /* Cal Omega v15.9 (Wild Double-Up) */
 	ROM_LOAD( "jkr2cgb.u69",    0x0800, 0x0800, CRC(d77dda31) SHA1(e11b476cf0b609a8a40981b81b4d83b3c86678dc) )
 	ROM_LOAD( "jkr2cga.u68",    0x1000, 0x0800, CRC(def60756) SHA1(fe71424fc638761d9ff65391261a030a2889ad5e) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "wldclr.u28", 0x0000, 0x0100, CRC(a26a8fae) SHA1(d570fe9443a0912bd34b81ac4c3e4c5f8901f523) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg164 )    /* Cal Omega v16.4 (Keno) */
@@ -3179,11 +3000,8 @@ ROM_START( comg164 )    /* Cal Omega v16.4 (Keno) */
 	ROM_LOAD( "kcgb.u69",   0x0800, 0x0800, CRC(2b9205d9) SHA1(48ed4dcef38e9567246f09bd9bea5bf291e7e1b9) )
 	ROM_LOAD( "kcga.u68",   0x1000, 0x0800, CRC(c4491e35) SHA1(44acb8bd7af287350b99d159b6f83015fcdbd93c) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg168 )    /* Cal Omega v16.8 (Keno) */
@@ -3202,11 +3020,8 @@ ROM_START( comg168 )    /* Cal Omega v16.8 (Keno) */
 	ROM_LOAD( "kcgb.u69",   0x0800, 0x0800, CRC(2b9205d9) SHA1(48ed4dcef38e9567246f09bd9bea5bf291e7e1b9) )
 	ROM_LOAD( "kcga.u68",   0x1000, 0x0800, CRC(c4491e35) SHA1(44acb8bd7af287350b99d159b6f83015fcdbd93c) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg172 )    /* Cal Omega v17.2 (Double Double Poker) */
@@ -3225,11 +3040,8 @@ ROM_START( comg172 )    /* Cal Omega v17.2 (Double Double Poker) */
 	ROM_LOAD( "jkrpkrcgb.u69",  0x0800, 0x0800, CRC(d77dda31) SHA1(e11b476cf0b609a8a40981b81b4d83b3c86678dc) )
 	ROM_LOAD( "jkrpkrcga.u68",  0x1000, 0x0800, CRC(def60756) SHA1(fe71424fc638761d9ff65391261a030a2889ad5e) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "wldclr.u28", 0x0000, 0x0100, CRC(a26a8fae) SHA1(d570fe9443a0912bd34b81ac4c3e4c5f8901f523) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg175 )    /* Cal Omega v17.5 (Gaming Draw Poker) */
@@ -3248,11 +3060,8 @@ ROM_START( comg175 )    /* Cal Omega v17.5 (Gaming Draw Poker) */
 	ROM_LOAD( "pkcgb.u69",  0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "pkcga.u68",  0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg176 )    /* Cal Omega 17.6 (Nudge Keno) */
@@ -3271,11 +3080,8 @@ ROM_START( comg176 )    /* Cal Omega 17.6 (Nudge Keno) */
 	ROM_LOAD( "nbcgb.u69",  0x1000, 0x1000, CRC(9d409932) SHA1(d3ffca50a059278777238d206895a0d188f4ff6f) )
 	ROM_LOAD( "nbcga.u68",  0x2000, 0x1000, CRC(afe1a666) SHA1(c1530700a283d18e7136754d45904930ef424bcf) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "bclr.u28",   0x0000, 0x0100, CRC(0ec45d01) SHA1(da73ae7e1c74913921dc378a97795c6da47dcbfb) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg181 )    /* Cal Omega 18.1 (Nudge Keno) */
@@ -3294,11 +3100,8 @@ ROM_START( comg181 )    /* Cal Omega 18.1 (Nudge Keno) */
 	ROM_LOAD( "nbcgb.u69",  0x1000, 0x1000, CRC(9d409932) SHA1(d3ffca50a059278777238d206895a0d188f4ff6f) )
 	ROM_LOAD( "nbcga.u68",  0x2000, 0x1000, CRC(afe1a666) SHA1(c1530700a283d18e7136754d45904930ef424bcf) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "bclr.u28",   0x0000, 0x0100, CRC(0ec45d01) SHA1(da73ae7e1c74913921dc378a97795c6da47dcbfb) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg183 )    /* Cal Omega v18.3 (Pixels) */
@@ -3317,11 +3120,8 @@ ROM_START( comg183 )    /* Cal Omega v18.3 (Pixels) */
 	ROM_LOAD( "pxcgb.u69",  0x1000, 0x1000, CRC(a3bed6b1) SHA1(078cface4af9720bee3288f5f0236725c8bfb575) )
 	ROM_LOAD( "pxcga.u68",  0x2000, 0x1000, CRC(d80f064a) SHA1(1b22ca3e446ed3c6fb49a90c463394dec96bc4ec) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pixclr.u28", 0x0000, 0x0100, CRC(67d23e76) SHA1(826cf77ca5a4d492d66e45ee96a7780a94fbe634) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg185 )    /* Cal Omega v18.5 (Pixels) */
@@ -3340,11 +3140,8 @@ ROM_START( comg185 )    /* Cal Omega v18.5 (Pixels) */
 	ROM_LOAD( "pxcgb.u69",  0x1000, 0x1000, CRC(a3bed6b1) SHA1(078cface4af9720bee3288f5f0236725c8bfb575) )
 	ROM_LOAD( "pxcga.u68",  0x2000, 0x1000, CRC(d80f064a) SHA1(1b22ca3e446ed3c6fb49a90c463394dec96bc4ec) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pixclr.u28", 0x0000, 0x0100, CRC(67d23e76) SHA1(826cf77ca5a4d492d66e45ee96a7780a94fbe634) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg186 )    /* Cal Omega v18.6 (Pixels) */
@@ -3363,11 +3160,8 @@ ROM_START( comg186 )    /* Cal Omega v18.6 (Pixels) */
 	ROM_LOAD( "pxcgb.u69",  0x1000, 0x1000, CRC(a3bed6b1) SHA1(078cface4af9720bee3288f5f0236725c8bfb575) )
 	ROM_LOAD( "pxcga.u68",  0x2000, 0x1000, CRC(d80f064a) SHA1(1b22ca3e446ed3c6fb49a90c463394dec96bc4ec) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pixclr.u28", 0x0000, 0x0100, CRC(67d23e76) SHA1(826cf77ca5a4d492d66e45ee96a7780a94fbe634) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg187 )    /* Cal Omega v18.7 (Amusement Poker) */
@@ -3386,11 +3180,8 @@ ROM_START( comg187 )    /* Cal Omega v18.7 (Amusement Poker) */
 	ROM_LOAD( "jkr2cgb.u69",    0x0800, 0x0800, CRC(d77dda31) SHA1(e11b476cf0b609a8a40981b81b4d83b3c86678dc) )
 	ROM_LOAD( "jkr2cga.u68",    0x1000, 0x0800, CRC(def60756) SHA1(fe71424fc638761d9ff65391261a030a2889ad5e) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "mltclr.u28", 0x0000, 0x0100, CRC(fefb0fa8) SHA1(66d86aa19d9d37ffd2840d6653fcec667bc716d4) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg204 )    /* Cal Omega v20.4 (Super Blackjack) */
@@ -3409,11 +3200,8 @@ ROM_START( comg204 )    /* Cal Omega v20.4 (Super Blackjack) */
 	ROM_LOAD( "jkr2cgb.u69",    0x0800, 0x0800, CRC(d77dda31) SHA1(e11b476cf0b609a8a40981b81b4d83b3c86678dc) )
 	ROM_LOAD( "jkr2cga.u68",    0x1000, 0x0800, CRC(def60756) SHA1(fe71424fc638761d9ff65391261a030a2889ad5e) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "mltclr.u28", 0x0000, 0x0100, CRC(fefb0fa8) SHA1(66d86aa19d9d37ffd2840d6653fcec667bc716d4) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg208 )    /* Cal Omega v20.8 (Winner's Choice) */
@@ -3432,11 +3220,8 @@ ROM_START( comg208 )    /* Cal Omega v20.8 (Winner's Choice) */
 	ROM_LOAD( "mlt2cgb.u69",    0x1000, 0x1000, CRC(d5173679) SHA1(396c9c3eb7a0a5e5d279d079e635c8e4e5581779) )
 	ROM_LOAD( "mlt2cga.u68",    0x2000, 0x1000, CRC(b7397d3a) SHA1(f35607a4cd60e4467e27474e8063b7a7a4a65d9f) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "mltclr.u28", 0x0000, 0x0100, CRC(fefb0fa8) SHA1(66d86aa19d9d37ffd2840d6653fcec667bc716d4) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg227 )    /* Cal Omega v22.7 (Amusement Poker (Double Double)) */
@@ -3455,11 +3240,8 @@ ROM_START( comg227 )    /* Cal Omega v22.7 (Amusement Poker (Double Double)) */
 	ROM_LOAD( "jkrpkrcgb.u69",  0x0800, 0x0800, CRC(d77dda31) SHA1(e11b476cf0b609a8a40981b81b4d83b3c86678dc) )
 	ROM_LOAD( "jkrpkrcga.u68",  0x1000, 0x0800, CRC(def60756) SHA1(fe71424fc638761d9ff65391261a030a2889ad5e) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "wldclr.u28", 0x0000, 0x0100, CRC(a26a8fae) SHA1(d570fe9443a0912bd34b81ac4c3e4c5f8901f523) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg230 )    /* Cal Omega v23.0 (FC Bingo (4-card)) */
@@ -3478,11 +3260,8 @@ ROM_START( comg230 )    /* Cal Omega v23.0 (FC Bingo (4-card)) */
 	ROM_LOAD( "fcbcgb.u69", 0x1000, 0x1000, BAD_DUMP CRC(a7548075) SHA1(a751289cbc8b726082b60740c0202c08e3981e24) )
 	ROM_LOAD( "fcbcga.u68", 0x2000, 0x1000, BAD_DUMP CRC(3fc39df9) SHA1(223d05f8969a1846a986b29395c98f97a3218bf7) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "fcbclr.u28", 0x0000, 0x0100, BAD_DUMP CRC(6db5a344) SHA1(5f1a81ac02a2a74252decd3bb95a5436cc943930) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg236 )    /* Cal Omega v23.6 (Hotline) */
@@ -3501,11 +3280,8 @@ ROM_START( comg236 )    /* Cal Omega v23.6 (Hotline) */
 	ROM_LOAD( "hlcgb.u69",  0x1000, 0x1000, CRC(db2d3eb7) SHA1(45f686edf7093069b44e895547c7ec67f820447d) )
 	ROM_LOAD( "hlcga.u68",  0x2000, 0x1000, CRC(a7e583fd) SHA1(d3b0aa9e24b6aedf24af55e5b149ab75d6f01a36) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "hlclr.u28",  0x0000, 0x0100, CRC(1c994cda) SHA1(5c8698b4c5e43146106c9da8a306e3099b26ca2d) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 /*
@@ -3557,11 +3333,8 @@ ROM_START( comg239 )    /* Cal Omega v23.9 (Gaming Draw Poker) */
 	ROM_LOAD( "pkcgb.u69",  0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "pkcga.u68",  0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "82s129n.u28",    0x0000, 0x0100, CRC(6db5a344) SHA1(5f1a81ac02a2a74252decd3bb95a5436cc943930) )
-	ROM_RELOAD(                 0x0100, 0x0100 )
-	ROM_RELOAD(                 0x0200, 0x0100 )
-	ROM_RELOAD(                 0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg240 )    /* Cal Omega v24.0 (Gaming Draw Poker) */
@@ -3580,11 +3353,8 @@ ROM_START( comg240 )    /* Cal Omega v24.0 (Gaming Draw Poker) */
 	ROM_LOAD( "cgb.u69",    0x0800, 0x0800, CRC(6bbb1e2d) SHA1(51ee282219bf84218886ad11a24bc6a8e7337527) )
 	ROM_LOAD( "cga.u68",    0x1000, 0x0800, CRC(6e3e9b1d) SHA1(14eb8d14ce16719a6ad7d13db01e47c8f05955f0) )
 
-	ROM_REGION( 0x400, "proms", 0 ) /* is this prom ok? */
+	ROM_REGION( 0x100, "proms", 0 ) /* is this prom ok? */
 	ROM_LOAD( "pok-6301.u28",   0x0000, 0x0100, CRC(56c2577b) SHA1(cb75882067e1e0d9f9369a37b5a829dd091d473e) )
-	ROM_RELOAD(                 0x0100, 0x0100 )
-	ROM_RELOAD(                 0x0200, 0x0100 )
-	ROM_RELOAD(                 0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg246 )    /* Cal Omega v24.6 (Hotline) */
@@ -3603,11 +3373,8 @@ ROM_START( comg246 )    /* Cal Omega v24.6 (Hotline) */
 	ROM_LOAD( "hlcgb.u69",  0x1000, 0x1000, CRC(db2d3eb7) SHA1(45f686edf7093069b44e895547c7ec67f820447d) )
 	ROM_LOAD( "hlcga.u68",  0x2000, 0x1000, CRC(a7e583fd) SHA1(d3b0aa9e24b6aedf24af55e5b149ab75d6f01a36) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "hlclr.u28",  0x0000, 0x0100, CRC(1c994cda) SHA1(5c8698b4c5e43146106c9da8a306e3099b26ca2d) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg272a )   /* Cal Omega v27.2 (Keno (amusement)) */
@@ -3626,11 +3393,8 @@ ROM_START( comg272a )   /* Cal Omega v27.2 (Keno (amusement)) */
 	ROM_LOAD( "kcgb.u69",   0x0800, 0x0800, CRC(2b9205d9) SHA1(48ed4dcef38e9567246f09bd9bea5bf291e7e1b9) )
 	ROM_LOAD( "kcga.u68",   0x1000, 0x0800, CRC(c4491e35) SHA1(44acb8bd7af287350b99d159b6f83015fcdbd93c) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg272b )   /* Cal Omega v27.2 (Keno (gaming)) */
@@ -3649,11 +3413,8 @@ ROM_START( comg272b )   /* Cal Omega v27.2 (Keno (gaming)) */
 	ROM_LOAD( "kcgb.u69",   0x0800, 0x0800, CRC(2b9205d9) SHA1(48ed4dcef38e9567246f09bd9bea5bf291e7e1b9) )
 	ROM_LOAD( "kcga.u68",   0x1000, 0x0800, CRC(c4491e35) SHA1(44acb8bd7af287350b99d159b6f83015fcdbd93c) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "pokclr.u28", 0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(             0x0100, 0x0100 )
-	ROM_RELOAD(             0x0200, 0x0100 )
-	ROM_RELOAD(             0x0300, 0x0100 )
 ROM_END
 
 /*
@@ -3680,9 +3441,8 @@ ROM_START( comg5108 )   /* Cal Omega v51.08 (Gaming Poker) */
 	ROM_LOAD( "cg2b.u5",    0x2000, 0x2000, CRC(1f79f76d) SHA1(b2bce60e24dd61977f7bf6ee4705ca7d104ab388) )
 	ROM_LOAD( "cg2a.u6",    0x4000, 0x2000, CRC(d5fd9fc2) SHA1(68472e7271f835656197109620bb3988fc52308a) )
 
-	ROM_REGION( 0x400, "proms", 0 ) /* from other set */
+	ROM_REGION( 0x200, "proms", 0 ) /* from other set, upper half is empty */
 	ROM_LOAD( "bprom.u16",  0x0000, 0x0200, CRC(a6d43709) SHA1(cbff2cb60137462dc0b7c7719a64574218d96c62) )
-	ROM_RELOAD(             0x0200, 0x0200 )
 ROM_END
 
 
@@ -3703,11 +3463,8 @@ ROM_START( comg903d )   /* Cal Omega 903d (System 903 diag.PROM) */
 	ROM_REGION( 0x1800, "gfx2", 0 )
 	ROM_FILL(                   0x0000, 0x1800, 0xff )  /* removed all ROMs (requested by the manual) */
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "testclr.u28",    0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(                 0x0100, 0x0100 )
-	ROM_RELOAD(                 0x0200, 0x0100 )
-	ROM_RELOAD(                 0x0300, 0x0100 )
 ROM_END
 
 ROM_START( comg905d )   /* Cal Omega 905d (System 905 diag.PROM) */
@@ -3724,11 +3481,8 @@ ROM_START( comg905d )   /* Cal Omega 905d (System 905 diag.PROM) */
 	ROM_REGION( 0x1800, "gfx2", 0 )
 	ROM_FILL(                   0x0000, 0x1800, 0xff )  /* removed all ROMs (requested by the manual) */
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "testclr.u28",    0x0000, 0x0100, CRC(a8191ef7) SHA1(d6f777980179ab091e2713ee815d46bf9c0ac486) )
-	ROM_RELOAD(                 0x0100, 0x0100 )
-	ROM_RELOAD(                 0x0200, 0x0100 )
-	ROM_RELOAD(                 0x0300, 0x0100 )
 ROM_END
 
 
@@ -3778,11 +3532,8 @@ ROM_START( elgrande )
 	ROM_LOAD( "d1.u69", 0x0800, 0x0800, CRC(ed3c83b7) SHA1(93e2134de3d9f79a6cff0391c1a32fccd3840c3f) )
 	ROM_LOAD( "d1.u68", 0x1000, 0x0800, CRC(81d07f12) SHA1(c14226f8bc1d08fcdfc5cb71fcaf6e070fa2d4a8) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "d1.u28", 0x0000, 0x0100, CRC(a26a8fae) SHA1(d570fe9443a0912bd34b81ac4c3e4c5f8901f523) )
-	ROM_RELOAD(         0x0100, 0x0100 )
-	ROM_RELOAD(         0x0200, 0x0100 )
-	ROM_RELOAD(         0x0300, 0x0100 )
 ROM_END
 
 ROM_START( jjpoker )    /* tuni-83 */
@@ -3801,11 +3552,8 @@ ROM_START( jjpoker )    /* tuni-83 */
 	ROM_LOAD( "tuni-83.u69",    0x0800, 0x0800, CRC(3483b4fb) SHA1(ac04b68c5fb8f8f142582181ad13bee87636cead) )
 	ROM_LOAD( "tuni-83.u68",    0x1000, 0x0800, CRC(e055a148) SHA1(d80e4330dce96b98df5bec731876f185476d6058) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "tunipoker.u28",  0x0000, 0x0100, CRC(5101a33b) SHA1(a36bc421064d0ed96beb27b549f69adce0a553c2) )
-	ROM_RELOAD(                 0x0100, 0x0100 )
-	ROM_RELOAD(                 0x0200, 0x0100 )
-	ROM_RELOAD(                 0x0300, 0x0100 )
 ROM_END
 
 ROM_START( jjpokerb )   /* pokr_j */
@@ -3824,11 +3572,8 @@ ROM_START( jjpokerb )   /* pokr_j */
 	ROM_LOAD( "tuni-83.u69",    0x0800, 0x0800, CRC(3483b4fb) SHA1(ac04b68c5fb8f8f142582181ad13bee87636cead) )
 	ROM_LOAD( "tuni-83.u68",    0x1000, 0x0800, CRC(e055a148) SHA1(d80e4330dce96b98df5bec731876f185476d6058) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "tunipoker.u28",  0x0000, 0x0100, CRC(5101a33b) SHA1(a36bc421064d0ed96beb27b549f69adce0a553c2) )
-	ROM_RELOAD(                 0x0100, 0x0100 )
-	ROM_RELOAD(                 0x0200, 0x0100 )
-	ROM_RELOAD(                 0x0300, 0x0100 )
 ROM_END
 
 ROM_START( ssipkr24 )   /* pokr02_4 (gfx and prom from jjpoker) */
@@ -3847,11 +3592,8 @@ ROM_START( ssipkr24 )   /* pokr02_4 (gfx and prom from jjpoker) */
 	ROM_LOAD( "tuni-83.u69",    0x0800, 0x0800, BAD_DUMP CRC(3483b4fb) SHA1(ac04b68c5fb8f8f142582181ad13bee87636cead) )
 	ROM_LOAD( "tuni-83.u68",    0x1000, 0x0800, BAD_DUMP CRC(e055a148) SHA1(d80e4330dce96b98df5bec731876f185476d6058) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "tunipoker.u28",  0x0000, 0x0100, BAD_DUMP CRC(5101a33b) SHA1(a36bc421064d0ed96beb27b549f69adce0a553c2) )
-	ROM_RELOAD(                 0x0100, 0x0100 )
-	ROM_RELOAD(                 0x0200, 0x0100 )
-	ROM_RELOAD(                 0x0300, 0x0100 )
 ROM_END
 
 ROM_START( ssipkr30 )   /* pokr03_0 (gfx and prom from jjpoker) */
@@ -3870,11 +3612,8 @@ ROM_START( ssipkr30 )   /* pokr03_0 (gfx and prom from jjpoker) */
 	ROM_LOAD( "tuni-83.u69",    0x0800, 0x0800, BAD_DUMP CRC(3483b4fb) SHA1(ac04b68c5fb8f8f142582181ad13bee87636cead) )
 	ROM_LOAD( "tuni-83.u68",    0x1000, 0x0800, BAD_DUMP CRC(e055a148) SHA1(d80e4330dce96b98df5bec731876f185476d6058) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "tunipoker.u28",  0x0000, 0x0100, BAD_DUMP CRC(5101a33b) SHA1(a36bc421064d0ed96beb27b549f69adce0a553c2) )
-	ROM_RELOAD(                 0x0100, 0x0100 )
-	ROM_RELOAD(                 0x0200, 0x0100 )
-	ROM_RELOAD(                 0x0300, 0x0100 )
 ROM_END
 
 ROM_START( ssipkr40 )   /* (gfx and prom from jjpoker) */
@@ -3893,11 +3632,8 @@ ROM_START( ssipkr40 )   /* (gfx and prom from jjpoker) */
 	ROM_LOAD( "tuni-83.u69",    0x0800, 0x0800, BAD_DUMP CRC(3483b4fb) SHA1(ac04b68c5fb8f8f142582181ad13bee87636cead) )
 	ROM_LOAD( "tuni-83.u68",    0x1000, 0x0800, BAD_DUMP CRC(e055a148) SHA1(d80e4330dce96b98df5bec731876f185476d6058) )
 
-	ROM_REGION( 0x400, "proms", 0 )
+	ROM_REGION( 0x100, "proms", 0 )
 	ROM_LOAD( "tunipoker.u28",  0x0000, 0x0100, BAD_DUMP CRC(5101a33b) SHA1(a36bc421064d0ed96beb27b549f69adce0a553c2) )
-	ROM_RELOAD(                 0x0100, 0x0100 )
-	ROM_RELOAD(                 0x0200, 0x0100 )
-	ROM_RELOAD(                 0x0300, 0x0100 )
 ROM_END
 
 
@@ -3905,56 +3641,25 @@ ROM_END
 *                  Driver Init                   *
 *************************************************/
 
-DRIVER_INIT_MEMBER(calomega_state,standard)
+DRIVER_INIT_MEMBER(calomega_state,sys903)
 {
-	/* background color is adjusted through RGB pots */
-	int x;
-	UINT8 *BPR = memregion( "proms" )->base();
-
-	for (x = 0x0000; x < 0x0400; x++)
-	{
-		if (BPR[x] == 0x07)
-			BPR[x] = 0x04;  /* blue background */
-	}
+	save_item(NAME(m_tx_line));
+	save_item(NAME(m_s903_mux_data));
 }
 
-DRIVER_INIT_MEMBER(calomega_state,elgrande)
+DRIVER_INIT_MEMBER(calomega_state,s903mod)
 {
-	int x;
-	UINT8 *BPR = memregion( "proms" )->base();
-
-	/* background color is adjusted through RGB pots */
-	for (x = 0x0000; x < 0x0400; x++)
-	{
-		if (BPR[x] == 0x07)
-			BPR[x] = 0x00; /* black background */
-	}
+	save_item(NAME(m_s903_mux_data));
 }
 
-DRIVER_INIT_MEMBER(calomega_state,jjpoker)
+DRIVER_INIT_MEMBER(calomega_state,sys905)
 {
-	/* background color is adjusted through RGB pots */
-	int x;
-	UINT8 *BPR = memregion( "proms" )->base();
-
-	for (x = 0x0000; x < 0x0400; x++)
-	{
-		if (BPR[x] == 0x02)
-			BPR[x] = 0x00;  /* black background */
-	}
+	save_item(NAME(m_s905_mux_data));
 }
 
 DRIVER_INIT_MEMBER(calomega_state,comg080)
 {
-	/* background color is adjusted through RGB pots */
-	int x;
-	UINT8 *BPR = memregion( "proms" )->base();
-
-	for (x = 0x0000; x < 0x0400; x++)
-	{
-		if (BPR[x] == 0x07)
-			BPR[x] = 0x04;  /* blue background */
-	}
+	DRIVER_INIT_CALL(sys903);
 
 	/* Injecting missing Start and NMI vectors...
 	   Start = $2042;  NMI = $26f8;
@@ -3977,50 +3682,50 @@ DRIVER_INIT_MEMBER(calomega_state,comg080)
 *************************************************/
 
 /*    YEAR  NAME      PARENT    MACHINE   INPUT     INIT      ROT    COMPANY                                  FULLNAME                                                    FLAGS   */
-GAME( 1981, comg074,  0,        sys903,   comg074, calomega_state,  standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 7.4 (Gaming Poker, W.Export)",             0 )
-GAME( 1981, comg076,  0,        sys903,   comg076, calomega_state,  standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 7.6 (Arcade Poker)",                       0 )
-GAME( 1981, comg079,  0,        sys903,   comg076, calomega_state,  standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 7.9 (Arcade Poker)",                       GAME_NOT_WORKING )    /* bad dump */
-GAME( 1981, comg080,  0,        sys903,   arcadebj, calomega_state, comg080,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 8.0 (Arcade Black Jack)",                  0 )                   /* bad dump */
-GAME( 1981, comg094,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 9.4 (Keno)",                               GAME_NOT_WORKING )
-GAME( 1982, comg107,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 10.7c (Big Game)",                         GAME_NOT_WORKING )
-GAME( 1982, comg123,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 12.3 (Ticket Poker)",                      GAME_NOT_WORKING )    /* bad dump */
-GAME( 1982, comg125,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 12.5 (Bingo)",                             GAME_NOT_WORKING )
-GAME( 1982, comg127,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 12.7 (Keno)",                              GAME_NOT_WORKING )
-GAME( 1982, comg128,  0,        sys903,   comg128, calomega_state,  standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 12.8 (Arcade Game)",                       0 )
-GAME( 1982, comg134,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 13.4 (Nudge Bingo)",                       GAME_NOT_WORKING )
-GAME( 1982, comg145,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 14.5 (Pixels)",                            GAME_NOT_WORKING )
-GAME( 1983, comg157,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 15.7 (Double-Draw Poker)",                 GAME_NOT_WORKING )
-GAME( 1983, comg159,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 15.9 (Wild Double-Up)",                    GAME_NOT_WORKING )
-GAME( 1983, comg164,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 16.4 (Keno)",                              GAME_NOT_WORKING )    /* incomplete dump */
-GAME( 1983, comg168,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 16.8 (Keno)",                              GAME_NOT_WORKING )
-GAME( 1983, comg172,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 17.2 (Double Double Poker)",               GAME_NOT_WORKING )
-GAME( 1984, comg175,  0,        sys903,   gdrwpkrd, calomega_state, standard, ROT0, "Cal Omega / Casino Electronics Inc.",   "Cal Omega - Game 17.51 (Gaming Draw Poker)",                0 )
-GAME( 1982, comg176,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 17.6 (Nudge Bingo)",                       GAME_NOT_WORKING )
-GAME( 1982, comg181,  0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.1 (Nudge Bingo)",                       GAME_NOT_WORKING )
-GAME( 1983, comg183,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.3 (Pixels)",                            GAME_NOT_WORKING )
-GAME( 1983, comg185,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.5 (Pixels)",                            GAME_NOT_WORKING )
-GAME( 1983, comg186,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.6 (Pixels)",                            GAME_NOT_WORKING )
-GAME( 1983, comg187,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.7 (Amusement Poker)",                   GAME_NOT_WORKING )    /* bad dump */
-GAME( 1984, comg204,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 20.4 (Super Blackjack)",                   GAME_NOT_WORKING )
-GAME( 1984, comg208,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 20.8 (Winner's Choice)",                   GAME_NOT_WORKING )
-GAME( 1984, comg227,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 22.7 (Amusement Poker, d/d)",              GAME_NOT_WORKING )
-GAME( 1984, comg230,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 23.0 (FC Bingo (4-card))",                 GAME_NOT_WORKING )    /* bad dump */
-GAME( 1984, comg236,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 23.6 (Hotline)",                           GAME_NOT_WORKING )
-GAME( 1985, comg239,  0,        sys903,   gdrwpkrd, calomega_state, standard, ROT0, "Cal Omega / Casino Electronics Inc.",   "Cal Omega - Game 23.9 (Gaming Draw Poker)",                 0 )
-GAME( 1985, comg240,  0,        sys903,   gdrwpkrh, calomega_state, standard, ROT0, "Cal Omega / Casino Electronics Inc.",   "Cal Omega - Game 24.0 (Gaming Draw Poker, hold)",           0 )
-GAME( 1985, comg246,  0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 24.6 (Hotline)",                           GAME_NOT_WORKING )
-GAME( 1985, comg272a, 0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 27.2 (Keno, amusement)",                   GAME_NOT_WORKING )
-GAME( 1985, comg272b, 0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 27.2 (Keno, gaming)",                      GAME_NOT_WORKING )
-GAME( 198?, comg5108, 0,        sys906,   stand906, calomega_state, standard, ROT0, "Cal Omega / Casino Electronics Inc.",   "Cal Omega - Game 51.08 (CEI Video Poker, Jacks or Better)", GAME_NOT_WORKING )
+GAME( 1981, comg074,  0,        sys903,   comg074,  calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 7.4 (Gaming Poker, W.Export)",             GAME_SUPPORTS_SAVE )
+GAME( 1981, comg076,  0,        sys903,   comg076,  calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 7.6 (Arcade Poker)",                       GAME_SUPPORTS_SAVE )
+GAME( 1981, comg079,  0,        sys903,   comg076,  calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 7.9 (Arcade Poker)",                       GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )    /* bad dump */
+GAME( 1981, comg080,  0,        sys903,   arcadebj, calomega_state, comg080, ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 8.0 (Arcade Black Jack)",                  GAME_SUPPORTS_SAVE )                       /* bad dump */
+GAME( 1981, comg094,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 9.4 (Keno)",                               GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1982, comg107,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 10.7c (Big Game)",                         GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1982, comg123,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 12.3 (Ticket Poker)",                      GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )    /* bad dump */
+GAME( 1982, comg125,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 12.5 (Bingo)",                             GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1982, comg127,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 12.7 (Keno)",                              GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1982, comg128,  0,        sys903,   comg128,  calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 12.8 (Arcade Game)",                       GAME_SUPPORTS_SAVE )
+GAME( 1982, comg134,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 13.4 (Nudge Bingo)",                       GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1982, comg145,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 14.5 (Pixels)",                            GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1983, comg157,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 15.7 (Double-Draw Poker)",                 GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1983, comg159,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 15.9 (Wild Double-Up)",                    GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1983, comg164,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 16.4 (Keno)",                              GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )    /* incomplete dump */
+GAME( 1983, comg168,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 16.8 (Keno)",                              GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1983, comg172,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 17.2 (Double Double Poker)",               GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1984, comg175,  0,        sys903,   gdrwpkrd, calomega_state, sys903,  ROT0, "Cal Omega / Casino Electronics Inc.",   "Cal Omega - Game 17.51 (Gaming Draw Poker)",                GAME_SUPPORTS_SAVE )
+GAME( 1982, comg176,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 17.6 (Nudge Bingo)",                       GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1982, comg181,  0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.1 (Nudge Bingo)",                       GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1983, comg183,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.3 (Pixels)",                            GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1983, comg185,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.5 (Pixels)",                            GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1983, comg186,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.6 (Pixels)",                            GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1983, comg187,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 18.7 (Amusement Poker)",                   GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )    /* bad dump */
+GAME( 1984, comg204,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 20.4 (Super Blackjack)",                   GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1984, comg208,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 20.8 (Winner's Choice)",                   GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1984, comg227,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 22.7 (Amusement Poker, d/d)",              GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1984, comg230,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 23.0 (FC Bingo (4-card))",                 GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )    /* bad dump */
+GAME( 1984, comg236,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 23.6 (Hotline)",                           GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1985, comg239,  0,        sys903,   gdrwpkrd, calomega_state, sys903,  ROT0, "Cal Omega / Casino Electronics Inc.",   "Cal Omega - Game 23.9 (Gaming Draw Poker)",                 GAME_SUPPORTS_SAVE )
+GAME( 1985, comg240,  0,        sys903,   gdrwpkrh, calomega_state, sys903,  ROT0, "Cal Omega / Casino Electronics Inc.",   "Cal Omega - Game 24.0 (Gaming Draw Poker, hold)",           GAME_SUPPORTS_SAVE )
+GAME( 1985, comg246,  0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 24.6 (Hotline)",                           GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1985, comg272a, 0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 27.2 (Keno, amusement)",                   GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 1985, comg272b, 0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - Game 27.2 (Keno, gaming)",                      GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 198?, comg5108, 0,        sys906,   stand906, driver_device,  0,       ROT0, "Cal Omega / Casino Electronics Inc.",   "Cal Omega - Game 51.08 (CEI Video Poker, Jacks or Better)", GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
 
 /************ Diagnostic PROMs ************/
-GAME( 198?, comg903d, 0,        sys903,   stand903, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - System 903 Diag.PROM",                          GAME_NOT_WORKING )
-GAME( 198?, comg905d, 0,        sys905,   stand905, calomega_state, standard, ROT0, "Cal Omega Inc.",                        "Cal Omega - System 905 Diag.PROM",                          GAME_NOT_WORKING )
+GAME( 198?, comg903d, 0,        sys903,   stand903, calomega_state, sys903,  ROT0, "Cal Omega Inc.",                        "Cal Omega - System 903 Diag.PROM",                          GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
+GAME( 198?, comg905d, 0,        sys905,   stand905, calomega_state, sys905,  ROT0, "Cal Omega Inc.",                        "Cal Omega - System 905 Diag.PROM",                          GAME_NOT_WORKING | GAME_SUPPORTS_SAVE )
 
 /****** Unofficial / 3rd part games *******/
-GAME( 1982, elgrande, 0,        s903mod,  elgrande, calomega_state, elgrande, ROT0, "Enter-Tech, Ltd. / Tuni Electro Service","El Grande - 5 Card Draw (New)",                            0 )
-GAME( 1983, jjpoker,  0,        s903mod,  jjpoker, calomega_state,  jjpoker,  ROT0, "Enter-Tech, Ltd.",                      "Jackpot Joker Poker (set 1)",                               0 )
-GAME( 1983, jjpokerb, jjpoker,  s903mod,  jjpoker, calomega_state,  jjpoker,  ROT0, "Enter-Tech, Ltd.",                      "Jackpot Joker Poker (set 2)",                               0 )
-GAME( 1988, ssipkr24, 0,        s903mod,  ssipkr, calomega_state,   jjpoker,  ROT0, "SSI",                                   "SSI Poker (v2.4)",                                          0 )
-GAME( 1988, ssipkr30, ssipkr24, s903mod,  ssipkr, calomega_state,   jjpoker,  ROT0, "SSI",                                   "SSI Poker (v3.0)",                                          0 )
-GAME( 1990, ssipkr40, ssipkr24, s903mod,  ssipkr, calomega_state,   jjpoker,  ROT0, "SSI",                                   "SSI Poker (v4.0)",                                          0 )
+GAME( 1982, elgrande, 0,        s903mod,  elgrande, calomega_state, s903mod, ROT0, "Enter-Tech, Ltd. / Tuni Electro Service", "El Grande - 5 Card Draw (New)",                           GAME_SUPPORTS_SAVE )
+GAME( 1983, jjpoker,  0,        s903mod,  jjpoker,  calomega_state, s903mod, ROT0, "Enter-Tech, Ltd.",                        "Jackpot Joker Poker (set 1)",                             GAME_SUPPORTS_SAVE )
+GAME( 1983, jjpokerb, jjpoker,  s903mod,  jjpoker,  calomega_state, s903mod, ROT0, "Enter-Tech, Ltd.",                        "Jackpot Joker Poker (set 2)",                             GAME_SUPPORTS_SAVE )
+GAME( 1988, ssipkr24, 0,        s903mod,  ssipkr,   calomega_state, s903mod, ROT0, "SSI",                                     "SSI Poker (v2.4)",                                        GAME_SUPPORTS_SAVE )
+GAME( 1988, ssipkr30, ssipkr24, s903mod,  ssipkr,   calomega_state, s903mod, ROT0, "SSI",                                     "SSI Poker (v3.0)",                                        GAME_SUPPORTS_SAVE )
+GAME( 1990, ssipkr40, ssipkr24, s903mod,  ssipkr,   calomega_state, s903mod, ROT0, "SSI",                                     "SSI Poker (v4.0)",                                        GAME_SUPPORTS_SAVE )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Andrew Gardner
 #ifndef __DSP56K_OPCODE_H__
 #define __DSP56K_OPCODE_H__
 
@@ -21,7 +23,7 @@ public:
 	Opcode(UINT16 w0, UINT16 w1);
 	virtual ~Opcode();
 
-	astring disassemble() const;
+	std::string disassemble() const;
 	void evaluate(dsp56k_core* cpustate) const;
 	size_t size() const;
 	size_t evalSize() const;
@@ -29,16 +31,16 @@ public:
 	// Peek through to the instruction
 	const reg_id& instSource() const;
 	const reg_id& instDestination() const;
-	const size_t instAccumulatorBitsModified() const;
+	size_t instAccumulatorBitsModified() const;
 
 private:
-	Instruction* m_instruction;
-	ParallelMove* m_parallelMove;
+	auto_pointer<Instruction> m_instruction;
+	auto_pointer<ParallelMove> m_parallelMove;
 
 	UINT16 m_word0;
 	//UINT16 m_word1;
 
-	astring dcString() const;
+	std::string dcString() const;
 };
 
 }

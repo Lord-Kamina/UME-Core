@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Tomasz Slanina
 /************************************
       Seta custom Nile ST-0026 chip
       sound emulation by Tomasz Slanina
@@ -51,7 +53,7 @@ enum
 const device_type NILE = &device_creator<nile_device>;
 
 nile_device::nile_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, NILE, "NiLe", tag, owner, clock),
+	: device_t(mconfig, NILE, "NiLe", tag, owner, clock, "nile", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_stream(NULL),
 		m_sound_ram(NULL),
@@ -66,7 +68,7 @@ nile_device::nile_device(const machine_config &mconfig, const char *tag, device_
 
 void nile_device::device_start()
 {
-	m_sound_ram = *region();
+	m_sound_ram = region()->base();
 	m_stream = stream_alloc(0, 2, 44100);
 }
 

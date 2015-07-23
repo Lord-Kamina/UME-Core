@@ -1,32 +1,41 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Sega System 32/Multi 32 hardware
 
 ***************************************************************************/
 
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
+#include "sound/multipcm.h"
+#include "machine/s32comm.h"
 
 
-class segas32_state : public driver_device
+
+
+class segas32_state : public device_t
 {
 public:
-	segas32_state(const machine_config &mconfig, device_type type, const char *tag)
-		: driver_device(mconfig, type, tag),
-		m_z80_shared_ram(*this,"z80_shared_ram"),
-		m_ga2_dpram(*this,"ga2_dpram"),
-		m_system32_workram(*this,"workram"),
-		m_system32_videoram(*this,"videoram", 0),
-		m_system32_spriteram(*this,"spriteram", 0),
-		m_system32_paletteram(*this,"paletteram", 0) ,
-		m_maincpu(*this, "maincpu"),
-		m_soundcpu(*this, "soundcpu"),
-		m_eeprom(*this, "eeprom") { }
+	segas32_state(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
 	required_shared_ptr<UINT8> m_z80_shared_ram;
 	optional_shared_ptr<UINT8> m_ga2_dpram;
 	optional_shared_ptr<UINT16> m_system32_workram;
 	required_shared_ptr<UINT16> m_system32_videoram;
 	required_shared_ptr<UINT16> m_system32_spriteram;
+	optional_shared_ptr_array<UINT16, 2> m_system32_paletteram;
+
+	required_device<cpu_device> m_maincpu;
+	required_device<cpu_device> m_soundcpu;
+	optional_device<multipcm_device> m_multipcm;
+	required_device<eeprom_serial_93cxx_device> m_eeprom;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
+
+	required_device<timer_device> m_irq_timer_0;
+	required_device<timer_device> m_irq_timer_1;
+	optional_device<s32comm_device> m_s32comm;
 
 	typedef void (segas32_state::*sys32_output_callback)(int which, UINT16 data);
 
@@ -66,9 +75,7 @@ public:
 	sys32_output_callback m_sw1_output;
 	sys32_output_callback m_sw2_output;
 	sys32_output_callback m_sw3_output;
-	UINT16* m_dual_pcb_comms;
 	UINT16 *m_system32_protram;
-	optional_shared_ptr_array<UINT16, 2> m_system32_paletteram;
 	UINT16 m_system32_displayenable[2];
 	UINT16 m_system32_tilebank_external;
 	UINT16 m_arescue_dsp_io[6];
@@ -82,7 +89,8 @@ public:
 	UINT8 m_sprite_control_latched[8];
 	UINT8 m_sprite_control[8];
 	UINT32 *m_spriteram_32bit;
-	void (*m_system32_prot_vblank)(device_t *device);
+	typedef void (segas32_state::*prot_vblank_func)();
+	prot_vblank_func m_system32_prot_vblank;
 	int m_print_count;
 	DECLARE_WRITE16_MEMBER(ga2_dpram_w);
 	DECLARE_READ16_MEMBER(ga2_dpram_r);
@@ -159,41 +167,11 @@ public:
 	DECLARE_WRITE8_MEMBER(sound_bank_hi_w);
 	DECLARE_READ8_MEMBER(sound_dummy_r);
 	DECLARE_WRITE8_MEMBER(sound_dummy_w);
-	DECLARE_WRITE16_MEMBER(dual_pcb_comms_w);
-	DECLARE_READ16_MEMBER(dual_pcb_comms_r);
-	DECLARE_READ16_MEMBER(dual_pcb_masterslave);
-	DECLARE_READ16_MEMBER(arescue_handshake_r);
-	DECLARE_READ16_MEMBER(arescue_slavebusy_r);
-	DECLARE_WRITE16_MEMBER(f1en_comms_echo_w);
+
 	DECLARE_WRITE8_MEMBER(multipcm_bank_w);
 	DECLARE_WRITE8_MEMBER(scross_bank_w);
-	DECLARE_DRIVER_INIT(titlef);
-	DECLARE_DRIVER_INIT(slipstrm);
-	DECLARE_DRIVER_INIT(radm);
-	DECLARE_DRIVER_INIT(holo);
-	DECLARE_DRIVER_INIT(svf);
-	DECLARE_DRIVER_INIT(jleague);
-	DECLARE_DRIVER_INIT(arescue);
-	DECLARE_DRIVER_INIT(jpark);
-	DECLARE_DRIVER_INIT(ga2);
-	DECLARE_DRIVER_INIT(scross);
-	DECLARE_DRIVER_INIT(spidman);
-	DECLARE_DRIVER_INIT(sonicp);
-	DECLARE_DRIVER_INIT(f1en);
-	DECLARE_DRIVER_INIT(dbzvrvs);
-	DECLARE_DRIVER_INIT(brival);
-	DECLARE_DRIVER_INIT(harddunk);
-	DECLARE_DRIVER_INIT(arabfgt);
-	DECLARE_DRIVER_INIT(sonic);
-	DECLARE_DRIVER_INIT(alien3);
-	DECLARE_DRIVER_INIT(darkedge);
-	DECLARE_DRIVER_INIT(radr);
-	DECLARE_DRIVER_INIT(f1lap);
-	DECLARE_DRIVER_INIT(orunners);
+
 	TILE_GET_INFO_MEMBER(get_tile_info);
-	DECLARE_MACHINE_RESET(system32);
-	DECLARE_VIDEO_START(system32);
-	DECLARE_VIDEO_START(multi32);
 	UINT32 screen_update_system32(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_multi32_left(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_multi32_right(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
@@ -246,21 +224,81 @@ public:
 	void scross_sw1_output( int which, UINT16 data );
 	void scross_sw2_output( int which, UINT16 data );
 	int compute_clipping_extents(screen_device &screen, int enable, int clipout, int clipmask, const rectangle &cliprect, struct extents_list *list);
+	void compute_tilemap_flips(int bgnum, int &flipx, int &flipy);
 	void update_tilemap_zoom(screen_device &screen, struct layer_info *layer, const rectangle &cliprect, int bgnum);
 	void update_tilemap_rowscroll(screen_device &screen, struct layer_info *layer, const rectangle &cliprect, int bgnum);
 	void update_tilemap_text(screen_device &screen, struct layer_info *layer, const rectangle &cliprect);
 	void update_bitmap(screen_device &screen, struct layer_info *layer, const rectangle &cliprect);
 	void update_background(struct layer_info *layer, const rectangle &cliprect);
 	DECLARE_WRITE_LINE_MEMBER(ym3438_irq_handler);
-	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_soundcpu;
-	required_device<eeprom_device> m_eeprom;
+	void signal_sound_irq(int which);
+	void clear_sound_irq(int which);
+	void darkedge_fd1149_vblank();
+	void f1lap_fd1149_vblank();
+
+	void init_alien3(void);
+	void init_arescue(int m_hasdsp);
+	void init_arabfgt(void);
+	void init_brival(void);
+	void init_darkedge(void);
+	void init_dbzvrvs(void);
+	void init_f1en(void);
+	void init_f1lap(void);
+	void init_ga2(void);
+	void init_harddunk(void);
+	void init_holo(void);
+	void init_jpark(void);
+	void init_orunners(void);
+	void init_radm(void);
+	void init_radr(void);
+	void init_scross(void);
+	void init_slipstrm(void);
+	void init_sonic(void);
+	void init_sonicp(void);
+	void init_spidman(void);
+	void init_svf(void);
+	void init_jleague(void);
+	void init_titlef(void);
+
+protected:
+	virtual void device_start();
+	virtual void device_reset();
+};
+
+class segas32_regular_state :  public segas32_state
+{
+public:
+	segas32_regular_state(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+protected:
+	virtual machine_config_constructor device_mconfig_additions() const;
+//  virtual void device_start();
+//  virtual void device_reset();
+};
+
+class segas32_v25_state :  public segas32_state
+{
+public:
+	segas32_v25_state(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+protected:
+	virtual machine_config_constructor device_mconfig_additions() const;
+	virtual void device_start();
+//  virtual void device_reset();
+};
+
+class sega_multi32_state :  public segas32_state
+{
+public:
+	sega_multi32_state(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+protected:
+	virtual machine_config_constructor device_mconfig_additions() const;
+	virtual void device_start();
+//  virtual void device_reset();
 };
 
 /*----------- defined in machine/segas32.c -----------*/
-void darkedge_fd1149_vblank(device_t *device);
-void f1lap_fd1149_vblank(device_t *device);
 extern const UINT8 ga2_v25_opcode_table[];
-void decrypt_ga2_protrom(running_machine &machine);
-/*----------- defined in video/segas32.c -----------*/
-void system32_set_vblank(running_machine &machine, int state);
+
+extern const device_type SEGA_S32_PCB;

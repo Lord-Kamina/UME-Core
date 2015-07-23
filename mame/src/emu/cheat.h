@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     cheat.h
 
     Cheat system.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -43,7 +14,7 @@
 #define __CHEAT_H__
 
 #include "debug/express.h"
-#include "ui.h"
+#include "ui/ui.h"
 
 
 //**************************************************************************
@@ -85,7 +56,7 @@ public:
 	operator const UINT64 &() const { return m_value; }
 
 	// format the number according to its format
-	const char *format(astring &string) const;
+	const char *format(std::string &str) const;
 
 private:
 	// internal state
@@ -133,12 +104,12 @@ private:
 		// getters
 		item *next() const { return m_next; }
 		const number_and_format &value() const { return m_value; }
-		const char *text() const { return m_text; }
+		const char *text() const { return m_text.c_str(); }
 
 	private:
 		// internal state
 		item *              m_next;                         // next item in list
-		astring             m_text;                         // name of the item
+		std::string         m_text;                         // name of the item
 		number_and_format   m_value;                        // value of the item
 	};
 
@@ -147,7 +118,7 @@ private:
 	number_and_format   m_maxval;                       // maximum value
 	number_and_format   m_stepval;                      // step value
 	UINT64              m_value;                        // live value of the parameter
-	astring             m_curtext;                      // holding for a value string
+	std::string         m_curtext;                      // holding for a value string
 	simple_list<item>   m_itemlist;                     // list of items
 };
 
@@ -219,7 +190,7 @@ private:
 		script_entry *      m_next;                         // link to next entry
 		parsed_expression   m_condition;                    // condition under which this is executed
 		parsed_expression   m_expression;                   // expression to execute
-		astring             m_format;                       // string format to print
+		std::string         m_format;                       // string format to print
 		simple_list<output_argument> m_arglist;             // list of arguments
 		INT8                m_line;                         // which line to print on
 		UINT8               m_justify;                      // justification when printing
@@ -250,8 +221,8 @@ public:
 	cheat_manager &manager() const { return m_manager; }
 	cheat_entry *next() const { return m_next; }
 	script_state state() const { return m_state; }
-	const char *description() const { return m_description; }
-	const char *comment() const { return m_comment; }
+	const char *description() const { return m_description.c_str(); }
+	const char *comment() const { return m_comment.c_str(); }
 
 	// script detection
 	bool has_run_script() const { return (m_run_script != NULL); }
@@ -281,7 +252,7 @@ public:
 	void save(emu_file &cheatfile) const;
 
 	// UI helpers
-	void menu_text(astring &description, astring &state, UINT32 &flags);
+	void menu_text(std::string &description, std::string &state, UINT32 &flags);
 
 	// per-frame update
 	void frame_update() { if (m_state == SCRIPT_STATE_RUN) execute_run_script(); }
@@ -289,18 +260,18 @@ public:
 private:
 	// internal helpers
 	bool set_state(script_state newstate);
-	cheat_script *&script_for_state(script_state state);
+	auto_pointer<cheat_script> &script_for_state(script_state state);
 
 	// internal state
 	cheat_manager &     m_manager;                      // reference to our manager
 	cheat_entry *       m_next;                         // next cheat entry
-	astring             m_description;                  // string description/menu title
-	astring             m_comment;                      // comment data
-	cheat_parameter *   m_parameter;                    // parameter
-	cheat_script *      m_on_script;                    // script to run when turning on
-	cheat_script *      m_off_script;                   // script to run when turning off
-	cheat_script *      m_change_script;                // script to run when value changes
-	cheat_script *      m_run_script;                   // script to run each frame when on
+	std::string         m_description;                  // string description/menu title
+	std::string         m_comment;                      // comment data
+	auto_pointer<cheat_parameter> m_parameter;          // parameter
+	auto_pointer<cheat_script> m_on_script;             // script to run when turning on
+	auto_pointer<cheat_script> m_off_script;            // script to run when turning off
+	auto_pointer<cheat_script> m_change_script;         // script to run when value changes
+	auto_pointer<cheat_script> m_run_script;            // script to run each frame when on
 	symbol_table        m_symbols;                      // symbol table for this cheat
 	script_state        m_state;                        // current cheat state
 	UINT32              m_numtemp;                      // number of temporary variables
@@ -334,10 +305,10 @@ public:
 	void render_text(render_container &container);
 
 	// output helpers
-	astring &get_output_astring(int row, int justify);
+	std::string &get_output_astring(int row, int justify);
 
 	// global helpers
-	static const char *quote_expression(astring &string, const parsed_expression &expression);
+	static const char *quote_expression(std::string &str, const parsed_expression &expression);
 	static UINT64 execute_frombcd(symbol_table &table, void *ref, int params, const UINT64 *param);
 	static UINT64 execute_tobcd(symbol_table &table, void *ref, int params, const UINT64 *param);
 
@@ -350,7 +321,7 @@ private:
 	running_machine &   m_machine;                          // reference to our machine
 	simple_list<cheat_entry> m_cheatlist;                   // cheat list
 	UINT64              m_framecount;                       // frame count
-	astring             m_output[UI_TARGET_FONT_ROWS*2];    // array of output strings
+	std::string         m_output[UI_TARGET_FONT_ROWS * 2];    // array of output strings
 	UINT8               m_justify[UI_TARGET_FONT_ROWS*2];   // justification for each string
 	UINT8               m_numlines;                         // number of lines available for output
 	INT8                m_lastline;                         // last line used for output

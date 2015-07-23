@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 #include "emu.h"
 #include "debugger.h"
 #include "hd61700.h"
@@ -36,7 +38,7 @@ enum
 	OP_REG8_,
 	OP_REGIM8,
 	OP_RMSIM3,
-	OP_RSIR,
+	OP_RSIR
 };
 
 struct hd61700_dasm

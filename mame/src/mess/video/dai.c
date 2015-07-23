@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Krzysztof Strzecha, Nathan Woods
 /***************************************************************************
 
   dai.c
@@ -7,7 +9,7 @@
   Krzysztof Strzecha
 
   All video modes are emulated but not fully tested yet.
-  SCREEN_UPDATE_IND16 function needs strong cleanup and optimalisation.
+  dai_state::screen_update_dai() function needs strong cleanup and optimalisation.
 
 
 ***************************************************************************/
@@ -40,13 +42,13 @@ const unsigned char dai_palette[16*3] =
 };
 
 
-void dai_state::palette_init()
+PALETTE_INIT_MEMBER(dai_state, dai)
 {
 	int i;
 
 	for ( i = 0; i < sizeof(dai_palette) / 3; i++ )
 	{
-		palette_set_color_rgb(machine(), i, dai_palette[i * 3], dai_palette[i * 3 + 1], dai_palette[i * 3 + 2]);
+		m_palette->set_pen_color(i, dai_palette[i * 3], dai_palette[i * 3 + 1], dai_palette[i * 3 + 2]);
 	}
 }
 

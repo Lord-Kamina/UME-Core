@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
 Super Basketball memory map (preliminary)
@@ -42,8 +44,6 @@ CPU/Video Board Parts:
 #include "cpu/z80/z80.h"
 #include "cpu/m6809/m6809.h"
 #include "sound/dac.h"
-#include "sound/sn76496.h"
-#include "sound/vlm5030.h"
 #include "machine/konami1.h"
 #include "includes/konamipt.h"
 #include "audio/trackfld.h"
@@ -94,9 +94,9 @@ static ADDRESS_MAP_START( sbasketb_sound_map, AS_PROGRAM, 8, sbasketb_state )
 	AM_RANGE(0x0000, 0x1fff) AM_ROM
 	AM_RANGE(0x4000, 0x43ff) AM_RAM
 	AM_RANGE(0x6000, 0x6000) AM_READ(soundlatch_byte_r)
-	AM_RANGE(0x8000, 0x8000) AM_READ_LEGACY(hyperspt_sh_timer_r)
-	AM_RANGE(0xa000, 0xa000) AM_DEVWRITE_LEGACY("vlm", vlm5030_data_w) /* speech data */
-	AM_RANGE(0xc000, 0xdfff) AM_DEVWRITE_LEGACY("vlm", hyperspt_sound_w)     /* speech and output controll */
+	AM_RANGE(0x8000, 0x8000) AM_DEVREAD("trackfld_audio", trackfld_audio_device, hyperspt_sh_timer_r)
+	AM_RANGE(0xa000, 0xa000) AM_DEVWRITE("vlm", vlm5030_device, data_w) /* speech data */
+	AM_RANGE(0xc000, 0xdfff) AM_DEVWRITE("trackfld_audio", trackfld_audio_device, hyperspt_sound_w)     /* speech and output controll */
 	AM_RANGE(0xe000, 0xe000) AM_DEVWRITE("dac", dac_device, write_unsigned8)
 	AM_RANGE(0xe001, 0xe001) AM_WRITE(konami_SN76496_latch_w)  /* Loads the snd command into the snd latch */
 	AM_RANGE(0xe002, 0xe002) AM_WRITE(konami_SN76496_w)      /* This address triggers the SN chip to read the data port. */
@@ -181,20 +181,10 @@ INTERRUPT_GEN_MEMBER(sbasketb_state::vblank_irq)
 		device.execute().set_input_line(0, HOLD_LINE);
 }
 
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
-
 static MACHINE_CONFIG_START( sbasketb, sbasketb_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M6809, 1400000)        /* 1.400 MHz ??? */
+	MCFG_CPU_ADD("maincpu", KONAMI1, 1400000)        /* 1.400 MHz ??? */
 	MCFG_CPU_PROGRAM_MAP(sbasketb_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", sbasketb_state,  vblank_irq)
 
@@ -208,10 +198,12 @@ static MACHINE_CONFIG_START( sbasketb, sbasketb_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(sbasketb_state, screen_update_sbasketb)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(sbasketb)
-	MCFG_PALETTE_LENGTH(16*16+16*16*16)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", sbasketb)
+	MCFG_PALETTE_ADD("palette", 16*16+16*16*16)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256)
+	MCFG_PALETTE_INIT_OWNER(sbasketb_state, sbasketb)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -223,10 +215,16 @@ static MACHINE_CONFIG_START( sbasketb, sbasketb_state )
 
 	MCFG_SOUND_ADD("snsnd", SN76489, XTAL_14_31818MHz / 8)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	MCFG_SOUND_ADD("vlm", VLM5030, XTAL_3_579545MHz) /* Schematics say 3.58MHz, but board uses 3.579545MHz xtal */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
+MACHINE_CONFIG_END
+
+MACHINE_CONFIG_DERIVED(sbasketbu, sbasketb)
+	MCFG_DEVICE_REMOVE("maincpu")
+	MCFG_CPU_ADD("maincpu", M6809, 1400000)        /* 1.400 MHz ??? */
+	MCFG_CPU_PROGRAM_MAP(sbasketb_map)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", sbasketb_state,  vblank_irq)
 MACHINE_CONFIG_END
 
 
@@ -405,10 +403,9 @@ ROM_END
 
 DRIVER_INIT_MEMBER(sbasketb_state,sbasketb)
 {
-	konami1_decode(machine(), "maincpu");
 }
 
-GAME( 1984, sbasketb, 0,        sbasketb, sbasketb, sbasketb_state, sbasketb, ROT90, "Konami", "Super Basketball (version I, encrypted)", GAME_SUPPORTS_SAVE )
-GAME( 1984, sbasketh, sbasketb, sbasketb, sbasketb, driver_device, 0,        ROT90, "Konami", "Super Basketball (version H, unprotected)", GAME_SUPPORTS_SAVE )
-GAME( 1984, sbasketg, sbasketb, sbasketb, sbasketb, sbasketb_state, sbasketb, ROT90, "Konami", "Super Basketball (version G, encrypted)", GAME_SUPPORTS_SAVE )
-GAME( 1984, sbaskete, sbasketb, sbasketb, sbasketb, sbasketb_state, sbasketb, ROT90, "Konami", "Super Basketball (version E, encrypted)", GAME_SUPPORTS_SAVE )
+GAME( 1984, sbasketb, 0,        sbasketb,  sbasketb, sbasketb_state, sbasketb, ROT90, "Konami", "Super Basketball (version I, encrypted)", GAME_SUPPORTS_SAVE )
+GAME( 1984, sbasketh, sbasketb, sbasketbu, sbasketb, driver_device, 0,        ROT90, "Konami", "Super Basketball (version H, unprotected)", GAME_SUPPORTS_SAVE )
+GAME( 1984, sbasketg, sbasketb, sbasketb,  sbasketb, sbasketb_state, sbasketb, ROT90, "Konami", "Super Basketball (version G, encrypted)", GAME_SUPPORTS_SAVE )
+GAME( 1984, sbaskete, sbasketb, sbasketb,  sbasketb, sbasketb_state, sbasketb, ROT90, "Konami", "Super Basketball (version E, encrypted)", GAME_SUPPORTS_SAVE )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Anthony Kruize
 /**************************************************************************************
 * Game Boy sound emulation (c) Anthony Kruize (trandor@labyrinth.net.au)
 *
@@ -104,7 +106,7 @@ const device_type GAMEBOY = &device_creator<gameboy_sound_device>;
 //-------------------------------------------------
 
 gameboy_sound_device::gameboy_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-					: device_t(mconfig, GAMEBOY, "LR35902", tag, owner, clock),
+					: device_t(mconfig, GAMEBOY, "LR35902 Sound", tag, owner, clock, "gameboy_sound", __FILE__),
 						device_sound_interface(mconfig, *this)
 {
 }
@@ -125,7 +127,7 @@ void gameboy_sound_device::device_config_complete()
 
 void gameboy_sound_device::device_start()
 {
-	m_channel = machine().sound().stream_alloc(*this, 0, 2, machine().sample_rate(), this);
+	m_channel = machine().sound().stream_alloc(*this, 0, 2, machine().sample_rate());
 	m_rate = machine().sample_rate();
 
 	save_item(NAME(m_snd_regs));

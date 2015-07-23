@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     hashing.h
 
     Hashing helper classes.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -43,7 +14,8 @@
 #define __HASHING_H__
 
 #include "osdcore.h"
-#include "astring.h"
+#include "corestr.h"
+#include <string>
 #include "md5.h"
 #include "sha1.h"
 
@@ -62,7 +34,7 @@ struct sha1_t
 	bool operator!=(const sha1_t &rhs) const { return memcmp(m_raw, rhs.m_raw, sizeof(m_raw)) != 0; }
 	operator UINT8 *() { return m_raw; }
 	bool from_string(const char *string, int length = -1);
-	const char *as_string(astring &buffer) const;
+	const char *as_string(std::string &buffer) const;
 	UINT8 m_raw[20];
 	static const sha1_t null;
 };
@@ -113,7 +85,7 @@ struct md5_t
 	bool operator!=(const md5_t &rhs) const { return memcmp(m_raw, rhs.m_raw, sizeof(m_raw)) != 0; }
 	operator UINT8 *() { return m_raw; }
 	bool from_string(const char *string, int length = -1);
-	const char *as_string(astring &buffer) const;
+	const char *as_string(std::string &buffer) const;
 	UINT8 m_raw[16];
 	static const md5_t null;
 };
@@ -164,7 +136,7 @@ struct crc32_t
 	crc32_t &operator=(const UINT32 crc) { m_raw = crc; return *this; }
 	operator UINT32() const { return m_raw; }
 	bool from_string(const char *string, int length = -1);
-	const char *as_string(astring &buffer) const;
+	const char *as_string(std::string &buffer) const;
 	UINT32 m_raw;
 	static const crc32_t null;
 };
@@ -210,7 +182,7 @@ struct crc16_t
 	crc16_t &operator=(const UINT16 crc) { m_raw = crc; return *this; }
 	operator UINT16() const { return m_raw; }
 	bool from_string(const char *string, int length = -1);
-	const char *as_string(astring &buffer) const;
+	const char *as_string(std::string &buffer) const;
 	UINT16 m_raw;
 	static const crc16_t null;
 };

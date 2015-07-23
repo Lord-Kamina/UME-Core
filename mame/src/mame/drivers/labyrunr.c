@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Labyrinth Runner (GX771) (c) 1987 Konami
@@ -11,7 +13,7 @@
 #include "emu.h"
 #include "cpu/m6809/hd6309.h"
 #include "sound/2203intf.h"
-#include "video/konicdev.h"
+
 #include "includes/konamipt.h"
 #include "includes/labyrunr.h"
 
@@ -19,14 +21,14 @@
 INTERRUPT_GEN_MEMBER(labyrunr_state::labyrunr_vblank_interrupt)
 {
 	address_space &space = generic_space();
-	if (k007121_ctrlram_r(m_k007121, space, 7) & 0x02)
+	if (m_k007121->ctrlram_r(space, 7) & 0x02)
 		device.execute().set_input_line(HD6309_IRQ_LINE, HOLD_LINE);
 }
 
 INTERRUPT_GEN_MEMBER(labyrunr_state::labyrunr_timer_interrupt)
 {
 	address_space &space = generic_space();
-	if (k007121_ctrlram_r(m_k007121, space, 7) & 0x01)
+	if (m_k007121->ctrlram_r(space, 7) & 0x01)
 		device.execute().set_input_line(INPUT_LINE_NMI, PULSE_LINE);
 }
 
@@ -44,7 +46,7 @@ WRITE8_MEMBER(labyrunr_state::labyrunr_bankswitch_w)
 }
 
 static ADDRESS_MAP_START( labyrunr_map, AS_PROGRAM, 8, labyrunr_state )
-	AM_RANGE(0x0000, 0x0007) AM_DEVWRITE_LEGACY("k007121", k007121_ctrl_w)
+	AM_RANGE(0x0000, 0x0007) AM_DEVWRITE("k007121", k007121_device, ctrl_w)
 	AM_RANGE(0x0020, 0x005f) AM_RAM AM_SHARE("scrollram")
 	AM_RANGE(0x0800, 0x0800) AM_DEVREADWRITE("ym1", ym2203_device, read_port_r, write_port_w)
 	AM_RANGE(0x0801, 0x0801) AM_DEVREADWRITE("ym1", ym2203_device, status_port_r, control_port_w)
@@ -54,9 +56,9 @@ static ADDRESS_MAP_START( labyrunr_map, AS_PROGRAM, 8, labyrunr_state )
 	AM_RANGE(0x0a01, 0x0a01) AM_READ_PORT("P1")
 	AM_RANGE(0x0b00, 0x0b00) AM_READ_PORT("SYSTEM")
 	AM_RANGE(0x0c00, 0x0c00) AM_WRITE(labyrunr_bankswitch_w)
-	AM_RANGE(0x0d00, 0x0d1f) AM_DEVREADWRITE_LEGACY("k051733", k051733_r, k051733_w)
+	AM_RANGE(0x0d00, 0x0d1f) AM_DEVREADWRITE("k051733", k051733_device, read, write)
 	AM_RANGE(0x0e00, 0x0e00) AM_WRITE(watchdog_reset_w)
-	AM_RANGE(0x1000, 0x10ff) AM_RAM AM_SHARE("paletteram")
+	AM_RANGE(0x1000, 0x10ff) AM_RAM_DEVWRITE("palette", palette_device, write_indirect) AM_SHARE("palette")
 	AM_RANGE(0x1800, 0x1fff) AM_RAM
 	AM_RANGE(0x2000, 0x2fff) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0x3000, 0x37ff) AM_RAM_WRITE(labyrunr_vram1_w) AM_SHARE("videoram1")
@@ -153,28 +155,6 @@ GFXDECODE_END
 
 ***************************************************************************/
 
-static const ay8910_interface ay8910_config_1 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSW1"),
-	DEVCB_INPUT_PORT("DSW2"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static const ay8910_interface ay8910_config_2 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_INPUT_PORT("DSW3"),
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
-
 void labyrunr_state::machine_start()
 {
 	UINT8 *ROM = memregion("maincpu")->base();
@@ -198,26 +178,31 @@ static MACHINE_CONFIG_START( labyrunr, labyrunr_state )
 	MCFG_SCREEN_SIZE(37*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 35*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(labyrunr_state, screen_update_labyrunr)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(labyrunr)
-	MCFG_PALETTE_LENGTH(2*8*16*16)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", labyrunr)
+	MCFG_PALETTE_ADD("palette", 2*8*16*16)
+	MCFG_PALETTE_INDIRECT_ENTRIES(128)
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
+	MCFG_PALETTE_INIT_OWNER(labyrunr_state, labyrunr)
 
 	MCFG_K007121_ADD("k007121")
+	MCFG_K007121_PALETTE("palette")
 	MCFG_K051733_ADD("k051733")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ym1", YM2203, 3000000)
-	MCFG_YM2203_AY8910_INTF(&ay8910_config_1)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSW1"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSW2"))
 	MCFG_SOUND_ROUTE(0, "mono", 0.40)
 	MCFG_SOUND_ROUTE(1, "mono", 0.40)
 	MCFG_SOUND_ROUTE(2, "mono", 0.40)
 	MCFG_SOUND_ROUTE(3, "mono", 0.80)
 
 	MCFG_SOUND_ADD("ym2", YM2203, 3000000)
-	MCFG_YM2203_AY8910_INTF(&ay8910_config_2)
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSW3"))
 	MCFG_SOUND_ROUTE(0, "mono", 0.40)
 	MCFG_SOUND_ROUTE(1, "mono", 0.40)
 	MCFG_SOUND_ROUTE(2, "mono", 0.40)

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /******************************************************************************************
 
     Kyocera Kyotronics 85 (and similar laptop computers)
@@ -28,6 +30,7 @@
 
     TODO:
 
+    - bar code reader (!RxDB -> RST5.5, Hewlett-Packard HREDS-3050 interface)
     - un-Y2K-hack tandy200
     - keyboard is unresponsive for couple of seconds after boot
     - soft power on/off
@@ -35,7 +38,7 @@
     - pc8201 NEC PC-8241A video interface (TMS9918, 16K videoRAM, 8K ROM)
     - pc8201 NEC PC-8233 floppy controller
     - pc8201 NEC floppy disc drives (PC-8031-1W, PC-8031-2W, PC-80S31)
-    - trsm100 Tandy Portable Disk Drive (TPDD: 100k 3?", TPDD2: 200k 3?") (undumped HD63A01V1 MCU + full custom uPD65002, serial comms via the missing IM6042, not going to happen anytime soon)
+    - trsm100 Tandy Portable Disk Drive (TPDD: 100k 3?", TPDD2: 200k 3?") (undumped HD63A01V1 MCU + full custom uPD65002, serial comms via IM6042)
     - trsm100 Chipmunk disk drive (384k 3?") (full custom logic, not going to happen)
     - trsm100 RS232/modem select
     - tandy200 RTC alarm
@@ -162,7 +165,7 @@ WRITE8_MEMBER( pc8201_state::bank_w )
 	    7
 
 	*/
-
+printf("bank %02x\n",data);
 	bankswitch(data);
 }
 
@@ -190,7 +193,7 @@ WRITE8_MEMBER( pc8201_state::scp_w )
 	m_rtc->stb_w(BIT(data, 4));
 
 	/* printer strobe */
-	m_centronics->strobe_w(BIT(data, 5));
+	m_centronics->write_strobe(BIT(data, 5));
 
 	/* serial interface select */
 	m_iosel = data >> 5;
@@ -377,9 +380,7 @@ READ8_MEMBER( pc8201_state::romrd_r )
 	UINT8 data = 0xff;
 
 	if (m_rom_sel)
-	{
-		data = m_option->base()[m_rom_addr & 0x1ffff];
-	}
+		data = m_cas_cart->read_rom(space, m_rom_addr & 0x1ffff);
 
 	return data;
 }
@@ -425,7 +426,7 @@ WRITE8_MEMBER( kc85_state::ctrl_w )
 	membank("bank1")->set_entry(BIT(data, 0));
 
 	/* printer strobe */
-	m_centronics->strobe_w(BIT(data, 1));
+	m_centronics->write_strobe(BIT(data, 1));
 
 	/* RTC strobe */
 	m_rtc->stb_w(BIT(data, 2));
@@ -529,7 +530,7 @@ WRITE8_MEMBER( tandy200_state::stbk_w )
 	*/
 
 	/* printer strobe */
-	m_centronics->strobe_w(BIT(data, 0));
+	m_centronics->write_strobe(BIT(data, 0));
 
 	/* cassette motor */
 	m_cassette->change_state(BIT(data,1) ? CASSETTE_MOTOR_ENABLED : CASSETTE_MOTOR_DISABLED, CASSETTE_MASK_MOTOR);
@@ -734,6 +735,60 @@ static INPUT_PORTS_START( kc85 )
 	PORT_CONFSETTING( 0x00, "Low Battery" )
 INPUT_PORTS_END
 
+static INPUT_PORTS_START( pc8201 )
+	PORT_INCLUDE( kc85 )
+
+	PORT_MODIFY("Y3")
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_RCONTROL) PORT_CHAR(']') PORT_CHAR('}')
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_SLASH) PORT_CHAR('/') PORT_CHAR('?')
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_STOP) PORT_CHAR('.') PORT_CHAR('>')
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_COMMA) PORT_CHAR(',') PORT_CHAR('<')
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_CLOSEBRACE) PORT_CHAR('\\') PORT_CHAR('|')
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_OPENBRACE) PORT_CHAR('@') PORT_CHAR('^')
+
+	PORT_MODIFY("Y4")
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_8) PORT_CHAR('8') PORT_CHAR('(')
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_7) PORT_CHAR('7') PORT_CHAR('\'')
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_6) PORT_CHAR('6') PORT_CHAR('&')
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_2) PORT_CHAR('2') PORT_CHAR('"')
+
+	PORT_MODIFY("Y5")
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("PAST INS") PORT_CODE(KEYCODE_INSERT) PORT_CHAR(UCHAR_MAMEKEY(INSERT))
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("SPACE") PORT_CODE(KEYCODE_SPACE) PORT_CHAR(' ')
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_RALT) PORT_CHAR('[') PORT_CHAR('{')
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_MINUS) PORT_CHAR('-') PORT_CHAR('=')
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_QUOTE) PORT_CHAR(':') PORT_CHAR('*')
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_COLON) PORT_CHAR(';') PORT_CHAR('+')
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_0) PORT_CHAR('0') PORT_CHAR('_')
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_CODE(KEYCODE_9) PORT_CHAR('9') PORT_CHAR(')')
+
+	PORT_MODIFY("Y6")
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("ESC") PORT_CODE(KEYCODE_ESC)
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("\xE2\x86\x92|") PORT_CODE(KEYCODE_TAB)
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_RIGHT) PORT_CODE(KEYCODE_RIGHT) PORT_CHAR(UCHAR_MAMEKEY(RIGHT))
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_LEFT) PORT_CODE(KEYCODE_LEFT) PORT_CHAR(UCHAR_MAMEKEY(LEFT))
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_DOWN) PORT_CODE(KEYCODE_DOWN) PORT_CHAR(UCHAR_MAMEKEY(DOWN))
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME(UTF8_UP) PORT_CODE(KEYCODE_UP) PORT_CHAR(UCHAR_MAMEKEY(UP))
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("DEL BKSP") PORT_CODE(KEYCODE_BACKSPACE) PORT_CHAR(8)
+
+	PORT_MODIFY("Y7")
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("STOP") PORT_CODE(KEYCODE_F8) PORT_CHAR(UCHAR_MAMEKEY(F8))
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("f.5") PORT_CODE(KEYCODE_F5) PORT_CHAR(UCHAR_MAMEKEY(F5))
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("f.4") PORT_CODE(KEYCODE_F4) PORT_CHAR(UCHAR_MAMEKEY(F4))
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("f.3") PORT_CODE(KEYCODE_F3) PORT_CHAR(UCHAR_MAMEKEY(F3))
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("f.2") PORT_CODE(KEYCODE_F2) PORT_CHAR(UCHAR_MAMEKEY(F2))
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("f.1") PORT_CODE(KEYCODE_F1) PORT_CHAR(UCHAR_MAMEKEY(F1))
+
+	PORT_MODIFY("Y8")
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNUSED )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_KEYBOARD ) PORT_NAME("CAPS LOCK") PORT_CODE(KEYCODE_CAPSLOCK) PORT_TOGGLE
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNUSED )
+INPUT_PORTS_END
+
 static INPUT_PORTS_START( pc8201a )
 	PORT_INCLUDE( kc85 )
 
@@ -885,12 +940,6 @@ static INPUT_PORTS_START( olivm10 )
 	PORT_CONFSETTING( 0x00, "Low Battery" )
 INPUT_PORTS_END
 
-/* RP5C01A Interface */
-
-static RP5C01_INTERFACE( tandy200_rtc_intf )
-{
-	DEVCB_NULL                              /* alarm */
-};
 
 /* 8155 Interface */
 
@@ -963,8 +1012,18 @@ WRITE8_MEMBER( kc85_state::i8155_pb_w )
 	if (m_buzzer) m_speaker->level_w(m_bell);
 
 	// RS-232
-	m_rs232->dtr_w(BIT(data, 6));
-	m_rs232->rts_w(BIT(data, 7));
+	m_rs232->write_dtr(BIT(data, 6));
+	m_rs232->write_rts(BIT(data, 7));
+}
+
+WRITE_LINE_MEMBER( kc85_state::write_centronics_busy )
+{
+	m_centronics_busy = state;
+}
+
+WRITE_LINE_MEMBER( kc85_state::write_centronics_select )
+{
+	m_centronics_select = state;
 }
 
 READ8_MEMBER( kc85_state::i8155_pc_r )
@@ -988,8 +1047,8 @@ READ8_MEMBER( kc85_state::i8155_pc_r )
 	data |= m_rtc->data_out_r();
 
 	// centronics busy
-	data |= m_centronics->not_busy_r() << 1;
-	data |= m_centronics->busy_r() << 2;
+	data |= m_centronics_select << 1;
+	data |= m_centronics_busy << 2;
 
 	// RS-232
 	data |= m_rs232->cts_r() << 4;
@@ -1009,17 +1068,6 @@ WRITE_LINE_MEMBER( kc85_state::i8155_to_w )
 	m_uart->rrc_w(state);
 }
 
-static I8155_INTERFACE( kc85_8155_intf )
-{
-	DEVCB_NULL,                                         /* port A read */
-	DEVCB_DRIVER_MEMBER(kc85_state, i8155_pa_w),        /* port A write */
-	DEVCB_NULL,                                         /* port B read */
-	DEVCB_DRIVER_MEMBER(kc85_state, i8155_pb_w),        /* port B write */
-	DEVCB_DRIVER_MEMBER(kc85_state, i8155_pc_r),        /* port C read */
-	DEVCB_NULL,                                         /* port C write */
-	DEVCB_DRIVER_LINE_MEMBER(kc85_state, i8155_to_w)    /* timer output */
-};
-
 WRITE8_MEMBER( tandy200_state::i8155_pa_w )
 {
 	/*
@@ -1037,7 +1085,7 @@ WRITE8_MEMBER( tandy200_state::i8155_pa_w )
 
 	*/
 
-	m_centronics->write(space, 0, data);
+	m_cent_data_out->write(space, 0, data);
 
 	m_keylatch = (m_keylatch & 0x100) | data;
 }
@@ -1069,6 +1117,16 @@ WRITE8_MEMBER( tandy200_state::i8155_pb_w )
 	if (m_buzzer) m_speaker->level_w(m_bell);
 }
 
+WRITE_LINE_MEMBER( tandy200_state::write_centronics_busy )
+{
+	m_centronics_busy = state;
+}
+
+WRITE_LINE_MEMBER( tandy200_state::write_centronics_select )
+{
+	m_centronics_select = state;
+}
+
 READ8_MEMBER( tandy200_state::i8155_pc_r )
 {
 	/*
@@ -1087,8 +1145,8 @@ READ8_MEMBER( tandy200_state::i8155_pc_r )
 	UINT8 data = 0x01;
 
 	// centronics
-	data |= m_centronics->not_busy_r() << 1;
-	data |= m_centronics->busy_r() << 2;
+	data |= m_centronics_select << 1;
+	data |= m_centronics_busy << 2;
 
 	// RS-232
 	data |= m_rs232->dcd_r() << 4;
@@ -1104,63 +1162,14 @@ WRITE_LINE_MEMBER( tandy200_state::i8155_to_w )
 	}
 }
 
-static I8155_INTERFACE( tandy200_8155_intf )
-{
-	DEVCB_NULL,                                             /* port A read */
-	DEVCB_DRIVER_MEMBER(tandy200_state, i8155_pa_w),        /* port A write */
-	DEVCB_NULL,                                             /* port B read */
-	DEVCB_DRIVER_MEMBER(tandy200_state, i8155_pb_w),        /* port B write */
-	DEVCB_DRIVER_MEMBER(tandy200_state, i8155_pc_r),        /* port C read */
-	DEVCB_NULL,                                             /* port C write */
-	DEVCB_DRIVER_LINE_MEMBER(tandy200_state, i8155_to_w)    /* timer output */
-};
-
-/* IM6402 Interface */
-
-static IM6402_INTERFACE( uart_intf )
-{
-	0,
-	0,
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, serial_port_device, rx),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, serial_port_device, tx),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-/* I8251 Interface */
-
-static const i8251_interface tandy200_uart_intf =
-{
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, serial_port_device, rx),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, serial_port_device, tx),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, rs232_port_device, dsr_r),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, rs232_port_device, dtr_w),
-	DEVCB_DEVICE_LINE_MEMBER(RS232_TAG, rs232_port_device, rts_w),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-//-------------------------------------------------
-//  rs232_port_interface rs232_intf
-//-------------------------------------------------
-
-static const rs232_port_interface rs232_intf =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
 /* Machine Drivers */
 
 void kc85_state::machine_start()
 {
 	address_space &program = m_maincpu->space(AS_PROGRAM);
+
+	std::string region_tag;
+	m_opt_region = memregion(region_tag.assign(m_opt_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
 
 	/* initialize RTC */
 	m_rtc->cs_w(1);
@@ -1170,7 +1179,7 @@ void kc85_state::machine_start()
 	program.install_read_bank(0x0000, 0x7fff, "bank1");
 	program.unmap_write(0x0000, 0x7fff);
 	membank("bank1")->configure_entry(0, m_rom->base());
-	membank("bank1")->configure_entry(1, m_option->base());
+	membank("bank1")->configure_entry(1, m_opt_region ? m_opt_region->base() : m_rom->base());
 	membank("bank1")->set_entry(0);
 
 	/* configure RAM banking */
@@ -1194,11 +1203,16 @@ void kc85_state::machine_start()
 	save_item(NAME(m_keylatch));
 	save_item(NAME(m_buzzer));
 	save_item(NAME(m_bell));
+	save_item(NAME(m_centronics_busy));
+	save_item(NAME(m_centronics_select));
 }
 
 void pc8201_state::machine_start()
 {
 	UINT8 *ram = m_ram->pointer();
+
+	std::string region_tag;
+	m_opt_region = memregion(region_tag.assign(m_opt_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
 
 	/* initialize RTC */
 	m_rtc->cs_w(1);
@@ -1206,7 +1220,7 @@ void pc8201_state::machine_start()
 
 	/* configure ROM banking */
 	membank("bank1")->configure_entry(0, m_rom->base());
-	membank("bank1")->configure_entry(1, m_option->base());
+	membank("bank1")->configure_entry(1, m_opt_region ? m_opt_region->base() : m_rom->base());
 	membank("bank1")->configure_entries(2, 2, ram + 0x8000, 0x8000);
 	membank("bank1")->set_entry(0);
 
@@ -1222,12 +1236,17 @@ void pc8201_state::machine_start()
 	save_item(NAME(m_keylatch));
 	save_item(NAME(m_buzzer));
 	save_item(NAME(m_bell));
+	save_item(NAME(m_centronics_busy));
+	save_item(NAME(m_centronics_select));
 	save_item(NAME(m_iosel));
 }
 
 void trsm100_state::machine_start()
 {
 	address_space &program = m_maincpu->space(AS_PROGRAM);
+
+	std::string region_tag;
+	m_opt_region = memregion(region_tag.assign(m_opt_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
 
 	/* initialize RTC */
 	m_rtc->cs_w(1);
@@ -1237,7 +1256,7 @@ void trsm100_state::machine_start()
 	program.install_read_bank(0x0000, 0x7fff, "bank1");
 	program.unmap_write(0x0000, 0x7fff);
 	membank("bank1")->configure_entry(0, m_rom->base());
-	membank("bank1")->configure_entry(1, m_option->base());
+	membank("bank1")->configure_entry(1, m_opt_region ? m_opt_region->base() : m_rom->base());
 	membank("bank1")->set_entry(0);
 
 	/* configure RAM banking */
@@ -1271,14 +1290,19 @@ void trsm100_state::machine_start()
 	save_item(NAME(m_keylatch));
 	save_item(NAME(m_buzzer));
 	save_item(NAME(m_bell));
+	save_item(NAME(m_centronics_busy));
+	save_item(NAME(m_centronics_select));
 }
 
 void tandy200_state::machine_start()
 {
+	std::string region_tag;
+	m_opt_region = memregion(region_tag.assign(m_opt_cart->tag()).append(GENERIC_ROM_REGION_TAG).c_str());
+
 	/* configure ROM banking */
 	membank("bank1")->configure_entry(0, m_rom->base());
 	membank("bank1")->configure_entry(1, m_rom->base() + 0x10000);
-	membank("bank1")->configure_entry(2, m_option->base());
+	membank("bank1")->configure_entry(2, m_opt_region ? m_opt_region->base() : m_rom->base());
 	membank("bank1")->set_entry(0);
 
 	/* configure RAM banking */
@@ -1287,20 +1311,13 @@ void tandy200_state::machine_start()
 
 	/* register for state saving */
 	save_item(NAME(m_bank));
-	save_item(NAME(m_tp));
 	save_item(NAME(m_keylatch));
 	save_item(NAME(m_buzzer));
 	save_item(NAME(m_bell));
+	save_item(NAME(m_centronics_busy));
+	save_item(NAME(m_centronics_select));
+	save_item(NAME(m_tp));
 }
-
-static const cassette_interface kc85_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	NULL,
-	NULL
-};
 
 WRITE_LINE_MEMBER( kc85_state::kc85_sod_w )
 {
@@ -1312,13 +1329,15 @@ READ_LINE_MEMBER( kc85_state::kc85_sid_r )
 	return m_cassette->input() > 0.0;
 }
 
-static I8085_CONFIG( kc85_i8085_config )
+WRITE_LINE_MEMBER( tandy200_state::kc85_sod_w )
 {
-	DEVCB_NULL,             /* STATUS changed callback */
-	DEVCB_NULL,             /* INTE changed callback */
-	DEVCB_DRIVER_LINE_MEMBER(kc85_state,kc85_sid_r),    /* SID changed callback (I8085A only) */
-	DEVCB_DRIVER_LINE_MEMBER(kc85_state,kc85_sod_w) /* SOD changed callback (I8085A only) */
-};
+	m_cassette->output(state ? +1.0 : -1.0);
+}
+
+READ_LINE_MEMBER( tandy200_state::kc85_sid_r )
+{
+	return m_cassette->input() > 0.0;
+}
 
 TIMER_DEVICE_CALLBACK_MEMBER(tandy200_state::tandy200_tp_tick)
 {
@@ -1332,7 +1351,8 @@ static MACHINE_CONFIG_START( kc85, kc85_state )
 	MCFG_CPU_ADD(I8085_TAG, I8085A, XTAL_4_9152MHz)
 	MCFG_CPU_PROGRAM_MAP(kc85_mem)
 	MCFG_CPU_IO_MAP(kc85_io)
-	MCFG_CPU_CONFIG(kc85_i8085_config)
+	MCFG_I8085A_SID(READLINE(kc85_state,kc85_sid_r))
+	MCFG_I8085A_SOD(WRITELINE(kc85_state,kc85_sod_w))
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD(kc85_video)
@@ -1343,18 +1363,29 @@ static MACHINE_CONFIG_START( kc85, kc85_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* devices */
-	MCFG_I8155_ADD(I8155_TAG, XTAL_4_9152MHz/2, kc85_8155_intf)
+	MCFG_DEVICE_ADD(I8155_TAG, I8155, XTAL_4_9152MHz/2)
+	MCFG_I8155_OUT_PORTA_CB(WRITE8(kc85_state, i8155_pa_w))
+	MCFG_I8155_OUT_PORTB_CB(WRITE8(kc85_state, i8155_pb_w))
+	MCFG_I8155_IN_PORTC_CB(READ8(kc85_state, i8155_pc_r))
+	MCFG_I8155_OUT_TIMEROUT_CB(WRITELINE(kc85_state, i8155_to_w))
+
 	MCFG_UPD1990A_ADD(UPD1990A_TAG, XTAL_32_768kHz, NULL, INPUTLINE(I8085_TAG, I8085_RST75_LINE))
-	MCFG_IM6402_ADD(IM6402_TAG, uart_intf)
-	MCFG_RS232_PORT_ADD(RS232_TAG, rs232_intf, default_rs232_devices, NULL)
-	MCFG_CENTRONICS_PRINTER_ADD(CENTRONICS_TAG, standard_centronics)
-	MCFG_CASSETTE_ADD("cassette", kc85_cassette_interface)
+
+	MCFG_IM6402_ADD(IM6402_TAG, 0, 0)
+	MCFG_IM6402_TRO_CALLBACK(DEVWRITELINE(RS232_TAG, rs232_port_device, write_txd))
+	MCFG_RS232_PORT_ADD(RS232_TAG, default_rs232_devices, NULL)
+	MCFG_RS232_RXD_HANDLER(DEVWRITELINE(IM6402_TAG, im6402_device, write_rri))
+
+	MCFG_CENTRONICS_ADD(CENTRONICS_TAG, centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(kc85_state, write_centronics_busy))
+	MCFG_CENTRONICS_SELECT_HANDLER(WRITELINE(kc85_state, write_centronics_select))
+
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
 
 	/* option ROM cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("trsm100_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("opt_cartslot", generic_linear_slot, "trsm100_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* software lists */
 	MCFG_SOFTWARE_LIST_ADD("cart_list", "trsm100")
@@ -1370,7 +1401,8 @@ static MACHINE_CONFIG_START( pc8201, pc8201_state )
 	MCFG_CPU_ADD(I8085_TAG, I8085A, XTAL_4_9152MHz)
 	MCFG_CPU_PROGRAM_MAP(pc8201_mem)
 	MCFG_CPU_IO_MAP(pc8201_io)
-	MCFG_CPU_CONFIG(kc85_i8085_config)
+	MCFG_I8085A_SID(READLINE(kc85_state,kc85_sid_r))
+	MCFG_I8085A_SOD(WRITELINE(kc85_state,kc85_sod_w))
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD(kc85_video)
@@ -1381,24 +1413,33 @@ static MACHINE_CONFIG_START( pc8201, pc8201_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* devices */
-	MCFG_I8155_ADD(I8155_TAG, XTAL_4_9152MHz/2, kc85_8155_intf)
+	MCFG_DEVICE_ADD(I8155_TAG, I8155, XTAL_4_9152MHz/2)
+	MCFG_I8155_OUT_PORTA_CB(WRITE8(kc85_state, i8155_pa_w))
+	MCFG_I8155_OUT_PORTB_CB(WRITE8(kc85_state, i8155_pb_w))
+	MCFG_I8155_IN_PORTC_CB(READ8(kc85_state, i8155_pc_r))
+	MCFG_I8155_OUT_TIMEROUT_CB(WRITELINE(kc85_state, i8155_to_w))
+
 	MCFG_UPD1990A_ADD(UPD1990A_TAG, XTAL_32_768kHz, NULL, INPUTLINE(I8085_TAG, I8085_RST75_LINE))
-	MCFG_IM6402_ADD(IM6402_TAG, uart_intf)
-	MCFG_RS232_PORT_ADD(RS232_TAG, rs232_intf, default_rs232_devices, NULL)
-	MCFG_CENTRONICS_PRINTER_ADD(CENTRONICS_TAG, standard_centronics)
-	MCFG_CASSETTE_ADD("cassette", kc85_cassette_interface)
+
+	MCFG_IM6402_ADD(IM6402_TAG, 0, 0)
+	MCFG_IM6402_TRO_CALLBACK(DEVWRITELINE(RS232_TAG, rs232_port_device, write_txd))
+	MCFG_RS232_PORT_ADD(RS232_TAG, default_rs232_devices, NULL)
+	MCFG_RS232_RXD_HANDLER(DEVWRITELINE(IM6402_TAG, im6402_device, write_rri))
+
+	MCFG_CENTRONICS_ADD(CENTRONICS_TAG, centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(kc85_state, write_centronics_busy))
+	MCFG_CENTRONICS_SELECT_HANDLER(WRITELINE(kc85_state, write_centronics_select))
+
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
 
 	/* option ROM cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("pc8201_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("opt_cartslot", generic_linear_slot, "pc8201_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* 128KB ROM cassette */
-	MCFG_CARTSLOT_ADD("cart2")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("pc8201_cart2")
+	MCFG_GENERIC_CARTSLOT_ADD("cas_cartslot", generic_linear_slot, "pc8201_cart2")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* software lists */
 	MCFG_SOFTWARE_LIST_ADD("cart_list", "pc8201")
@@ -1409,12 +1450,19 @@ static MACHINE_CONFIG_START( pc8201, pc8201_state )
 	MCFG_RAM_EXTRA_OPTIONS("32K,64K,96K")
 MACHINE_CONFIG_END
 
+static MACHINE_CONFIG_DERIVED( pc8300, pc8201 )
+	MCFG_RAM_MODIFY(RAM_TAG)
+	MCFG_RAM_DEFAULT_SIZE("32K")
+	MCFG_RAM_EXTRA_OPTIONS("64K,96K")
+MACHINE_CONFIG_END
+
 static MACHINE_CONFIG_START( trsm100, trsm100_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD(I8085_TAG, I8085A, XTAL_4_9152MHz)
 	MCFG_CPU_PROGRAM_MAP(kc85_mem)
 	MCFG_CPU_IO_MAP(trsm100_io)
-	MCFG_CPU_CONFIG(kc85_i8085_config)
+	MCFG_I8085A_SID(READLINE(kc85_state,kc85_sid_r))
+	MCFG_I8085A_SOD(WRITELINE(kc85_state,kc85_sod_w))
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD(kc85_video)
@@ -1425,19 +1473,28 @@ static MACHINE_CONFIG_START( trsm100, trsm100_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* devices */
-	MCFG_I8155_ADD(I8155_TAG, XTAL_4_9152MHz/2, kc85_8155_intf)
+	MCFG_DEVICE_ADD(I8155_TAG, I8155, XTAL_4_9152MHz/2)
+	MCFG_I8155_OUT_PORTA_CB(WRITE8(kc85_state, i8155_pa_w))
+	MCFG_I8155_OUT_PORTB_CB(WRITE8(kc85_state, i8155_pb_w))
+	MCFG_I8155_IN_PORTC_CB(READ8(kc85_state, i8155_pc_r))
+	MCFG_I8155_OUT_TIMEROUT_CB(WRITELINE(kc85_state, i8155_to_w))
+
 	MCFG_UPD1990A_ADD(UPD1990A_TAG, XTAL_32_768kHz, NULL, INPUTLINE(I8085_TAG, I8085_RST75_LINE))
-	MCFG_IM6402_ADD(IM6402_TAG, uart_intf)
-	MCFG_RS232_PORT_ADD(RS232_TAG, rs232_intf, default_rs232_devices, NULL)
-	MCFG_CENTRONICS_PRINTER_ADD(CENTRONICS_TAG, standard_centronics)
-	MCFG_CASSETTE_ADD("cassette", kc85_cassette_interface)
+
+	MCFG_IM6402_ADD(IM6402_TAG, 0, 0)
+	MCFG_IM6402_TRO_CALLBACK(DEVWRITELINE(RS232_TAG, rs232_port_device, write_txd))
+	MCFG_RS232_PORT_ADD(RS232_TAG, default_rs232_devices, NULL)
+	MCFG_RS232_RXD_HANDLER(DEVWRITELINE(IM6402_TAG, im6402_device, write_rri))
+
+	MCFG_CENTRONICS_ADD(CENTRONICS_TAG, centronics_devices, "printer")
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+
 //  MCFG_MC14412_ADD(MC14412_TAG, XTAL_1MHz)
 
 	/* option ROM cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("trsm100_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("opt_cartslot", generic_linear_slot, "trsm100_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* software lists */
 	MCFG_SOFTWARE_LIST_ADD("cart_list", "trsm100")
@@ -1459,7 +1516,8 @@ static MACHINE_CONFIG_START( tandy200, tandy200_state )
 	MCFG_CPU_ADD(I8085_TAG, I8085A, XTAL_4_9152MHz)
 	MCFG_CPU_PROGRAM_MAP(tandy200_mem)
 	MCFG_CPU_IO_MAP(tandy200_io)
-	MCFG_CPU_CONFIG(kc85_i8085_config)
+	MCFG_I8085A_SID(READLINE(tandy200_state,kc85_sid_r))
+	MCFG_I8085A_SOD(WRITELINE(tandy200_state,kc85_sod_w))
 
 	/* video hardware */
 	MCFG_FRAGMENT_ADD(tandy200_video)
@@ -1474,19 +1532,36 @@ static MACHINE_CONFIG_START( tandy200, tandy200_state )
 //  MCFG_TCM5089_ADD(TCM5089_TAG, XTAL_3_579545MHz)
 
 	/* devices */
-	MCFG_I8155_ADD(I8155_TAG, XTAL_4_9152MHz/2, tandy200_8155_intf)
-	MCFG_RP5C01_ADD(RP5C01A_TAG, XTAL_32_768kHz, tandy200_rtc_intf)
-	MCFG_I8251_ADD(I8251_TAG, /*XTAL_4_9152MHz/2,*/ tandy200_uart_intf)
-	MCFG_RS232_PORT_ADD(RS232_TAG, rs232_intf, default_rs232_devices, NULL)
+	MCFG_DEVICE_ADD(I8155_TAG, I8155, XTAL_4_9152MHz/2)
+	MCFG_I8155_OUT_PORTA_CB(WRITE8(tandy200_state, i8155_pa_w))
+	MCFG_I8155_OUT_PORTB_CB(WRITE8(tandy200_state, i8155_pb_w))
+	MCFG_I8155_IN_PORTC_CB(READ8(tandy200_state, i8155_pc_r))
+	MCFG_I8155_OUT_TIMEROUT_CB(WRITELINE(tandy200_state, i8155_to_w))
+
+	MCFG_DEVICE_ADD(RP5C01A_TAG, RP5C01, XTAL_32_768kHz)
+
+	MCFG_DEVICE_ADD(I8251_TAG, I8251, 0) /*XTAL_4_9152MHz/2,*/
+	MCFG_I8251_TXD_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_txd))
+	MCFG_I8251_DTR_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_dtr))
+	MCFG_I8251_RTS_HANDLER(DEVWRITELINE(RS232_TAG, rs232_port_device, write_rts))
+
+	MCFG_RS232_PORT_ADD(RS232_TAG, default_rs232_devices, NULL)
+	MCFG_RS232_RXD_HANDLER(DEVWRITELINE(I8251_TAG, i8251_device, write_rxd))
+	MCFG_RS232_DSR_HANDLER(DEVWRITELINE(I8251_TAG, i8251_device, write_dsr))
+
 //  MCFG_MC14412_ADD(MC14412_TAG, XTAL_1MHz)
-	MCFG_CENTRONICS_PRINTER_ADD(CENTRONICS_TAG, standard_centronics)
-	MCFG_CASSETTE_ADD("cassette", kc85_cassette_interface)
+	MCFG_CENTRONICS_ADD(CENTRONICS_TAG, centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(tandy200_state, write_centronics_busy))
+	MCFG_CENTRONICS_SELECT_HANDLER(WRITELINE(tandy200_state, write_centronics_select))
+
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", CENTRONICS_TAG)
+
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
 
 	/* option ROM cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("tandy200_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("opt_cartslot", generic_linear_slot, "tandy200_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
 
 	/* software lists */
 	MCFG_SOFTWARE_LIST_ADD("cart_list", "tandy200")
@@ -1502,44 +1577,22 @@ MACHINE_CONFIG_END
 ROM_START( kc85 )
 	ROM_REGION( 0x8000, I8085_TAG, 0 )
 	ROM_LOAD( "kc85rom.bin", 0x0000, 0x8000, CRC(8a9ddd6b) SHA1(9d18cb525580c9e071e23bc3c472380aa46356c0) )
-
-	ROM_REGION( 0x8000, "option", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart", 0x0000, 0x8000, ROM_MIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START( pc8201 )
 	ROM_REGION( 0x10000, I8085_TAG, 0 )
 	ROM_LOAD( "3256a41-3b1 n 82 basic.rom0", 0x0000, 0x8000, CRC(3dbaa484) SHA1(9886a973faa639ca9e0ba478790bab20e5163495) )
-
-	ROM_REGION( 0x8000, "option", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart1", 0x0000, 0x8000, ROM_MIRROR | ROM_OPTIONAL)
-
-	ROM_REGION( 0x20000, "cassette", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart2", 0x0000, 0x20000, ROM_MIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START( pc8201a )
 	ROM_REGION( 0x10000, I8085_TAG, 0 )
 	ROM_LOAD( "pc8201rom.rom", 0x0000, 0x8000, CRC(30555035) SHA1(96f33ff235db3028bf5296052acedbc94437c596) )
-
-	ROM_REGION( 0x8000, "option", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart", 0x0000, 0x8000, ROM_MIRROR | ROM_OPTIONAL)
-
-	ROM_REGION( 0x20000, "cassette", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart2", 0x0000, 0x20000, ROM_MIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START( npc8300 )
 	ROM_REGION( 0x10000, I8085_TAG, 0 )
 	ROM_LOAD( "831000-438_n83a_basic_1986_microsoft_8716_z01.bin", 0x0000, 0x8000, CRC(a3c15dcb) SHA1(f0322dfe3f2e951de043bf6d0973e6ffc2c87181))
-
-	ROM_REGION( 0x8000, "option", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart1", 0x0000, 0x8000, ROM_MIRROR | ROM_OPTIONAL)
-
-	ROM_REGION( 0x20000, "cassette", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart2", 0x0000, 0x20000, ROM_MIRROR | ROM_OPTIONAL)
 ROM_END
-
 
 ROM_START( trsm100 )
 	/*
@@ -1551,27 +1604,17 @@ ROM_START( trsm100 )
 	*/
 	ROM_REGION( 0x8000, I8085_TAG, 0 )
 	ROM_LOAD( "m100rom.m12",  0x0000, 0x8000, CRC(730a3611) SHA1(094dbc4ac5a4ea5cdf51a1ac581a40a9622bb25d) )
-
-	// increased to 0x30000 to fully load 'Booster Pack', but its banking is still unknown
-	ROM_REGION( 0x30000, "option", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart", 0x0000, 0x30000, ROM_MIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START( m10 )
 	// 3256C02-4B3/I        Italian
 	ROM_REGION( 0x8010, I8085_TAG, 0 )
 	ROM_LOAD( "m10rom.m12", 0x0000, 0x8000, CRC(f0e8447a) SHA1(d58867276213116a79f7074109b7d7ce02e8a3af) )
-
-	ROM_REGION( 0x8000, "option", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart", 0x0000, 0x8000, ROM_MIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START( tandy102 )
 	ROM_REGION( 0x8000, I8085_TAG, 0 )
 	ROM_LOAD( "m102rom.m12", 0x0000, 0x8000, CRC(08e9f89c) SHA1(b6ede7735a361c80419f4c9c0e36e7d480c36d11) )
-
-	ROM_REGION( 0x8000, "option", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart", 0x0000, 0x8000, ROM_MIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START( tandy200 )
@@ -1581,19 +1624,17 @@ ROM_START( tandy200 )
 	ROM_LOAD( "rom #2.m14",   0x10000, 0x8000, NO_DUMP )
 	ROM_LOAD( "t200rom.bin", 0x0000, 0xa000, BAD_DUMP CRC(e3358b38) SHA1(35d4e6a5fb8fc584419f57ec12b423f6021c0991) ) /* Y2K hacked */
 	ROM_CONTINUE(           0x10000, 0x8000 )
-
-	ROM_REGION( 0x8000, "option", ROMREGION_ERASEFF )
-	ROM_CART_LOAD("cart", 0x0000, 0x8000, ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 /* System Drivers */
+
 /*    YEAR  NAME        PARENT  COMPAT  MACHINE     INPUT       INIT    COMPANY                 FULLNAME */
-COMP( 1983, kc85,       0,      0,      kc85,       kc85, driver_device,        0,      "Kyosei",               "Kyotronic 85 (Japan)", 0 )
-COMP( 1983, m10,        kc85,   0,      kc85,       olivm10, driver_device, 0,      "Olivetti",             "M-10", 0 )
-//COMP( 1983, m10m,     kc85,   0,      kc85,       olivm10, driver_device,    0,      "Olivetti",             "M-10 Modem (US)", 0 )
-COMP( 1983, trsm100,    0,      0,      trsm100,    kc85, driver_device,        0,      "Tandy Radio Shack",    "TRS-80 Model 100", 0 )
-COMP( 1986, tandy102,   trsm100,0,      tandy102,   kc85, driver_device,        0,      "Tandy Radio Shack",    "Tandy 102", 0 )
-COMP( 1983, pc8201,     0,      0,      pc8201,     pc8201a, driver_device,    0,      "Nippon Electronic Company",                  "PC-8201 (Japan)", GAME_NOT_WORKING ) // keyboard layout wrong
-COMP( 1983, pc8201a,    pc8201, 0,      pc8201,     pc8201a, driver_device, 0,      "Nippon Electronic Company",                    "PC-8201A", 0 )
-COMP( 1987, npc8300,    pc8201, 0,      pc8201,     pc8201a, driver_device,    0,      "Nippon Electronic Company",                  "PC-8300", GAME_NOT_WORKING )
-COMP( 1984, tandy200,   0,      0,      tandy200,   kc85, driver_device,        0,      "Tandy Radio Shack",    "Tandy 200", 0 )
+COMP( 1983, kc85,       0,      0,      kc85,       kc85,       driver_device, 0,      "Kyosei",                    "Kyotronic 85 (Japan)",     0 )
+COMP( 1983, m10,        kc85,   0,      kc85,       olivm10,    driver_device, 0,      "Olivetti",                  "M-10",                     0 )
+//COMP( 1983, m10m,     kc85,   0,      kc85,       olivm10,    driver_device, 0,      "Olivetti",                  "M-10 Modem (US)",          0 )
+COMP( 1983, trsm100,    0,      0,      trsm100,    kc85,       driver_device, 0,      "Tandy Radio Shack",         "TRS-80 Model 100",         0 )
+COMP( 1986, tandy102,   trsm100,0,      tandy102,   kc85,       driver_device, 0,      "Tandy Radio Shack",         "Tandy 102",                0 )
+COMP( 1983, pc8201,     0,      0,      pc8201,     pc8201,     driver_device, 0,      "Nippon Electronic Company", "PC-8201 (Japan)",          GAME_NOT_WORKING ) // keyboard layout wrong
+COMP( 1983, pc8201a,    pc8201, 0,      pc8201,     pc8201a,    driver_device, 0,      "Nippon Electronic Company", "PC-8201A",                 0 )
+COMP( 1987, npc8300,    pc8201, 0,      pc8300,     pc8201a,    driver_device, 0,      "Nippon Electronic Company", "PC-8300",                  GAME_NOT_WORKING )
+COMP( 1984, tandy200,   0,      0,      tandy200,   kc85,       driver_device, 0,      "Tandy Radio Shack",         "Tandy 200",                0 )

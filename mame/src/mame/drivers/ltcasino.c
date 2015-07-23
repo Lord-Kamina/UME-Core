@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Pierpaolo Prazzoli, David Haywood
 /*
 
 Little Casino
@@ -25,7 +27,8 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_tile_num_ram(*this, "tile_nuram"),
 		m_tile_atr_ram(*this, "tile_atr_ram"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode") { }
 
 	required_shared_ptr<UINT8> m_tile_num_ram;
 	required_shared_ptr<UINT8> m_tile_atr_ram;
@@ -37,6 +40,7 @@ public:
 	virtual void video_start();
 	UINT32 screen_update_ltcasino(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
 };
 
 
@@ -56,7 +60,7 @@ TILE_GET_INFO_MEMBER(ltcasino_state::get_ltcasino_tile_info)
 
 void ltcasino_state::video_start()
 {
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ltcasino_state::get_ltcasino_tile_info),this),TILEMAP_SCAN_ROWS,8, 8,64,32);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ltcasino_state::get_ltcasino_tile_info),this),TILEMAP_SCAN_ROWS,8, 8,64,32);
 }
 
 
@@ -640,7 +644,7 @@ GFXDECODE_END
 
 UINT32 ltcasino_state::screen_update_ltcasino(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_tilemap->draw(bitmap, cliprect, 0,0);
+	m_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	return 0;
 }
 
@@ -658,9 +662,10 @@ static MACHINE_CONFIG_START( ltcasino, ltcasino_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(6*8, 58*8-1, 0, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(ltcasino_state, screen_update_ltcasino)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(ltcasino)
-	MCFG_PALETTE_LENGTH(0x100)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", ltcasino)
+	MCFG_PALETTE_ADD("palette", 0x100)
 
 
 	/* sound hardware */

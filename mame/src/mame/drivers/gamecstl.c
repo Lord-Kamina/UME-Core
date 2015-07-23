@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /*
     Cristaltec "Game Cristal" (MAME bootleg)
 
@@ -64,7 +66,7 @@
 
 #include "emu.h"
 #include "cpu/i386/i386.h"
-#include "machine/pci.h"
+#include "machine/lpci.h"
 #include "machine/pcshare.h"
 #include "machine/pckeybrd.h"
 #include "machine/idectrl.h"
@@ -75,11 +77,15 @@ class gamecstl_state : public pcat_base_state
 public:
 	gamecstl_state(const machine_config &mconfig, device_type type, const char *tag)
 		: pcat_base_state(mconfig, type, tag),
-		m_cga_ram(*this, "cga_ram") { }
+		m_cga_ram(*this, "cga_ram"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	required_shared_ptr<UINT32> m_cga_ram;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 	UINT32 *m_bios_ram;
-	UINT8 m_mxtc_config_reg[256];
+	UINT8 m_mtxc_config_reg[256];
 	UINT8 m_piix4_config_reg[4][256];
 
 	DECLARE_WRITE32_MEMBER(pnp_config_w);
@@ -97,17 +103,17 @@ public:
 
 static const rgb_t cga_palette[16] =
 {
-	MAKE_RGB( 0x00, 0x00, 0x00 ), MAKE_RGB( 0x00, 0x00, 0xaa ), MAKE_RGB( 0x00, 0xaa, 0x00 ), MAKE_RGB( 0x00, 0xaa, 0xaa ),
-	MAKE_RGB( 0xaa, 0x00, 0x00 ), MAKE_RGB( 0xaa, 0x00, 0xaa ), MAKE_RGB( 0xaa, 0x55, 0x00 ), MAKE_RGB( 0xaa, 0xaa, 0xaa ),
-	MAKE_RGB( 0x55, 0x55, 0x55 ), MAKE_RGB( 0x55, 0x55, 0xff ), MAKE_RGB( 0x55, 0xff, 0x55 ), MAKE_RGB( 0x55, 0xff, 0xff ),
-	MAKE_RGB( 0xff, 0x55, 0x55 ), MAKE_RGB( 0xff, 0x55, 0xff ), MAKE_RGB( 0xff, 0xff, 0x55 ), MAKE_RGB( 0xff, 0xff, 0xff ),
+	rgb_t( 0x00, 0x00, 0x00 ), rgb_t( 0x00, 0x00, 0xaa ), rgb_t( 0x00, 0xaa, 0x00 ), rgb_t( 0x00, 0xaa, 0xaa ),
+	rgb_t( 0xaa, 0x00, 0x00 ), rgb_t( 0xaa, 0x00, 0xaa ), rgb_t( 0xaa, 0x55, 0x00 ), rgb_t( 0xaa, 0xaa, 0xaa ),
+	rgb_t( 0x55, 0x55, 0x55 ), rgb_t( 0x55, 0x55, 0xff ), rgb_t( 0x55, 0xff, 0x55 ), rgb_t( 0x55, 0xff, 0xff ),
+	rgb_t( 0xff, 0x55, 0x55 ), rgb_t( 0xff, 0x55, 0xff ), rgb_t( 0xff, 0xff, 0x55 ), rgb_t( 0xff, 0xff, 0xff ),
 };
 
 void gamecstl_state::video_start()
 {
 	int i;
 	for (i=0; i < 16; i++)
-		palette_set_color(machine(), i, cga_palette[i]);
+		m_palette->set_pen_color(i, cga_palette[i]);
 }
 
 void gamecstl_state::draw_char(bitmap_ind16 &bitmap, const rectangle &cliprect, gfx_element *gfx, int ch, int att, int x, int y)
@@ -135,7 +141,7 @@ void gamecstl_state::draw_char(bitmap_ind16 &bitmap, const rectangle &cliprect, 
 UINT32 gamecstl_state::screen_update_gamecstl(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int i, j;
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 	UINT32 *cga = m_cga_ram;
 	int index = 0;
 
@@ -158,19 +164,19 @@ UINT32 gamecstl_state::screen_update_gamecstl(screen_device &screen, bitmap_ind1
 	return 0;
 }
 
-// Intel 82439TX System Controller (MXTC)
+// Intel 82439TX System Controller (MTXC)
 
-static UINT8 mxtc_config_r(device_t *busdevice, device_t *device, int function, int reg)
+static UINT8 mtxc_config_r(device_t *busdevice, device_t *device, int function, int reg)
 {
 	gamecstl_state *state = busdevice->machine().driver_data<gamecstl_state>();
-	printf("MXTC: read %d, %02X\n", function, reg);
-	return state->m_mxtc_config_reg[reg];
+	printf("MTXC: read %d, %02X\n", function, reg);
+	return state->m_mtxc_config_reg[reg];
 }
 
-static void mxtc_config_w(device_t *busdevice, device_t *device, int function, int reg, UINT8 data)
+static void mtxc_config_w(device_t *busdevice, device_t *device, int function, int reg, UINT8 data)
 {
 	gamecstl_state *state = busdevice->machine().driver_data<gamecstl_state>();
-	printf("%s:MXTC: write %d, %02X, %02X\n", busdevice->machine().describe_context(), function, reg, data);
+	printf("%s:MTXC: write %d, %02X, %02X\n", busdevice->machine().describe_context(), function, reg, data);
 
 	switch(reg)
 	{
@@ -188,17 +194,17 @@ static void mxtc_config_w(device_t *busdevice, device_t *device, int function, i
 		}
 	}
 
-	state->m_mxtc_config_reg[reg] = data;
+	state->m_mtxc_config_reg[reg] = data;
 }
 
 void gamecstl_state::intel82439tx_init()
 {
-	m_mxtc_config_reg[0x60] = 0x02;
-	m_mxtc_config_reg[0x61] = 0x02;
-	m_mxtc_config_reg[0x62] = 0x02;
-	m_mxtc_config_reg[0x63] = 0x02;
-	m_mxtc_config_reg[0x64] = 0x02;
-	m_mxtc_config_reg[0x65] = 0x02;
+	m_mtxc_config_reg[0x60] = 0x02;
+	m_mtxc_config_reg[0x61] = 0x02;
+	m_mtxc_config_reg[0x62] = 0x02;
+	m_mtxc_config_reg[0x63] = 0x02;
+	m_mtxc_config_reg[0x64] = 0x02;
+	m_mtxc_config_reg[0x65] = 0x02;
 }
 
 static UINT32 intel82439tx_pci_r(device_t *busdevice, device_t *device, int function, int reg, UINT32 mem_mask)
@@ -206,19 +212,19 @@ static UINT32 intel82439tx_pci_r(device_t *busdevice, device_t *device, int func
 	UINT32 r = 0;
 	if (ACCESSING_BITS_24_31)
 	{
-		r |= mxtc_config_r(busdevice, device, function, reg + 3) << 24;
+		r |= mtxc_config_r(busdevice, device, function, reg + 3) << 24;
 	}
 	if (ACCESSING_BITS_16_23)
 	{
-		r |= mxtc_config_r(busdevice, device, function, reg + 2) << 16;
+		r |= mtxc_config_r(busdevice, device, function, reg + 2) << 16;
 	}
 	if (ACCESSING_BITS_8_15)
 	{
-		r |= mxtc_config_r(busdevice, device, function, reg + 1) << 8;
+		r |= mtxc_config_r(busdevice, device, function, reg + 1) << 8;
 	}
 	if (ACCESSING_BITS_0_7)
 	{
-		r |= mxtc_config_r(busdevice, device, function, reg + 0) << 0;
+		r |= mtxc_config_r(busdevice, device, function, reg + 0) << 0;
 	}
 	return r;
 }
@@ -227,19 +233,19 @@ static void intel82439tx_pci_w(device_t *busdevice, device_t *device, int functi
 {
 	if (ACCESSING_BITS_24_31)
 	{
-		mxtc_config_w(busdevice, device, function, reg + 3, (data >> 24) & 0xff);
+		mtxc_config_w(busdevice, device, function, reg + 3, (data >> 24) & 0xff);
 	}
 	if (ACCESSING_BITS_16_23)
 	{
-		mxtc_config_w(busdevice, device, function, reg + 2, (data >> 16) & 0xff);
+		mtxc_config_w(busdevice, device, function, reg + 2, (data >> 16) & 0xff);
 	}
 	if (ACCESSING_BITS_8_15)
 	{
-		mxtc_config_w(busdevice, device, function, reg + 1, (data >> 8) & 0xff);
+		mtxc_config_w(busdevice, device, function, reg + 1, (data >> 8) & 0xff);
 	}
 	if (ACCESSING_BITS_0_7)
 	{
-		mxtc_config_w(busdevice, device, function, reg + 0, (data >> 0) & 0xff);
+		mtxc_config_w(busdevice, device, function, reg + 0, (data >> 0) & 0xff);
 	}
 }
 
@@ -306,7 +312,7 @@ WRITE32_MEMBER(gamecstl_state::pnp_config_w)
 {
 	if (ACCESSING_BITS_8_15)
 	{
-//      mame_printf_debug("PNP Config: %02X\n", (data >> 8) & 0xff);
+//      osd_printf_debug("PNP Config: %02X\n", (data >> 8) & 0xff);
 	}
 }
 
@@ -314,7 +320,7 @@ WRITE32_MEMBER(gamecstl_state::pnp_data_w)
 {
 	if (ACCESSING_BITS_8_15)
 	{
-//      mame_printf_debug("PNP Data: %02X\n", (data >> 8) & 0xff);
+//      osd_printf_debug("PNP Data: %02X\n", (data >> 8) & 0xff);
 	}
 }
 
@@ -322,7 +328,7 @@ WRITE32_MEMBER(gamecstl_state::pnp_data_w)
 
 WRITE32_MEMBER(gamecstl_state::bios_ram_w)
 {
-	if (m_mxtc_config_reg[0x59] & 0x20)     // write to RAM if this region is write-enabled
+	if (m_mtxc_config_reg[0x59] & 0x20)     // write to RAM if this region is write-enabled
 	{
 		COMBINE_DATA(m_bios_ram + offset);
 	}
@@ -345,11 +351,11 @@ static ADDRESS_MAP_START(gamecstl_io, AS_IO, 32, gamecstl_state )
 	AM_IMPORT_FROM(pcat32_io_common)
 	AM_RANGE(0x00e8, 0x00eb) AM_NOP
 	AM_RANGE(0x00ec, 0x00ef) AM_NOP
-	AM_RANGE(0x01f0, 0x01f7) AM_DEVREADWRITE16("ide", ide_controller_device, read_cs0_pc, write_cs0_pc, 0xffffffff)
+	AM_RANGE(0x01f0, 0x01f7) AM_DEVREADWRITE16("ide", ide_controller_device, read_cs0, write_cs0, 0xffffffff)
 	AM_RANGE(0x0300, 0x03af) AM_NOP
 	AM_RANGE(0x03b0, 0x03df) AM_NOP
 	AM_RANGE(0x0278, 0x027b) AM_WRITE(pnp_config_w)
-	AM_RANGE(0x03f0, 0x03ff) AM_DEVREADWRITE16("ide", ide_controller_device, read_cs1_pc, write_cs1_pc, 0xffffffff)
+	AM_RANGE(0x03f0, 0x03f7) AM_DEVREADWRITE16("ide", ide_controller_device, read_cs1, write_cs1, 0xffffffff)
 	AM_RANGE(0x0a78, 0x0a7b) AM_WRITE(pnp_data_w)
 	AM_RANGE(0x0cf8, 0x0cff) AM_DEVREADWRITE("pcibus", pci_bus_legacy_device, read, write)
 ADDRESS_MAP_END
@@ -419,15 +425,14 @@ void gamecstl_state::machine_start()
 void gamecstl_state::machine_reset()
 {
 	membank("bank1")->set_base(memregion("bios")->base() + 0x30000);
-
-	m_maincpu->set_irq_acknowledge_callback(device_irq_acknowledge_delegate(FUNC(gamecstl_state::irq_callback),this));
 }
 
 static MACHINE_CONFIG_START( gamecstl, gamecstl_state )
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", PENTIUM, 200000000)
+	MCFG_CPU_ADD("maincpu", PENTIUM3, 200000000)
 	MCFG_CPU_PROGRAM_MAP(gamecstl_map)
 	MCFG_CPU_IO_MAP(gamecstl_io)
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE("pic8259_1", pic8259_device, inta_cb)
 
 	MCFG_FRAGMENT_ADD( pcat_common )
 
@@ -435,8 +440,8 @@ static MACHINE_CONFIG_START( gamecstl, gamecstl_state )
 	MCFG_PCI_BUS_LEGACY_DEVICE(0, NULL, intel82439tx_pci_r, intel82439tx_pci_w)
 	MCFG_PCI_BUS_LEGACY_DEVICE(7, NULL, intel82371ab_pci_r, intel82371ab_pci_w)
 
-	MCFG_IDE_CONTROLLER_ADD("ide", ide_devices, "hdd", NULL, true)
-	MCFG_IDE_CONTROLLER_IRQ_HANDLER(DEVWRITELINE("pic8259_2", pic8259_device, ir6_w))
+	MCFG_IDE_CONTROLLER_ADD("ide", ata_devices, "hdd", NULL, true)
+	MCFG_ATA_INTERFACE_IRQ_HANDLER(DEVWRITELINE("pic8259_2", pic8259_device, ir6_w))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -445,9 +450,10 @@ static MACHINE_CONFIG_START( gamecstl, gamecstl_state )
 	MCFG_SCREEN_SIZE(640, 480)
 	MCFG_SCREEN_VISIBLE_AREA(0, 639, 0, 199)
 	MCFG_SCREEN_UPDATE_DRIVER(gamecstl_state, screen_update_gamecstl)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(CGA)
-	MCFG_PALETTE_LENGTH(16)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", CGA)
+	MCFG_PALETTE_ADD("palette", 16)
 
 
 MACHINE_CONFIG_END
@@ -469,7 +475,7 @@ ROM_START(gamecstl)
 	ROM_REGION(0x08100, "gfx1", 0)
 	ROM_LOAD("cga.chr",     0x00000, 0x01000, BAD_DUMP CRC(42009069) SHA1(ed08559ce2d7f97f68b9f540bddad5b6295294dd))
 
-	DISK_REGION( "drive_0" )
+	DISK_REGION( "ide:0:hdd:image" )
 	DISK_IMAGE( "gamecstl", 0, SHA1(b431af3c42c48ba07972d77a3d24e60ee1e4359e) )
 ROM_END
 
@@ -480,7 +486,7 @@ ROM_START(gamecst2)
 	ROM_REGION(0x08100, "gfx1", 0)
 	ROM_LOAD("cga.chr",     0x00000, 0x01000, BAD_DUMP CRC(42009069) SHA1(ed08559ce2d7f97f68b9f540bddad5b6295294dd))
 
-	DISK_REGION( "drive_0" )
+	DISK_REGION( "ide:0:hdd:image" )
 	DISK_IMAGE( "gamecst2", 0, SHA1(14e1b311cb474801c7bdda3164a0c220fb102159) )
 ROM_END
 

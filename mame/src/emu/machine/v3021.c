@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese
 /***************************************************************************
 
     v3021.c
@@ -32,7 +34,7 @@ const device_type v3021 = &device_creator<v3021_device>;
 //-------------------------------------------------
 
 v3021_device::v3021_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, v3021, "v3021", tag, owner, clock)
+	: device_t(mconfig, v3021, "V3021 RTC", tag, owner, clock, "v3021", __FILE__)
 {
 }
 

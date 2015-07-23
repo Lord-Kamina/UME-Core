@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Karl Stenerud
 /* ======================================================================== */
 /* ========================= LICENSING & COPYRIGHT ======================== */
 /* ======================================================================== */
@@ -8,15 +10,6 @@
  * A portable Motorola M680x0 processor emulation engine.
  * Copyright Karl Stenerud.  All rights reserved.
  *
- * This code may be freely used for non-commercial purposes as long as this
- * copyright notice remains unaltered in the source code and any binary files
- * containing this code in compiled form.
- *
- * All other licensing terms must be negotiated with the author
- * (Karl Stenerud).
- *
- * The latest version of this code can be obtained at:
- * http://kstenerud.cjb.net or http://mamedev.org/
  */
 
 /*
@@ -71,6 +64,18 @@ static const char g_version[] = "4.90";
 /* ======================================================================== */
 /* ============================= CONFIGURATION ============================ */
 /* ======================================================================== */
+
+#if defined(__GNUC__) && (__GNUC__ >= 3)
+#define ATTR_PRINTF(x,y)        __attribute__((format(printf, x, y)))
+#define ATTR_NORETURN           __attribute__((noreturn))
+#else
+#define ATTR_PRINTF(x,y)
+#if defined(_MSC_VER) && (_MSC_VER >= 1200)
+#define ATTR_NORETURN           __declspec(noreturn)
+#else
+#define ATTR_NORETURN
+#endif
+#endif
 
 #define M68K_MAX_PATH 1024
 #define M68K_MAX_DIR  1024
@@ -136,7 +141,7 @@ enum
 	CPU_TYPE_020,       // 2
 	CPU_TYPE_030,       // 3
 	CPU_TYPE_040,       // 4
-	CPU_TYPE_68340,     // 5
+	CPU_TYPE_FSCPU32,     // 5
 	CPU_TYPE_COLDFIRE,  // 6
 	NUM_CPUS
 };
@@ -218,8 +223,8 @@ struct replace_struct
 
 
 /* Function Prototypes */
-static void error_exit(const char* fmt, ...);
-static void perror_exit(const char* fmt, ...);
+static void ATTR_NORETURN error_exit(const char* fmt, ...) ATTR_PRINTF(1,2);
+static void ATTR_NORETURN perror_exit(const char* fmt, ...) ATTR_PRINTF(1,2);
 static int check_strsncpy(char* dst, char* src, int maxlength);
 static int check_atoi(char* str, int *result);
 static int skip_spaces(char* str);
@@ -599,7 +604,7 @@ static int fgetline(char* buff, int nchars, FILE* file)
 	if(fgets(buff, nchars, file) == NULL)
 		return -1;
 	if(buff[0] == '\r')
-		memcpy(buff, buff + 1, nchars - 1);
+		memmove(buff, buff + 1, nchars - 1);
 
 	length = strlen(buff);
 	while(length && (buff[length-1] == '\r' || buff[length-1] == '\n'))
@@ -790,8 +795,8 @@ static void get_base_name(char* base_name, opcode_struct* op)
 /* Write the name of an opcode handler function */
 static void write_function_name(FILE* filep, char* base_name)
 {
-	fprintf(filep, "void _m68ki_cpu_core::%s(_m68ki_cpu_core* mc68kcpu)\n", base_name);
-	fprintf(g_prototype_file, "static void %s(_m68ki_cpu_core* mc68kcpu);\n", base_name);
+	fprintf(filep, "void m68000_base_device_ops::%s(m68000_base_device* mc68kcpu)\n", base_name);
+	fprintf(g_prototype_file, "static void %s(m68000_base_device* mc68kcpu);\n", base_name);
 }
 
 static void add_opcode_output_table_entry(opcode_struct* op, char* name)
@@ -804,7 +809,7 @@ static void add_opcode_output_table_entry(opcode_struct* op, char* name)
 
 	*ptr = *op;
 
-	sprintf( ptr->name, "_m68ki_cpu_core::%s", name);
+	sprintf( ptr->name, "m68000_base_device_ops::%s", name);
 	ptr->bits = num_bits(ptr->op_mask);
 }
 

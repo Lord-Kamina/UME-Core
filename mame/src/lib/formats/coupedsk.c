@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 /*************************************************************************
 
     formats/coupedsk.c
@@ -6,7 +8,8 @@
 
 **************************************************************************/
 
-#include "emu.h"
+#include <assert.h>
+
 #include "formats/coupedsk.h"
 #include "flopimg.h"
 
@@ -63,7 +66,7 @@ bool mgt_format::supports_save() const
 
 int mgt_format::identify(io_generic *io, UINT32 form_factor)
 {
-	int size = io_generic_size(io);
+	UINT64 size = io_generic_size(io);
 
 	if(/*size == 737280 || */ size == 819200)
 		return 50;
@@ -73,7 +76,7 @@ int mgt_format::identify(io_generic *io, UINT32 form_factor)
 
 bool mgt_format::load(io_generic *io, UINT32 form_factor, floppy_image *image)
 {
-	int size = io_generic_size(io);
+	UINT64 size = io_generic_size(io);
 	int sector_count = size == 737280 ? 9 : 10;
 
 	UINT8 sectdata[10*512];

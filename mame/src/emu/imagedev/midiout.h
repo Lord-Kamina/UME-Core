@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /*********************************************************************
 
     midiout.h
@@ -9,7 +11,6 @@
 #ifndef __MIDIOUT_H__
 #define __MIDIOUT_H__
 
-#include "image.h"
 
 /***************************************************************************
     CONSTANTS
@@ -47,18 +48,18 @@ public:
 	virtual bool core_opens_image_file() const { return FALSE; }
 	virtual const option_guide *create_option_guide() const { return NULL; }
 
-	virtual void tx(UINT8 state) { check_for_start(state); }
+	virtual void tx(UINT8 state) { rx_w(state); }
 
 protected:
 	// device-level overrides
 	virtual void device_start();
 	virtual void device_reset();
+	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
 
 	virtual void device_config_complete();
 
 	// serial overrides
 	virtual void rcv_complete();    // Rx completed receiving byte
-	void input_callback(UINT8 state);
 
 private:
 	osd_midi_device *m_midi;

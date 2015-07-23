@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Cinemat/Leland driver
@@ -29,22 +31,21 @@
 
 TIMER_CALLBACK_MEMBER(leland_state::scanline_callback)
 {
-	device_t *audio = machine().device("custom");
 	int scanline = param;
 
 	/* update the DACs */
 	if (!(m_dac_control & 0x01))
-		leland_dac_update(audio, 0, m_video_ram[(m_last_scanline) * 256 + 160]);
+		m_dac0->write_unsigned8(m_video_ram[(m_last_scanline) * 256 + 160]);
 
 	if (!(m_dac_control & 0x02))
-		leland_dac_update(audio, 1, m_video_ram[(m_last_scanline) * 256 + 161]);
+		m_dac1->write_unsigned8(m_video_ram[(m_last_scanline) * 256 + 161]);
 
 	m_last_scanline = scanline;
 
 	scanline = (scanline+1) % 256;
 
 	/* come back at the next appropriate scanline */
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(scanline), scanline);
+	m_scanline_timer->adjust(m_screen->time_until_pos(scanline), scanline);
 }
 
 
@@ -61,15 +62,13 @@ VIDEO_START_MEMBER(leland_state,leland)
 
 	/* scanline timer */
 	m_scanline_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(leland_state::scanline_callback),this));
-	m_scanline_timer->adjust(machine().primary_screen->time_until_pos(0));
-
+	m_scanline_timer->adjust(m_screen->time_until_pos(0));
 }
-
 
 VIDEO_START_MEMBER(leland_state,ataxx)
 {
 	/* first do the standard stuff */
-	VIDEO_START_CALL_MEMBER(leland);
+	m_video_ram = auto_alloc_array_clear(machine(), UINT8, VRAM_SIZE);
 
 	/* allocate memory */
 	m_ataxx_qram = auto_alloc_array_clear(machine(), UINT8, QRAM_SIZE);
@@ -85,9 +84,9 @@ VIDEO_START_MEMBER(leland_state,ataxx)
 
 WRITE8_MEMBER(leland_state::leland_scroll_w)
 {
-	int scanline = machine().primary_screen->vpos();
+	int scanline = m_screen->vpos();
 	if (scanline > 0)
-		machine().primary_screen->update_partial(scanline - 1);
+		m_screen->update_partial(scanline - 1);
 
 	/* adjust the proper scroll value */
 	switch (offset)
@@ -110,14 +109,16 @@ WRITE8_MEMBER(leland_state::leland_scroll_w)
 
 		default:
 			fatalerror("Unexpected leland_gfx_port_w\n");
-			break;
 	}
 }
 
 
 WRITE8_MEMBER(leland_state::leland_gfx_port_w)
 {
-	machine().primary_screen->update_partial(machine().primary_screen->vpos());
+	int scanline = m_screen->vpos();
+	if (scanline > 0)
+		m_screen->update_partial(scanline - 1);
+
 	m_gfxbank = data;
 }
 
@@ -204,9 +205,9 @@ void leland_state::leland_vram_port_w(address_space &space, int offset, int data
 
 	/* don't fully understand why this is needed.  Isn't the
 	   video RAM just one big RAM? */
-	int scanline = space.machine().primary_screen->vpos();
+	int scanline = m_screen->vpos();
 	if (scanline > 0)
-		space.machine().primary_screen->update_partial(scanline - 1);
+		m_screen->update_partial(scanline - 1);
 
 	if (LOG_COMM && addr >= 0xf000)
 		logerror("%s:%s comm write %04X = %02X\n", space.machine().describe_context(), num ? "slave" : "master", addr, data);
@@ -382,8 +383,6 @@ READ8_MEMBER(leland_state::ataxx_svram_port_r)
 
 UINT32 leland_state::screen_update_leland(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	int y;
-
 	const UINT8 *bg_prom = memregion("user1")->base();
 	const UINT8 *bg_gfx = memregion("gfx1")->base();
 	offs_t bg_gfx_bank_page_size = memregion("gfx1")->bytes() / 3;
@@ -391,16 +390,15 @@ UINT32 leland_state::screen_update_leland(screen_device &screen, bitmap_ind16 &b
 	offs_t prom_bank = ((m_gfxbank >> 3) & 0x01) * 0x2000;
 
 	/* for each scanline in the visible region */
-	for (y = cliprect.min_y; y <= cliprect.max_y; y++)
+	for (int y = cliprect.min_y; y <= cliprect.max_y; y++)
 	{
-		int x;
 		UINT8 fg_data = 0;
 
 		UINT16 *dst = &bitmap.pix16(y);
 		UINT8 *fg_src = &m_video_ram[y << 8];
 
 		/* for each pixel on the scanline */
-		for (x = 0; x < VIDEO_WIDTH; x++)
+		for (int x = 0; x < VIDEO_WIDTH; x++)
 		{
 			/* compute the effective scrolled pixel coordinates */
 			UINT16 sx = (x + m_xscroll) & 0x07ff;
@@ -434,7 +432,6 @@ UINT32 leland_state::screen_update_leland(screen_device &screen, bitmap_ind16 &b
 
 			*dst++ = pen;
 		}
-
 	}
 
 	return 0;
@@ -450,23 +447,20 @@ UINT32 leland_state::screen_update_leland(screen_device &screen, bitmap_ind16 &b
 
 UINT32 leland_state::screen_update_ataxx(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	int y;
-
 	const UINT8 *bg_gfx = memregion("gfx1")->base();
 	offs_t bg_gfx_bank_page_size = memregion("gfx1")->bytes() / 6;
 	offs_t bg_gfx_offs_mask = bg_gfx_bank_page_size - 1;
 
 	/* for each scanline in the visible region */
-	for (y = cliprect.min_y; y <= cliprect.max_y; y++)
+	for (int y = cliprect.min_y; y <= cliprect.max_y; y++)
 	{
-		int x;
 		UINT8 fg_data = 0;
 
 		UINT16 *dst = &bitmap.pix16(y);
 		UINT8 *fg_src = &m_video_ram[y << 8];
 
 		/* for each pixel on the scanline */
-		for (x = 0; x < VIDEO_WIDTH; x++)
+		for (int x = 0; x < VIDEO_WIDTH; x++)
 		{
 			/* compute the effective scrolled pixel coordinates */
 			UINT16 sx = (x + m_xscroll) & 0x07ff;
@@ -515,21 +509,26 @@ UINT32 leland_state::screen_update_ataxx(screen_device &screen, bitmap_ind16 &bi
 
 MACHINE_CONFIG_FRAGMENT( leland_video )
 
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
 	MCFG_VIDEO_START_OVERRIDE(leland_state,leland)
 
-	MCFG_PALETTE_LENGTH(1024)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_FORMAT(BBGGGRRR)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
 	MCFG_SCREEN_SIZE(40*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 0*8, 30*8-1)
 	MCFG_SCREEN_REFRESH_RATE(60)
 	MCFG_SCREEN_UPDATE_DRIVER(leland_state, screen_update_leland)
+	MCFG_SCREEN_PALETTE("palette")
 MACHINE_CONFIG_END
-
 
 MACHINE_CONFIG_DERIVED( ataxx_video, leland_video )
 	MCFG_VIDEO_START_OVERRIDE(leland_state,ataxx)
+
 	MCFG_SCREEN_MODIFY("screen")
 	MCFG_SCREEN_UPDATE_DRIVER(leland_state, screen_update_ataxx)
+
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_FORMAT(xxxxRRRRGGGGBBBB)
 MACHINE_CONFIG_END

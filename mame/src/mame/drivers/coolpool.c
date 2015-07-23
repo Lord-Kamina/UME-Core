@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles,Nicola Salmoria
 /***************************************************************************
 
     AmeriDarts      (c) 1989 Ameri Corporation
@@ -20,6 +22,7 @@
       4U/8U it is actually reading 4U/8U/3U/7U, when testing 3U/7U it
       actually reads 2U/6U/1U/5U. The placement cannot therefore be exactly
       determined by the check passing.
+
 
 ***************************************************************************/
 
@@ -54,11 +57,9 @@ static const UINT16 nvram_unlock_seq[] =
  *
  *************************************/
 
-static void amerdart_scanline(screen_device &screen, bitmap_rgb32 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_RGB32_CB_MEMBER(coolpool_state::amerdart_scanline)
 {
-	coolpool_state *state = screen.machine().driver_data<coolpool_state>();
-
-	UINT16 *vram = &state->m_vram_base[(params->rowaddr << 8) & 0xff00];
+	UINT16 *vram = &m_vram_base[(params->rowaddr << 8) & 0xff00];
 	UINT32 *dest = &bitmap.pix32(scanline);
 	rgb_t pens[16];
 	int coladdr = params->coladdr;
@@ -68,8 +69,8 @@ static void amerdart_scanline(screen_device &screen, bitmap_rgb32 &bitmap, int s
 	if (scanline < 256)
 		for (x = 0; x < 16; x++)
 		{
-			UINT16 pal = state->m_vram_base[x];
-			pens[x] = MAKE_RGB(pal4bit(pal >> 4), pal4bit(pal >> 8), pal4bit(pal >> 12));
+			UINT16 pal = m_vram_base[x];
+			pens[x] = rgb_t(pal4bit(pal >> 4), pal4bit(pal >> 8), pal4bit(pal >> 12));
 		}
 
 	for (x = params->heblnk; x < params->hsblnk; x += 4)
@@ -83,13 +84,11 @@ static void amerdart_scanline(screen_device &screen, bitmap_rgb32 &bitmap, int s
 }
 
 
-static void coolpool_scanline(screen_device &screen, bitmap_rgb32 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_RGB32_CB_MEMBER(coolpool_state::coolpool_scanline)
 {
-	coolpool_state *state = screen.machine().driver_data<coolpool_state>();
-
-	UINT16 *vram = &state->m_vram_base[(params->rowaddr << 8) & 0x1ff00];
+	UINT16 *vram = &m_vram_base[(params->rowaddr << 8) & 0x1ff00];
 	UINT32 *dest = &bitmap.pix32(scanline);
-	const rgb_t *pens = state->m_tlc34076->get_pens();
+	const rgb_t *pens = m_tlc34076->get_pens();
 	int coladdr = params->coladdr;
 	int x;
 
@@ -109,19 +108,15 @@ static void coolpool_scanline(screen_device &screen, bitmap_rgb32 &bitmap, int s
  *
  *************************************/
 
-static void coolpool_to_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_TO_SHIFTREG_CB_MEMBER(coolpool_state::to_shiftreg)
 {
-	coolpool_state *state = space.machine().driver_data<coolpool_state>();
-
-	memcpy(shiftreg, &state->m_vram_base[TOWORD(address) & ~TOWORD(0xfff)], TOBYTE(0x1000));
+	memcpy(shiftreg, &m_vram_base[TOWORD(address) & ~TOWORD(0xfff)], TOBYTE(0x1000));
 }
 
 
-static void coolpool_from_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_FROM_SHIFTREG_CB_MEMBER(coolpool_state::from_shiftreg)
 {
-	coolpool_state *state = space.machine().driver_data<coolpool_state>();
-
-	memcpy(&state->m_vram_base[TOWORD(address) & ~TOWORD(0xfff)], shiftreg, TOBYTE(0x1000));
+	memcpy(&m_vram_base[TOWORD(address) & ~TOWORD(0xfff)], shiftreg, TOBYTE(0x1000));
 }
 
 
@@ -296,52 +291,50 @@ static int amerdart_trackball_dec(int data)
 	return data;
 }
 
-static int amerdart_trackball_direction(address_space &space, int num, int data)
+int coolpool_state::amerdart_trackball_direction(int num, int data)
 {
-	coolpool_state *state = space.machine().driver_data<coolpool_state>();
-
 	UINT16 result_x = (data & 0x0c) >> 2;
 	UINT16 result_y = (data & 0x03) >> 0;
 
 
-	if ((state->m_dx[num] == 0) && (state->m_dy[num] < 0)) {        /* Up */
-		state->m_oldy[num]--;
+	if ((m_dx[num] == 0) && (m_dy[num] < 0)) {        /* Up */
+		m_oldy[num]--;
 		result_x = amerdart_trackball_inc(result_x);
 		result_y = amerdart_trackball_inc(result_y);
 	}
-	if ((state->m_dx[num] == 0) && (state->m_dy[num] > 0)) {        /* Down */
-		state->m_oldy[num]++;
+	if ((m_dx[num] == 0) && (m_dy[num] > 0)) {        /* Down */
+		m_oldy[num]++;
 		result_x = amerdart_trackball_dec(result_x);
 		result_y = amerdart_trackball_dec(result_y);
 	}
-	if ((state->m_dx[num] < 0) && (state->m_dy[num] == 0)) {        /* Left */
-		state->m_oldx[num]--;
+	if ((m_dx[num] < 0) && (m_dy[num] == 0)) {        /* Left */
+		m_oldx[num]--;
 		result_x = amerdart_trackball_inc(result_x);
 		result_y = amerdart_trackball_dec(result_y);
 	}
-	if ((state->m_dx[num] > 0) && (state->m_dy[num] == 0)) {        /* Right */
-		state->m_oldx[num]++;
+	if ((m_dx[num] > 0) && (m_dy[num] == 0)) {        /* Right */
+		m_oldx[num]++;
 		result_x = amerdart_trackball_dec(result_x);
 		result_y = amerdart_trackball_inc(result_y);
 	}
-	if ((state->m_dx[num] < 0) && (state->m_dy[num] < 0)) {         /* Left & Up */
-		state->m_oldx[num]--;
-		state->m_oldy[num]--;
+	if ((m_dx[num] < 0) && (m_dy[num] < 0)) {         /* Left & Up */
+		m_oldx[num]--;
+		m_oldy[num]--;
 		result_x = amerdart_trackball_inc(result_x);
 	}
-	if ((state->m_dx[num] < 0) && (state->m_dy[num] > 0)) {         /* Left & Down */
-		state->m_oldx[num]--;
-		state->m_oldy[num]++;
+	if ((m_dx[num] < 0) && (m_dy[num] > 0)) {         /* Left & Down */
+		m_oldx[num]--;
+		m_oldy[num]++;
 		result_y = amerdart_trackball_dec(result_y);
 	}
-	if ((state->m_dx[num] > 0) && (state->m_dy[num] < 0)) {         /* Right & Up */
-		state->m_oldx[num]++;
-		state->m_oldy[num]--;
+	if ((m_dx[num] > 0) && (m_dy[num] < 0)) {         /* Right & Up */
+		m_oldx[num]++;
+		m_oldy[num]--;
 		result_y = amerdart_trackball_inc(result_y);
 	}
-	if ((state->m_dx[num] > 0) && (state->m_dy[num] > 0)) {         /* Right & Down */
-		state->m_oldx[num]++;
-		state->m_oldy[num]++;
+	if ((m_dx[num] > 0) && (m_dy[num] > 0)) {         /* Right & Down */
+		m_oldx[num]++;
+		m_oldy[num]++;
 		result_x = amerdart_trackball_dec(result_x);
 	}
 
@@ -403,10 +396,10 @@ READ16_MEMBER(coolpool_state::amerdart_trackball_r)
 	m_dy[2] = (INT8)(m_newy[2] - m_oldy[2]);
 
 	/* Determine Trackball 1 direction state */
-	m_result = (m_result & 0xf0ff) | (amerdart_trackball_direction(space, 1, ((m_result >>  8) & 0xf)) <<  8);
+	m_result = (m_result & 0xf0ff) | (amerdart_trackball_direction(1, ((m_result >>  8) & 0xf)) <<  8);
 
 	/* Determine Trackball 2 direction state */
-	m_result = (m_result & 0x0fff) | (amerdart_trackball_direction(space, 2, ((m_result >> 12) & 0xf)) << 12);
+	m_result = (m_result & 0x0fff) | (amerdart_trackball_direction(2, ((m_result >> 12) & 0xf)) << 12);
 
 
 //  logerror("%08X:read port 6 (X=%02X Y=%02X oldX=%02X oldY=%02X oldRes=%04X Res=%04X)\n", space.device().safe_pc(), m_newx, m_newy, m_oldx, m_oldy, m_lastresult, m_result);
@@ -621,7 +614,7 @@ static ADDRESS_MAP_START( amerdart_map, AS_PROGRAM, 16, coolpool_state )
 	AM_RANGE(0x04000000, 0x0400000f) AM_WRITE(amerdart_misc_w)
 	AM_RANGE(0x05000000, 0x0500000f) AM_READWRITE(amerdart_iop_r, amerdart_iop_w)
 	AM_RANGE(0x06000000, 0x06007fff) AM_RAM_WRITE(nvram_thrash_data_w) AM_SHARE("nvram")
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("maincpu", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0xffb00000, 0xffffffff) AM_ROM AM_REGION("user1", 0)
 ADDRESS_MAP_END
 
@@ -633,7 +626,7 @@ static ADDRESS_MAP_START( coolpool_map, AS_PROGRAM, 16, coolpool_state )
 	AM_RANGE(0x03000000, 0x0300000f) AM_WRITE(coolpool_misc_w)
 	AM_RANGE(0x03000000, 0x03ffffff) AM_ROM AM_REGION("gfx1", 0)
 	AM_RANGE(0x06000000, 0x06007fff) AM_RAM_WRITE(nvram_thrash_data_w) AM_SHARE("nvram")
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("maincpu", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0xffe00000, 0xffffffff) AM_ROM AM_REGION("user1", 0)
 ADDRESS_MAP_END
 
@@ -644,7 +637,7 @@ static ADDRESS_MAP_START( nballsht_map, AS_PROGRAM, 16, coolpool_state )
 	AM_RANGE(0x03000000, 0x0300000f) AM_WRITE(coolpool_misc_w)
 	AM_RANGE(0x04000000, 0x040000ff) AM_DEVREADWRITE8("tlc34076", tlc34076_device, read, write, 0x00ff)    // IMSG176P-40
 	AM_RANGE(0x06000000, 0x0601ffff) AM_MIRROR(0x00020000) AM_RAM_WRITE(nvram_thrash_data_w) AM_SHARE("nvram")
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("maincpu", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0xff000000, 0xff7fffff) AM_ROM AM_REGION("gfx1", 0)
 	AM_RANGE(0xffc00000, 0xffffffff) AM_ROM AM_REGION("user1", 0)
 ADDRESS_MAP_END
@@ -730,10 +723,12 @@ INPUT_PORTS_END
 static INPUT_PORTS_START( coolpool )
 	PORT_START("IN0")
 	PORT_BIT( 0x00ff, IP_ACTIVE_HIGH, IPT_UNKNOWN )
-	PORT_BIT( 0x0f00, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x1000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2)
-	PORT_BIT( 0x2000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1)
-	PORT_BIT( 0xc000, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x0700, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x0800, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(2) PORT_NAME("P2 English")
+	PORT_BIT( 0x1000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(2) PORT_NAME("P2 Lock")
+	PORT_BIT( 0x2000, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(1) PORT_NAME("P1 Lock")
+	PORT_BIT( 0x4000, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1) PORT_NAME("P1 English")
+	PORT_BIT( 0x8000, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
 	PORT_START("IN1")
 	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_START1 )
@@ -785,42 +780,6 @@ static INPUT_PORTS_START( 9ballsht )
 INPUT_PORTS_END
 
 
-
-/*************************************
- *
- *  34010 configuration
- *
- *************************************/
-
-static const tms34010_config tms_config_amerdart =
-{
-	FALSE,                          /* halt on reset */
-	"screen",                       /* the screen operated on */
-	XTAL_40MHz/12,                  /* pixel clock */
-	2,                              /* pixels per clock */
-	NULL,                           /* scanline callback (indexed16) */
-	amerdart_scanline,              /* scanline callback (rgb32) */
-	NULL,                           /* generate interrupt */
-	coolpool_to_shiftreg,           /* write to shiftreg function */
-	coolpool_from_shiftreg          /* read from shiftreg function */
-};
-
-
-static const tms34010_config tms_config_coolpool =
-{
-	FALSE,                          /* halt on reset */
-	"screen",                       /* the screen operated on */
-	XTAL_40MHz/6,                   /* pixel clock */
-	1,                              /* pixels per clock */
-	NULL,                           /* scanline callback (indexed16) */
-	coolpool_scanline,              /* scanline callback (rgb32) */
-	NULL,                           /* generate interrupt */
-	coolpool_to_shiftreg,           /* write to shiftreg function */
-	coolpool_from_shiftreg          /* read from shiftreg function */
-};
-
-
-
 /*************************************
  *
  *  Machine drivers
@@ -831,8 +790,13 @@ static MACHINE_CONFIG_START( amerdart, coolpool_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", TMS34010, XTAL_40MHz)
-	MCFG_CPU_CONFIG(tms_config_amerdart)
 	MCFG_CPU_PROGRAM_MAP(amerdart_map)
+	MCFG_TMS340X0_HALT_ON_RESET(FALSE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(XTAL_40MHz/12) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(2) /* pixels per clock */
+	MCFG_TMS340X0_SCANLINE_RGB32_CB(coolpool_state, amerdart_scanline) /* scanline callback (rgb32) */
+	MCFG_TMS340X0_TO_SHIFTREG_CB(coolpool_state, to_shiftreg)  /* write to shiftreg function */
+	MCFG_TMS340X0_FROM_SHIFTREG_CB(coolpool_state, from_shiftreg) /* read from shiftreg function */
 
 	MCFG_CPU_ADD("dsp", TMS32015, XTAL_40MHz/2)
 	MCFG_CPU_PROGRAM_MAP(amerdart_dsp_pgm_map)
@@ -848,7 +812,7 @@ static MACHINE_CONFIG_START( amerdart, coolpool_state )
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(XTAL_40MHz/6, 212*2, 0, 161*2, 262, 0, 241)
-	MCFG_SCREEN_UPDATE_STATIC(tms340x0_rgb32)
+	MCFG_SCREEN_UPDATE_DEVICE("maincpu", tms34010_device, tms340x0_rgb32)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -862,8 +826,13 @@ static MACHINE_CONFIG_START( coolpool, coolpool_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", TMS34010, XTAL_40MHz)
-	MCFG_CPU_CONFIG(tms_config_coolpool)
 	MCFG_CPU_PROGRAM_MAP(coolpool_map)
+	MCFG_TMS340X0_HALT_ON_RESET(FALSE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(XTAL_40MHz/6) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(1) /* pixels per clock */
+	MCFG_TMS340X0_SCANLINE_RGB32_CB(coolpool_state, coolpool_scanline) /* scanline callback (rgb32) */
+	MCFG_TMS340X0_TO_SHIFTREG_CB(coolpool_state, to_shiftreg)  /* write to shiftreg function */
+	MCFG_TMS340X0_FROM_SHIFTREG_CB(coolpool_state, from_shiftreg) /* read from shiftreg function */
 
 	MCFG_CPU_ADD("dsp", TMS32026,XTAL_40MHz)
 	MCFG_CPU_PROGRAM_MAP(coolpool_dsp_pgm_map)
@@ -879,7 +848,7 @@ static MACHINE_CONFIG_START( coolpool, coolpool_state )
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(XTAL_40MHz/6, 424, 0, 320, 262, 0, 240)
-	MCFG_SCREEN_UPDATE_STATIC(tms340x0_rgb32)
+	MCFG_SCREEN_UPDATE_DEVICE("maincpu", tms34010_device, tms340x0_rgb32)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -917,7 +886,7 @@ ROM_START( amerdart ) /* You need to check the sum16 values listed on the labels
 	ROM_LOAD16_BYTE( "ameri corp copyright 1989 u58 48af", 0x080000, 0x10000, CRC(f1b3d7c4) SHA1(7b897230d110be7a5eb05eda927d00561ebb9ce3) ) /* Different then set 2 or 3 */
 
 	ROM_REGION( 0x10000, "dsp", 0 ) /* TMS32015 code  */
-	ROM_LOAD16_WORD( "tms320e15.bin", 0x0000, 0x2000, CRC(375DB4EA) SHA1(11689C89CE62F44F43CB8973B4EC6E6B0024ED14) ) /* Passes internal checksum routine */
+	ROM_LOAD16_WORD( "tms320e15.bin", 0x0000, 0x2000, CRC(375db4ea) SHA1(11689c89ce62f44f43cb8973b4ec6e6b0024ed14) ) /* Passes internal checksum routine */
 
 	ROM_REGION( 0x100000, "user2", 0 )              /* TMS32015 audio sample data */
 	ROM_LOAD16_WORD( "ameri corp copyright 1989 u1 4461",  0x000000, 0x10000, CRC(3f459482) SHA1(d9d489efd0d9217fceb3bf1a3b37a78d6823b4d9) ) /* Different then set 2 or 3 */
@@ -952,7 +921,7 @@ ROM_START( amerdart2 ) /* You need to check the sum16 values listed on the label
 	ROM_LOAD16_BYTE( "ameri corp copyright 1989 u58 0d81", 0x080000, 0x10000, CRC(8bb81975) SHA1(b7666572ab543991c7deaa0ebefb8b4526a7e386) ) /* Different then set 1 or 3 */
 
 	ROM_REGION( 0x10000, "dsp", 0 ) /* TMS32015 code  */
-	ROM_LOAD16_WORD( "tms320e15.bin", 0x0000, 0x2000, CRC(375DB4EA) SHA1(11689C89CE62F44F43CB8973B4EC6E6B0024ED14) ) /* Passes internal checksum routine */
+	ROM_LOAD16_WORD( "tms320e15.bin", 0x0000, 0x2000, CRC(375db4ea) SHA1(11689c89ce62f44f43cb8973b4ec6e6b0024ed14) ) /* Passes internal checksum routine */
 
 	ROM_REGION( 0x100000, "user2", 0 )              /* TMS32015 audio sample data */
 	ROM_LOAD16_WORD( "ameri corp copyright 1989 u1 222f",  0x000000, 0x10000, CRC(e2bb7f54) SHA1(39eeb61a852b93331f445cc1c993727e52959660) ) /* Different then set 1 */
@@ -987,7 +956,7 @@ ROM_START( amerdart3 ) /* You need to check the sum16 values listed on the label
 	ROM_LOAD16_BYTE( "ameri corp copyright 1989 u58 729e", 0x080000, 0x10000, CRC(8cef479a) SHA1(80002e215416a11ff071523ee67218a1aabe155b) ) /* Different then set 2 or 3 */
 
 	ROM_REGION( 0x10000, "dsp", 0 ) /* TMS32015 code  */
-	ROM_LOAD16_WORD( "tms320e15.bin", 0x0000, 0x2000, CRC(375DB4EA) SHA1(11689C89CE62F44F43CB8973B4EC6E6B0024ED14) ) /* Passes internal checksum routine */
+	ROM_LOAD16_WORD( "tms320e15.bin", 0x0000, 0x2000, CRC(375db4ea) SHA1(11689c89ce62f44f43cb8973b4ec6e6b0024ed14) ) /* Passes internal checksum routine */
 
 	ROM_REGION( 0x100000, "user2", 0 )              /* TMS32015 audio sample data */
 	ROM_LOAD16_WORD( "ameri corp copyright 1989 u1 222f",  0x000000, 0x10000, CRC(e2bb7f54) SHA1(39eeb61a852b93331f445cc1c993727e52959660) ) /* Same as set 2 */
@@ -1135,19 +1104,17 @@ ROM_END
  *
  *************************************/
 
-static void register_state_save(running_machine &machine)
+void coolpool_state::register_state_save()
 {
-	coolpool_state *state = machine.driver_data<coolpool_state>();
+	save_item(NAME(m_oldx));
+	save_item(NAME(m_oldy));
+	save_item(NAME(m_result));
+	save_item(NAME(m_lastresult));
 
-	state->save_item(NAME(state->m_oldx));
-	state->save_item(NAME(state->m_oldy));
-	state->save_item(NAME(state->m_result));
-	state->save_item(NAME(state->m_lastresult));
-
-	state->save_item(NAME(state->m_cmd_pending));
-	state->save_item(NAME(state->m_iop_cmd));
-	state->save_item(NAME(state->m_iop_answer));
-	state->save_item(NAME(state->m_iop_romaddr));
+	save_item(NAME(m_cmd_pending));
+	save_item(NAME(m_iop_cmd));
+	save_item(NAME(m_iop_answer));
+	save_item(NAME(m_iop_romaddr));
 }
 
 
@@ -1156,14 +1123,14 @@ DRIVER_INIT_MEMBER(coolpool_state,amerdart)
 {
 	m_lastresult = 0xffff;
 
-	register_state_save(machine());
+	register_state_save();
 }
 
 DRIVER_INIT_MEMBER(coolpool_state,coolpool)
 {
 	m_dsp->space(AS_IO).install_read_handler(0x07, 0x07, read16_delegate(FUNC(coolpool_state::coolpool_input_r),this));
 
-	register_state_save(machine());
+	register_state_save();
 }
 
 
@@ -1207,7 +1174,7 @@ DRIVER_INIT_MEMBER(coolpool_state,9ballsht)
 		rom[a+1] = tmp;
 	}
 
-	register_state_save(machine());
+	register_state_save();
 }
 
 

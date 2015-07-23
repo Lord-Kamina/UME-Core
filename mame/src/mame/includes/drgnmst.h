@@ -1,5 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 
 #include "sound/okim6295.h"
+#include "cpu/pic16c5x/pic16c5x.h"
 
 class drgnmst_state : public driver_device
 {
@@ -16,7 +19,9 @@ public:
 			m_oki_1(*this, "oki1"),
 			m_oki_2(*this, "oki2") ,
 		m_maincpu(*this, "maincpu"),
-		m_audiocpu(*this, "audiocpu") { }
+		m_audiocpu(*this, "audiocpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_vidregs;
@@ -54,7 +59,7 @@ public:
 	DECLARE_WRITE8_MEMBER(drgnmst_pcm_banksel_w);
 	DECLARE_WRITE8_MEMBER(drgnmst_oki_w);
 	DECLARE_WRITE8_MEMBER(drgnmst_snd_control_w);
-	DECLARE_READ8_MEMBER(PIC16C5X_T0_clk_r);
+	DECLARE_READ_LINE_MEMBER(PIC16C5X_T0_clk_r);
 	DECLARE_WRITE16_MEMBER(drgnmst_fg_videoram_w);
 	DECLARE_WRITE16_MEMBER(drgnmst_bg_videoram_w);
 	DECLARE_WRITE16_MEMBER(drgnmst_md_videoram_w);
@@ -72,5 +77,7 @@ public:
 	void draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect );
 	UINT8 drgnmst_asciitohex( UINT8 data );
 	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_audiocpu;
+	required_device<pic16c55_device> m_audiocpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };

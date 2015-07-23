@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
 /***************************************************************************
 Namco System 21 Video Hardware
 
@@ -45,61 +47,55 @@ WRITE16_MEMBER(namcos21_state::winrun_gpu_videoram_w)
 			videoram[(offset+i)&0x7ffff] = color;
 		}
 	}
-} /* winrun_gpu_videoram_w */
+}
 
 READ16_MEMBER(namcos21_state::winrun_gpu_videoram_r)
 {
 	UINT8 *videoram = m_videoram;
 	return videoram[offset]<<8;
-} /* winrun_gpu_videoram_r */
+}
 
-static void
-AllocatePolyFrameBuffer( running_machine &machine )
+void namcos21_state::allocate_poly_framebuffer()
 {
-	namcos21_state *state = machine.driver_data<namcos21_state>();
-	state->m_mpPolyFrameBufferZ     = auto_alloc_array(machine, UINT16, FRAMEBUFFER_SIZE_IN_BYTES/2 );
-	state->m_mpPolyFrameBufferPens  = auto_alloc_array(machine, UINT16, FRAMEBUFFER_SIZE_IN_BYTES/2 );
+	m_mpPolyFrameBufferZ     = auto_alloc_array(machine(), UINT16, FRAMEBUFFER_SIZE_IN_BYTES/2 );
+	m_mpPolyFrameBufferPens  = auto_alloc_array(machine(), UINT16, FRAMEBUFFER_SIZE_IN_BYTES/2 );
 
-	state->m_mpPolyFrameBufferZ2    = auto_alloc_array(machine, UINT16, FRAMEBUFFER_SIZE_IN_BYTES/2 );
-	state->m_mpPolyFrameBufferPens2 = auto_alloc_array(machine, UINT16, FRAMEBUFFER_SIZE_IN_BYTES/2 );
+	m_mpPolyFrameBufferZ2    = auto_alloc_array(machine(), UINT16, FRAMEBUFFER_SIZE_IN_BYTES/2 );
+	m_mpPolyFrameBufferPens2 = auto_alloc_array(machine(), UINT16, FRAMEBUFFER_SIZE_IN_BYTES/2 );
 
-	namcos21_ClearPolyFrameBuffer(machine);
-	namcos21_ClearPolyFrameBuffer(machine);
-} /* AllocatePolyFrameBuffer */
+	clear_poly_framebuffer();
+	clear_poly_framebuffer();
+}
 
-void
-namcos21_ClearPolyFrameBuffer( running_machine &machine )
+void namcos21_state::clear_poly_framebuffer()
 {
-	namcos21_state *state = machine.driver_data<namcos21_state>();
-	int i;
 	UINT16 *temp2;
 
 	/* swap work and visible framebuffers */
-	temp2 = state->m_mpPolyFrameBufferZ;
-	state->m_mpPolyFrameBufferZ = state->m_mpPolyFrameBufferZ2;
-	state->m_mpPolyFrameBufferZ2 = temp2;
+	temp2 = m_mpPolyFrameBufferZ;
+	m_mpPolyFrameBufferZ = m_mpPolyFrameBufferZ2;
+	m_mpPolyFrameBufferZ2 = temp2;
 
-	temp2 = state->m_mpPolyFrameBufferPens;
-	state->m_mpPolyFrameBufferPens = state->m_mpPolyFrameBufferPens2;
-	state->m_mpPolyFrameBufferPens2 = temp2;
+	temp2 = m_mpPolyFrameBufferPens;
+	m_mpPolyFrameBufferPens = m_mpPolyFrameBufferPens2;
+	m_mpPolyFrameBufferPens2 = temp2;
 
 	/* wipe work zbuffer */
-	for( i=0; i<NAMCOS21_POLY_FRAME_WIDTH*NAMCOS21_POLY_FRAME_HEIGHT; i++ )
+	for( int i = 0; i < NAMCOS21_POLY_FRAME_WIDTH*NAMCOS21_POLY_FRAME_HEIGHT; i++ )
 	{
-		state->m_mpPolyFrameBufferZ[i] = 0x7fff;
+		m_mpPolyFrameBufferZ[i] = 0x7fff;
 	}
-} /* namcos21_ClearPolyFrameBuffer */
+}
 
-static void
-CopyVisiblePolyFrameBuffer( running_machine &machine, bitmap_ind16 &bitmap, const rectangle &clip, int zlo, int zhi )
+void namcos21_state::copy_visible_poly_framebuffer(bitmap_ind16 &bitmap, const rectangle &clip, int zlo, int zhi)
 {
-	namcos21_state *state = machine.driver_data<namcos21_state>(); /* blit the visible framebuffer */
+	/* blit the visible framebuffer */
 	int sy;
 	for( sy=clip.min_y; sy<=clip.max_y; sy++ )
 	{
 		UINT16 *dest = &bitmap.pix16(sy);
-		const UINT16 *pPen = state->m_mpPolyFrameBufferPens2+NAMCOS21_POLY_FRAME_WIDTH*sy;
-		const UINT16 *pZ = state->m_mpPolyFrameBufferZ2+NAMCOS21_POLY_FRAME_WIDTH*sy;
+		const UINT16 *pPen = m_mpPolyFrameBufferPens2+NAMCOS21_POLY_FRAME_WIDTH*sy;
+		const UINT16 *pZ = m_mpPolyFrameBufferZ2+NAMCOS21_POLY_FRAME_WIDTH*sy;
 		int sx;
 		for( sx=clip.min_x; sx<=clip.max_x; sx++ )
 		{
@@ -111,7 +107,7 @@ CopyVisiblePolyFrameBuffer( running_machine &machine, bitmap_ind16 &bitmap, cons
 			}
 		}
 	}
-} /* CopyVisiblePolyFrameBuffer */
+}
 
 VIDEO_START_MEMBER(namcos21_state,namcos21)
 {
@@ -119,50 +115,30 @@ VIDEO_START_MEMBER(namcos21_state,namcos21)
 	{
 		m_videoram = auto_alloc_array(machine(), UINT8, 0x80000);
 	}
-	AllocatePolyFrameBuffer(machine());
+	allocate_poly_framebuffer();
 	c355_obj_init(
 		0,      /* gfx bank */
 		0xf,    /* reverse palette mapping */
 		namcos2_shared_state::c355_obj_code2tile_delegate() );
-} /* VIDEO_START( namcos21 ) */
+}
 
-static void
-update_palette( running_machine &machine )
-{
-	namcos21_state *state = machine.driver_data<namcos21_state>();
-	int i;
-	INT16 data1,data2;
-	int r,g,b;
 
-	/*
-	Palette:
-	    0x0000..0x1fff  sprite palettes (0x10 sets of 0x100 colors)
+/*  Palette:
+        0x0000..0x1fff  sprite palettes (0x10 sets of 0x100 colors)
 
-	    0x2000..0x3fff  polygon palette bank0 (0x10 sets of 0x200 colors)
-	        (in starblade, some palette animation effects are performed here)
+        0x2000..0x3fff  polygon palette bank0 (0x10 sets of 0x200 colors)
+            (in starblade, some palette animation effects are performed here)
 
-	    0x4000..0x5fff  polygon palette bank1 (0x10 sets of 0x200 colors)
+        0x4000..0x5fff  polygon palette bank1 (0x10 sets of 0x200 colors)
 
-	    0x6000..0x7fff  polygon palette bank2 (0x10 sets of 0x200 colors)
+        0x6000..0x7fff  polygon palette bank2 (0x10 sets of 0x200 colors)
 
-	    The polygon-dedicated color sets within a bank typically increase in
-	    intensity from very dark to full intensity.
+        The polygon-dedicated color sets within a bank typically increase in
+        intensity from very dark to full intensity.
 
-	    Probably the selected palette is determined by most significant bits of z-code.
-	    This is not yet hooked up.
-	*/
-	for( i=0; i<NAMCOS21_NUM_COLORS; i++ )
-	{
-		data1 = state->m_generic_paletteram_16[0x00000/2+i];
-		data2 = state->m_generic_paletteram_16[0x10000/2+i];
-
-		r = data1>>8;
-		g = data1&0xff;
-		b = data2&0xff;
-
-		palette_set_color( machine,i, MAKE_RGB(r,g,b) );
-	}
-} /* update_palette */
+        Probably the selected palette is determined by most significant bits of z-code.
+        This is not yet hooked up.
+    */
 
 
 UINT32 namcos21_state::screen_update_namcos21(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
@@ -170,33 +146,32 @@ UINT32 namcos21_state::screen_update_namcos21(screen_device &screen, bitmap_ind1
 	UINT8 *videoram = m_videoram;
 	int pivot = 3;
 	int pri;
-	update_palette(machine());
 	bitmap.fill(0xff, cliprect );
 
 	if( m_gametype != NAMCOS21_WINRUN91 )
 	{ /* draw low priority 2d sprites */
-		c355_obj_draw(bitmap, cliprect, 2 );
-		c355_obj_draw(bitmap, cliprect, 14 );   //driver's eyes
+		c355_obj_draw(screen, bitmap, cliprect, 2 );
+		c355_obj_draw(screen, bitmap, cliprect, 14 );   //driver's eyes
 	}
 
-	CopyVisiblePolyFrameBuffer( machine(), bitmap, cliprect, 0x7fc0, 0x7ffe );
+	copy_visible_poly_framebuffer(bitmap, cliprect, 0x7fc0, 0x7ffe);
 
 	if( m_gametype != NAMCOS21_WINRUN91 )
 	{ /* draw low priority 2d sprites */
-		c355_obj_draw(bitmap, cliprect, 0 );
-		c355_obj_draw(bitmap, cliprect, 1 );
+		c355_obj_draw(screen, bitmap, cliprect, 0 );
+		c355_obj_draw(screen, bitmap, cliprect, 1 );
 	}
 
-	CopyVisiblePolyFrameBuffer( machine(), bitmap, cliprect, 0, 0x7fbf );
+	copy_visible_poly_framebuffer(bitmap, cliprect, 0, 0x7fbf);
 
 
 	if( m_gametype != NAMCOS21_WINRUN91 )
 	{ /* draw high priority 2d sprites */
 		for( pri=pivot; pri<8; pri++ )
 		{
-			c355_obj_draw(bitmap, cliprect, pri );
+			c355_obj_draw(screen, bitmap, cliprect, pri );
 		}
-			c355_obj_draw(bitmap, cliprect, 15 );   //driver's eyes
+			c355_obj_draw(screen, bitmap, cliprect, 15 );   //driver's eyes
 	}
 	else
 	{ /* winrun bitmap layer */
@@ -228,26 +203,13 @@ UINT32 namcos21_state::screen_update_namcos21(screen_device &screen, bitmap_ind1
 		}
 	} /* winrun bitmap layer */
 	return 0;
-} /* SCREEN_UPDATE_IND16( namcos21 ) */
+}
 
 /*********************************************************************************************/
 
-struct vertex
-{
-	double x,y;
-	double z;
-};
-
-struct edge
-{
-	double x;
-	double z;
-};
-
 #define SWAP(T,A,B) { const T *temp = A; A = B; B = temp; }
 
-static void
-renderscanline_flat( namcos21_state *state, const edge *e1, const edge *e2, int sy, unsigned color, int depthcueenable )
+void namcos21_state::renderscanline_flat(const edge *e1, const edge *e2, int sy, unsigned color, int depthcueenable)
 {
 	if( e1->x > e2->x )
 	{
@@ -255,8 +217,8 @@ renderscanline_flat( namcos21_state *state, const edge *e1, const edge *e2, int 
 	}
 
 	{
-		UINT16 *pDest = state->m_mpPolyFrameBufferPens + sy*NAMCOS21_POLY_FRAME_WIDTH;
-		UINT16 *pZBuf = state->m_mpPolyFrameBufferZ    + sy*NAMCOS21_POLY_FRAME_WIDTH;
+		UINT16 *pDest = m_mpPolyFrameBufferPens + sy*NAMCOS21_POLY_FRAME_WIDTH;
+		UINT16 *pZBuf = m_mpPolyFrameBufferZ    + sy*NAMCOS21_POLY_FRAME_WIDTH;
 		int x0 = (int)e1->x;
 		int x1 = (int)e2->x;
 		int w = x1-x0;
@@ -285,12 +247,12 @@ renderscanline_flat( namcos21_state *state, const edge *e1, const edge *e2, int 
 					if( depthcueenable && zz>0 )
 					{
 						int depth = 0;
-						if( state->m_gametype == NAMCOS21_WINRUN91 )
+						if( m_gametype == NAMCOS21_WINRUN91 )
 						{
 							depth = (zz>>10)*0x100;
 							pen += depth;
 						}
-						else if( state->m_gametype == NAMCOS21_DRIVERS_EYES )
+						else if( m_gametype == NAMCOS21_DRIVERS_EYES )
 						{
 							depth = (zz>>10)*0x100;
 							pen -= depth;
@@ -308,16 +270,9 @@ renderscanline_flat( namcos21_state *state, const edge *e1, const edge *e2, int 
 			}
 		}
 	}
-} /* renderscanline_flat */
+}
 
-static void
-rendertri(
-		namcos21_state *state,
-		const vertex *v0,
-		const vertex *v1,
-		const vertex *v2,
-		unsigned color,
-		int depthcueenable )
+void namcos21_state::rendertri(const n21_vertex *v0, const n21_vertex *v1, const n21_vertex *v2, unsigned color, int depthcueenable)
 {
 	int dy,ystart,yend,crop;
 
@@ -326,11 +281,11 @@ rendertri(
 	{
 		if( v0->y > v1->y )
 		{
-			SWAP(vertex,v0,v1);
+			SWAP(n21_vertex,v0,v1);
 		}
 		else if( v1->y > v2->y )
 		{
-			SWAP(vertex,v1,v2);
+			SWAP(n21_vertex,v1,v2);
 		}
 		else
 		{
@@ -384,7 +339,7 @@ rendertri(
 
 			for( y=ystart; y<yend; y++ )
 			{
-				renderscanline_flat( state, &e1, &e2, y, color, depthcueenable );
+				renderscanline_flat(&e1, &e2, y, color, depthcueenable);
 
 				e2.x += dx2dy;
 				e2.z += dz2dy;
@@ -418,7 +373,7 @@ rendertri(
 			}
 			for( y=ystart; y<yend; y++ )
 			{
-				renderscanline_flat( state, &e1, &e2, y, color, depthcueenable );
+				renderscanline_flat(&e1, &e2, y, color, depthcueenable);
 
 				e2.x += dx2dy;
 				e2.z += dz2dy;
@@ -428,13 +383,11 @@ rendertri(
 			}
 		}
 	}
-} /* rendertri */
+}
 
-void
-namcos21_DrawQuad( running_machine &machine, int sx[4], int sy[4], int zcode[4], int color )
+void namcos21_state::draw_quad(int sx[4], int sy[4], int zcode[4], int color)
 {
-	namcos21_state *state = machine.driver_data<namcos21_state>();
-	vertex a,b,c,d;
+	n21_vertex a,b,c,d;
 	int depthcueenable = 1;
 	/*
 	    0x0000..0x1fff  sprite palettes (0x20 sets of 0x100 colors)
@@ -442,11 +395,11 @@ namcos21_DrawQuad( running_machine &machine, int sx[4], int sy[4], int zcode[4],
 	    0x4000..0x5fff  polygon palette bank1 (0x10 sets of 0x200 colors or 0x20 sets of 0x100 colors)
 	    0x6000..0x7fff  polygon palette bank2 (0x10 sets of 0x200 colors or 0x20 sets of 0x100 colors)
 	*/
-	if( state->m_gametype == NAMCOS21_WINRUN91 )
+	if( m_gametype == NAMCOS21_WINRUN91 )
 	{
 		color = 0x4000|(color&0xff);
 	}
-	else if ( state->m_gametype == NAMCOS21_DRIVERS_EYES )
+	else if ( m_gametype == NAMCOS21_DRIVERS_EYES )
 	{
 		color = 0x3f00|(color&0xff);
 	}
@@ -486,6 +439,6 @@ namcos21_DrawQuad( running_machine &machine, int sx[4], int sy[4], int zcode[4],
 	d.y = sy[3];
 	d.z = zcode[3];
 
-	rendertri( state, &a, &b, &c, color, depthcueenable );
-	rendertri( state, &c, &d, &a, color, depthcueenable );
-} /* namcos21_DrawQuad */
+	rendertri(&a, &b, &c, color, depthcueenable);
+	rendertri(&c, &d, &a, color, depthcueenable);
+}

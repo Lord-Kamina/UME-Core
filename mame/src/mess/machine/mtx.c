@@ -1,6 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:Lee Ward, Dirk Best, Curt Coder
 /*************************************************************************
-
-    machine/mtx.c
 
     Memotech MTX 500, MTX 512 and RS 128
 
@@ -13,7 +13,7 @@
 #include "imagedev/cassette.h"
 #include "machine/ram.h"
 #include "imagedev/snapquik.h"
-#include "machine/ctronics.h"
+#include "bus/centronics/ctronics.h"
 #include "machine/z80ctc.h"
 #include "machine/z80dart.h"
 #include "video/tms9928a.h"
@@ -29,9 +29,8 @@
 
 READ8_MEMBER(mtx_state::mtx_strobe_r)
 {
-	centronics_device *centronics = machine().device<centronics_device>(CENTRONICS_TAG);
 	/* set STROBE low */
-	centronics->strobe_w(FALSE);
+	m_centronics->write_strobe(FALSE);
 
 	return 0xff;
 }
@@ -141,10 +140,28 @@ WRITE8_MEMBER(mtx_state::mtx_cst_w)
     mtx_prt_r - centronics status
 -------------------------------------------------*/
 
+WRITE_LINE_MEMBER(mtx_state::write_centronics_busy)
+{
+	m_centronics_busy = state;
+}
+
+WRITE_LINE_MEMBER(mtx_state::write_centronics_fault)
+{
+	m_centronics_fault = state;
+}
+
+WRITE_LINE_MEMBER(mtx_state::write_centronics_perror)
+{
+	m_centronics_perror = state;
+}
+
+WRITE_LINE_MEMBER(mtx_state::write_centronics_select)
+{
+	m_centronics_select = state;
+}
+
 READ8_MEMBER(mtx_state::mtx_prt_r)
 {
-	centronics_device *centronics = machine().device<centronics_device>(CENTRONICS_TAG);
-
 	/*
 
 	    bit     description
@@ -163,19 +180,12 @@ READ8_MEMBER(mtx_state::mtx_prt_r)
 	UINT8 data = 0;
 
 	/* reset STROBE to high */
-	centronics->strobe_w( TRUE);
+	m_centronics->write_strobe( TRUE);
 
-	/* busy */
-	data |= centronics->busy_r() << 0;
-
-	/* fault */
-	data |= centronics->fault_r() << 1;
-
-	/* paper empty */
-	data |= !centronics->pe_r() << 2;
-
-	/* select */
-	data |= centronics->vcc_r() << 3;
+	data |= m_centronics_busy << 0;
+	data |= m_centronics_fault << 1;
+	data |= m_centronics_perror << 2;
+	data |= m_centronics_select << 3;
 
 	return data;
 }
@@ -323,35 +333,57 @@ WRITE8_MEMBER(mtx_state::hrx_attr_w)
     SNAPSHOT
 ***************************************************************************/
 
+// this only works for some of the files, nothing which tries to load
+// more data from tape. todo: tapes which autorun after loading
 SNAPSHOT_LOAD_MEMBER( mtx_state, mtx )
 {
 	address_space &program = m_maincpu->space(AS_PROGRAM);
-
+	void *ptr;
 	UINT8 header[18];
-	UINT16 addr;
 
-	/* get the header */
-	image.fread( &header, sizeof(header));
+	// read header
+	image.fread(&header, sizeof(header));
 
-	if (header[0] == 0xff)
+	// verify first byte
+	if (header[0] != 0xff)
 	{
-		/* long header */
-		addr = pick_integer_le(header, 16, 2);
-		void *ptr = program.get_write_ptr(addr);
-		image.fread( ptr, 599);
-		ptr = program.get_write_ptr(0xc000);
-		image.fread( ptr, snapshot_size - 599 - 18);
+		image.seterror(IMAGE_ERROR_INVALIDIMAGE, NULL);
+		return IMAGE_INIT_FAIL;
 	}
-	else
+
+	// get tape name
+	char tape_name[16];
+	memcpy(&tape_name, &header[1], 15);
+	tape_name[15] = '\0';
+	image.message("Loading '%s'", tape_name);
+
+	// start of system variables area
+	UINT16 system_variables_base = pick_integer_le(header, 16, 2);
+
+	// write system variables
+	UINT16 system_variables_size = 0;
+
+	if (system_variables_base != 0)
 	{
-		/* short header */
-		addr = pick_integer_le(header, 0, 2);
-		image.fseek(4, SEEK_SET);
-		void *ptr = program.get_write_ptr(addr);
-		image.fread( ptr, 599);
-		ptr = program.get_write_ptr(0xc000);
-		image.fread( ptr, snapshot_size - 599 - 4);
+		ptr = program.get_write_ptr(system_variables_base);
+		system_variables_size = 0xfb4b - system_variables_base;
+		image.fread(ptr, system_variables_size);
 	}
+
+	// write actual image data
+	UINT16 data_size = snapshot_size - 18 - system_variables_size;
+
+	ptr = program.get_write_ptr(0x4000);
+	image.fread(ptr, 0x4000);
+
+	// if we cross the page boundary, get a new write pointer and write the rest
+	if (data_size > 0x4000)
+	{
+		ptr = program.get_write_ptr(0x8000);
+		image.fread(ptr, 0x4000);
+	}
+
+	logerror("snapshot name = '%s', system_size = 0x%04x, data_size = 0x%04x\n", tape_name, system_variables_size, data_size);
 
 	return IMAGE_INIT_PASS;
 }
@@ -374,10 +406,6 @@ MACHINE_START_MEMBER(mtx_state,mtx512)
 	membank("bank3")->configure_entries(0, messram->size()/0x4000/2, messram->pointer(), 0x4000);
 	membank("bank4")->configure_entries(0, messram->size()/0x4000/2, messram->pointer() + messram->size()/2, 0x4000);
 }
-
-/*-------------------------------------------------
-    MACHINE_RESET( mtx512 )
--------------------------------------------------*/
 
 MACHINE_RESET_MEMBER(mtx_state,mtx512)
 {

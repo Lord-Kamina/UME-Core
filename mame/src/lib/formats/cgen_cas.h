@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /*********************************************************************
 
     cgen_cas.h
 
-    Format code for EACA Colour Genie .cas casette files.
+    Format code for EACA Colour Genie .cas cassette files.
 
 *********************************************************************/
 

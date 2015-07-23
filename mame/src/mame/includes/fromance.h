@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Takahiro Nogi. Bryan McPhail, Nicola Salmoria, Aaron Giles
 /***************************************************************************
 
     Game Driver for Video System Mahjong series and Pipe Dream.
@@ -19,7 +21,10 @@ public:
 		m_spr_old(*this, "vsystem_spr_old"),
 		m_subcpu(*this, "sub"),
 		m_maincpu(*this, "maincpu"),
-		m_msm(*this, "msm") { }
+		m_msm(*this, "msm"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers (used by pipedrm) */
 	optional_shared_ptr<UINT8> m_videoram;
@@ -98,4 +103,7 @@ public:
 	DECLARE_WRITE_LINE_MEMBER(fromance_adpcm_int);
 	required_device<cpu_device> m_maincpu;
 	optional_device<msm5205_device> m_msm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 };

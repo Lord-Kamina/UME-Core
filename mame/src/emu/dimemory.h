@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     dimemory.h
 
     Device memory interfaces.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -75,6 +46,9 @@ const int TRANSLATE_FETCH_DEBUG     = (TRANSLATE_FETCH | TRANSLATE_DEBUG_MASK);
 #define MCFG_DEVICE_ADDRESS_MAP(_space, _map) \
 	device_memory_interface::static_set_addrmap(*device, _space, ADDRESS_MAP_NAME(_map));
 
+#define MCFG_DEVICE_REMOVE_ADDRESS_MAP(_space) \
+	device_memory_interface::static_set_addrmap(*device, _space, NULL);
+
 #define MCFG_DEVICE_PROGRAM_MAP(_map) \
 	MCFG_DEVICE_ADDRESS_MAP(AS_PROGRAM, _map)
 
@@ -83,6 +57,9 @@ const int TRANSLATE_FETCH_DEBUG     = (TRANSLATE_FETCH | TRANSLATE_DEBUG_MASK);
 
 #define MCFG_DEVICE_IO_MAP(_map) \
 	MCFG_DEVICE_ADDRESS_MAP(AS_IO, _map)
+
+#define MCFG_DEVICE_DECRYPTED_OPCODES_MAP(_map) \
+	MCFG_DEVICE_ADDRESS_MAP(AS_DECRYPTED_OPCODES, _map)
 
 
 
@@ -111,6 +88,8 @@ public:
 	// basic information getters
 	bool has_space(int index = 0) const { return (m_addrspace[index] != NULL); }
 	bool has_space(address_spacenum index) const { return (m_addrspace[int(index)] != NULL); }
+	bool has_configured_map(int index = 0) const { return (m_address_map[index] != NULL); }
+	bool has_configured_map(address_spacenum index) const { return (m_address_map[int(index)] != NULL); }
 	address_space &space(int index = 0) const { assert(m_addrspace[index] != NULL); return *m_addrspace[index]; }
 	address_space &space(address_spacenum index) const { assert(m_addrspace[int(index)] != NULL); return *m_addrspace[int(index)]; }
 

@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     testcpu.c
 
     Example driver for performing CPU stress tests.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 **************************************************************************/
 
@@ -126,7 +97,7 @@ public:
 		m_space = &m_cpu->space(AS_PROGRAM);
 
 		// configure DRC in the most compatible mode
-		ppcdrc_set_options(m_cpu, PPCDRC_COMPATIBLE_OPTIONS);
+		m_cpu->ppcdrc_set_options(PPCDRC_COMPATIBLE_OPTIONS);
 
 		// set a timer to go off right away
 		timer_set(attotime::zero);
@@ -180,14 +151,14 @@ public:
 	{
 		UINT64 fulloffs = offset;
 		UINT64 result = fulloffs + (fulloffs << 8) + (fulloffs << 16) + (fulloffs << 24) + (fulloffs << 32);
-		printf("Read from %08X & %016" I64FMT "X = %016" I64FMT "X\n", offset * 8, mem_mask, result);
+		printf("Read from %08X & %08X%08X = %08X%08X\n", offset * 8, (int)((mem_mask&0xffffffff00000000LL) >> 32) , (int)(mem_mask&0xffffffff), (int)((result&0xffffffff00000000LL) >> 32), (int)(result&0xffffffff));
 		return result;
 	}
 
 	// report writes to anywhere
 	WRITE64_MEMBER( general_w )
 	{
-		printf("Write to %08X & %016" I64FMT "X = %016" I64FMT "X\n", offset * 8, mem_mask, data);
+		printf("Write to %08X & %08X%08X = %08X%08X\n", offset * 8, (int)((mem_mask&0xffffffff00000000LL) >> 32) , (int)(mem_mask&0xffffffff), (int)((data&0xffffffff00000000LL) >> 32), (int)(data&0xffffffff));
 	}
 
 private:
@@ -214,17 +185,11 @@ ADDRESS_MAP_END
 //  MACHINE DRIVERS
 //**************************************************************************
 
-static const powerpc_config ppc_config =
-{
-	// 603e, Stretch, 1.3
-	66000000        // Multiplier 1, Bus = 66MHz, Core = 66MHz
-};
-
 static MACHINE_CONFIG_START( testcpu, testcpu_state )
 
 	// CPUs
 	MCFG_CPU_ADD("maincpu", PPC603E, 66000000)
-	MCFG_CPU_CONFIG(ppc_config)
+	MCFG_PPC_BUS_FREQUENCY(66000000)  // Multiplier 1, Bus = 66MHz, Core = 66MHz
 	MCFG_CPU_PROGRAM_MAP(ppc_mem)
 MACHINE_CONFIG_END
 

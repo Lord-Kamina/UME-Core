@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /*********************************************************************
 
     adam_cas.h
 
-    Format code for Coleco Adam .ddp casette files.
+    Format code for Coleco Adam .ddp cassette files.
 
 *********************************************************************/
 

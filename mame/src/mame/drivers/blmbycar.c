@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                               -= Blomby Car =-
@@ -105,10 +107,8 @@ static ADDRESS_MAP_START( blmbycar_map, AS_PROGRAM, 16, blmbycar_state )
 	AM_RANGE(0x108000, 0x10bfff) AM_WRITEONLY                                               // ???
 	AM_RANGE(0x10c000, 0x10c003) AM_WRITEONLY AM_SHARE("scroll_1")              // Scroll 1
 	AM_RANGE(0x10c004, 0x10c007) AM_WRITEONLY AM_SHARE("scroll_0")              // Scroll 0
-	AM_RANGE(0x200000, 0x2005ff) AM_RAM_WRITE(blmbycar_palette_w)                           // Palette
-	AM_RANGE(0x200600, 0x203fff) AM_RAM
-	AM_RANGE(0x204000, 0x2045ff) AM_RAM_WRITE(blmbycar_palette_w) AM_SHARE("paletteram")    // Palette
-	AM_RANGE(0x204600, 0x207fff) AM_RAM
+	AM_RANGE(0x200000, 0x2005ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette") AM_MIRROR(0x4000) // Palette
+	AM_RANGE(0x200600, 0x203fff) AM_RAM AM_MIRROR(0x4000)
 	AM_RANGE(0x440000, 0x441fff) AM_RAM
 	AM_RANGE(0x444000, 0x445fff) AM_WRITEONLY AM_SHARE("spriteram")// Sprites (size?)
 	AM_RANGE(0x700000, 0x700001) AM_READ_PORT("DSW")
@@ -138,10 +138,8 @@ static ADDRESS_MAP_START( watrball_map, AS_PROGRAM, 16, blmbycar_state )
 	AM_RANGE(0x108000, 0x10bfff) AM_WRITEONLY                                               // ???
 	AM_RANGE(0x10c000, 0x10c003) AM_WRITEONLY AM_SHARE("scroll_1")                  // Scroll 1
 	AM_RANGE(0x10c004, 0x10c007) AM_WRITEONLY AM_SHARE("scroll_0")                  // Scroll 0
-	AM_RANGE(0x200000, 0x2005ff) AM_RAM_WRITE(blmbycar_palette_w)                           // Palette
-	AM_RANGE(0x200600, 0x203fff) AM_RAM
-	AM_RANGE(0x204000, 0x2045ff) AM_RAM_WRITE(blmbycar_palette_w) AM_SHARE("paletteram")    // Palette
-	AM_RANGE(0x204600, 0x207fff) AM_RAM
+	AM_RANGE(0x200000, 0x2005ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette") AM_MIRROR(0x4000) // Palette
+	AM_RANGE(0x200600, 0x203fff) AM_RAM AM_MIRROR(0x4000)
 	AM_RANGE(0x440000, 0x441fff) AM_RAM
 	AM_RANGE(0x444000, 0x445fff) AM_WRITEONLY AM_SHARE("spriteram")// Sprites (size?)
 	AM_RANGE(0x700000, 0x700001) AM_READ_PORT("DSW")
@@ -348,7 +346,7 @@ MACHINE_RESET_MEMBER(blmbycar_state,blmbycar)
 static MACHINE_CONFIG_START( blmbycar, blmbycar_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M68000, 10000000)   /* ? */
+	MCFG_CPU_ADD("maincpu", M68000, XTAL_24MHz/2)   /* 12MHz */
 	MCFG_CPU_PROGRAM_MAP(blmbycar_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", blmbycar_state,  irq1_line_hold)
 
@@ -362,15 +360,17 @@ static MACHINE_CONFIG_START( blmbycar, blmbycar_state )
 	MCFG_SCREEN_SIZE(0x180, 0x100)
 	MCFG_SCREEN_VISIBLE_AREA(0, 0x180-1, 0, 0x100-1)
 	MCFG_SCREEN_UPDATE_DRIVER(blmbycar_state, screen_update_blmbycar)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(blmbycar)
-	MCFG_PALETTE_LENGTH(0x300)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", blmbycar)
 
+	MCFG_PALETTE_ADD("palette", 0x300)
+	MCFG_PALETTE_FORMAT(xxxxBBBBRRRRGGGG)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	MCFG_OKIM6295_ADD("oki", 1056000, OKIM6295_PIN7_HIGH) // clock frequency & pin 7 not verified
+	MCFG_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH) // clock frequency & pin 7 not verified
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -389,7 +389,7 @@ MACHINE_RESET_MEMBER(blmbycar_state,watrball)
 static MACHINE_CONFIG_START( watrball, blmbycar_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M68000, 10000000)   /* ? */
+	MCFG_CPU_ADD("maincpu", M68000, XTAL_24MHz/2)   /* 12MHz */
 	MCFG_CPU_PROGRAM_MAP(watrball_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", blmbycar_state,  irq1_line_hold)
 
@@ -403,15 +403,16 @@ static MACHINE_CONFIG_START( watrball, blmbycar_state )
 	MCFG_SCREEN_SIZE(0x180, 0x100)
 	MCFG_SCREEN_VISIBLE_AREA(0, 0x180-1, 16, 0x100-1)
 	MCFG_SCREEN_UPDATE_DRIVER(blmbycar_state, screen_update_blmbycar)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(blmbycar)
-	MCFG_PALETTE_LENGTH(0x300)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", blmbycar)
+	MCFG_PALETTE_ADD("palette", 0x300)
+	MCFG_PALETTE_FORMAT(xxxxBBBBRRRRGGGG)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
-	MCFG_OKIM6295_ADD("oki", 1056000, OKIM6295_PIN7_HIGH) // clock frequency & pin 7 not verified
+	MCFG_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH) // clock frequency & pin 7 not verified
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -430,9 +431,9 @@ MACHINE_CONFIG_END
                                 Blomby Car
 Abm & Gecas, 1990.
 
-CPU : 68000
+CPU : MC68000P12
 SND : Oki M6295 (samples only)
-OSC : 30.000 + 24.000
+OSC : 30.000MHz, 24.000MHz & 1.00MHz resonator
 DSW : 2 x 8
 GFX : TI TPC1020AFN-084
 
@@ -528,6 +529,6 @@ DRIVER_INIT_MEMBER(blmbycar_state,blmbycar)
 
 ***************************************************************************/
 
-GAME( 1994, blmbycar, 0,        blmbycar, blmbycar, blmbycar_state, blmbycar, ROT0, "ABM & Gecas", "Blomby Car", GAME_SUPPORTS_SAVE )
-GAME( 1994, blmbycaru,blmbycar, blmbycar, blmbycar, driver_device, 0,        ROT0, "ABM & Gecas", "Blomby Car (not encrypted)", GAME_SUPPORTS_SAVE )
-GAME( 1996, watrball, 0,        watrball, watrball, driver_device, 0,        ROT0, "ABM", "Water Balls", GAME_SUPPORTS_SAVE )
+GAME( 1994, blmbycar,  0,        blmbycar, blmbycar, blmbycar_state, blmbycar, ROT0, "ABM & Gecas", "Blomby Car", GAME_SUPPORTS_SAVE )
+GAME( 1994, blmbycaru, blmbycar, blmbycar, blmbycar, driver_device,  0,        ROT0, "ABM & Gecas", "Blomby Car (not encrypted)", GAME_SUPPORTS_SAVE )
+GAME( 1996, watrball,  0,        watrball, watrball, driver_device,  0,        ROT0, "ABM",         "Water Balls", GAME_SUPPORTS_SAVE )

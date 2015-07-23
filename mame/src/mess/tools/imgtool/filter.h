@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
     filter.h
@@ -58,6 +60,7 @@ extern void filter_thombas5_getinfo(UINT32 state, union filterinfo *info);
 extern void filter_thombas7_getinfo(UINT32 state, union filterinfo *info);
 extern void filter_thombas128_getinfo(UINT32 state, union filterinfo *info);
 extern void filter_thomcrypt_getinfo(UINT32 state, union filterinfo *info);
+extern void filter_bml3bas_getinfo(UINT32 state, union filterinfo *info);
 
 
 #endif /* FILTER_H */

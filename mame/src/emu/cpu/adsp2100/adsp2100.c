@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     ADSP2100.c
 
     ADSP-21xx series emulator.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ****************************************************************************
 
@@ -148,8 +119,8 @@ const device_type ADSP2181 = &device_creator<adsp2181_device>;
 //  adsp21xx_device - constructor
 //-------------------------------------------------
 
-adsp21xx_device::adsp21xx_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 chiptype)
-	: cpu_device(mconfig, type, name, tag, owner, clock),
+adsp21xx_device::adsp21xx_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 chiptype, const char *shortname, const char *source)
+	: cpu_device(mconfig, type, name, tag, owner, clock, shortname, source),
 		m_program_config("program", ENDIANNESS_LITTLE, 32, 14, -2),
 		m_data_config("data", ENDIANNESS_LITTLE, 16, 14, -1),
 		m_chip_type(chiptype),
@@ -183,7 +154,10 @@ adsp21xx_device::adsp21xx_device(const machine_config &mconfig, device_type type
 		m_icount(0),
 		m_mstat_mask((m_chip_type >= CHIP_TYPE_ADSP2101) ? 0x7f : 0x0f),
 		m_imask_mask((m_chip_type >= CHIP_TYPE_ADSP2181) ? 0x3ff :
-					(m_chip_type >= CHIP_TYPE_ADSP2101) ? 0x3f : 0x0f)
+					(m_chip_type >= CHIP_TYPE_ADSP2101) ? 0x3f : 0x0f),
+		m_sport_rx_cb(*this),
+		m_sport_tx_cb(*this),
+		m_timer_fired_cb(*this)
 {
 	// initialize remaining state
 	memset(&m_core, 0, sizeof(m_core));
@@ -199,10 +173,6 @@ adsp21xx_device::adsp21xx_device(const machine_config &mconfig, device_type type
 	memset(&m_stat_stack, 0, sizeof(m_stat_stack));
 	memset(&m_irq_state, 0, sizeof(m_irq_state));
 	memset(&m_irq_latch, 0, sizeof(m_irq_latch));
-
-	m_sport_rx_callback = NULL;
-	m_sport_tx_callback = NULL;
-	m_timer_fired = NULL;
 
 	// create the tables
 	create_tables();
@@ -278,25 +248,25 @@ adsp21xx_device::adsp21xx_device(const machine_config &mconfig, device_type type
 }
 
 adsp2100_device::adsp2100_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: adsp21xx_device(mconfig, ADSP2100, "ADSP-2100", tag, owner, clock, CHIP_TYPE_ADSP2100) { }
+	: adsp21xx_device(mconfig, ADSP2100, "ADSP-2100", tag, owner, clock, CHIP_TYPE_ADSP2100, "adsp2100", __FILE__) { }
 
 adsp2101_device::adsp2101_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: adsp21xx_device(mconfig, ADSP2101, "ADSP-2101", tag, owner, clock, CHIP_TYPE_ADSP2101) { }
+	: adsp21xx_device(mconfig, ADSP2101, "ADSP-2101", tag, owner, clock, CHIP_TYPE_ADSP2101, "adsp2101", __FILE__) { }
 
-adsp2101_device::adsp2101_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 chiptype)
-	: adsp21xx_device(mconfig, type, name, tag, owner, clock, chiptype) { }
+adsp2101_device::adsp2101_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 chiptype, const char *shortname, const char *source)
+	: adsp21xx_device(mconfig, type, name, tag, owner, clock, chiptype, shortname, source) { }
 
 adsp2104_device::adsp2104_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: adsp2101_device(mconfig, ADSP2104, "ADSP-2104", tag, owner, clock, CHIP_TYPE_ADSP2104) { }
+	: adsp2101_device(mconfig, ADSP2104, "ADSP-2104", tag, owner, clock, CHIP_TYPE_ADSP2104, "adsp2104", __FILE__) { }
 
 adsp2105_device::adsp2105_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: adsp2101_device(mconfig, ADSP2105, "ADSP-2105", tag, owner, clock, CHIP_TYPE_ADSP2105) { }
+	: adsp2101_device(mconfig, ADSP2105, "ADSP-2105", tag, owner, clock, CHIP_TYPE_ADSP2105, "adsp2105", __FILE__) { }
 
 adsp2115_device::adsp2115_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: adsp2101_device(mconfig, ADSP2115, "ADSP-2115", tag, owner, clock, CHIP_TYPE_ADSP2115) { }
+	: adsp2101_device(mconfig, ADSP2115, "ADSP-2115", tag, owner, clock, CHIP_TYPE_ADSP2115, "adsp2115", __FILE__) { }
 
 adsp2181_device::adsp2181_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: adsp21xx_device(mconfig, ADSP2181, "ADSP-2181", tag, owner, clock, CHIP_TYPE_ADSP2181),
+	: adsp21xx_device(mconfig, ADSP2181, "ADSP-2181", tag, owner, clock, CHIP_TYPE_ADSP2181, "adsp2181", __FILE__),
 		m_io_config("I/O", ENDIANNESS_LITTLE, 16, 11, -1) { }
 
 
@@ -321,18 +291,6 @@ adsp21xx_device::~adsp21xx_device()
 	}
 	fclose(log);
 #endif
-}
-
-
-//-------------------------------------------------
-//  static_set_config - set the configuration
-//  structure
-//-------------------------------------------------
-
-void adsp21xx_device::static_set_config(device_t &device, const adsp21xx_config &config)
-{
-	adsp21xx_device &adsp = downcast<adsp21xx_device &>(device);
-	static_cast<adsp21xx_config &>(adsp) = config;
 }
 
 
@@ -444,6 +402,10 @@ UINT16 adsp2181_device::idma_data_r()
 
 void adsp21xx_device::device_start()
 {
+	m_sport_rx_cb.resolve();
+	m_sport_tx_cb.resolve();
+	m_timer_fired_cb.resolve();
+
 	// get our address spaces
 	m_program = &space(AS_PROGRAM);
 	m_direct = &m_program->direct();
@@ -582,15 +544,15 @@ void adsp21xx_device::device_start()
 	state_add(ADSP2100_SR0_SEC, "SR0_SEC",   m_alt.sr.srx.sr0.u);
 	state_add(ADSP2100_SR1_SEC, "SR1_SEC",   m_alt.sr.srx.sr1.u);
 
-	astring tempstring;
+	std::string tempstring;
 	for (int ireg = 0; ireg < 8; ireg++)
-		state_add(ADSP2100_I0 + ireg, tempstring.format("I%d", ireg), m_i[ireg]).mask(0x3fff).callimport();
+		state_add(ADSP2100_I0 + ireg, strformat(tempstring, "I%d", ireg).c_str(), m_i[ireg]).mask(0x3fff).callimport();
 
 	for (int lreg = 0; lreg < 8; lreg++)
-		state_add(ADSP2100_L0 + lreg, tempstring.format("L%d", lreg), m_l[lreg]).mask(0x3fff).callimport();
+		state_add(ADSP2100_L0 + lreg, strformat(tempstring, "L%d", lreg).c_str(), m_l[lreg]).mask(0x3fff).callimport();
 
 	for (int mreg = 0; mreg < 8; mreg++)
-		state_add(ADSP2100_M0 + mreg, tempstring.format("M%d", mreg), m_m[mreg]).signed_mask(0x3fff);
+		state_add(ADSP2100_M0 + mreg, strformat(tempstring, "M%d", mreg).c_str(), m_m[mreg]).signed_mask(0x3fff);
 
 	state_add(ADSP2100_PX,      "PX",        m_px);
 	state_add(ADSP2100_CNTR,    "CNTR",      m_cntr).mask(0x3fff);
@@ -609,7 +571,7 @@ void adsp21xx_device::device_start()
 
 	for (int irqnum = 0; irqnum < 4; irqnum++)
 		if (irqnum < 4 || m_chip_type == CHIP_TYPE_ADSP2100)
-			state_add(ADSP2100_IRQSTATE0 + irqnum, tempstring.format("IRQ%d", irqnum), m_irq_state[irqnum]).mask(1).callimport();
+			state_add(ADSP2100_IRQSTATE0 + irqnum, strformat(tempstring, "IRQ%d", irqnum).c_str(), m_irq_state[irqnum]).mask(1).callimport();
 
 	state_add(ADSP2100_FLAGIN,  "FLAGIN",    m_flagin).mask(1);
 	state_add(ADSP2100_FLAGOUT, "FLAGOUT",   m_flagout).mask(1);
@@ -749,7 +711,6 @@ void adsp21xx_device::state_import(const device_state_entry &entry)
 
 		default:
 			fatalerror("CPU_IMPORT_STATE(adsp21xx) called for unexpected value\n");
-			break;
 	}
 }
 
@@ -759,12 +720,12 @@ void adsp21xx_device::state_import(const device_state_entry &entry)
 //  for the debugger
 //-------------------------------------------------
 
-void adsp21xx_device::state_string_export(const device_state_entry &entry, astring &string)
+void adsp21xx_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case STATE_GENFLAGS:
-			string.printf("%c%c%c%c%c%c%c%c",
+			strprintf(str, "%c%c%c%c%c%c%c%c",
 				m_astat & 0x80 ? 'X':'.',
 				m_astat & 0x40 ? 'M':'.',
 				m_astat & 0x20 ? 'Q':'.',
@@ -850,7 +811,7 @@ inline void adsp21xx_device::program_write(UINT32 addr, UINT32 data)
 
 inline UINT32 adsp21xx_device::opcode_read()
 {
-	return m_direct->read_decrypted_dword(m_pc << 2);
+	return m_direct->read_dword(m_pc << 2);
 }
 
 
@@ -858,7 +819,7 @@ inline UINT32 adsp21xx_device::opcode_read()
     IMPORT CORE UTILITIES
 ***************************************************************************/
 
-#include "2100ops.c"
+#include "2100ops.inc"
 
 
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder,Jonathan Gevaryahu
 /*
 
     Tandberg TDV2324
@@ -148,9 +150,9 @@ static ADDRESS_MAP_START( tdv2324_io, AS_IO, 8, tdv2324_state )
 	AM_RANGE(0x30, 0x30) AM_READ(tdv2324_main_io_30)
 //  AM_RANGE(0xe2, 0xe2) AM_WRITE(tdv2324_main_io_e2) console output
 	AM_RANGE(0xe6, 0xe6) AM_READ(tdv2324_main_io_e6)
-//  AM_RANGE(0x, 0x) AM_DEVREADWRITE_LEGACY(P8253_5_0_TAG, pit8253_r, pit8253_w)
-//  AM_RANGE(0x, 0x) AM_DEVREADWRITE_LEGACY(MK3887N4_TAG, z80dart_ba_cd_r, z80dart_ba_cd_w)
-//  AM_RANGE(0x, 0x) AM_DEVREADWRITE_LEGACY(P8259A_TAG, pic8259_r, pic8259_w)
+//  AM_RANGE(0x, 0x) AM_DEVREADWRITE(P8253_5_0_TAG, pit8253_device, read, write)
+//  AM_RANGE(0x, 0x) AM_DEVREADWRITE(MK3887N4_TAG, z80dart_device, ba_cd_r, ba_cd_w)
+//  AM_RANGE(0x, 0x) AM_DEVREADWRITE(P8259A_TAG, pic8259_device, read, write)
 ADDRESS_MAP_END
 
 
@@ -217,18 +219,10 @@ INPUT_PORTS_END
 //  VIDEO
 //**************************************************************************
 
-//-------------------------------------------------
-//  VIDEO_START( tdv2324 )
-//-------------------------------------------------
-
 void tdv2324_state::video_start()
 {
 }
 
-
-//-------------------------------------------------
-//  SCREEN_UPDATE_IND16( tdv2324 )
-//-------------------------------------------------
 
 UINT32 tdv2324_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
@@ -240,118 +234,6 @@ UINT32 tdv2324_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap,
 //**************************************************************************
 //  DEVICE CONFIGURATION
 //**************************************************************************
-
-//-------------------------------------------------
-//  I8085_CONFIG( i8085_intf )
-//-------------------------------------------------
-
-static I8085_CONFIG( i8085_intf )
-{
-	DEVCB_NULL, /* STATUS changed callback */
-	DEVCB_NULL, /* INTE changed callback */
-	DEVCB_NULL, /* SID changed callback (I8085A only) */
-	DEVCB_NULL  /* SOD changed callback (I8085A only) */
-};
-
-
-//-------------------------------------------------
-//  I8085_CONFIG( i8085_sub_intf )
-//-------------------------------------------------
-
-static I8085_CONFIG( i8085_sub_intf )
-{
-	DEVCB_NULL, /* STATUS changed callback */
-	DEVCB_NULL, /* INTE changed callback */
-	DEVCB_NULL, /* SID changed callback (I8085A only) */
-	DEVCB_NULL  /* SOD changed callback (I8085A only) */
-};
-
-
-//-------------------------------------------------
-//  pit8253_config pit0_intf
-//-------------------------------------------------
-
-static const struct pit8253_interface pit0_intf =
-{
-	{
-		{
-			0,
-			DEVCB_NULL,
-			DEVCB_NULL
-		}, {
-			0,
-			DEVCB_NULL,
-			DEVCB_NULL
-		}, {
-			0,
-			DEVCB_NULL,
-			DEVCB_NULL
-		}
-	}
-};
-
-
-//-------------------------------------------------
-//  pit8253_config pit1_intf
-//-------------------------------------------------
-
-static const struct pit8253_interface pit1_intf =
-{
-	{
-		{
-			0,
-			DEVCB_NULL,
-			DEVCB_NULL
-		}, {
-			0,
-			DEVCB_NULL,
-			DEVCB_NULL
-		}, {
-			0,
-			DEVCB_NULL,
-			DEVCB_NULL
-		}
-	}
-};
-
-
-//-------------------------------------------------
-//  Z80SIO_INTERFACE( sio_intf )
-//-------------------------------------------------
-
-static Z80SIO_INTERFACE( sio_intf )
-{
-	0, 0, 0, 0,
-
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-
-	DEVCB_NULL
-};
-
-
-//-------------------------------------------------
-//  tms9927_interface vtac_intf
-//-------------------------------------------------
-
-static const tms9927_interface vtac_intf =
-{
-	SCREEN_TAG,
-	8,
-	NULL
-};
-
 
 //-------------------------------------------------
 //  SLOT_INTERFACE( tdv2324_floppies )
@@ -376,12 +258,10 @@ static MACHINE_CONFIG_START( tdv2324, tdv2324_state )
 	MCFG_CPU_ADD(P8085AH_0_TAG, I8085A, 8700000/2) // ???
 	MCFG_CPU_PROGRAM_MAP(tdv2324_mem)
 	MCFG_CPU_IO_MAP(tdv2324_io)
-	MCFG_CPU_CONFIG(i8085_intf)
 
 	MCFG_CPU_ADD(P8085AH_1_TAG, I8085A, 8000000/2) // ???
 	MCFG_CPU_PROGRAM_MAP(tdv2324_sub_mem)
 	MCFG_CPU_IO_MAP(tdv2324_sub_io)
-	MCFG_CPU_CONFIG(i8085_sub_intf)
 
 	MCFG_CPU_ADD(MC68B02P_TAG, M6802, 8000000/2) // ???
 	MCFG_CPU_PROGRAM_MAP(tdv2324_fdc_mem)
@@ -393,17 +273,21 @@ static MACHINE_CONFIG_START( tdv2324, tdv2324_state )
 	MCFG_SCREEN_SIZE(800, 400)
 	MCFG_SCREEN_VISIBLE_AREA(0, 800-1, 0, 400-1)
 
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(monochrome_green)
+	MCFG_PALETTE_ADD_MONOCHROME_GREEN("palette")
 
-	MCFG_TMS9927_ADD(TMS9937NL_TAG, XTAL_25_39836MHz, vtac_intf)
+	MCFG_DEVICE_ADD(TMS9937NL_TAG, TMS9927, XTAL_25_39836MHz)
+	MCFG_TMS9927_CHAR_WIDTH(8)
 
 	// devices
 	MCFG_PIC8259_ADD(P8259A_TAG, NULL, VCC, NULL)
-	MCFG_PIT8253_ADD(P8253_5_0_TAG, pit0_intf)
-	MCFG_PIT8253_ADD(P8253_5_1_TAG, pit1_intf)
-	MCFG_Z80SIO2_ADD(MK3887N4_TAG, 8000000/2, sio_intf)
-	MCFG_FD1797x_ADD(FD1797PL02_TAG, 8000000/4)
+
+	MCFG_DEVICE_ADD(P8253_5_0_TAG, PIT8253, 0)
+
+	MCFG_DEVICE_ADD(P8253_5_1_TAG, PIT8253, 0)
+
+	MCFG_Z80SIO2_ADD(MK3887N4_TAG, 8000000/2, 0, 0, 0, 0)
+
+	MCFG_FD1797_ADD(FD1797PL02_TAG, 8000000/4)
 	MCFG_FLOPPY_DRIVE_ADD(FD1797PL02_TAG":0", tdv2324_floppies, "8dsdd", floppy_image_device::default_floppy_formats)
 	MCFG_FLOPPY_DRIVE_ADD(FD1797PL02_TAG":1", tdv2324_floppies, "8dsdd", floppy_image_device::default_floppy_formats)
 

@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
 Taito Super Speed Race video emulation
@@ -196,8 +198,8 @@ void sspeedr_state::draw_drones(bitmap_ind16 &bitmap, const rectangle &cliprect)
 
 		y = 0xf0 - m_drones_vert[i >> 1];
 
-		drawgfx_transpen(bitmap, cliprect,
-			machine().gfx[1],
+
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 			code[i] ^ m_toggle,
 			0,
 			0, 0,
@@ -226,8 +228,8 @@ void sspeedr_state::draw_driver(bitmap_ind16 &bitmap, const rectangle &cliprect)
 
 	y = 0xf0 - m_driver_vert;
 
-	drawgfx_transpen(bitmap, cliprect,
-		machine().gfx[0],
+
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 		m_driver_pic,
 		0,
 		0, 0,

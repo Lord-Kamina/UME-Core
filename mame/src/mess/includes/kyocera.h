@@ -1,25 +1,29 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 #pragma once
 
 #ifndef __KYOCERA__
 #define __KYOCERA__
 
 
-#include "emu.h"
+#include "bus/rs232/rs232.h"
 #include "cpu/i8085/i8085.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/cassette.h"
-#include "machine/ctronics.h"
+#include "machine/buffer.h"
+#include "bus/centronics/ctronics.h"
 #include "machine/i8155.h"
 #include "machine/i8251.h"
 #include "machine/im6402.h"
 #include "machine/ram.h"
 #include "machine/rp5c01.h"
-#include "machine/serial.h"
 #include "machine/upd1990a.h"
 #include "video/hd44102.h"
 #include "video/hd61830.h"
 #include "sound/speaker.h"
 #include "rendlay.h"
+
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 
 #define SCREEN_TAG      "screen"
 #define I8085_TAG       "m19"
@@ -69,10 +73,10 @@ public:
 			m_centronics(*this, CENTRONICS_TAG),
 			m_speaker(*this, "speaker"),
 			m_cassette(*this, "cassette"),
+			m_opt_cart(*this, "opt_cartslot"),
 			m_ram(*this, RAM_TAG),
 			m_rs232(*this, RS232_TAG),
 			m_rom(*this, I8085_TAG),
-			m_option(*this, "option"),
 			m_y0(*this, "Y0"),
 			m_y1(*this, "Y1"),
 			m_y2(*this, "Y2"),
@@ -101,10 +105,10 @@ public:
 	required_device<centronics_device> m_centronics;
 	required_device<speaker_sound_device> m_speaker;
 	required_device<cassette_image_device> m_cassette;
+	required_device<generic_slot_device> m_opt_cart;
 	required_device<ram_device> m_ram;
 	required_device<rs232_port_device> m_rs232;
 	required_memory_region m_rom;
-	required_memory_region m_option;
 	required_ioport m_y0;
 	required_ioport m_y1;
 	required_ioport m_y2;
@@ -117,6 +121,7 @@ public:
 	required_ioport m_battery;
 
 	virtual void machine_start();
+	memory_region *m_opt_region;
 
 	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 
@@ -131,6 +136,8 @@ public:
 	DECLARE_WRITE8_MEMBER( i8155_pb_w );
 	DECLARE_READ8_MEMBER( i8155_pc_r );
 	DECLARE_WRITE_LINE_MEMBER( i8155_to_w );
+	DECLARE_WRITE_LINE_MEMBER( write_centronics_busy );
+	DECLARE_WRITE_LINE_MEMBER( write_centronics_select );
 
 	/* memory state */
 	UINT8 m_bank;           /* memory bank selection */
@@ -141,6 +148,9 @@ public:
 	/* sound state */
 	int m_buzzer;               /* buzzer select */
 	int m_bell;             /* bell output */
+
+	int m_centronics_busy;
+	int m_centronics_select;
 
 	DECLARE_PALETTE_INIT(kc85);
 	DECLARE_WRITE_LINE_MEMBER(kc85_sod_w);
@@ -160,9 +170,12 @@ class pc8201_state : public kc85_state
 {
 public:
 	pc8201_state(const machine_config &mconfig, device_type type, const char *tag)
-		: kc85_state(mconfig, type, tag) { }
+		: kc85_state(mconfig, type, tag),
+			m_cas_cart(*this, "cas_cartslot")
+	{ }
 
 	virtual void machine_start();
+	required_device<generic_slot_device> m_cas_cart;
 
 	DECLARE_READ8_MEMBER( bank_r );
 	DECLARE_WRITE8_MEMBER( bank_w );
@@ -192,12 +205,13 @@ public:
 			m_rtc(*this, RP5C01A_TAG),
 			m_lcdc(*this, HD61830_TAG),
 			m_centronics(*this, CENTRONICS_TAG),
+			m_cent_data_out(*this, "cent_data_out"),
 			m_speaker(*this, "speaker"),
 			m_cassette(*this, "cassette"),
+			m_opt_cart(*this, "opt_cartslot"),
 			m_ram(*this, RAM_TAG),
 			m_rs232(*this, RS232_TAG),
 			m_rom(*this, I8085_TAG),
-			m_option(*this, "option"),
 			m_y0(*this, "Y0"),
 			m_y1(*this, "Y1"),
 			m_y2(*this, "Y2"),
@@ -213,12 +227,13 @@ public:
 	required_device<rp5c01_device> m_rtc;
 	required_device<hd61830_device> m_lcdc;
 	required_device<centronics_device> m_centronics;
+	required_device<output_latch_device> m_cent_data_out;
 	required_device<speaker_sound_device> m_speaker;
 	required_device<cassette_image_device> m_cassette;
+	required_device<generic_slot_device> m_opt_cart;
 	required_device<ram_device> m_ram;
 	required_device<rs232_port_device> m_rs232;
 	required_memory_region m_rom;
-	required_memory_region m_option;
 	required_ioport m_y0;
 	required_ioport m_y1;
 	required_ioport m_y2;
@@ -230,6 +245,7 @@ public:
 	required_ioport m_y8;
 
 	virtual void machine_start();
+	memory_region *m_opt_region;
 
 	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 
@@ -241,6 +257,10 @@ public:
 	DECLARE_WRITE8_MEMBER( i8155_pb_w );
 	DECLARE_READ8_MEMBER( i8155_pc_r );
 	DECLARE_WRITE_LINE_MEMBER( i8155_to_w );
+	DECLARE_WRITE_LINE_MEMBER(kc85_sod_w);
+	DECLARE_READ_LINE_MEMBER(kc85_sid_r);
+	DECLARE_WRITE_LINE_MEMBER( write_centronics_busy );
+	DECLARE_WRITE_LINE_MEMBER( write_centronics_select );
 
 	DECLARE_PALETTE_INIT(tandy200);
 
@@ -258,6 +278,9 @@ public:
 	/* sound state */
 	int m_buzzer;           /* buzzer select */
 	int m_bell;             /* bell output */
+
+	int m_centronics_busy;
+	int m_centronics_select;
 };
 
 /* ---------- defined in video/kyocera.c ---------- */

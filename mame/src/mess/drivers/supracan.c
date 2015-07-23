@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Angelo Salese,Ryan Holtz
 /***************************************************************************
 
 
@@ -76,8 +78,8 @@ DEBUG TRICKS:
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
 #include "cpu/m6502/m6502.h"
-#include "imagedev/cartslot.h"
-//#include "debugger.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 
 #define SOUNDCPU_BOOT_HACK      (1)
 
@@ -117,30 +119,41 @@ public:
 		: driver_device(mconfig, type, tag),
 			m_maincpu(*this, "maincpu"),
 			m_soundcpu(*this, "soundcpu"),
-			m_soundram(*this, "soundram")
+			m_cart(*this, "cartslot"),
+			m_vram(*this, "vram"),
+			m_soundram(*this, "soundram"),
+			m_gfxdecode(*this, "gfxdecode"),
+			m_palette(*this, "palette")
 	{
 		m_m6502_reset = 0;
 	}
 
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_soundcpu;
-	DECLARE_READ16_MEMBER(supracan_68k_soundram_r);
-	DECLARE_WRITE16_MEMBER(supracan_68k_soundram_w);
-	DECLARE_READ8_MEMBER(supracan_6502_soundmem_r);
-	DECLARE_WRITE8_MEMBER(supracan_6502_soundmem_w);
-	DECLARE_WRITE16_MEMBER(supracan_dma_w);
-	DECLARE_READ16_MEMBER(supracan_sound_r);
-	DECLARE_WRITE16_MEMBER(supracan_sound_w);
-	DECLARE_READ16_MEMBER(supracan_video_r);
-	DECLARE_WRITE16_MEMBER(supracan_video_w);
-	DECLARE_READ16_MEMBER(supracan_vram_r);
-	DECLARE_WRITE16_MEMBER(supracan_vram_w);
+	required_device<generic_slot_device> m_cart;
+
+	required_shared_ptr<UINT16> m_vram;
+	required_shared_ptr<UINT8> m_soundram;
+
+	DECLARE_READ16_MEMBER(_68k_soundram_r);
+	DECLARE_WRITE16_MEMBER(_68k_soundram_w);
+	DECLARE_READ8_MEMBER(_6502_soundmem_r);
+	DECLARE_WRITE8_MEMBER(_6502_soundmem_w);
+
+	void dma_w(address_space &space, int offset, UINT16 data, UINT16 mem_mask, int ch);
+	DECLARE_WRITE16_MEMBER(dma_channel0_w);
+	DECLARE_WRITE16_MEMBER(dma_channel1_w);
+
+	DECLARE_READ16_MEMBER(sound_r);
+	DECLARE_WRITE16_MEMBER(sound_w);
+	DECLARE_READ16_MEMBER(video_r);
+	DECLARE_WRITE16_MEMBER(video_w);
+	DECLARE_WRITE16_MEMBER(vram_w);
 	DECLARE_WRITE16_MEMBER(paletteram_w);
 	acan_dma_regs_t m_acan_dma_regs;
 	acan_sprdma_regs_t m_acan_sprdma_regs;
 
 	UINT16 m_m6502_reset;
-	required_shared_ptr<UINT8> m_soundram;
 	UINT8 m_soundlatch;
 	UINT8 m_soundcpu_irq_src;
 	UINT8 m_sound_irq_enable_reg;
@@ -151,9 +164,8 @@ public:
 	emu_timer *m_hbl_timer;
 	emu_timer *m_line_on_timer;
 	emu_timer *m_line_off_timer;
-	UINT16 *m_vram;
-	UINT16 *m_vram_swapped;
-	UINT8 *m_vram_addr_swapped;
+
+	dynamic_buffer m_vram_addr_swapped;
 
 	UINT16 *m_pram;
 
@@ -201,7 +213,7 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(supracan);
 	UINT32 screen_update_supracan(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(supracan_irq);
 	INTERRUPT_GEN_MEMBER(supracan_sound_irq);
@@ -210,7 +222,7 @@ public:
 	TIMER_CALLBACK_MEMBER(supracan_line_off_callback);
 	TIMER_CALLBACK_MEMBER(supracan_video_callback);
 	DECLARE_DEVICE_IMAGE_LOAD_MEMBER(supracan_cart);
-	inline void verboselog(const char *tag, int n_level, const char *s_fmt, ...);
+	inline void verboselog(const char *tag, int n_level, const char *s_fmt, ...) ATTR_PRINTF(4,5);
 	int supracan_tilemap_get_region(int layer);
 	void supracan_tilemap_get_info_common(int layer, tile_data &tileinfo, int count);
 	void supracan_tilemap_get_info_roz(int layer, tile_data &tileinfo, int count);
@@ -218,13 +230,15 @@ public:
 	void draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void mark_active_tilemap_all_dirty(int layer);
 	void supracan_suprnova_draw_roz(bitmap_ind16 &bitmap, const rectangle &cliprect, tilemap_t *tmap, UINT32 startx, UINT32 starty, int incxx, int incxy, int incyx, int incyy, int wraparound/*, int columnscroll, UINT32* scrollram*/, int transmask);
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 
 
-#if ENABLE_VERBOSE_LOG
 inline void supracan_state::verboselog(const char *tag, int n_level, const char *s_fmt, ...)
 {
+#if ENABLE_VERBOSE_LOG
 	if( VERBOSE_LEVEL >= n_level )
 	{
 		va_list v;
@@ -234,11 +248,8 @@ inline void supracan_state::verboselog(const char *tag, int n_level, const char 
 		va_end( v );
 		logerror( "%06x: %s: %s", machine().device(tag)->safe_pc(), tag, buf );
 	}
-}
-
-#else
-#define verboselog(w,x,y,z,...)
 #endif
+}
 
 int supracan_state::supracan_tilemap_get_region(int layer)
 {
@@ -298,6 +309,11 @@ void supracan_state::supracan_tilemap_get_info_common(int layer, tile_data &tile
 	{
 		case 7:
 			tile_bank = 0x1c00;
+			palette_bank = 0x00;
+			break;
+
+		case 6: // gambling lord
+			tile_bank = 0x0c00;
 			palette_bank = 0x00;
 			break;
 
@@ -414,29 +430,29 @@ void supracan_state::video_start()
 {
 	m_sprite_final_bitmap.allocate(1024, 1024, BITMAP_FORMAT_IND16);
 
-	m_vram = (UINT16*)(*memregion("ram_gfx"));
-	m_vram_swapped = (UINT16*)(*memregion("ram_gfx2"));
-	m_vram_addr_swapped = (UINT8*)(*memregion("ram_gfx3")); // hack for 1bpp layer at startup
+	m_vram_addr_swapped.resize(0x20000); // hack for 1bpp layer at startup
+	m_gfxdecode->gfx(4)->set_source(&m_vram_addr_swapped[0]);
+	m_gfxdecode->gfx(4)->set_xormask(0);
 
-	m_tilemap_sizes[0][0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap0_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_tilemap_sizes[0][1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap0_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
-	m_tilemap_sizes[0][2] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap0_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 128, 32);
-	m_tilemap_sizes[0][3] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap0_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
+	m_tilemap_sizes[0][0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap0_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_tilemap_sizes[0][1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap0_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_tilemap_sizes[0][2] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap0_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 128, 32);
+	m_tilemap_sizes[0][3] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap0_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
 
-	m_tilemap_sizes[1][0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_tilemap_sizes[1][1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
-	m_tilemap_sizes[1][2] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 128, 32);
-	m_tilemap_sizes[1][3] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
+	m_tilemap_sizes[1][0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_tilemap_sizes[1][1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_tilemap_sizes[1][2] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 128, 32);
+	m_tilemap_sizes[1][3] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
 
-	m_tilemap_sizes[2][0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_tilemap_sizes[2][1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
-	m_tilemap_sizes[2][2] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 128, 32);
-	m_tilemap_sizes[2][3] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
+	m_tilemap_sizes[2][0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_tilemap_sizes[2][1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_tilemap_sizes[2][2] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 128, 32);
+	m_tilemap_sizes[2][3] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_tilemap2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
 
-	m_tilemap_sizes[3][0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_roz_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_tilemap_sizes[3][1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_roz_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
-	m_tilemap_sizes[3][2] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_roz_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 128, 32);
-	m_tilemap_sizes[3][3] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_roz_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
+	m_tilemap_sizes[3][0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_roz_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_tilemap_sizes[3][1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_roz_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_tilemap_sizes[3][2] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_roz_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 128, 32);
+	m_tilemap_sizes[3][3] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(supracan_state::get_supracan_roz_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 64);
 }
 
 int supracan_state::get_tilemap_dimensions(int &xsize, int &ysize, int layer)
@@ -516,7 +532,7 @@ void supracan_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 		int sprite_xflip = (supracan_vram[i+1] & 0x0800) >> 11;
 		int sprite_yflip = (supracan_vram[i+1] & 0x0400) >> 10;
 		//int xscale = (supracan_vram[i+2] & 0xf000) >> 12;
-		gfx_element *gfx = machine().gfx[region];
+		gfx_element *gfx = m_gfxdecode->gfx(region);
 
 
 
@@ -554,7 +570,7 @@ void supracan_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 
 				//printf("sprite data %04x %04x %04x %04x\n", supracan_vram[i+0] , supracan_vram[i+1] , supracan_vram[i+2] ,supracan_vram[i+3]  );
 
-				drawgfx_transpen(bitmap,cliprect,gfx,tile,palette,sprite_xflip,sprite_yflip,
+				gfx->transpen(bitmap,cliprect,tile,palette,sprite_xflip,sprite_yflip,
 					x,
 					y,
 					0);
@@ -601,7 +617,7 @@ void supracan_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 						int tile_xflip = sprite_xflip ^ ((data & 0x0800)>>11);
 						int tile_yflip = sprite_yflip ^ ((data & 0x0400)>>10);
 
-						drawgfx_transpen(bitmap,cliprect,gfx,tile,palette,tile_xflip,tile_yflip,xpos,ypos,0);
+						gfx->transpen(bitmap,cliprect,tile,palette,tile_xflip,tile_yflip,xpos,ypos,0);
 					}
 				}
 			}
@@ -984,51 +1000,44 @@ UINT32 supracan_state::screen_update_supracan(screen_device &screen, bitmap_ind1
 }
 
 
-WRITE16_MEMBER( supracan_state::supracan_dma_w )
+void supracan_state::dma_w(address_space &space, int offset, UINT16 data, UINT16 mem_mask, int ch)
 {
 	acan_dma_regs_t *acan_dma_regs = &m_acan_dma_regs;
-	int ch = (offset < 0x10/2) ? 0 : 1;
 	address_space &mem = m_maincpu->space(AS_PROGRAM);
 
 	switch(offset)
 	{
 		case 0x00/2: // Source address MSW
-		case 0x10/2:
-			verboselog("maincpu", 0, "supracan_dma_w: source msw %d: %04x\n", ch, data);
+			verboselog("maincpu", 0, "dma_w: source msw %d: %04x\n", ch, data);
 			acan_dma_regs->source[ch] &= 0x0000ffff;
 			acan_dma_regs->source[ch] |= data << 16;
 			break;
 		case 0x02/2: // Source address LSW
-		case 0x12/2:
-			verboselog("maincpu", 0, "supracan_dma_w: source lsw %d: %04x\n", ch, data);
+			verboselog("maincpu", 0, "dma_w: source lsw %d: %04x\n", ch, data);
 			acan_dma_regs->source[ch] &= 0xffff0000;
 			acan_dma_regs->source[ch] |= data;
 			break;
 		case 0x04/2: // Destination address MSW
-		case 0x14/2:
-			verboselog("maincpu", 0, "supracan_dma_w: dest msw %d: %04x\n", ch, data);
+			verboselog("maincpu", 0, "dma_w: dest msw %d: %04x\n", ch, data);
 			acan_dma_regs->dest[ch] &= 0x0000ffff;
 			acan_dma_regs->dest[ch] |= data << 16;
 			break;
 		case 0x06/2: // Destination address LSW
-		case 0x16/2:
-			verboselog("maincpu", 0, "supracan_dma_w: dest lsw %d: %04x\n", ch, data);
+			verboselog("maincpu", 0, "dma_w: dest lsw %d: %04x\n", ch, data);
 			acan_dma_regs->dest[ch] &= 0xffff0000;
 			acan_dma_regs->dest[ch] |= data;
 			break;
 		case 0x08/2: // Byte count
-		case 0x18/2:
-			verboselog("maincpu", 0, "supracan_dma_w: count %d: %04x\n", ch, data);
+			verboselog("maincpu", 0, "dma_w: count %d: %04x\n", ch, data);
 			acan_dma_regs->count[ch] = data;
 			break;
 		case 0x0a/2: // Control
-		case 0x1a/2:
-			verboselog("maincpu", 0, "supracan_dma_w: control %d: %04x\n", ch, data);
+			verboselog("maincpu", 0, "dma_w: control %d: %04x\n", ch, data);
 			if(data & 0x8800)
 			{
 //            if(data & 0x2000)
 //                acan_dma_regs->source-=2;
-				logerror("supracan_dma_w: Kicking off a DMA from %08x to %08x, %d bytes (%04x)\n", acan_dma_regs->source[ch], acan_dma_regs->dest[ch], acan_dma_regs->count[ch] + 1, data);
+				logerror("dma_w: Kicking off a DMA from %08x to %08x, %d bytes (%04x)\n", acan_dma_regs->source[ch], acan_dma_regs->dest[ch], acan_dma_regs->count[ch] + 1, data);
 
 				for(int i = 0; i <= acan_dma_regs->count[ch]; i++)
 				{
@@ -1051,15 +1060,26 @@ WRITE16_MEMBER( supracan_state::supracan_dma_w )
 			}
 			else if(data != 0x0000) // fake DMA, used by C.U.G.
 			{
-				verboselog("maincpu", 0, "supracan_dma_w: Unknown DMA kickoff value of %04x (other regs %08x, %08x, %d)\n", data, acan_dma_regs->source[ch], acan_dma_regs->dest[ch], acan_dma_regs->count[ch] + 1);
-				fatalerror("supracan_dma_w: Unknown DMA kickoff value of %04x (other regs %08x, %08x, %d)\n",data, acan_dma_regs->source[ch], acan_dma_regs->dest[ch], acan_dma_regs->count[ch] + 1);
+				verboselog("maincpu", 0, "dma_w: Unknown DMA kickoff value of %04x (other regs %08x, %08x, %d)\n", data, acan_dma_regs->source[ch], acan_dma_regs->dest[ch], acan_dma_regs->count[ch] + 1);
+				fatalerror("dma_w: Unknown DMA kickoff value of %04x (other regs %08x, %08x, %d)\n",data, acan_dma_regs->source[ch], acan_dma_regs->dest[ch], acan_dma_regs->count[ch] + 1);
 			}
 			break;
 		default:
-			verboselog("maincpu", 0, "supracan_dma_w: Unknown register: %08x = %04x & %04x\n", 0xe90020 + (offset << 1), data, mem_mask);
+			verboselog("maincpu", 0, "dma_w: Unknown register: %08x = %04x & %04x\n", 0xe90020 + (offset << 1), data, mem_mask);
 			break;
 	}
 }
+
+WRITE16_MEMBER( supracan_state::dma_channel0_w )
+{
+	dma_w(space, offset, data, mem_mask, 0);
+}
+
+WRITE16_MEMBER( supracan_state::dma_channel1_w )
+{
+	dma_w(space, offset, data, mem_mask, 1);
+}
+
 
 #if 0
 WRITE16_MEMBER( supracan_state::supracan_pram_w )
@@ -1077,51 +1097,41 @@ void supracan_state::write_swapped_byte( int offset, UINT8 byte )
 	m_vram_addr_swapped[swapped_offset] = byte;
 }
 
-
-READ16_MEMBER( supracan_state::supracan_vram_r )
-{
-	return m_vram[offset];
-}
-
-
-WRITE16_MEMBER( supracan_state::supracan_vram_w )
+WRITE16_MEMBER( supracan_state::vram_w )
 {
 	COMBINE_DATA(&m_vram[offset]);
 
-	// store a byteswapped vesrion for easier gfx-decode
-	data = m_vram[offset];
-	data = ((data & 0x00ff)<<8) | ((data & 0xff00)>>8);
-	m_vram_swapped[offset] = data;
-
 	// hack for 1bpp layer at startup
-	write_swapped_byte(offset*2+1, (data & 0xff00)>>8);
-	write_swapped_byte(offset*2, (data & 0x00ff));
+	write_swapped_byte(offset*2, (data & 0xff00)>>8);
+	write_swapped_byte(offset*2+1, (data & 0x00ff));
 
 	// mark tiles of each depth as dirty
-	machine().gfx[0]->mark_dirty((offset*2)/(64));
-	machine().gfx[1]->mark_dirty((offset*2)/(32));
-	machine().gfx[2]->mark_dirty((offset*2)/(16));
-	machine().gfx[3]->mark_dirty((offset*2)/(512));
-	machine().gfx[4]->mark_dirty((offset*2)/(8));
+	m_gfxdecode->gfx(0)->mark_dirty((offset*2)/(64));
+	m_gfxdecode->gfx(1)->mark_dirty((offset*2)/(32));
+	m_gfxdecode->gfx(2)->mark_dirty((offset*2)/(16));
+	m_gfxdecode->gfx(3)->mark_dirty((offset*2)/(512));
+	m_gfxdecode->gfx(4)->mark_dirty((offset*2)/(8));
 
 }
 
 static ADDRESS_MAP_START( supracan_mem, AS_PROGRAM, 16, supracan_state )
-	AM_RANGE( 0x000000, 0x3fffff ) AM_ROM AM_REGION( "cart", 0 )
+	//AM_RANGE( 0x000000, 0x3fffff )        // mapped by the cartslot
 	AM_RANGE( 0xe80200, 0xe80201 ) AM_READ_PORT("P1")
 	AM_RANGE( 0xe80202, 0xe80203 ) AM_READ_PORT("P2")
 	AM_RANGE( 0xe80208, 0xe80209 ) AM_READ_PORT("P3")
 	AM_RANGE( 0xe8020c, 0xe8020d ) AM_READ_PORT("P4")
-	AM_RANGE( 0xe80000, 0xe8ffff ) AM_READWRITE( supracan_68k_soundram_r, supracan_68k_soundram_w )
-	AM_RANGE( 0xe90000, 0xe9001f ) AM_READWRITE( supracan_sound_r, supracan_sound_w )
-	AM_RANGE( 0xe90020, 0xe9003f ) AM_WRITE( supracan_dma_w )
-	AM_RANGE( 0xf00000, 0xf001ff ) AM_READWRITE( supracan_video_r, supracan_video_w )
-	AM_RANGE( 0xf00200, 0xf003ff ) AM_RAM AM_WRITE(paletteram_xBBBBBGGGGGRRRRR_word_w) AM_SHARE("paletteram")
-	AM_RANGE( 0xf40000, 0xf5ffff ) AM_READWRITE(supracan_vram_r, supracan_vram_w)
+	AM_RANGE( 0xe80000, 0xe8ffff ) AM_READWRITE(_68k_soundram_r, _68k_soundram_w)
+	AM_RANGE( 0xe90000, 0xe9001f ) AM_READWRITE(sound_r, sound_w)
+	AM_RANGE( 0xe90020, 0xe9002f ) AM_WRITE(dma_channel0_w)
+	AM_RANGE( 0xe90030, 0xe9003f ) AM_WRITE(dma_channel1_w)
+
+	AM_RANGE( 0xf00000, 0xf001ff ) AM_READWRITE(video_r, video_w)
+	AM_RANGE( 0xf00200, 0xf003ff ) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
+	AM_RANGE( 0xf40000, 0xf5ffff ) AM_RAM_WRITE(vram_w) AM_SHARE("vram")
 	AM_RANGE( 0xfc0000, 0xfdffff ) AM_MIRROR(0x30000) AM_RAM /* System work ram */
 ADDRESS_MAP_END
 
-READ8_MEMBER( supracan_state::supracan_6502_soundmem_r )
+READ8_MEMBER( supracan_state::_6502_soundmem_r )
 {
 	address_space &mem = m_maincpu->space(AS_PROGRAM);
 	UINT8 data = m_soundram[offset];
@@ -1180,7 +1190,7 @@ READ8_MEMBER( supracan_state::supracan_6502_soundmem_r )
 	return data;
 }
 
-WRITE8_MEMBER( supracan_state::supracan_6502_soundmem_w )
+WRITE8_MEMBER( supracan_state::_6502_soundmem_w )
 {
 	switch(offset)
 	{
@@ -1217,7 +1227,7 @@ WRITE8_MEMBER( supracan_state::supracan_6502_soundmem_w )
 }
 
 static ADDRESS_MAP_START( supracan_sound_mem, AS_PROGRAM, 8, supracan_state )
-	AM_RANGE( 0x0000, 0xffff ) AM_READWRITE(supracan_6502_soundmem_r, supracan_6502_soundmem_w) AM_SHARE("soundram")
+	AM_RANGE(0x0000, 0xffff) AM_READWRITE(_6502_soundmem_r, _6502_soundmem_w) AM_SHARE("soundram")
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START( supracan )
@@ -1334,7 +1344,7 @@ static INPUT_PORTS_START( supracan )
 	PORT_BIT(0x8000, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(4) PORT_NAME("P4 Button A")
 INPUT_PORTS_END
 
-void supracan_state::palette_init()
+PALETTE_INIT_MEMBER(supracan_state, supracan)
 {
 	// Used for debugging purposes for now
 	//#if 0
@@ -1345,12 +1355,12 @@ void supracan_state::palette_init()
 		r = (i & 0x1f) << 3;
 		g = ((i >> 5) & 0x1f) << 3;
 		b = ((i >> 10) & 0x1f) << 3;
-		palette_set_color_rgb( machine(), i, r, g, b );
+		palette.set_pen_color( i, r, g, b );
 	}
 	//#endif
 }
 
-WRITE16_MEMBER( supracan_state::supracan_68k_soundram_w )
+WRITE16_MEMBER( supracan_state::_68k_soundram_w )
 {
 	address_space &mem = m_maincpu->space(AS_PROGRAM);
 	m_soundram[offset*2 + 1] = data & 0xff;
@@ -1361,19 +1371,19 @@ WRITE16_MEMBER( supracan_state::supracan_68k_soundram_w )
 		if(mem_mask & 0xff00)
 		{
 			m_hack_68k_to_6502_access = true;
-			supracan_6502_soundmem_w(mem, offset*2, data >> 8);
+			_6502_soundmem_w(mem, offset*2, data >> 8);
 			m_hack_68k_to_6502_access = false;
 		}
 		if(mem_mask & 0x00ff)
 		{
 			m_hack_68k_to_6502_access = true;
-			supracan_6502_soundmem_w(mem, offset*2 + 1, data & 0xff);
+			_6502_soundmem_w(mem, offset*2 + 1, data & 0xff);
 			m_hack_68k_to_6502_access = false;
 		}
 	}
 }
 
-READ16_MEMBER( supracan_state::supracan_68k_soundram_r )
+READ16_MEMBER( supracan_state::_68k_soundram_r )
 {
 	address_space &mem = m_maincpu->space(AS_PROGRAM);
 	UINT16 val = m_soundram[offset*2 + 0] << 8;
@@ -1385,13 +1395,13 @@ READ16_MEMBER( supracan_state::supracan_68k_soundram_r )
 		if(mem_mask & 0xff00)
 		{
 			m_hack_68k_to_6502_access = true;
-			val |= supracan_6502_soundmem_r(mem, offset*2) << 8;
+			val |= _6502_soundmem_r(mem, offset*2) << 8;
 			m_hack_68k_to_6502_access = false;
 		}
 		if(mem_mask & 0x00ff)
 		{
 			m_hack_68k_to_6502_access = true;
-			val |= supracan_6502_soundmem_r(mem, offset*2 + 1);
+			val |= _6502_soundmem_r(mem, offset*2 + 1);
 			m_hack_68k_to_6502_access = false;
 		}
 	}
@@ -1399,21 +1409,21 @@ READ16_MEMBER( supracan_state::supracan_68k_soundram_r )
 	return val;
 }
 
-READ16_MEMBER( supracan_state::supracan_sound_r )
+READ16_MEMBER( supracan_state::sound_r )
 {
 	UINT16 data = 0;
 
 	switch( offset )
 	{
 		default:
-			verboselog("maincpu", 0, "supracan_sound_r: Unknown register: (%08x) & %04x\n", 0xe90000 + (offset << 1), mem_mask);
+			verboselog("maincpu", 0, "sound_r: Unknown register: (%08x) & %04x\n", 0xe90000 + (offset << 1), mem_mask);
 			break;
 	}
 
 	return data;
 }
 
-WRITE16_MEMBER( supracan_state::supracan_sound_w )
+WRITE16_MEMBER( supracan_state::sound_w )
 {
 	switch ( offset )
 	{
@@ -1441,13 +1451,13 @@ WRITE16_MEMBER( supracan_state::supracan_sound_w )
 			verboselog("maincpu", 0, "sound cpu ctrl: %04x\n", data);
 			break;
 		default:
-			verboselog("maincpu", 0, "supracan_sound_w: Unknown register: %08x = %04x & %04x\n", 0xe90000 + (offset << 1), data, mem_mask);
+			verboselog("maincpu", 0, "sound_w: Unknown register: %08x = %04x & %04x\n", 0xe90000 + (offset << 1), data, mem_mask);
 			break;
 	}
 }
 
 
-READ16_MEMBER( supracan_state::supracan_video_r )
+READ16_MEMBER( supracan_state::video_r )
 {
 	address_space &mem = m_maincpu->space(AS_PROGRAM);
 	UINT16 data = m_video_regs[offset];
@@ -1463,8 +1473,8 @@ READ16_MEMBER( supracan_state::supracan_video_r )
 			break;
 		case 0x02/2: // Current scanline
 			break;
-		case 0x08/2: // Unknown (not video flags!)
-			data = 0;
+		case 0x08/2: // Unknown (not video flags!) - gambling lord disagrees, it MUST read back what it wrote because it reads it before turning on/off layers and writes it back
+			//data = 0;
 			break;
 		case 0x100/2:
 			if(!mem.debugger_access()) verboselog("maincpu", 0, "read tilemap_flags[0] (%04x)\n", data);
@@ -1476,7 +1486,7 @@ READ16_MEMBER( supracan_state::supracan_video_r )
 			if(!mem.debugger_access()) verboselog("maincpu", 0, "read tilemap_flags[1] (%04x)\n", data);
 			break;
 		default:
-			if(!mem.debugger_access()) verboselog("maincpu", 0, "supracan_video_r: Unknown register: %08x (%04x & %04x)\n", 0xf00000 + (offset << 1), data, mem_mask);
+			if(!mem.debugger_access()) verboselog("maincpu", 0, "video_r: Unknown register: %08x (%04x & %04x)\n", 0xf00000 + (offset << 1), data, mem_mask);
 			break;
 	}
 
@@ -1506,7 +1516,7 @@ TIMER_CALLBACK_MEMBER(supracan_state::supracan_line_off_callback)
 
 TIMER_CALLBACK_MEMBER(supracan_state::supracan_video_callback)
 {
-	int vpos = machine().primary_screen->vpos();
+	int vpos = machine().first_screen()->vpos();
 
 	m_video_regs[0] &= ~0x0002;
 
@@ -1537,20 +1547,23 @@ TIMER_CALLBACK_MEMBER(supracan_state::supracan_video_callback)
 		break;
 	}
 
-	m_video_regs[1] = machine().primary_screen->vpos()-16; // for son of evil, wants vblank active around 224 instead...
+	m_video_regs[1] = machine().first_screen()->vpos()-16; // for son of evil, wants vblank active around 224 instead...
 
-	m_hbl_timer->adjust( machine().primary_screen->time_until_pos( vpos, 320 ) );
-	m_video_timer->adjust( machine().primary_screen->time_until_pos( ( vpos + 1 ) % 256, 0 ) );
+	m_hbl_timer->adjust( machine().first_screen()->time_until_pos( vpos, 320 ) );
+	m_video_timer->adjust( machine().first_screen()->time_until_pos( ( vpos + 1 ) % 256, 0 ) );
 }
 
-WRITE16_MEMBER( supracan_state::supracan_video_w )
+WRITE16_MEMBER( supracan_state::video_w )
 {
 	address_space &mem = m_maincpu->space(AS_PROGRAM);
 	acan_sprdma_regs_t *acan_sprdma_regs = &m_acan_sprdma_regs;
 	int i;
 
 	// if any of this changes we need a partial update (see sango fighters intro)
-	machine().primary_screen->update_partial(machine().primary_screen->vpos());
+	machine().first_screen()->update_partial(machine().first_screen()->vpos());
+
+	COMBINE_DATA(&m_video_regs[offset]);
+	data = m_video_regs[offset];
 
 	switch(offset)
 	{
@@ -1587,7 +1600,7 @@ WRITE16_MEMBER( supracan_state::supracan_video_w )
 			acan_sprdma_regs->src_inc = data;
 			break;
 		case 0x1e/2:
-			logerror( "supracan_video_w: Kicking off a DMA from %08x to %08x, %d bytes (%04x)\n", acan_sprdma_regs->src, acan_sprdma_regs->dst, acan_sprdma_regs->count, data);
+			logerror( "video_w: Kicking off a DMA from %08x to %08x, %d bytes (%04x)\n", acan_sprdma_regs->src, acan_sprdma_regs->dst, acan_sprdma_regs->count, data);
 
 			/* TODO: what's 0x2000 and 0x4000 for? */
 			if(data & 0x8000)
@@ -1620,7 +1633,7 @@ WRITE16_MEMBER( supracan_state::supracan_video_w )
 			}
 			else
 			{
-				verboselog("maincpu", 0, "supracan_dma_w: Attempting to kick off a DMA without bit 15 set! (%04x)\n", data);
+				verboselog("maincpu", 0, "dma_w: Attempting to kick off a DMA without bit 15 set! (%04x)\n", data);
 			}
 			break;
 		case 0x08/2:
@@ -1628,10 +1641,10 @@ WRITE16_MEMBER( supracan_state::supracan_video_w )
 				verboselog("maincpu", 3, "video_flags = %04x\n", data);
 				m_video_flags = data;
 
-				rectangle visarea = machine().primary_screen->visible_area();
+				rectangle visarea = machine().first_screen()->visible_area();
 
 				visarea.set(0, ((m_video_flags & 0x100) ? 320 : 256) - 1, 8, 232 - 1);
-				machine().primary_screen->configure(348, 256, visarea, machine().primary_screen->frame_period().attoseconds);
+				machine().first_screen()->configure(348, 256, visarea, machine().first_screen()->frame_period().attoseconds);
 			}
 			break;
 		case 0x0a/2:
@@ -1640,7 +1653,7 @@ WRITE16_MEMBER( supracan_state::supracan_video_w )
 				verboselog("maincpu", 0, "IRQ Trigger? = %04x\n", data);
 				if(data & 0x8000)
 				{
-					m_line_on_timer->adjust(machine().primary_screen->time_until_pos((data & 0x00ff), 0));
+					m_line_on_timer->adjust(machine().first_screen()->time_until_pos((data & 0x00ff), 0));
 				}
 				else
 				{
@@ -1654,7 +1667,7 @@ WRITE16_MEMBER( supracan_state::supracan_video_w )
 				verboselog("maincpu", 0, "IRQ De-Trigger? = %04x\n", data);
 				if(data & 0x8000)
 				{
-					m_line_off_timer->adjust(machine().primary_screen->time_until_pos(data & 0x00ff, 0));
+					m_line_off_timer->adjust(machine().first_screen()->time_until_pos(data & 0x00ff, 0));
 				}
 				else
 				{
@@ -1721,39 +1734,25 @@ WRITE16_MEMBER( supracan_state::supracan_video_w )
 			verboselog("maincpu", 3, "irq_mask = %04x\n", data);
 			break;
 		default:
-			verboselog("maincpu", 0, "supracan_video_w: Unknown register: %08x = %04x & %04x\n", 0xf00000 + (offset << 1), data, mem_mask);
+			verboselog("maincpu", 0, "video_w: Unknown register: %08x = %04x & %04x\n", 0xf00000 + (offset << 1), data, mem_mask);
 			break;
 	}
-	m_video_regs[offset] = data;
+//  m_video_regs[offset] = data;
 }
 
 
 DEVICE_IMAGE_LOAD_MEMBER( supracan_state, supracan_cart )
 {
-	UINT8 *cart = memregion("cart")->base();
-	UINT32 size = 0;
+	UINT32 size = m_cart->common_get_size("rom");
 
-	if (image.software_entry() == NULL)
+	if (size > 0x400000)
 	{
-		size = image.length();
-
-		if (size > 0x400000)
-		{
-			image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unsupported cartridge size");
-			return IMAGE_INIT_FAIL;
-		}
-
-		if (image.fread(cart, size) != size)
-		{
-			image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unable to fully read from file");
-			return IMAGE_INIT_FAIL;
-		}
+		image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unsupported cartridge size");
+		return IMAGE_INIT_FAIL;
 	}
-	else
-	{
-		size = image.get_software_region_length("rom");
-		memcpy(cart, image.get_software_region("rom"), size);
-	}
+
+	m_cart->rom_alloc(size, GENERIC_ROM16_WIDTH, ENDIANNESS_BIG);
+	m_cart->common_load_rom(m_cart->get_rom_base(), size, "rom");
 
 	return IMAGE_INIT_PASS;
 }
@@ -1765,6 +1764,9 @@ void supracan_state::machine_start()
 	m_hbl_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(supracan_state::supracan_hbl_callback),this));
 	m_line_on_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(supracan_state::supracan_line_on_callback),this));
 	m_line_off_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(supracan_state::supracan_line_off_callback),this));
+
+	if (m_cart->exists())
+		m_maincpu->space(AS_PROGRAM).install_read_handler(0x000000, 0x3fffff, read16_delegate(FUNC(generic_slot_device::read16_rom),(generic_slot_device*)m_cart));
 }
 
 
@@ -1772,7 +1774,7 @@ void supracan_state::machine_reset()
 {
 	m_soundcpu->set_input_line(INPUT_LINE_HALT, ASSERT_LINE);
 
-	m_video_timer->adjust( machine().primary_screen->time_until_pos( 0, 0 ) );
+	m_video_timer->adjust( machine().first_screen()->time_until_pos( 0, 0 ) );
 	m_irq_mask = 0;
 }
 
@@ -1851,11 +1853,11 @@ static const gfx_layout supracan_gfx1bpp_alt =
 
 
 static GFXDECODE_START( supracan )
-	GFXDECODE_ENTRY( "ram_gfx2",  0, supracan_gfx8bpp,   0, 1 )
-	GFXDECODE_ENTRY( "ram_gfx2",  0, supracan_gfx4bpp,   0, 0x10 )
-	GFXDECODE_ENTRY( "ram_gfx2",  0, supracan_gfx2bpp,   0, 0x40 )
-	GFXDECODE_ENTRY( "ram_gfx2",  0, supracan_gfx1bpp,   0, 0x80 )
-	GFXDECODE_ENTRY( "ram_gfx3",  0, supracan_gfx1bpp_alt,   0, 0x80 )
+	GFXDECODE_RAM( "vram",  0, supracan_gfx8bpp,   0, 1 )
+	GFXDECODE_RAM( "vram",  0, supracan_gfx4bpp,   0, 0x10 )
+	GFXDECODE_RAM( "vram",  0, supracan_gfx2bpp,   0, 0x40 )
+	GFXDECODE_RAM( "vram",  0, supracan_gfx1bpp,   0, 0x80 )
+	GFXDECODE_RAM( "vram",  0, supracan_gfx1bpp_alt,   0, 0x80 )
 GFXDECODE_END
 
 INTERRUPT_GEN_MEMBER(supracan_state::supracan_irq)
@@ -1898,27 +1900,27 @@ static MACHINE_CONFIG_START( supracan, supracan_state )
 	MCFG_QUANTUM_PERFECT_CPU("soundcpu")
 #endif
 
-
 	MCFG_SCREEN_ADD( "screen", RASTER )
 	MCFG_SCREEN_RAW_PARAMS(XTAL_10_738635MHz/2, 348, 0, 256, 256, 0, 240 )  /* No idea if this is correct */
 	MCFG_SCREEN_UPDATE_DRIVER(supracan_state, screen_update_supracan)
-	MCFG_PALETTE_LENGTH( 32768 )
-	MCFG_GFXDECODE(supracan)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin")
-	MCFG_CARTSLOT_INTERFACE("supracan_cart")
-	MCFG_CARTSLOT_LOAD(supracan_state,supracan_cart)
+	MCFG_PALETTE_ADD( "palette", 32768 )
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
+	MCFG_PALETTE_INIT_OWNER(supracan_state, supracan)
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", supracan)
+
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "supracan_cart")
+	MCFG_GENERIC_WIDTH(GENERIC_ROM16_WIDTH)
+	MCFG_GENERIC_ENDIAN(ENDIANNESS_BIG)
+	MCFG_GENERIC_LOAD(supracan_state, supracan_cart)
 
 	MCFG_SOFTWARE_LIST_ADD("cart_list","supracan")
 MACHINE_CONFIG_END
 
 
 ROM_START( supracan )
-	ROM_REGION( 0x400000, "cart", ROMREGION_ERASEFF )
-	ROM_REGION( 0x20000, "ram_gfx", ROMREGION_ERASEFF )
-	ROM_REGION( 0x20000, "ram_gfx2", ROMREGION_ERASEFF )
-	ROM_REGION( 0x20000, "ram_gfx3", ROMREGION_ERASEFF )
 ROM_END
 
 

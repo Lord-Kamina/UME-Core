@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /*
  Moero!! Pro Yakyuu Homerun Kyousou - (c) 1988 Jaleco
  Dynamic Shoot Kyousou - (c) 1988 Jaleco
@@ -52,7 +54,6 @@ Notes:
 #include "cpu/z80/z80.h"
 #include "machine/i8255.h"
 #include "sound/2203intf.h"
-#include "sound/upd7759.h"
 #include "sound/samples.h"
 #include "includes/homerun.h"
 
@@ -71,8 +72,8 @@ WRITE8_MEMBER(homerun_state::homerun_control_w)
 	// d5: d7756 reset pin(?)
 	if (m_d7756 != NULL)
 	{
-		upd7759_reset_w(m_d7756, ~data & 0x20);
-		upd7759_start_w(m_d7756, ~data & 0x10);
+		m_d7756->reset_w(~data & 0x20);
+		m_d7756->start_w(~data & 0x10);
 	}
 	if (m_samples != NULL)
 	{
@@ -97,7 +98,7 @@ WRITE8_MEMBER(homerun_state::homerun_d7756_sample_w)
 	m_sample = data;
 
 	if (m_d7756 != NULL)
-		upd7759_port_w(m_d7756, space, 0, data);
+		m_d7756->port_w(space, 0, data);
 }
 
 static ADDRESS_MAP_START( homerun_memmap, AS_PROGRAM, 8, homerun_state )
@@ -128,7 +129,7 @@ CUSTOM_INPUT_MEMBER(homerun_state::homerun_d7756_busy_r)
 
 CUSTOM_INPUT_MEMBER(homerun_state::ganjaja_d7756_busy_r)
 {
-	return upd7759_busy_r(m_d7756);
+	return m_d7756->busy_r();
 }
 
 CUSTOM_INPUT_MEMBER(homerun_state::ganjaja_hopper_status_r)
@@ -287,12 +288,6 @@ static const char *const homerun_sample_names[] =
 	0
 };
 
-static const samples_interface homerun_samples_interface =
-{
-	1,
-	homerun_sample_names
-};
-
 /**************************************************************************/
 
 static const gfx_layout gfxlayout =
@@ -322,28 +317,6 @@ static GFXDECODE_START( homerun )
 	GFXDECODE_ENTRY( "gfx2", 0, spritelayout,   0, 16 )
 GFXDECODE_END
 
-/**************************************************************************/
-
-static I8255A_INTERFACE( ppi8255_intf )
-{
-	// all ports are outputs
-	DEVCB_NULL,             /* Port A read */
-	DEVCB_DRIVER_MEMBER(homerun_state, homerun_scrollhi_w), /* Port A write */
-	DEVCB_NULL,             /* Port B read */
-	DEVCB_DRIVER_MEMBER(homerun_state, homerun_scrolly_w),  /* Port B write */
-	DEVCB_NULL,             /* Port C read */
-	DEVCB_DRIVER_MEMBER(homerun_state, homerun_scrollx_w)   /* Port C write */
-};
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSW"),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(homerun_state, homerun_banking_w)
-};
 
 /**************************************************************************/
 
@@ -380,8 +353,10 @@ static MACHINE_CONFIG_START( dynashot, homerun_state )
 	MCFG_CPU_IO_MAP(homerun_iomap)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", homerun_state,  irq0_line_hold)
 
-
-	MCFG_I8255A_ADD( "ppi8255", ppi8255_intf )
+	MCFG_DEVICE_ADD("ppi8255", I8255A, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(homerun_state, homerun_scrollhi_w))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(homerun_state, homerun_scrolly_w))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(homerun_state, homerun_scrollx_w))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -389,15 +364,17 @@ static MACHINE_CONFIG_START( dynashot, homerun_state )
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(homerun_state, screen_update_homerun)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(homerun)
-	MCFG_PALETTE_LENGTH(16*4)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", homerun)
+	MCFG_PALETTE_ADD("palette", 16*4)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, XTAL_20MHz/8)
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSW"))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(homerun_state, homerun_banking_w))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 
@@ -407,7 +384,9 @@ static MACHINE_CONFIG_DERIVED( homerun, dynashot )
 	MCFG_SOUND_ADD("d7756", UPD7756, UPD7759_STANDARD_CLOCK)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.75)
 
-	MCFG_SAMPLES_ADD("samples", homerun_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(1)
+	MCFG_SAMPLES_NAMES(homerun_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_CONFIG_END
 

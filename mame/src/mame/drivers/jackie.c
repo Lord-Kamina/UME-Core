@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Mirko Buffoni
 /*
 Happy Jackie (c) 1993 IGS.
 Video Slot machine game for amusement only.
@@ -54,15 +56,22 @@ public:
 	jackie_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this,"maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette"),
 		m_bg_scroll2(*this, "bg_scroll2"),
 		m_bg_scroll(*this, "bg_scroll"),
 		m_reel1_ram(*this, "reel1_ram"),
 		m_reel2_ram(*this, "reel2_ram"),
 		m_reel3_ram(*this, "reel3_ram"),
 		m_fg_tile_ram(*this, "fg_tile_ram"),
-		m_fg_color_ram(*this, "fg_color_ram"){ }
+		m_fg_color_ram(*this, "fg_color_ram") { }
 
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
+
 	required_shared_ptr<UINT8> m_bg_scroll2;
 	required_shared_ptr<UINT8> m_bg_scroll;
 	required_shared_ptr<UINT8> m_reel1_ram;
@@ -70,6 +79,7 @@ public:
 	required_shared_ptr<UINT8> m_reel3_ram;
 	required_shared_ptr<UINT8> m_fg_tile_ram;
 	required_shared_ptr<UINT8> m_fg_color_ram;
+
 	int m_exp_bank;
 	tilemap_t *m_fg_tilemap;
 	tilemap_t *m_reel1_tilemap;
@@ -85,33 +95,39 @@ public:
 	DECLARE_WRITE8_MEMBER(fg_tile_w);
 	DECLARE_WRITE8_MEMBER(fg_color_w);
 	DECLARE_WRITE8_MEMBER(bg_scroll_w);
-	DECLARE_WRITE8_MEMBER(jackie_reel1_ram_w);
-	DECLARE_WRITE8_MEMBER(jackie_reel2_ram_w);
-	DECLARE_WRITE8_MEMBER(jackie_reel3_ram_w);
-	DECLARE_WRITE8_MEMBER(jackie_unk_reg1_lo_w);
-	DECLARE_WRITE8_MEMBER(jackie_unk_reg2_lo_w);
-	DECLARE_WRITE8_MEMBER(jackie_unk_reg3_lo_w);
-	DECLARE_WRITE8_MEMBER(jackie_unk_reg1_hi_w);
-	DECLARE_WRITE8_MEMBER(jackie_unk_reg2_hi_w);
-	DECLARE_WRITE8_MEMBER(jackie_unk_reg3_hi_w);
-	DECLARE_WRITE8_MEMBER(jackie_nmi_and_coins_w);
-	DECLARE_WRITE8_MEMBER(jackie_lamps_w);
+	DECLARE_WRITE8_MEMBER(reel1_ram_w);
+	DECLARE_WRITE8_MEMBER(reel2_ram_w);
+	DECLARE_WRITE8_MEMBER(reel3_ram_w);
+	DECLARE_WRITE8_MEMBER(unk_reg1_lo_w);
+	DECLARE_WRITE8_MEMBER(unk_reg2_lo_w);
+	DECLARE_WRITE8_MEMBER(unk_reg3_lo_w);
+	DECLARE_WRITE8_MEMBER(unk_reg1_hi_w);
+	DECLARE_WRITE8_MEMBER(unk_reg2_hi_w);
+	DECLARE_WRITE8_MEMBER(unk_reg3_hi_w);
+	DECLARE_WRITE8_MEMBER(nmi_and_coins_w);
+	DECLARE_WRITE8_MEMBER(lamps_w);
 	DECLARE_READ8_MEMBER(igs_irqack_r);
 	DECLARE_WRITE8_MEMBER(igs_irqack_w);
 	DECLARE_READ8_MEMBER(expram_r);
-	void jackie_unk_reg_lo_w( int offset, UINT8 data, int reg );
-	void jackie_unk_reg_hi_w( int offset, UINT8 data, int reg );
+
+	void unk_reg_lo_w( int offset, UINT8 data, int reg );
+	void unk_reg_hi_w( int offset, UINT8 data, int reg );
 	void show_out();
+
 	DECLARE_CUSTOM_INPUT_MEMBER(hopper_r);
-	DECLARE_DRIVER_INIT(jackie);
+
 	TILE_GET_INFO_MEMBER(get_fg_tile_info);
-	TILE_GET_INFO_MEMBER(get_jackie_reel1_tile_info);
-	TILE_GET_INFO_MEMBER(get_jackie_reel2_tile_info);
-	TILE_GET_INFO_MEMBER(get_jackie_reel3_tile_info);
+	TILE_GET_INFO_MEMBER(get_reel1_tile_info);
+	TILE_GET_INFO_MEMBER(get_reel2_tile_info);
+	TILE_GET_INFO_MEMBER(get_reel3_tile_info);
+
+	DECLARE_DRIVER_INIT(jackie);
+	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	UINT32 screen_update_jackie(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	TIMER_DEVICE_CALLBACK_MEMBER(jackie_irq);
+
+	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+	TIMER_DEVICE_CALLBACK_MEMBER(irq);
 };
 
 
@@ -145,13 +161,13 @@ WRITE8_MEMBER(jackie_state::bg_scroll_w)
 }
 
 
-WRITE8_MEMBER(jackie_state::jackie_reel1_ram_w)
+WRITE8_MEMBER(jackie_state::reel1_ram_w)
 {
 	m_reel1_ram[offset] = data;
 	m_reel1_tilemap->mark_tile_dirty(offset);
 }
 
-TILE_GET_INFO_MEMBER(jackie_state::get_jackie_reel1_tile_info)
+TILE_GET_INFO_MEMBER(jackie_state::get_reel1_tile_info)
 {
 	int code = m_reel1_ram[tile_index];
 	SET_TILE_INFO_MEMBER(1, code, 0, 0);
@@ -159,26 +175,26 @@ TILE_GET_INFO_MEMBER(jackie_state::get_jackie_reel1_tile_info)
 
 
 
-WRITE8_MEMBER(jackie_state::jackie_reel2_ram_w)
+WRITE8_MEMBER(jackie_state::reel2_ram_w)
 {
 	m_reel2_ram[offset] = data;
 	m_reel2_tilemap->mark_tile_dirty(offset);
 }
 
-TILE_GET_INFO_MEMBER(jackie_state::get_jackie_reel2_tile_info)
+TILE_GET_INFO_MEMBER(jackie_state::get_reel2_tile_info)
 {
 	int code = m_reel2_ram[tile_index];
 	SET_TILE_INFO_MEMBER(1, code, 0, 0);
 }
 
 
-WRITE8_MEMBER(jackie_state::jackie_reel3_ram_w)
+WRITE8_MEMBER(jackie_state::reel3_ram_w)
 {
 	m_reel3_ram[offset] = data;
 	m_reel3_tilemap->mark_tile_dirty(offset);
 }
 
-TILE_GET_INFO_MEMBER(jackie_state::get_jackie_reel3_tile_info)
+TILE_GET_INFO_MEMBER(jackie_state::get_reel3_tile_info)
 {
 	int code = m_reel3_ram[tile_index];
 	SET_TILE_INFO_MEMBER(1, code, 0, 0);
@@ -186,26 +202,26 @@ TILE_GET_INFO_MEMBER(jackie_state::get_jackie_reel3_tile_info)
 
 void jackie_state::video_start()
 {
-	m_reel1_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(jackie_state::get_jackie_reel1_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 8);
-	m_reel2_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(jackie_state::get_jackie_reel2_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 8);
-	m_reel3_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(jackie_state::get_jackie_reel3_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 8);
+	m_reel1_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(jackie_state::get_reel1_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 8);
+	m_reel2_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(jackie_state::get_reel2_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 8);
+	m_reel3_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(jackie_state::get_reel3_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 64, 8);
 
 	m_reel1_tilemap->set_scroll_cols(64);
 	m_reel2_tilemap->set_scroll_cols(64);
 	m_reel3_tilemap->set_scroll_cols(64);
 
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(jackie_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8,  8,  64, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(jackie_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8,  8,  64, 32);
 	m_fg_tilemap->set_transparent_pen(0);
 }
 
 
-UINT32 jackie_state::screen_update_jackie(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 jackie_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int i,j;
 	int startclipmin = 0;
 	const rectangle &visarea = screen.visible_area();
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	for (i=0;i < 0x40;i++)
 	{
@@ -224,15 +240,15 @@ UINT32 jackie_state::screen_update_jackie(screen_device &screen, bitmap_ind16 &b
 
 		if (rowenable==0)
 		{
-			m_reel1_tilemap->draw(bitmap, clip, 0,0);
+			m_reel1_tilemap->draw(screen, bitmap, clip, 0,0);
 		}
 		else if (rowenable==1)
 		{
-			m_reel2_tilemap->draw(bitmap, clip, 0,0);
+			m_reel2_tilemap->draw(screen, bitmap, clip, 0,0);
 		}
 		else if (rowenable==2)
 		{
-			m_reel3_tilemap->draw(bitmap, clip, 0,0);
+			m_reel3_tilemap->draw(screen, bitmap, clip, 0,0);
 		}
 		else if (rowenable==3)
 		{
@@ -241,12 +257,21 @@ UINT32 jackie_state::screen_update_jackie(screen_device &screen, bitmap_ind16 &b
 		startclipmin+=1;
 	}
 
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
 
-
+void jackie_state::machine_start()
+{
+	save_item(NAME(m_exp_bank));
+	// save_item(NAME(m_irq_enable)); //always 1?
+	save_item(NAME(m_nmi_enable));
+	// save_item(NAME(m_bg_enable)); //always 1?
+	save_item(NAME(m_hopper));
+	save_item(NAME(m_out));
+	save_item(NAME(m_unk_reg));
+}
 
 void jackie_state::machine_reset()
 {
@@ -260,7 +285,7 @@ void jackie_state::machine_reset()
 void jackie_state::show_out()
 {
 #ifdef MAME_DEBUG
-//  popmessage("%02x %02x %02x", state->m_out[0], state->m_out[1], state->m_out[2]);
+//  popmessage("%02x %02x %02x", m_out[0], m_out[1], m_out[2]);
 	popmessage("520: %04x %04x %04x %04x %04x\n560: %04x %04x %04x %04x %04x\n5A0: %04x %04x %04x %04x %04x",
 		m_unk_reg[0][0],m_unk_reg[0][1],m_unk_reg[0][2],m_unk_reg[0][3],m_unk_reg[0][4],
 		m_unk_reg[1][0],m_unk_reg[1][1],m_unk_reg[1][2],m_unk_reg[1][3],m_unk_reg[1][4],
@@ -269,29 +294,29 @@ void jackie_state::show_out()
 #endif
 }
 
-void jackie_state::jackie_unk_reg_lo_w( int offset, UINT8 data, int reg )
+void jackie_state::unk_reg_lo_w( int offset, UINT8 data, int reg )
 {
 	m_unk_reg[reg][offset] &= 0xff00;
 	m_unk_reg[reg][offset] |= data;
 	show_out();
 }
 
-WRITE8_MEMBER(jackie_state::jackie_unk_reg1_lo_w){ jackie_unk_reg_lo_w( offset, data, 0 ); }
-WRITE8_MEMBER(jackie_state::jackie_unk_reg2_lo_w){ jackie_unk_reg_lo_w( offset, data, 1 ); }
-WRITE8_MEMBER(jackie_state::jackie_unk_reg3_lo_w){ jackie_unk_reg_lo_w( offset, data, 2 ); }
+WRITE8_MEMBER(jackie_state::unk_reg1_lo_w){ unk_reg_lo_w( offset, data, 0 ); }
+WRITE8_MEMBER(jackie_state::unk_reg2_lo_w){ unk_reg_lo_w( offset, data, 1 ); }
+WRITE8_MEMBER(jackie_state::unk_reg3_lo_w){ unk_reg_lo_w( offset, data, 2 ); }
 
-void jackie_state::jackie_unk_reg_hi_w( int offset, UINT8 data, int reg )
+void jackie_state::unk_reg_hi_w( int offset, UINT8 data, int reg )
 {
 	m_unk_reg[reg][offset] &= 0xff;
 	m_unk_reg[reg][offset] |= data << 8;
 	show_out();
 }
 
-WRITE8_MEMBER(jackie_state::jackie_unk_reg1_hi_w){ jackie_unk_reg_hi_w( offset, data, 0 ); }
-WRITE8_MEMBER(jackie_state::jackie_unk_reg2_hi_w){ jackie_unk_reg_hi_w( offset, data, 1 ); }
-WRITE8_MEMBER(jackie_state::jackie_unk_reg3_hi_w){ jackie_unk_reg_hi_w( offset, data, 2 ); }
+WRITE8_MEMBER(jackie_state::unk_reg1_hi_w){ unk_reg_hi_w( offset, data, 0 ); }
+WRITE8_MEMBER(jackie_state::unk_reg2_hi_w){ unk_reg_hi_w( offset, data, 1 ); }
+WRITE8_MEMBER(jackie_state::unk_reg3_hi_w){ unk_reg_hi_w( offset, data, 2 ); }
 
-WRITE8_MEMBER(jackie_state::jackie_nmi_and_coins_w)
+WRITE8_MEMBER(jackie_state::nmi_and_coins_w)
 {
 	coin_counter_w(machine(), 0,        data & 0x01);   // coin_a
 	coin_counter_w(machine(), 1,        data & 0x04);   // coin_c
@@ -307,7 +332,7 @@ WRITE8_MEMBER(jackie_state::jackie_nmi_and_coins_w)
 	show_out();
 }
 
-WRITE8_MEMBER(jackie_state::jackie_lamps_w)
+WRITE8_MEMBER(jackie_state::lamps_w)
 {
 /*
     - Lbits -
@@ -362,32 +387,32 @@ static ADDRESS_MAP_START( jackie_prg_map, AS_PROGRAM, 8, jackie_state )
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( jackie_io_map, AS_IO, 8, jackie_state )
-	AM_RANGE(0x0520, 0x0524) AM_WRITE(jackie_unk_reg1_lo_w)
-	AM_RANGE(0x0d20, 0x0d24) AM_WRITE(jackie_unk_reg1_hi_w)
-	AM_RANGE(0x0560, 0x0564) AM_WRITE(jackie_unk_reg2_lo_w)
-	AM_RANGE(0x0d60, 0x0d64) AM_WRITE(jackie_unk_reg2_hi_w)
-	AM_RANGE(0x05a0, 0x05a4) AM_WRITE(jackie_unk_reg3_lo_w)
-	AM_RANGE(0x0da0, 0x0da4) AM_WRITE(jackie_unk_reg3_hi_w)
+	AM_RANGE(0x0520, 0x0524) AM_WRITE(unk_reg1_lo_w)
+	AM_RANGE(0x0d20, 0x0d24) AM_WRITE(unk_reg1_hi_w)
+	AM_RANGE(0x0560, 0x0564) AM_WRITE(unk_reg2_lo_w)
+	AM_RANGE(0x0d60, 0x0d64) AM_WRITE(unk_reg2_hi_w)
+	AM_RANGE(0x05a0, 0x05a4) AM_WRITE(unk_reg3_lo_w)
+	AM_RANGE(0x0da0, 0x0da4) AM_WRITE(unk_reg3_hi_w)
 	AM_RANGE(0x1000, 0x1107) AM_RAM AM_SHARE("bg_scroll2")
-	AM_RANGE(0x2000, 0x27ff) AM_RAM_WRITE(paletteram_xBBBBBGGGGGRRRRR_byte_split_lo_w ) AM_SHARE("paletteram")
-	AM_RANGE(0x2800, 0x2fff) AM_RAM_WRITE(paletteram_xBBBBBGGGGGRRRRR_byte_split_hi_w ) AM_SHARE("paletteram2")
+	AM_RANGE(0x2000, 0x27ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
+	AM_RANGE(0x2800, 0x2fff) AM_RAM_DEVWRITE("palette", palette_device, write_ext) AM_SHARE("palette_ext")
 	AM_RANGE(0x4000, 0x4000) AM_READ_PORT("DSW1")           /* DSW1 */
 	AM_RANGE(0x4001, 0x4001) AM_READ_PORT("DSW2")           /* DSW2 */
 	AM_RANGE(0x4002, 0x4002) AM_READ_PORT("DSW3")           /* DSW3 */
 	AM_RANGE(0x4003, 0x4003) AM_READ_PORT("DSW4")           /* DSW4 */
 	AM_RANGE(0x4004, 0x4004) AM_READ_PORT("DSW5")           /* DSW5 */
-	AM_RANGE(0x5080, 0x5080) AM_WRITE(jackie_nmi_and_coins_w)
+	AM_RANGE(0x5080, 0x5080) AM_WRITE(nmi_and_coins_w)
 	AM_RANGE(0x5081, 0x5081) AM_READ_PORT("SERVICE")
 	AM_RANGE(0x5082, 0x5082) AM_READ_PORT("COINS")
 	AM_RANGE(0x5090, 0x5090) AM_READ_PORT("BUTTONS1")
-	AM_RANGE(0x5091, 0x5091) AM_WRITE(jackie_lamps_w )
+	AM_RANGE(0x5091, 0x5091) AM_WRITE(lamps_w )
 	AM_RANGE(0x50a0, 0x50a0) AM_READ_PORT("BUTTONS2")
 	AM_RANGE(0x50b0, 0x50b1) AM_DEVWRITE("ymsnd", ym2413_device, write)
 	AM_RANGE(0x50c0, 0x50c0) AM_READ(igs_irqack_r) AM_WRITE(igs_irqack_w)
 	AM_RANGE(0x6000, 0x60ff) AM_RAM_WRITE(bg_scroll_w ) AM_SHARE("bg_scroll")
-	AM_RANGE(0x6800, 0x69ff) AM_RAM_WRITE(jackie_reel1_ram_w )  AM_SHARE("reel1_ram")
-	AM_RANGE(0x6a00, 0x6bff) AM_RAM_WRITE(jackie_reel2_ram_w )  AM_SHARE("reel2_ram")
-	AM_RANGE(0x6c00, 0x6dff) AM_RAM_WRITE(jackie_reel3_ram_w )  AM_SHARE("reel3_ram")
+	AM_RANGE(0x6800, 0x69ff) AM_RAM_WRITE(reel1_ram_w )  AM_SHARE("reel1_ram")
+	AM_RANGE(0x6a00, 0x6bff) AM_RAM_WRITE(reel2_ram_w )  AM_SHARE("reel2_ram")
+	AM_RANGE(0x6c00, 0x6dff) AM_RAM_WRITE(reel3_ram_w )  AM_SHARE("reel3_ram")
 	AM_RANGE(0x7000, 0x77ff) AM_RAM_WRITE(fg_tile_w )  AM_SHARE("fg_tile_ram")
 	AM_RANGE(0x7800, 0x7fff) AM_RAM_WRITE(fg_color_w ) AM_SHARE("fg_color_ram")
 	AM_RANGE(0x8000, 0xffff) AM_READ(expram_r)
@@ -395,7 +420,7 @@ ADDRESS_MAP_END
 
 CUSTOM_INPUT_MEMBER(jackie_state::hopper_r)
 {
-	if (m_hopper) return !(machine().primary_screen->frame_number()%10);
+	if (m_hopper) return !(m_screen->frame_number()%10);
 	return machine().input().code_pressed(KEYCODE_H);
 }
 
@@ -557,7 +582,7 @@ DRIVER_INIT_MEMBER(jackie_state,jackie)
 	rom[0x7e86] = 0xc3;
 }
 
-TIMER_DEVICE_CALLBACK_MEMBER(jackie_state::jackie_irq)
+TIMER_DEVICE_CALLBACK_MEMBER(jackie_state::irq)
 {
 	int scanline = param;
 
@@ -576,7 +601,7 @@ static MACHINE_CONFIG_START( jackie, jackie_state )
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_12MHz / 2)
 	MCFG_CPU_PROGRAM_MAP(jackie_prg_map)
 	MCFG_CPU_IO_MAP(jackie_io_map)
-	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", jackie_state, jackie_irq, "screen", 0, 1)
+	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", jackie_state, irq, "screen", 0, 1)
 
 
 	/* video hardware */
@@ -585,11 +610,12 @@ static MACHINE_CONFIG_START( jackie, jackie_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 64*8-1, 0, 32*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(jackie_state, screen_update_jackie)
+	MCFG_SCREEN_UPDATE_DRIVER(jackie_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(jackie)
-	MCFG_PALETTE_LENGTH(2048)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", jackie)
+	MCFG_PALETTE_ADD("palette", 2048)
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -624,4 +650,4 @@ ROM_START( jackie )
 ROM_END
 
 
-GAME( 1993,  jackie,   0,        jackie,   jackie, jackie_state, jackie,  ROT0, "IGS",    "Happy Jackie (v110U)",       0 )
+GAME( 1993,  jackie,   0,        jackie,   jackie, jackie_state, jackie,  ROT0, "IGS",    "Happy Jackie (v110U)", GAME_SUPPORTS_SAVE )

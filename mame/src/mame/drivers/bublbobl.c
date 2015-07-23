@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Chris Moore, Nicola Salmoria
 /***************************************************************************
 
 Tokio          (c) 1986 Taito
@@ -290,7 +292,7 @@ static ADDRESS_MAP_START( master_map, AS_PROGRAM, 8, bublbobl_state )
 	AM_RANGE(0xc000, 0xdcff) AM_RAM AM_SHARE("videoram")
 	AM_RANGE(0xdd00, 0xdfff) AM_RAM AM_SHARE("objectram")
 	AM_RANGE(0xe000, 0xf7ff) AM_RAM AM_SHARE("share1")
-	AM_RANGE(0xf800, 0xf9ff) AM_RAM_WRITE(paletteram_RRRRGGGGBBBBxxxx_byte_be_w) AM_SHARE("paletteram")
+	AM_RANGE(0xf800, 0xf9ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xfa00, 0xfa00) AM_READWRITE(bublbobl_sound_status_r, bublbobl_sound_command_w)
 	AM_RANGE(0xfa03, 0xfa03) AM_WRITE(bublbobl_soundcpu_reset_w)
 	AM_RANGE(0xfa80, 0xfa80) AM_WRITE(watchdog_reset_w)
@@ -346,7 +348,7 @@ static ADDRESS_MAP_START( bootleg_map, AS_PROGRAM, 8, bublbobl_state )
 	AM_RANGE(0xc000, 0xdcff) AM_RAM AM_SHARE("videoram")
 	AM_RANGE(0xdd00, 0xdfff) AM_RAM AM_SHARE("objectram")
 	AM_RANGE(0xe000, 0xf7ff) AM_RAM AM_SHARE("share1")
-	AM_RANGE(0xf800, 0xf9ff) AM_RAM_WRITE(paletteram_RRRRGGGGBBBBxxxx_byte_be_w) AM_SHARE("paletteram")
+	AM_RANGE(0xf800, 0xf9ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xfa00, 0xfa00) AM_READWRITE(bublbobl_sound_status_r, bublbobl_sound_command_w)
 	AM_RANGE(0xfa03, 0xfa03) AM_WRITE(bublbobl_soundcpu_reset_w)
 	AM_RANGE(0xfa80, 0xfa80) AM_WRITENOP // ???
@@ -370,7 +372,7 @@ static ADDRESS_MAP_START( tokio_map, AS_PROGRAM, 8, bublbobl_state )
 	AM_RANGE(0xc000, 0xdcff) AM_RAM AM_SHARE("videoram")
 	AM_RANGE(0xdd00, 0xdfff) AM_RAM AM_SHARE("objectram")
 	AM_RANGE(0xe000, 0xf7ff) AM_RAM AM_SHARE("share1")
-	AM_RANGE(0xf800, 0xf9ff) AM_RAM_WRITE(paletteram_RRRRGGGGBBBBxxxx_byte_be_w) AM_SHARE("paletteram")
+	AM_RANGE(0xf800, 0xf9ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xfa00, 0xfa00) AM_WRITE(watchdog_reset_w)
 	AM_RANGE(0xfa03, 0xfa03) AM_READ_PORT("DSW0")
 	AM_RANGE(0xfa04, 0xfa04) AM_READ_PORT("DSW1")
@@ -554,7 +556,7 @@ static INPUT_PORTS_START( boblbobl )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
 INPUT_PORTS_END
 
-static INPUT_PORTS_START( sboblbob )
+static INPUT_PORTS_START( sboblboblb )
 	PORT_INCLUDE( boblbobl )
 
 	PORT_MODIFY( "DSW0" )
@@ -569,6 +571,15 @@ static INPUT_PORTS_START( sboblbob )
 	PORT_DIPSETTING(    0x00, "2" )
 	PORT_DIPSETTING(    0x30, "3" )
 	PORT_DIPSETTING(    0x20, "100 (Cheat)")
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( sboblbobl )
+	PORT_INCLUDE( sboblboblb )
+
+	PORT_MODIFY( "IN0" )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_COIN2 ) PORT_IMPULSE(1)
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_COIN1 ) PORT_IMPULSE(1)
+	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_UNKNOWN ) // Must be low or the game freezes!
 INPUT_PORTS_END
 
 // default to 'Dream Land' not 'Super Dream Land'
@@ -701,15 +712,6 @@ WRITE_LINE_MEMBER(bublbobl_state::irqhandler)
 	m_audiocpu->set_input_line(0, state ? ASSERT_LINE : CLEAR_LINE);
 }
 
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL
-};
-
-
-
 /*************************************
  *
  *  Machine driver
@@ -749,36 +751,38 @@ MACHINE_RESET_MEMBER(bublbobl_state,tokio)
 static MACHINE_CONFIG_START( tokio, bublbobl_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", Z80, MAIN_XTAL/4)   // 6 MHz
+	MCFG_CPU_ADD("maincpu", Z80, MAIN_XTAL/4) // 6 MHz
 	MCFG_CPU_PROGRAM_MAP(tokio_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state,  irq0_line_hold)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state, irq0_line_hold)
 
 	MCFG_CPU_ADD("slave", Z80, MAIN_XTAL/4) // 6 MHz
 	MCFG_CPU_PROGRAM_MAP(tokio_slave_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state,  irq0_line_hold)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state, irq0_line_hold)
 
-	MCFG_CPU_ADD("audiocpu", Z80, MAIN_XTAL/8)  // 3 MHz
+	MCFG_CPU_ADD("audiocpu", Z80, MAIN_XTAL/8) // 3 MHz
 	MCFG_CPU_PROGRAM_MAP(tokio_sound_map) // NMIs are triggered by the main CPU, IRQs are triggered by the YM2203
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(6000)) // 100 CPU slices per frame - a high value to ensure proper synchronization of the CPUs
 
-	MCFG_MACHINE_START_OVERRIDE(bublbobl_state,tokio)
-	MCFG_MACHINE_RESET_OVERRIDE(bublbobl_state,tokio)
+	MCFG_MACHINE_START_OVERRIDE(bublbobl_state, tokio)
+	MCFG_MACHINE_RESET_OVERRIDE(bublbobl_state, tokio)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MAIN_XTAL/4, 384, 0, 256, 264, 16, 240)
 	MCFG_SCREEN_UPDATE_DRIVER(bublbobl_state, screen_update_bublbobl)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(bublbobl)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", bublbobl)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_FORMAT(RRRRGGGGBBBBxxxx)
+	MCFG_PALETTE_ENDIANNESS(ENDIANNESS_BIG)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, MAIN_XTAL/8)
 	MCFG_YM2203_IRQ_HANDLER(WRITELINE(bublbobl_state, irqhandler))
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(0, "mono", 0.08)
 	MCFG_SOUND_ROUTE(1, "mono", 0.08)
 	MCFG_SOUND_ROUTE(2, "mono", 0.08)
@@ -825,40 +829,42 @@ MACHINE_RESET_MEMBER(bublbobl_state,bublbobl)
 static MACHINE_CONFIG_START( bublbobl, bublbobl_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", Z80, MAIN_XTAL/4)   // 6 MHz
+	MCFG_CPU_ADD("maincpu", Z80, MAIN_XTAL/4) // 6 MHz
 	MCFG_CPU_PROGRAM_MAP(master_map)
 	// IRQs are triggered by the MCU
 
 	MCFG_CPU_ADD("slave", Z80, MAIN_XTAL/4) // 6 MHz
 	MCFG_CPU_PROGRAM_MAP(slave_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state,  irq0_line_hold)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state, irq0_line_hold)
 
-	MCFG_CPU_ADD("audiocpu", Z80, MAIN_XTAL/8)  // 3 MHz
+	MCFG_CPU_ADD("audiocpu", Z80, MAIN_XTAL/8) // 3 MHz
 	MCFG_CPU_PROGRAM_MAP(sound_map) // IRQs are triggered by the YM2203
 
-	MCFG_CPU_ADD("mcu", M6801, 4000000) // actually 6801U4  // xtal is 4MHz, divided by 4 internally
+	MCFG_CPU_ADD("mcu", M6801, XTAL_4MHz) // actually 6801U4 - xtal is 4MHz, divided by 4 internally
 	MCFG_CPU_PROGRAM_MAP(mcu_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state,  irq0_line_pulse) // comes from the same clock that latches the INT pin on the second Z80
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state, irq0_line_pulse) // comes from the same clock that latches the INT pin on the second Z80
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(6000)) // 100 CPU slices per frame - a high value to ensure proper synchronization of the CPUs
 
-	MCFG_MACHINE_START_OVERRIDE(bublbobl_state,bublbobl)
-	MCFG_MACHINE_RESET_OVERRIDE(bublbobl_state,bublbobl)
+	MCFG_MACHINE_START_OVERRIDE(bublbobl_state, bublbobl)
+	MCFG_MACHINE_RESET_OVERRIDE(bublbobl_state, bublbobl)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MAIN_XTAL/4, 384, 0, 256, 264, 16, 240)
 	MCFG_SCREEN_UPDATE_DRIVER(bublbobl_state, screen_update_bublbobl)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(bublbobl)
-	MCFG_PALETTE_LENGTH(256)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", bublbobl)
+	MCFG_PALETTE_ADD("palette", 256)
+	MCFG_PALETTE_FORMAT(RRRRGGGGBBBBxxxx)
+	MCFG_PALETTE_ENDIANNESS(ENDIANNESS_BIG)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ym1", YM2203, MAIN_XTAL/8)
 	MCFG_YM2203_IRQ_HANDLER(WRITELINE(bublbobl_state, irqhandler))
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	MCFG_SOUND_ADD("ym2", YM3526, MAIN_XTAL/8)
@@ -884,12 +890,13 @@ MACHINE_RESET_MEMBER(bublbobl_state,boblbobl)
 
 static MACHINE_CONFIG_DERIVED( boblbobl, bublbobl )
 
+	/* basic machine hardware */
 	MCFG_CPU_MODIFY("maincpu")
 	MCFG_CPU_PROGRAM_MAP(bootleg_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state,  irq0_line_hold)   // interrupt mode 1, unlike Bubble Bobble
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state, irq0_line_hold) // interrupt mode 1, unlike Bubble Bobble
 
-	MCFG_MACHINE_START_OVERRIDE(bublbobl_state,boblbobl)
-	MCFG_MACHINE_RESET_OVERRIDE(bublbobl_state,boblbobl)
+	MCFG_MACHINE_START_OVERRIDE(bublbobl_state, boblbobl)
+	MCFG_MACHINE_RESET_OVERRIDE(bublbobl_state, boblbobl)
 
 	MCFG_DEVICE_REMOVE("mcu")
 MACHINE_CONFIG_END
@@ -924,9 +931,11 @@ MACHINE_RESET_MEMBER(bublbobl_state,bub68705)
 }
 
 static MACHINE_CONFIG_DERIVED( bub68705, bublbobl )
+
+	/* basic machine hardware */
 	MCFG_DEVICE_REMOVE("mcu")
 
-	MCFG_CPU_ADD("mcu", M68705, 4000000)    // xtal is 4MHz, divided by 4 internally
+	MCFG_CPU_ADD("mcu", M68705, XTAL_4MHz) // xtal is 4MHz, divided by 4 internally
 	MCFG_CPU_PROGRAM_MAP(bootlegmcu_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", bublbobl_state, bublbobl_m68705_interrupt) // ??? should come from the same clock which latches the INT pin on the second Z80
 
@@ -943,12 +952,12 @@ MACHINE_CONFIG_END
  *************************************/
 ROM_START( tokio ) // newer japan set, has -1 revision of roms 02, 03 and 06
 	ROM_REGION( 0x30000, "maincpu", 0 ) /* main CPU */
-	ROM_LOAD( "a71-02-1.ic4", 0x00000, 0x8000, CRC(BB8DABD7) SHA1(141E9F0C19BCF316477681369E2D98DFFDD8435D) )
+	ROM_LOAD( "a71-02-1.ic4", 0x00000, 0x8000, CRC(bb8dabd7) SHA1(141e9f0c19bcf316477681369e2d98dffdd8435d) )
 	/* ROMs banked at 8000-bfff */
-	ROM_LOAD( "a71-03-1.ic5", 0x10000, 0x8000, CRC(EE49B383) SHA1(D510A1D168542DF6A87C7D7C67A47CF776A51F29) )
+	ROM_LOAD( "a71-03-1.ic5", 0x10000, 0x8000, CRC(ee49b383) SHA1(d510a1d168542df6a87c7d7c67a47cf776a51f29) )
 	ROM_LOAD( "a71-04.ic6",   0x18000, 0x8000, CRC(a0a4ce0e) SHA1(c49bdcd85c760a5e7327d1b424772e1560f1a318) )
 	ROM_LOAD( "a71-05.ic7",   0x20000, 0x8000, CRC(6da0b945) SHA1(6c80b8333dd95657f99e6ba5b6e877733ac02a8c) )
-	ROM_LOAD( "a71-06-1.ic8", 0x28000, 0x8000, CRC(56927B3F) SHA1(33FB4E71B95664ECFF1F35F6782A14101982A56D) )
+	ROM_LOAD( "a71-06-1.ic8", 0x28000, 0x8000, CRC(56927b3f) SHA1(33fb4e71b95664ecff1f35f6782a14101982a56d) )
 
 	ROM_REGION( 0x10000, "slave", 0 )   /* video CPU */
 	ROM_LOAD( "a71-01.ic1",   0x00000, 0x8000, CRC(0867c707) SHA1(7129974f1252b28e9e338bd3c7fcb87210dcf412) )
@@ -1350,7 +1359,7 @@ ROM_START( boblbobl )
 	ROM_LOAD( "pal16l8.u4",  0x0400, 0x0104, CRC(077d20a8) SHA1(8e568ffd6f66c3dd61708dd0f3be9c2ed488ae4b) )
 ROM_END
 
-ROM_START( boblbobl2 )
+ROM_START( sboblbobl )
 	ROM_REGION( 0x30000, "maincpu", 0 )
 	ROM_LOAD( "cpu2-3.bin",   0x00000, 0x08000, CRC(2d9107b6) SHA1(ab1a4a20f4b533cd06cc458668f407a8a14c9d70) )
 	/* ROMs banked at 8000-bfff */
@@ -1364,23 +1373,23 @@ ROM_START( boblbobl2 )
 	ROM_REGION( 0x10000, "audiocpu", 0 )    /* 64k for the third CPU */
 	ROM_LOAD( "a78-07.46",    0x0000, 0x08000, CRC(4f9a26e8) SHA1(3105b34b88a7134493c2b3f584729f8b0407a011) )
 
-	ROM_REGION( 0x80000, "gfx1", ROMREGION_INVERT )
-	ROM_LOAD( "gfx7.bin",     0x00000, 0x10000, CRC(702f61c0) SHA1(2f294ab2b0286736a64ea2bfc95d855aa5b41ada) )
-	ROM_LOAD( "gfx8.bin",     0x10000, 0x10000, CRC(677840e8) SHA1(995b2125ca18910d7d4b96078f4ecb17465c4151) )
-	ROM_LOAD( "a78-13.16",    0x20000, 0x08000, CRC(d0af35c5) SHA1(c5a89f4d73acc0db86654540b3abfd77b3757db5) )
-	ROM_LOAD( "a78-14.17",    0x28000, 0x08000, CRC(7b5369a8) SHA1(1307b26d80e6f36ebe6c442bebec41d20066eaf9) )  // match
-	/* 0x30000-0x3ffff empty */
-	ROM_LOAD( "gfx10.bin",    0x40000, 0x10000, CRC(d370f499) SHA1(94ce157ff1a53fabf08abe5467531b94a56666a5) )
-	ROM_LOAD( "gfx11.bin",    0x50000, 0x10000, CRC(76f2b367) SHA1(3e357a5642c8747df77a995057cecdf96f3130ab) )
-	ROM_LOAD( "a78-19.34",    0x60000, 0x08000, CRC(66e9438c) SHA1(b94e62b6fbe7f4e08086d0365afc5cff6e0ccafd) )
-	ROM_LOAD( "a78-20.35",    0x68000, 0x08000, CRC(9ef863ad) SHA1(29f91b5a3765e4d6e6c3382db1d8d8297b6e56c8) )  // match
-	/* 0x70000-0x7ffff empty */
+	ROM_REGION (0x80000, "gfx1", ROMREGION_INVERT)
+	ROM_LOAD ("gfx11.bin", 0x00000, 0x10000, CRC (76f2b367) SHA1 (3e357a5642c8747df77a995057cecdf96f3130ab))
+	ROM_LOAD ("gfx10.bin", 0x10000, 0x10000, CRC (d370f499) SHA1 (94ce157ff1a53fabf08abe5467531b94a56666a5))
+	ROM_LOAD ("a78-13.16", 0x20000, 0x08000, CRC (d0af35c5) SHA1 (c5a89f4d73acc0db86654540b3abfd77b3757db5)) // Match
+	ROM_LOAD ("a78-14.17", 0x28000, 0x08000, CRC (7b5369a8) SHA1 (1307b26d80e6f36ebe6c442bebec41d20066eaf9)) // Match
+	// 0x30000 - 0x3FFFF empty
+	ROM_LOAD ("gfx8.bin",  0x40000, 0x10000, CRC (677840e8) SHA1 (995b2125ca18910d7d4b96078f4ecb17465c4151))
+	ROM_LOAD ("gfx7.bin",  0x50000, 0x10000, CRC (702f61c0) SHA1 (2f294ab2b0286736a64ea2bfc95d855aa5b41ada))
+	ROM_LOAD ("a78-19.34", 0x60000, 0x08000, CRC (66e9438c) SHA1 (b94e62b6fbe7f4e08086d0365afc5cff6e0ccafd)) // Match
+	ROM_LOAD ("a78-20.35", 0x68000, 0x08000, CRC (9ef863ad) SHA1 (29f91b5a3765e4d6e6c3382db1d8d8297b6e56c8)) // Match
+	// 0x70000 - 0x7FFFF empty
 
 	ROM_REGION( 0x0100, "proms", 0 )
 	ROM_LOAD( "a71-25.41",    0x0000, 0x0100, CRC(2d0f8545) SHA1(089c31e2f614145ef2743164f7b52ae35bc06808) )    /* video timing */
 ROM_END
 
-ROM_START( sboblboa )
+ROM_START( sboblbobla )
 	ROM_REGION( 0x30000, "maincpu", 0 )
 	ROM_LOAD( "1c.bin",    0x00000, 0x08000, CRC(f304152a) SHA1(103d9beddccef289ed739d28ebda69bbad3d42f9) )
 	/* ROMs banked at 8000-bfff */
@@ -1414,7 +1423,7 @@ ROM_START( sboblboa )
 	ROM_LOAD( "a71-25.41",    0x0000, 0x0100, CRC(2d0f8545) SHA1(089c31e2f614145ef2743164f7b52ae35bc06808) )    /* video timing */
 ROM_END
 
-ROM_START( sboblbob )
+ROM_START( sboblboblb )
 	ROM_REGION( 0x30000, "maincpu", 0 )
 	ROM_LOAD( "bbb-3.rom",    0x00000, 0x08000, CRC(f304152a) SHA1(103d9beddccef289ed739d28ebda69bbad3d42f9) )
 	/* ROMs banked at 8000-bfff */
@@ -1575,20 +1584,20 @@ DRIVER_INIT_MEMBER(bublbobl_state,dland)
  *
  *************************************/
 
-GAME( 1986, tokio,      0,        tokio,    tokio, bublbobl_state,    tokio,    ROT90, "Taito Corporation", "Tokio / Scramble Formation (newer)", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_SUPPORTS_SAVE )
-GAME( 1986, tokioo,     tokio,    tokio,    tokio, bublbobl_state,    tokio,    ROT90, "Taito Corporation", "Tokio / Scramble Formation (older)", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_SUPPORTS_SAVE )
-GAME( 1986, tokiou,     tokio,    tokio,    tokio, bublbobl_state,    tokio,    ROT90, "Taito America Corporation (Romstar license)", "Tokio / Scramble Formation (US)", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_SUPPORTS_SAVE )
-GAME( 1986, tokiob,     tokio,    tokio,    tokio, bublbobl_state,    tokiob,   ROT90, "bootleg", "Tokio / Scramble Formation (bootleg)", GAME_SUPPORTS_SAVE )
+GAME( 1986, tokio,      0,        tokio,    tokio,      bublbobl_state, tokio,    ROT90, "Taito Corporation", "Tokio / Scramble Formation (newer)", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_SUPPORTS_SAVE )
+GAME( 1986, tokioo,     tokio,    tokio,    tokio,      bublbobl_state, tokio,    ROT90, "Taito Corporation", "Tokio / Scramble Formation (older)", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_SUPPORTS_SAVE )
+GAME( 1986, tokiou,     tokio,    tokio,    tokio,      bublbobl_state, tokio,    ROT90, "Taito America Corporation (Romstar license)", "Tokio / Scramble Formation (US)", GAME_NOT_WORKING | GAME_UNEMULATED_PROTECTION | GAME_SUPPORTS_SAVE )
+GAME( 1986, tokiob,     tokio,    tokio,    tokio,      bublbobl_state, tokiob,   ROT90, "bootleg", "Tokio / Scramble Formation (bootleg)", GAME_SUPPORTS_SAVE )
 
-GAME( 1986, bublbobl,   0,        bublbobl, bublbobl, bublbobl_state, bublbobl, ROT0,  "Taito Corporation", "Bubble Bobble (Japan, Ver 0.1)", GAME_SUPPORTS_SAVE )
-GAME( 1986, bublbobl1,  bublbobl, bublbobl, bublbobl, bublbobl_state, bublbobl, ROT0,  "Taito Corporation", "Bubble Bobble (Japan, Ver 0.0)", GAME_SUPPORTS_SAVE )
-GAME( 1986, bublboblr,  bublbobl, bublbobl, bublbobl, bublbobl_state, bublbobl, ROT0,  "Taito America Corporation (Romstar license)", "Bubble Bobble (US, Ver 5.1)", GAME_SUPPORTS_SAVE ) // newest release, with mode select
-GAME( 1986, bublboblr1, bublbobl, bublbobl, bublbobl, bublbobl_state, bublbobl, ROT0,  "Taito America Corporation (Romstar license)", "Bubble Bobble (US, Ver 1.0)", GAME_SUPPORTS_SAVE )
+GAME( 1986, bublbobl,   0,        bublbobl, bublbobl,   bublbobl_state, bublbobl, ROT0,  "Taito Corporation", "Bubble Bobble (Japan, Ver 0.1)", GAME_SUPPORTS_SAVE )
+GAME( 1986, bublbobl1,  bublbobl, bublbobl, bublbobl,   bublbobl_state, bublbobl, ROT0,  "Taito Corporation", "Bubble Bobble (Japan, Ver 0.0)", GAME_SUPPORTS_SAVE )
+GAME( 1986, bublboblr,  bublbobl, bublbobl, bublbobl,   bublbobl_state, bublbobl, ROT0,  "Taito America Corporation (Romstar license)", "Bubble Bobble (US, Ver 5.1)", GAME_SUPPORTS_SAVE ) // newest release, with mode select
+GAME( 1986, bublboblr1, bublbobl, bublbobl, bublbobl,   bublbobl_state, bublbobl, ROT0,  "Taito America Corporation (Romstar license)", "Bubble Bobble (US, Ver 1.0)", GAME_SUPPORTS_SAVE )
 
-GAME( 1986, boblbobl,   bublbobl, boblbobl, boblbobl, bublbobl_state, bublbobl, ROT0,  "bootleg", "Bobble Bobble (set 1)", GAME_SUPPORTS_SAVE )
-GAME( 1986, boblbobl2,  bublbobl, boblbobl, boblbobl, bublbobl_state, bublbobl, ROT0,  "bootleg", "Bobble Bobble (set 2)", GAME_SUPPORTS_SAVE | GAME_NOT_WORKING )
-GAME( 1986, sboblboa,   bublbobl, boblbobl, boblbobl, bublbobl_state, bublbobl, ROT0,  "bootleg", "Super Bobble Bobble (set 1)", GAME_SUPPORTS_SAVE )
-GAME( 1986, sboblbob,   bublbobl, boblbobl, sboblbob, bublbobl_state, bublbobl, ROT0,  "bootleg", "Super Bobble Bobble (set 2)", GAME_SUPPORTS_SAVE )
-GAME( 1986, bub68705,   bublbobl, bub68705, bublbobl, bublbobl_state, bublbobl, ROT0,  "bootleg", "Bubble Bobble (bootleg with 68705)", GAME_SUPPORTS_SAVE )
+GAME( 1986, boblbobl,   bublbobl, boblbobl, boblbobl,   bublbobl_state, bublbobl, ROT0,  "bootleg", "Bobble Bobble (bootleg of Bubble Bobble)", GAME_SUPPORTS_SAVE )
+GAME( 1986, sboblbobl,  bublbobl, boblbobl, sboblbobl,  bublbobl_state, bublbobl, ROT0,  "bootleg (Datsu)", "Super Bobble Bobble (bootleg, set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1986, sboblbobla, bublbobl, boblbobl, boblbobl,   bublbobl_state, bublbobl, ROT0,  "bootleg", "Super Bobble Bobble (bootleg, set 2)", GAME_SUPPORTS_SAVE )
+GAME( 1986, sboblboblb, bublbobl, boblbobl, sboblboblb, bublbobl_state, bublbobl, ROT0,  "bootleg", "Super Bobble Bobble (bootleg, set 3)", GAME_SUPPORTS_SAVE )
+GAME( 1986, bub68705,   bublbobl, bub68705, bublbobl,   bublbobl_state, bublbobl, ROT0,  "bootleg", "Bubble Bobble (bootleg with 68705)", GAME_SUPPORTS_SAVE )
 
-GAME( 1987, dland,      bublbobl, boblbobl, dland, bublbobl_state,    dland,    ROT0,  "bootleg", "Dream Land / Super Dream Land (bootleg of Bubble Bobble)", GAME_SUPPORTS_SAVE )
+GAME( 1987, dland,      bublbobl, boblbobl, dland,      bublbobl_state, dland,    ROT0,  "bootleg", "Dream Land / Super Dream Land (bootleg of Bubble Bobble)", GAME_SUPPORTS_SAVE )

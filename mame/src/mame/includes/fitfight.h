@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 
 class fitfight_state : public driver_device
 {
@@ -14,7 +16,9 @@ public:
 		m_fof_mid_tileram(*this, "fof_mid_tileram"),
 		m_fof_txt_tileram(*this, "fof_txt_tileram"),
 		m_spriteram(*this, "spriteram"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_fof_100000;
@@ -66,4 +70,6 @@ public:
 	INTERRUPT_GEN_MEMBER(snd_irq);
 	void draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, int layer );
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };

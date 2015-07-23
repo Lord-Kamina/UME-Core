@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Peter Trauner
 /******************************************************************************
  PeT mess@utanet.at 2000,2001
 ******************************************************************************/
@@ -5,7 +7,6 @@
 #include "emu.h"
 #include "includes/lynx.h"
 #include "cpu/m6502/m65sc02.h"
-#include "imagedev/cartslot.h"
 
 
 #define PAD_UP      0x80
@@ -1018,7 +1019,10 @@ READ8_MEMBER(lynx_state::suzy_read)
 			value = ioport("PAUSE")->read();
 			break;
 		case RCART:
-			value = *(memregion("user1")->base() + (m_suzy.high * m_granularity) + m_suzy.low);
+			if (m_cart->exists())
+				value = m_cart->read_rom(space, (m_suzy.high * m_granularity) + m_suzy.low);
+			else
+				value = 0;
 			m_suzy.low = (m_suzy.low + 1) & (m_granularity - 1);
 			break;
 		//case RCART_BANK1: /* we need bank 1 emulation!!! */
@@ -1313,8 +1317,8 @@ void lynx_state::lynx_draw_line()
 		for (x = 160 - 2; x >= 0; j++, x -= 2)
 		{
 			byte = lynx_read_ram(j);
-			line[x + 1] = m_palette[(byte >> 4) & 0x0f];
-			line[x + 0] = m_palette[(byte >> 0) & 0x0f];
+			line[x + 1] = m_lynx_palette[(byte >> 4) & 0x0f];
+			line[x + 0] = m_lynx_palette[(byte >> 0) & 0x0f];
 		}
 	}
 	else
@@ -1323,8 +1327,8 @@ void lynx_state::lynx_draw_line()
 		for (x = 0; x < 160; j++, x += 2)
 		{
 			byte = lynx_read_ram(j);
-			line[x + 0] = m_palette[(byte >> 4) & 0x0f];
-			line[x + 1] = m_palette[(byte >> 0) & 0x0f];
+			line[x + 0] = m_lynx_palette[(byte >> 4) & 0x0f];
+			line[x + 1] = m_lynx_palette[(byte >> 0) & 0x0f];
 		}
 	}
 }
@@ -1379,11 +1383,11 @@ void lynx_state::lynx_timer_init(int which)
 	memset(&m_timer[which], 0, sizeof(LYNX_TIMER));
 	m_timer[which].timer = timer_alloc(TIMER_SHOT);
 
-	state_save_register_item(machine(), "Lynx", NULL, which, m_timer[which].bakup);
-	state_save_register_item(machine(), "Lynx", NULL, which, m_timer[which].cntrl1);
-	state_save_register_item(machine(), "Lynx", NULL, which, m_timer[which].cntrl2);
-	state_save_register_item(machine(), "Lynx", NULL, which, m_timer[which].counter);
-	state_save_register_item(machine(), "Lynx", NULL, which, m_timer[which].timer_active);
+	save_item(NAME(m_timer[which].bakup), which);
+	save_item(NAME(m_timer[which].cntrl1), which);
+	save_item(NAME(m_timer[which].cntrl2), which);
+	save_item(NAME(m_timer[which].counter), which);
+	save_item(NAME(m_timer[which].timer_active), which);
 }
 
 void lynx_state::lynx_timer_signal_irq(int which)
@@ -1417,7 +1421,7 @@ void lynx_state::lynx_timer_signal_irq(int which)
 		lynx_timer_count_down(2);
 		break;
 	case 2:
-		copybitmap(m_bitmap, m_bitmap_temp, 0, 0, 0, 0, machine().primary_screen->cliprect());
+		copybitmap(m_bitmap, m_bitmap_temp, 0, 0, 0, 0, machine().first_screen()->cliprect());
 		lynx_timer_count_down(4);
 		break;
 	case 1:
@@ -1828,10 +1832,10 @@ WRITE8_MEMBER(lynx_state::mikey_write)
 		m_mikey.data[offset] = data;
 
 		/* RED = 0xb- & 0x0f, GREEN = 0xa- & 0x0f, BLUE = (0xb- & 0xf0) >> 4 */
-		m_palette[offset & 0x0f] = machine().pens[
+		m_lynx_palette[offset & 0x0f] = m_palette->pen(
 			((m_mikey.data[0xb0 + (offset & 0x0f)] & 0x0f)) |
 			((m_mikey.data[0xa0 + (offset & 0x0f)] & 0x0f) << 4) |
-			((m_mikey.data[0xb0 + (offset & 0x0f)] & 0xf0) << 4)];
+			((m_mikey.data[0xb0 + (offset & 0x0f)] & 0xf0) << 4));
 		break;
 
 	/* TODO: properly implement these writes */
@@ -1950,7 +1954,7 @@ void lynx_state::machine_start()
 	save_item(NAME(m_memory_config));
 	save_item(NAME(m_sign_AB));
 	save_item(NAME(m_sign_CD));
-	save_item(NAME(m_palette));
+	save_item(NAME(m_lynx_palette));
 	save_item(NAME(m_rotate));
 	// save blitter variables
 	save_item(NAME(m_blitter.screen));
@@ -2026,15 +2030,6 @@ void lynx_state::machine_start()
 
 ****************************************/
 
-
-static void lynx_partialhash(hash_collection &dest, const unsigned char *data,
-	unsigned long length, const char *functions)
-{
-	if (length <= 64)
-		return;
-	dest.compute(&data[64], length - 64, functions);
-}
-
 int lynx_state::lynx_verify_cart (char *header, int kind)
 {
 	if (kind)
@@ -2047,7 +2042,7 @@ int lynx_state::lynx_verify_cart (char *header, int kind)
 	}
 	else
 	{
-		if (strncmp("LYNX",&header[0],4))
+		if (strncmp("LYNX", &header[0], 4))
 		{
 			if (!strncmp("BS93", &header[6], 4))
 			{
@@ -2068,45 +2063,48 @@ DEVICE_IMAGE_LOAD_MEMBER( lynx_state, lynx_cart )
 	/* Lynx carts have 19 address lines, the upper 8 used for bank select. The lower
 	11 bits are used to address data within the selected bank. Valid bank sizes are 256,
 	512, 1024 or 2048 bytes. Commercial roms use all 256 banks.*/
-
-	UINT8 *rom = memregion("user1")->base();
-	UINT32 size;
-	UINT8 header[0x40];
+	UINT32 size = m_cart->common_get_size("rom");
+	UINT16 gran = 0;
 
 	if (image.software_entry() == NULL)
 	{
-		const char *filetype;
-		size = image.length();
-/* 64 byte header
-   LYNX
-   intelword lower counter size
-   0 0 1 0
-   32 chars name
-   22 chars manufacturer
-*/
-
-		filetype = image.filetype();
-
-		if (!mame_stricmp (filetype, "lnx"))
+		// check for lnx header
+		const char *filetype = image.filetype();
+		if (!core_stricmp(filetype, "lnx"))
 		{
-			if (image.fread( header, 0x40) != 0x40)
-				return IMAGE_INIT_FAIL;
+			// 64 byte header
+			// LYNX
+			// intelword lower counter size
+			// 0 0 1 0
+			// 32 chars name
+			// 22 chars manufacturer
+			UINT8 header[0x40];
+			image.fread(header, 0x40);
 
-			/* Check the image */
+			// Check the image
 			if (lynx_verify_cart((char*)header, LYNX_CART) == IMAGE_VERIFY_FAIL)
 				return IMAGE_INIT_FAIL;
 
 			/* 2008-10 FP: According to Handy source these should be page_size_bank0. Are we using
-			it correctly in MESS? Moreover, the next two values should be page_size_bank1. We should
-			implement this as well */
-			m_granularity = header[4] | (header[5] << 8);
+			 it correctly in MESS? Moreover, the next two values should be page_size_bank1. We should
+			 implement this as well */
+			gran = header[4] | (header[5] << 8);
 
-			logerror ("%s %dkb cartridge with %dbyte granularity from %s\n",
-					header + 10, size / 1024, m_granularity, header + 42);
-
+			logerror ("%s %dkb cartridge with %dbyte granularity from %s\n", header + 10, size / 1024, gran, header + 42);
 			size -= 0x40;
 		}
-		else if (!mame_stricmp (filetype, "lyx"))
+	}
+
+	m_cart->rom_alloc(size, GENERIC_ROM8_WIDTH, ENDIANNESS_LITTLE);
+	m_cart->common_load_rom(m_cart->get_rom_base(), size, "rom");
+
+	// set-up granularity
+	if (image.software_entry() == NULL)
+	{
+		const char *filetype = image.filetype();
+		if (!core_stricmp(filetype, "lnx"))     // from header
+			m_granularity = gran;
+		else if (!core_stricmp(filetype, "lyx"))
 		{
 			/* 2008-10 FP: FIXME: .lyx file don't have an header, hence they miss "lynx_granularity"
 			(see above). What if bank 0 has to be loaded elsewhere? And what about bank 1?
@@ -2118,45 +2116,29 @@ DEVICE_IMAGE_LOAD_MEMBER( lynx_state, lynx_cart )
 			else
 				m_granularity = 0x0400;
 		}
-
-		if (image.fread( rom, size) != size)
-			return IMAGE_INIT_FAIL;
 	}
 	else
 	{
-		size = image.get_software_region_length("rom");
 		if (size > 0xffff) // 64,128,256,512k cartridges
-		m_granularity = size >> 8;
+			m_granularity = size >> 8;
 		else
-		m_granularity = 0x400; // Homebrew roms not using all 256 banks (T-Tris) (none currently in softlist)
+			m_granularity = 0x400; // Homebrew roms not using all 256 banks (T-Tris) (none currently in softlist)
+	}
 
-		memcpy(rom, image.get_software_region("rom"), size);
-
+	// set-up rotation from softlist
+	if (image.software_entry() != NULL)
+	{
 		const char *rotate = image.get_feature("rotation");
 		m_rotate = 0;
 		if (rotate)
 		{
-			if(strcmp(rotate, "RIGHT") == 0) {
+			if (!core_stricmp(rotate, "RIGHT"))
 				m_rotate = 1;
-			}
-			else if (strcmp(rotate, "LEFT") == 0) {
+			else if (!core_stricmp(rotate, "LEFT"))
 				m_rotate = 2;
-			}
 		}
 
 	}
 
 	return IMAGE_INIT_PASS;
 }
-
-MACHINE_CONFIG_FRAGMENT(lynx_cartslot)
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("lnx,lyx")
-	MCFG_CARTSLOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("lynx_cart")
-	MCFG_CARTSLOT_LOAD(lynx_state, lynx_cart)
-	MCFG_CARTSLOT_PARTIALHASH(lynx_partialhash)
-
-	/* Software lists */
-	MCFG_SOFTWARE_LIST_ADD("cart_list","lynx")
-MACHINE_CONFIG_END

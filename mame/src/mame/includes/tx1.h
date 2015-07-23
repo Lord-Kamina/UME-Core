@@ -1,10 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /*************************************************************************
 
     TX-1/Buggy Boy hardware
 
 *************************************************************************/
 
-#include "devlegcy.h"
 
 #define TX1_PIXEL_CLOCK     (XTAL_18MHz / 3)
 #define TX1_HBSTART         256
@@ -55,9 +56,9 @@ struct sn74s516_t
 	union
 	{
 	#ifdef LSB_FIRST
-		struct { UINT16 W; INT16 Z; };
+		struct { UINT16 W; INT16 Z; } as16bit;
 	#else
-		struct { INT16 Z; UINT16 W; };
+		struct { INT16 Z; UINT16 W; } as16bit;
 	#endif
 		INT32 ZW32;
 	} ZW;
@@ -107,7 +108,14 @@ public:
 			m_vram(*this, "vram"),
 			m_objram(*this, "objram"),
 			m_rcram(*this, "rcram"),
-			m_z80_ram(*this, "z80_ram") { }
+			m_z80_ram(*this, "z80_ram"),
+			m_char_tiles(*this, "char_tiles"),
+			m_obj_tiles(*this, "obj_tiles"),
+			m_road_rom(*this, "road"),
+			m_obj_map(*this, "obj_map"),
+			m_obj_luts(*this, "obj_luts"),
+			m_proms(*this, "proms"),
+			m_screen(*this, "screen") { }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_mathcpu;
@@ -117,6 +125,15 @@ public:
 	required_shared_ptr<UINT16> m_objram;
 	required_shared_ptr<UINT16> m_rcram;
 	required_shared_ptr<UINT8> m_z80_ram;
+
+	required_region_ptr<UINT8> m_char_tiles;
+	required_region_ptr<UINT8> m_obj_tiles;
+	required_region_ptr<UINT8> m_road_rom;
+	required_region_ptr<UINT8> m_obj_map;
+	required_region_ptr<UINT8> m_obj_luts;
+	required_region_ptr<UINT8> m_proms;
+
+	required_device<screen_device> m_screen;
 
 	emu_timer *m_interrupt_timer;
 
@@ -192,8 +209,7 @@ public:
 
 	void buggyboy_draw_char(UINT8 *bitmap, bool wide);
 	void buggyboy_get_roadpix(int screen, int ls161, UINT8 rva0_6, UINT8 sld, UINT32 *_rorev,
-								UINT8 *rc0, UINT8 *rc1, UINT8 *rc2, UINT8 *rc3,
-								const UINT8 *rom, const UINT8 *prom0, const UINT8 *prom1, const UINT8 *prom2);
+								UINT8 *rc0, UINT8 *rc1, UINT8 *rc2, UINT8 *rc3);
 	void buggyboy_draw_road(UINT8 *bitmap);
 	void buggybjr_draw_road(UINT8 *bitmap);
 	void buggyboy_draw_objs(UINT8 *bitmap, bool wide);
@@ -214,27 +230,40 @@ public:
 };
 
 /*----------- defined in audio/tx1.c -----------*/
-DECLARE_READ8_DEVICE_HANDLER( tx1_pit8253_r );
-DECLARE_WRITE8_DEVICE_HANDLER( tx1_pit8253_w );
 
-DECLARE_WRITE8_DEVICE_HANDLER( bb_ym1_a_w );
-DECLARE_WRITE8_DEVICE_HANDLER( bb_ym2_a_w );
-DECLARE_WRITE8_DEVICE_HANDLER( bb_ym2_b_w );
+/*************************************
+ *
+ *  8253 Programmable Interval Timer
+ *
+ *************************************/
+struct pit8253_state
+{
+	union
+	{
+#ifdef LSB_FIRST
+		struct { UINT8 LSB; UINT8 MSB; } as8bit;
+#else
+		struct { UINT8 MSB; UINT8 LSB; } as8bit;
+#endif
+		UINT16 val;
+	} counts[3];
 
-
-DECLARE_WRITE8_DEVICE_HANDLER( tx1_ay8910_a_w );
-DECLARE_WRITE8_DEVICE_HANDLER( tx1_ay8910_b_w );
+	int idx[3];
+};
 
 class tx1_sound_device : public device_t,
 							public device_sound_interface
 {
 public:
 	tx1_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	tx1_sound_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
-	~tx1_sound_device() { global_free(m_token); }
+	tx1_sound_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
+	~tx1_sound_device() {}
 
-	// access to legacy token
-	void *token() const { assert(m_token != NULL); return m_token; }
+	DECLARE_READ8_MEMBER( pit8253_r );
+	DECLARE_WRITE8_MEMBER( pit8253_w );
+	DECLARE_WRITE8_MEMBER( ay8910_a_w );
+	DECLARE_WRITE8_MEMBER( ay8910_b_w );
+
 protected:
 	// device-level overrides
 	virtual void device_config_complete();
@@ -243,9 +272,39 @@ protected:
 
 	// sound stream update overrides
 	virtual void sound_stream_update(sound_stream &stream, stream_sample_t **inputs, stream_sample_t **outputs, int samples);
-private:
+
 	// internal state
-	void *m_token;
+	sound_stream *m_stream;
+	UINT32 m_freq_to_step;
+	UINT32 m_step0;
+	UINT32 m_step1;
+	UINT32 m_step2;
+
+	pit8253_state m_pit8253;
+
+	UINT8 m_ay_outputa;
+	UINT8 m_ay_outputb;
+
+	stream_sample_t m_pit0;
+	stream_sample_t m_pit1;
+	stream_sample_t m_pit2;
+
+	double m_weights0[4];
+	double m_weights1[3];
+	double m_weights2[3];
+	int m_eng0[4];
+	int m_eng1[4];
+	int m_eng2[4];
+
+	int m_noise_lfsra;
+	int m_noise_lfsrb;
+	int m_noise_lfsrc;
+	int m_noise_lfsrd;
+	int m_noise_counter;
+	UINT8 m_ym1_outputa;
+	UINT8 m_ym2_outputa;
+	UINT8 m_ym2_outputb;
+	UINT16 m_eng_voltages[16];
 };
 
 extern const device_type TX1;
@@ -254,6 +313,11 @@ class buggyboy_sound_device : public tx1_sound_device
 {
 public:
 	buggyboy_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+	DECLARE_WRITE8_MEMBER( ym1_a_w );
+	DECLARE_WRITE8_MEMBER( ym2_a_w );
+	DECLARE_WRITE8_MEMBER( ym2_b_w );
+
 protected:
 	// device-level overrides
 	virtual void device_config_complete();
@@ -262,6 +326,7 @@ protected:
 
 	// sound stream update overrides
 	virtual void sound_stream_update(sound_stream &stream, stream_sample_t **inputs, stream_sample_t **outputs, int samples);
+
 private:
 	// internal state
 };

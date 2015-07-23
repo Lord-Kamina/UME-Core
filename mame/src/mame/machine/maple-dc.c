@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 
 #include "emu.h"
 #include "maple-dc.h"
@@ -7,6 +9,7 @@ const device_type MAPLE_DC = &device_creator<maple_dc_device>;
 
 DEVICE_ADDRESS_MAP_START(amap, 32, maple_dc_device)
 	AM_RANGE(0x04, 0x07) AM_READWRITE(sb_mdstar_r, sb_mdstar_w)
+	AM_RANGE(0x10, 0x13) AM_READWRITE(sb_mdtsel_r, sb_mdtsel_w)
 	AM_RANGE(0x14, 0x17) AM_READWRITE(sb_mden_r, sb_mden_w)
 	AM_RANGE(0x18, 0x1b) AM_READWRITE(sb_mdst_r, sb_mdst_w)
 	AM_RANGE(0x80, 0x83) AM_READWRITE(sb_msys_r, sb_msys_w)
@@ -26,7 +29,7 @@ void maple_dc_device::static_set_irq_cb(device_t &device, void (*irq_cb)(running
 }
 
 maple_dc_device::maple_dc_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MAPLE_DC, "MAPLE_DC", tag, owner, clock)
+	: device_t(mconfig, MAPLE_DC, "Dreamcast Maple Bus", tag, owner, clock, "maple_dc", __FILE__)
 {
 	// Do not move that in device_start or there will be a race
 	// condition with the maple devices call to register_port.
@@ -55,6 +58,7 @@ void maple_dc_device::device_start()
 	save_item(NAME(mden));
 	save_item(NAME(mdst));
 	save_item(NAME(msys));
+	save_item(NAME(mdtsel));
 	save_item(NAME(dma_state));
 	save_item(NAME(dma_adr));
 	save_item(NAME(dma_port));
@@ -67,6 +71,7 @@ void maple_dc_device::device_reset()
 	mden = 0;
 	mdst = 0;
 	msys = 0;
+	mdtsel = 0;
 	dma_state = DMA_IDLE;
 	dma_adr = 0;
 	dma_port = 0;
@@ -115,9 +120,9 @@ void maple_dc_device::dma_step()
 			ddtdata.size      = 4;       // bytes per word
 			ddtdata.buffer    = header;  // destination buffer
 			ddtdata.direction = 0;       // 0 source to buffer, 1 buffer to source
-			ddtdata.channel   = -1;      // not used
+			ddtdata.channel   = 0;
 			ddtdata.mode      = -1;      // copy from/to buffer
-			sh4_dma_ddt(cpu, &ddtdata);
+			cpu->sh4_dma_ddt(&ddtdata);
 			dma_adr += 8;
 
 			dma_endflag    = header[0] & 0x80000000;
@@ -131,9 +136,9 @@ void maple_dc_device::dma_step()
 			ddtdata.size      = 4;       // bytes per word
 			ddtdata.buffer    = data;    // destination buffer
 			ddtdata.direction = 0;       // 0 source to buffer, 1 buffer to source
-			ddtdata.channel   = -1;      // not used
+			ddtdata.channel   = 0;
 			ddtdata.mode      = -1;      // copy from/to buffer
-			sh4_dma_ddt(cpu, &ddtdata);
+			cpu->sh4_dma_ddt(&ddtdata);
 			dma_adr += length*4;
 
 			switch(pattern) {
@@ -186,9 +191,9 @@ void maple_dc_device::dma_step()
 			ddtdata.size        = 4;        // bytes per word
 			ddtdata.buffer      = &data;    // destination buffer
 			ddtdata.direction   = 1;        // 0 source to buffer, 1 buffer to source
-			ddtdata.channel     = -1;       // not used
+			ddtdata.channel     = 0;
 			ddtdata.mode        = -1;       // copy from/to buffer
-			sh4_dma_ddt(cpu, &ddtdata);
+			cpu->sh4_dma_ddt(&ddtdata);
 			dma_state = dma_endflag ? DMA_DONE : DMA_SEND;
 			break;
 		}
@@ -211,9 +216,9 @@ void maple_dc_device::dma_step()
 				ddtdata.size        = 4;        // bytes per word
 				ddtdata.buffer      = data;     // destination buffer
 				ddtdata.direction   = 1;        // 0 source to buffer, 1 buffer to source
-				ddtdata.channel     = -1;       // not used
+				ddtdata.channel     = 0;
 				ddtdata.mode        = -1;       // copy from/to buffer
-				sh4_dma_ddt(cpu, &ddtdata);
+				cpu->sh4_dma_ddt(&ddtdata);
 				dma_dest += length*4;
 			}
 
@@ -239,6 +244,16 @@ void maple_dc_device::end_of_reply()
 		logerror("MAPLE: Unexpected end of reply\n");
 }
 
+void maple_dc_device::maple_hw_trigger()
+{
+	if(mdtsel & 1) // HW trigger
+	{
+		dma_adr = mdstar;
+		dma_state = DMA_SEND;
+		dma_step();
+	}
+}
+
 READ32_MEMBER(maple_dc_device::sb_mdstar_r)
 {
 	return mdstar;
@@ -259,6 +274,16 @@ WRITE32_MEMBER(maple_dc_device::sb_mden_w)
 	mden = data & 1;
 }
 
+READ32_MEMBER(maple_dc_device::sb_mdtsel_r)
+{
+	return mdtsel;
+}
+
+WRITE32_MEMBER(maple_dc_device::sb_mdtsel_w)
+{
+	mdtsel = data & 1;
+}
+
 READ32_MEMBER(maple_dc_device::sb_mdst_r)
 {
 	return dma_state != DMA_IDLE ? 1 : 0;
@@ -269,8 +294,7 @@ WRITE32_MEMBER(maple_dc_device::sb_mdst_w)
 	UINT32 old = mdst;
 	mdst = data & 1;
 
-	if(!old && data && (mden & 1)) {
-		// Hardware trigger unhandled.
+	if(!old && data && (mden & 1) && mdtsel == 0) {
 		dma_adr = mdstar;
 		dma_state = DMA_SEND;
 		dma_step();

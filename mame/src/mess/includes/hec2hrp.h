@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:JJ Stacino
 /////////////////////////////////////////////////////////////////////
 //////   HECTOR HEADER FILE /////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
@@ -38,9 +40,10 @@
 */
 
 #include "machine/upd765.h"
-#include "machine/wd17xx.h"
+#include "machine/wd_fdc.h"
 #include "imagedev/flopdrv.h"
 #include "imagedev/cassette.h"
+#include "sound/sn76477.h"   /* for sn sound*/
 
 /* Enum status for high memory bank (c000 - ffff)*/
 enum
@@ -73,14 +76,32 @@ class hec2hrp_state : public driver_device
 public:
 	hec2hrp_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-		m_videoram(*this,"videoram"),
-		m_hector_videoram(*this,"hector_videoram") ,
 		m_maincpu(*this, "maincpu"),
 		m_disc2cpu(*this, "disc2cpu"),
-		m_cassette(*this, "cassette") { }
+		m_cassette(*this, "cassette"),
+		m_sn(*this, "sn76477"),
+		m_palette(*this, "palette"),
+		m_videoram(*this,"videoram"),
+		m_hector_videoram(*this,"hector_videoram") ,
+		m_keyboard(*this, "KEY"),
+		m_minidisc_fdc(*this, "wd179x"),
+		m_floppy0(*this, "wd179x:0")
+	{}
 
+	DECLARE_FLOPPY_FORMATS(minidisc_formats);
+
+	required_device<cpu_device> m_maincpu;
+	optional_device<cpu_device> m_disc2cpu;
+	required_device<cassette_image_device> m_cassette;
+	required_device<sn76477_device> m_sn;
+	required_device<palette_device> m_palette;
 	optional_shared_ptr<UINT8> m_videoram;
 	optional_shared_ptr<UINT8> m_hector_videoram;
+	required_ioport_array<9> m_keyboard;
+
+	optional_device<fd1793_t> m_minidisc_fdc;
+	optional_device<floppy_connector> m_floppy0;
+
 	UINT8 m_hector_flag_hr;
 	UINT8 m_hector_flag_80c;
 	UINT8 m_hector_color[4];
@@ -118,8 +139,9 @@ public:
 	int m_hector_flag_result;
 	int m_print;
 	UINT8 m_hector_videoram_hrx[0x04000];
-	DECLARE_READ8_MEMBER(hector_179x_register_r);
-	DECLARE_WRITE8_MEMBER(hector_179x_register_w);
+
+	DECLARE_WRITE8_MEMBER(minidisc_control_w);
+
 	DECLARE_WRITE8_MEMBER(hector_switch_bank_w);
 	DECLARE_WRITE8_MEMBER(hector_keyboard_w);
 	DECLARE_READ8_MEMBER(hector_keyboard_r);
@@ -143,16 +165,12 @@ public:
 	UINT32 screen_update_hec2hrp(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	TIMER_CALLBACK_MEMBER(Callback_CK);
 
-	void disc2_fdc_interrupt(bool state);
-	void disc2_fdc_dma_irq(bool state);
-	required_device<cpu_device> m_maincpu;
-	optional_device<cpu_device> m_disc2cpu;
-	required_device<cassette_image_device> m_cassette;
+	DECLARE_WRITE_LINE_MEMBER( disc2_fdc_interrupt );
+	DECLARE_WRITE_LINE_MEMBER( disc2_fdc_dma_irq );
 	int isHectorWithDisc2();
 	int isHectorWithMiniDisc();
 	int isHectorHR();
 	int isHectoreXtend();
-	void hector_minidisc_init();
 	void Mise_A_Jour_Etat(int Adresse, int Value );
 	void Init_Value_SN76477_Hector();
 	void Update_Sound(address_space &space, UINT8 data);
@@ -176,11 +194,6 @@ public:
 	DECLARE_WRITE8_MEMBER( hector_disc2_io50_port_w);
 
 	void hector_disc2_reset();
-	void hector_disc2_init();
 };
 
-/* Sound function*/
-extern const sn76477_interface hector_sn76477_interface;
-
-extern const wd17xx_interface hector_wd17xx_interface;  // Special for minidisc
-extern const floppy_interface minidisc_floppy_interface;
+MACHINE_CONFIG_EXTERN( hector_audio );

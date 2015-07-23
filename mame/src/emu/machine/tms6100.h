@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Couriersud
 #pragma once
 
 #ifndef __TMS6100_H__
@@ -9,7 +11,7 @@ class tms6100_device : public device_t
 {
 public:
 	tms6100_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
-	tms6100_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock);
+	tms6100_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source);
 
 	DECLARE_WRITE_LINE_MEMBER( tms6100_m0_w );
 	DECLARE_WRITE_LINE_MEMBER( tms6100_m1_w );
@@ -25,6 +27,7 @@ protected:
 	virtual void device_reset();
 private:
 	// internal state
+	required_region_ptr<UINT8> m_rom;
 	UINT32 m_address;
 	UINT32 m_address_latch;
 	UINT8  m_loadptr;
@@ -34,8 +37,7 @@ private:
 	UINT8  m_tms_clock;
 	UINT8  m_data;
 	UINT8  m_state;
-
-	const UINT8 *m_rom;
+	//UINT8  m_variant;
 
 };
 

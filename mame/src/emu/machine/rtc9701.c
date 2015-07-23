@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese, David Haywood
 /***************************************************************************
 
     rtc9701.c
@@ -31,7 +33,7 @@ const device_type rtc9701 = &device_creator<rtc9701_device>;
 //-------------------------------------------------
 
 rtc9701_device::rtc9701_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, rtc9701, "rtc9701", tag, owner, clock),
+	: device_t(mconfig, rtc9701, "RTC-9701", tag, owner, clock, "rtc9701", __FILE__),
 		device_nvram_interface(mconfig, *this),
 		m_latch(0),
 		m_reset_line(CLEAR_LINE),
@@ -103,6 +105,10 @@ void rtc9701_device::device_start()
 	m_rtc.hour = ((systime.local_time.hour / 10)<<4) | ((systime.local_time.hour % 10) & 0xf);
 	m_rtc.min = ((systime.local_time.minute / 10)<<4) | ((systime.local_time.minute % 10) & 0xf);
 	m_rtc.sec = ((systime.local_time.second / 10)<<4) | ((systime.local_time.second % 10) & 0xf);
+
+	rtc_state = RTC9701_CMD_WAIT;
+	cmd_stream_pos = 0;
+	current_cmd = 0;
 }
 
 
@@ -200,11 +206,6 @@ WRITE_LINE_MEMBER( rtc9701_device::write_bit )
 	m_latch = state;
 }
 
-
-READ_LINE_DEVICE_HANDLER( rtc9701_read_bit )
-{
-	return downcast<rtc9701_device *>(device)->read_bit();
-}
 
 READ_LINE_MEMBER( rtc9701_device::read_bit )
 {

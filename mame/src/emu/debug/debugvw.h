@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*********************************************************************
 
     debugvw.h
 
     Debugger view engine.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -58,7 +29,8 @@ enum debug_view_type
 	DVT_LOG,
 	DVT_TIMERS,
 	DVT_ALLOCS,
-	DVT_BREAK_POINTS
+	DVT_BREAK_POINTS,
+	DVT_WATCH_POINTS
 };
 
 
@@ -141,7 +113,7 @@ class debug_view_source
 {
 	DISABLE_COPYING(debug_view_source);
 
-	friend class debug_view_source_list;
+	friend class simple_list<debug_view_source>;
 
 public:
 	// construction/destruction
@@ -149,7 +121,7 @@ public:
 	virtual ~debug_view_source();
 
 	// getters
-	const char *name() const { return m_name; }
+	const char *name() const { return m_name.c_str(); }
 	debug_view_source *next() const { return m_next; }
 	device_t *device() const { return m_device; }
 	bool is_octal() const { return m_is_octal; }
@@ -157,41 +129,9 @@ public:
 private:
 	// internal state
 	debug_view_source *     m_next;                 // link to next item
-	astring                 m_name;                 // name of the source item
+	std::string             m_name;                 // name of the source item
 	device_t *              m_device;               // associated device (if applicable)
 	bool                    m_is_octal;             // is view in octal or hex
-};
-
-
-// a debug_view_source_list contains a list of debug_view_sources
-class debug_view_source_list
-{
-	DISABLE_COPYING(debug_view_source_list);
-
-public:
-	// construction/destruction
-	debug_view_source_list(running_machine &machine);
-	~debug_view_source_list();
-
-	// getters
-	running_machine &machine() const { return m_machine; }
-	const debug_view_source *head() const { return m_head; }
-	int count() const { return m_count; }
-	int index(const debug_view_source &source) const;
-	const debug_view_source *by_index(int index) const;
-
-	// operations
-	void reset();
-	void append(debug_view_source &view_source);
-	const debug_view_source *match_device(device_t *device) const;
-	int match_device_index(device_t *device) const { return index(*match_device(device)); }
-
-private:
-	// internal state
-	running_machine &       m_machine;              // reference to our machine
-	debug_view_source *     m_head;                 // head of the list
-	debug_view_source *     m_tail;                 // end of the tail
-	UINT32                  m_count;                // number of items in the list
 };
 
 
@@ -210,7 +150,7 @@ public:
 	running_machine &machine() const { return m_machine; }
 	debug_view *next() const { return m_next; }
 	debug_view_type type() const { return m_type; }
-	const debug_view_char *viewdata() const { return m_viewdata; }
+	const debug_view_char *viewdata() const { return &m_viewdata[0]; }
 	debug_view_xy total_size() { flush_updates(); return m_total; }
 	debug_view_xy visible_size() { flush_updates(); return m_visible; }
 	debug_view_xy visible_position() { flush_updates(); return m_topleft; }
@@ -218,7 +158,8 @@ public:
 	bool cursor_supported() { flush_updates(); return m_supports_cursor; }
 	bool cursor_visible() { flush_updates(); return m_cursor_visible; }
 	const debug_view_source *source() const { return m_source; }
-	const debug_view_source_list &source_list() const { return m_source_list; }
+	const debug_view_source *first_source() { return m_source_list.first(); }
+	const simple_list<debug_view_source> &source_list() const { return m_source_list; }
 
 	// setters
 	void set_size(int width, int height);
@@ -227,8 +168,11 @@ public:
 	void set_cursor_position(debug_view_xy pos);
 	void set_cursor_visible(bool visible = true);
 	void set_source(const debug_view_source &source);
+
+	// helpers
 	void process_char(int character) { view_char(character); }
 	void process_click(int button, debug_view_xy pos) { view_click(button, pos); }
+	const debug_view_source *source_for_device(device_t *device) const;
 
 protected:
 	// internal updating helpers
@@ -253,7 +197,7 @@ protected:
 	debug_view *            m_next;             // link to the next view
 	debug_view_type         m_type;             // type of view
 	const debug_view_source *m_source;          // currently selected data source
-	debug_view_source_list  m_source_list;      // list of available data sources
+	simple_list<debug_view_source> m_source_list; // list of available data sources
 
 	// OSD data
 	debug_view_osd_update_func m_osdupdate;     // callback for the update
@@ -272,8 +216,7 @@ protected:
 	UINT8                   m_update_level;     // update level; updates when this hits 0
 	bool                    m_update_pending;   // true if there is a pending update
 	bool                    m_osd_update_pending; // true if there is a pending update
-	debug_view_char *       m_viewdata;         // current array of view data
-	int                     m_viewdata_size;    // number of elements of the viewdata array
+	std::vector<debug_view_char> m_viewdata;  // current array of view data
 
 private:
 	running_machine &       m_machine;          // machine associated with this view
@@ -297,6 +240,7 @@ public:
 
 	// update helpers
 	void update_all(debug_view_type type = DVT_NONE);
+	void update_all_except(debug_view_type type = DVT_NONE);
 	void flush_osd_updates();
 
 private:
@@ -322,12 +266,12 @@ public:
 	bool dirty() const { return m_dirty; }
 	UINT64 last_value() const { return m_result; }
 	UINT64 value() { recompute(); return m_result; }
-	const char *string() const { return m_string; }
+	const char *string() const { return m_string.c_str(); }
 	symbol_table *context() const { return m_parsed.symbols(); }
 
 	// setters
 	void mark_dirty() { m_dirty = true; }
-	void set_string(const char *string) { m_string.cpy(string); m_dirty = true; }
+	void set_string(const char *string) { m_string.assign(string); m_dirty = true; }
 	void set_context(symbol_table *context);
 
 private:
@@ -339,7 +283,7 @@ private:
 	bool                m_dirty;                // true if the expression needs to be re-evaluated
 	UINT64              m_result;               // last result from the expression
 	parsed_expression   m_parsed;               // parsed expression data
-	astring             m_string;               // copy of the expression string
+	std::string         m_string;               // copy of the expression string
 };
 
 

@@ -1,5 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #include "machine/namcoio.h"
 #include "sound/dac.h"
+#include "sound/namco.h"
 
 class mappy_state : public driver_device
 {
@@ -34,7 +37,11 @@ public:
 		m_maincpu(*this, "maincpu"),
 		m_subcpu(*this, "sub"),
 		m_subcpu2(*this, "sub2"),
-		m_dac(*this, "dac")  { }
+		m_namco_15xx(*this, "namco"),
+		m_dac(*this, "dac"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette")  { }
 
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_spriteram;
@@ -42,7 +49,11 @@ public:
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_subcpu;
 	optional_device<cpu_device> m_subcpu2;
+	required_device<namco_15xx_device> m_namco_15xx;
 	optional_device<dac_device> m_dac;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 
 	namco56xx_device *m_namco56xx_1;
 	namco56xx_device *m_namco56xx_2;

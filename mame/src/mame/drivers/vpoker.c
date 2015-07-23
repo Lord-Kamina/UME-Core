@@ -1,108 +1,84 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese, Roberto Fresca
 /**************************************************************************************************************
 
-Videotronics Poker (c) 198? Videotronics
+  Videotronics Poker (c) 198? Videotronics
+  Preliminary driver by Angelo Salese & Roberto Fresca.
 
-preliminary driver by Angelo Salese
+  Notes:
+  - Looks like the 2nd generation of Noraut Poker / Draw Poker Hi-Lo HW.
 
-Notes:
-- Looks like the 2nd generation of Noraut Poker / Draw Poker Hi-Lo HW.
-
-TODO:
-- Understand how the 6840PTM hooks up, needed to let it work properly;
-- I/Os;
-- sound;
+  TODO:
+  - Understand how the 6840PTM hooks up, needed to let it work properly;
+  - I/Os;
+  - sound;
 
 ===============================================================================================================
 
-Bought as "old poker game by videotronics early 80's"
+  Bought as "old poker game by videotronics early 80's"
 
-Scratched on the CPU board  SN1069
-Scratched on the CPU board  SN1069
+  Scratched on the CPU board  SN1069
+  Scratched on the CPU board  SN1069
 
-CPU board
-.0  2716    stickered   DRAWPKR2    located top left
-                8-F
-                REV A
+  CPU board
 
-.1  2716    stickered   DRAWPKR2    located next to .0
-                0-7
-                REV A
+  .0  2716    stickered   DRAWPKR2  8-F  REV A    located top left
+  .1  2716    stickered   DRAWPKR2  0-7  REV A    located next to .0
 
-ROM board
-Top of board left to right
-.R0 2716    stickered   RA
-                0-7
+  ROM board
 
-.R1 2716    stickered   RA
-                8-F
+  Top of board left to right
 
-.R2 2716    stickered   BA
-                0-7
+  .R0 2716    stickered   RA  0-7
+  .R1 2716    stickered   RA  8-F
+  .R2 2716    stickered   BA  0-7
+  .R3 2716    stickered   BA  8-F
+  .R4 2716    stickered   GA  0-7
+  .R5 2716    stickered   GA  8-F
 
-.R3 2716    stickered   BA
-                8-F
+  Below top row left to right
 
-.R4 2716    stickered   GA
-                0-7
+  .R6  2716    stickered   RB  0-7
+  .R7  2716    stickered   RB  8-F
+  .R8  2716    stickered   BB  0-7
+  .R9  2716    stickered   BB  8-F
+  .R10 2716    stickered   GB  0-7
+  .R11 2716    stickered   GB  8-F
 
-.R5 2716    stickered   GA
-                8-F
+  ROM data showed cards
 
-
-Below top row left to right
-.R6 2716    stickered   RB
-                0-7
-
-.R7 2716    stickered   RB
-                8-F
-
-.R8 2716    stickered   BB
-                0-7
-
-.R9 2716    stickered   BB
-                8-F
-
-.R10    2716    stickered   GB
-                0-7
-
-.R11    2716    stickered   GB
-                8-F
-
-ROM data showed cards
-
-6809 cpu
-4.000Mhz crystal
-MC6840P
-mm74c920J/mmc6551j-9    x2
+  6809 CPU
+  4.000 Mhz crystal
+  MC6840P
+  mm74c920J/mmc6551j-9    x2
 
 
 **************************************************************************************************************
 
-- Added 5-Aces Poker (Roberto Fresca)
+ - Added 5-Aces Poker (Roberto Fresca)
 
-.1 is closest to the connector
-.7 is closest to the cpu
+  .1 is closest to the connector
+  .7 is closest to the cpu
 
-Etched in copper on top by .1 eprom 6000
+  Etched in copper on top by .1 eprom 6000
 
-.1  2732    handwritten sticker GJOK1
-.2  2732    handwritten sticker GJOK2
-.3  2732    handwritten sticker BJOK1
-.4  2732    handwritten sticker BJOK2
-.5  2732    handwritten sticker RJOK1
-.6  2732    handwritten sticker RJOK2
-.7  2764    handwritten sticker 688C
+  .1  2732    handwritten sticker GJOK1
+  .2  2732    handwritten sticker GJOK2
+  .3  2732    handwritten sticker BJOK1
+  .4  2732    handwritten sticker BJOK2
+  .5  2732    handwritten sticker RJOK1
+  .6  2732    handwritten sticker RJOK2
+  .7  2764    handwritten sticker 688C
 
+  4 MHz crystal
+  6809
+  MC6840P
+  nmc6514-9   x2
+  nm23114     x2
 
-4 Mhz crystal
-6809
-MC6840P
-nmc6514-9   x2
-nm23114     x2
-
-16 pin chip marked  74166F 7745
-            SA2889-0697
-    stamped     ETC
+  16 pin chip marked  74166F 7745
+                      SA2889-0697
+             stamped     ETC
 
 **************************************************************************************************************/
 
@@ -117,7 +93,9 @@ class vpoker_state : public driver_device
 public:
 	vpoker_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	UINT8 *m_videoram;
 	UINT8 m_blit_ram[8];
@@ -125,9 +103,11 @@ public:
 	DECLARE_WRITE8_MEMBER(blitter_w);
 	DECLARE_WRITE_LINE_MEMBER(ptm_irq);
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(vpoker);
 	UINT32 screen_update_vpoker(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -139,7 +119,7 @@ void vpoker_state::video_start()
 UINT32 vpoker_state::screen_update_vpoker(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	UINT8 *videoram = m_videoram;
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 	int count = 0x0000;
 
 	int y,x;
@@ -150,7 +130,7 @@ UINT32 vpoker_state::screen_update_vpoker(screen_device &screen, bitmap_ind16 &b
 		{
 			int tile = videoram[count];
 			//int colour = tile>>12;
-			drawgfx_opaque(bitmap,cliprect,gfx,tile,0,0,0,x*16,y*16);
+			gfx->opaque(bitmap,cliprect,tile,0,0,0,x*16,y*16);
 
 			count++;
 		}
@@ -626,7 +606,7 @@ static GFXDECODE_START( vpoker )
 	GFXDECODE_ENTRY( "gfx1", 0, charlayout,     0, 1 )
 GFXDECODE_END
 
-void vpoker_state::palette_init()
+PALETTE_INIT_MEMBER(vpoker_state, vpoker)
 {
 	int i;
 
@@ -634,9 +614,9 @@ void vpoker_state::palette_init()
 	{
 		rgb_t color;
 
-		color = MAKE_RGB(pal1bit((i & 4) >> 2),pal1bit(i & 1),pal1bit((i & 2) >> 1));
+		color = rgb_t(pal1bit((i & 4) >> 2),pal1bit(i & 1),pal1bit((i & 2) >> 1));
 
-		palette_set_color(machine(), i, color);
+		palette.set_pen_color(i, color);
 	}
 }
 
@@ -644,14 +624,6 @@ WRITE_LINE_MEMBER(vpoker_state::ptm_irq)
 {
 	m_maincpu->set_input_line(M6809_IRQ_LINE, state ? ASSERT_LINE : CLEAR_LINE);
 }
-
-static const ptm6840_interface ptm_intf =
-{
-	XTAL_4MHz,
-	{ 0, 0, 0 },
-	{ DEVCB_NULL, DEVCB_NULL, DEVCB_NULL },
-	DEVCB_DRIVER_LINE_MEMBER(vpoker_state,ptm_irq)
-};
 
 static MACHINE_CONFIG_START( vpoker, vpoker_state )
 
@@ -668,13 +640,17 @@ static MACHINE_CONFIG_START( vpoker, vpoker_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 480-1, 0*8, 240-1)
 //  MCFG_SCREEN_VISIBLE_AREA(0*8, 512-1, 0*8, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(vpoker_state, screen_update_vpoker)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(vpoker)
-	MCFG_PALETTE_LENGTH(8)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", vpoker)
+	MCFG_PALETTE_ADD("palette", 8)
+	MCFG_PALETTE_INIT_OWNER(vpoker_state, vpoker)
 
 	/* 6840 PTM */
-	MCFG_PTM6840_ADD("6840ptm", ptm_intf)
+	MCFG_DEVICE_ADD("6840ptm", PTM6840, 0)
+	MCFG_PTM6840_INTERNAL_CLOCK(XTAL_4MHz)
+	MCFG_PTM6840_EXTERNAL_CLOCKS(0, 0, 0)
+	MCFG_PTM6840_IRQ_CB(WRITELINE(vpoker_state, ptm_irq))
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -725,5 +701,6 @@ ROM_START( 5acespkr )
 ROM_END
 
 
-GAME( 198?, vpoker,   0,     vpoker,  vpoker, driver_device,   0,  ROT0, "Videotronics", "Videotronics Poker", GAME_NOT_WORKING | GAME_NO_SOUND )
-GAME( 198?, 5acespkr, 0,     vpoker,  5acespkr, driver_device, 0,  ROT0, "<unknown>",    "5-Aces Poker",       GAME_NOT_WORKING | GAME_NO_SOUND )
+/*    YEAR  NAME      PARENT  MACHINE  INPUT     STATE          INIT  ROT    COMPANY         FULLNAME             FLAGS... */
+GAME( 198?, vpoker,   0,      vpoker,  vpoker,   driver_device, 0,    ROT0, "Videotronics", "Videotronics Poker", GAME_NOT_WORKING | GAME_NO_SOUND )
+GAME( 198?, 5acespkr, 0,      vpoker,  5acespkr, driver_device, 0,    ROT0, "<unknown>",    "5-Aces Poker",       GAME_NOT_WORKING | GAME_NO_SOUND )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Roberto Fresca
 /********************************************************************************
 
 
@@ -71,7 +73,7 @@
 #include "includes/ampoker2.h"
 
 
-void ampoker2_state::palette_init()
+PALETTE_INIT_MEMBER(ampoker2_state, ampoker2)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 /*    - bits -
@@ -89,7 +91,7 @@ void ampoker2_state::palette_init()
 			2,  resistances_b,  weights_b,  0,  0);
 
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int bit0, bit1, bit2, r, g, b;
 
@@ -108,7 +110,7 @@ void ampoker2_state::palette_init()
 		bit2 = (color_prom[i] >> 7) & 0x01;
 		r = combine_3_weights(weights_r, bit0, bit1, bit2);
 
-		palette_set_color(machine(),i,MAKE_RGB(r,g,b));
+		palette.set_pen_color(i,rgb_t(r,g,b));
 	}
 }
 
@@ -147,18 +149,18 @@ TILE_GET_INFO_MEMBER(ampoker2_state::s2k_get_bg_tile_info)
 
 void ampoker2_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ampoker2_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ampoker2_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
 			8, 8, 64, 32);
 }
 
 VIDEO_START_MEMBER(ampoker2_state,sigma2k)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ampoker2_state::s2k_get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ampoker2_state::s2k_get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
 			8, 8, 64, 32);
 }
 
 UINT32 ampoker2_state::screen_update_ampoker2(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

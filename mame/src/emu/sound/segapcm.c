@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Hiromitsu Shioya, Olivier Galibert
 /*********************************************************/
 /*    SEGA 16ch 8bit PCM                                 */
 /*********************************************************/
@@ -17,11 +19,11 @@ const device_type SEGAPCM = &device_creator<segapcm_device>;
 segapcm_device::segapcm_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
 	: device_t(mconfig, SEGAPCM, "Sega PCM", tag, owner, clock, "segapcm", __FILE__),
 		device_sound_interface(mconfig, *this),
+		m_rom(*this, DEVICE_SELF),
 		m_ram(NULL),
-		m_rom(NULL),
+		m_bank(0),
 		m_bankshift(0),
 		m_bankmask(0),
-		m_rgnmask(0),
 		m_stream(NULL)
 {
 }
@@ -33,24 +35,18 @@ segapcm_device::segapcm_device(const machine_config &mconfig, const char *tag, d
 
 void segapcm_device::device_start()
 {
-	int mask, rom_mask, len;
-	const sega_pcm_interface *intf = (const sega_pcm_interface *)static_config();
+	int mask, rom_mask;
 
-	m_rom = *region();
 	m_ram = auto_alloc_array(machine(), UINT8, 0x800);
 
 	memset(m_ram, 0xff, 0x800);
 
-	m_bankshift = (UINT8)(intf->bank);
-	mask = intf->bank >> 16;
-	if(!mask)
-		mask = BANK_MASK7>>16;
+	m_bankshift = (UINT8) m_bank;
+	mask = m_bank >> 16;
+	if (!mask)
+		mask = BANK_MASK7 >> 16;
 
-	len = region()->bytes();
-	m_rgnmask = len - 1;
-
-	for(rom_mask = 1; rom_mask < len; rom_mask *= 2);
-
+	for(rom_mask = 1; rom_mask < m_rom.length(); rom_mask *= 2);
 	rom_mask--;
 
 	m_bankmask = mask & (rom_mask >> m_bankshift);
@@ -124,11 +120,11 @@ void segapcm_device::sound_stream_update(sound_stream &stream, stream_sample_t *
 				}
 
 				/* fetch the sample */
-				v = rom[(addr >> 8) & m_rgnmask] - 0x80;
+				v = rom[(addr >> 8) & m_rom.mask()] - 0x80;
 
 				/* apply panning and advance */
-				outputs[0][i] += v * regs[2];
-				outputs[1][i] += v * regs[3];
+				outputs[0][i] += v * (regs[2] & 0x7f);
+				outputs[1][i] += v * (regs[3] & 0x7f);
 				addr = (addr + regs[7]) & 0xffffff;
 			}
 

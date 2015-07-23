@@ -1,9 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, Nicola Salmoria
 /*************************************************************************
 
     Volfied
 
 *************************************************************************/
-#include "video/taitoic.h"
+
+#include "video/pc090oj.h"
 
 class volfied_state : public driver_device
 {
@@ -17,7 +20,8 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
-		m_pc090oj(*this, "pc090oj") { }
+		m_pc090oj(*this, "pc090oj"),
+		m_screen(*this, "screen") { }
 
 	/* memory pointers */
 	UINT16 *    m_video_ram;
@@ -38,6 +42,8 @@ public:
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
 	required_device<pc090oj_device> m_pc090oj;
+	required_device<screen_device> m_screen;
+
 	DECLARE_WRITE16_MEMBER(volfied_cchip_ctrl_w);
 	DECLARE_WRITE16_MEMBER(volfied_cchip_bank_w);
 	DECLARE_WRITE16_MEMBER(volfied_cchip_ram_w);

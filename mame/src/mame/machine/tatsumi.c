@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 #include "emu.h"
 #include "includes/tatsumi.h"
 #include "sound/2151intf.h"
@@ -6,17 +8,16 @@
 
 /******************************************************************************/
 
-void tatsumi_reset(running_machine &machine)
+void tatsumi_state::tatsumi_reset()
 {
-	tatsumi_state *state = machine.driver_data<tatsumi_state>();
-	state->m_last_control = 0;
-	state->m_control_word = 0;
-	state->m_apache3_adc = 0;
-	state->m_apache3_rot_idx = 0;
+	m_last_control = 0;
+	m_control_word = 0;
+	m_apache3_adc = 0;
+	m_apache3_rot_idx = 0;
 
-	state->save_item(NAME(state->m_last_control));
-	state->save_item(NAME(state->m_control_word));
-	state->save_item(NAME(state->m_apache3_adc));
+	save_item(NAME(m_last_control));
+	save_item(NAME(m_control_word));
+	save_item(NAME(m_apache3_adc));
 }
 
 /******************************************************************************/
@@ -159,7 +160,7 @@ WRITE16_MEMBER(tatsumi_state::roundup_v30_z80_w)
 	if (ACCESSING_BITS_0_7)
 	{
 		if (m_control_word & 0x20)
-			offset += 0x8000; /* Upper half of Z80 address &space */
+			offset += 0x8000; /* Upper half of Z80 address space */
 
 		targetspace.write_byte(offset, data & 0xff);
 	}
@@ -346,8 +347,6 @@ READ8_MEMBER(tatsumi_state::tatsumi_hack_ym2151_r)
 	return r;
 }
 
-// Todo:  Tatsumi self-test fails if OKI doesn't respond (when sound off).
-// Mame really should emulate the OKI status reads even with Mame sound off.
 READ8_MEMBER(tatsumi_state::tatsumi_hack_oki_r)
 {
 	int r=m_oki->read(space,0);

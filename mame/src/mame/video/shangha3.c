@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
 Custom blitter GA9201 KA01-0249 (120pin IC)
@@ -21,12 +23,12 @@ The chip addresses 0x100000 bytes of memory, containing both the command list,
 tilemap, and spare RAM to be used by the CPU.
 
 The command list starts at a variable point in memory, set by
-shangha3_gfxlist_addr_w(), and always ends at 0x0fffff.
+gfxlist_addr_w(), and always ends at 0x0fffff.
 
 Large sprites refer to a single tilemap starting at 0x000000, the command list
 contains the coordinates of the place in the tilemap to pick data from.
 
-The commands list is processed when shangha3_blitter_go_w() is written to, so
+The commands list is processed when blitter_go_w() is written to, so
 it is not processed automatically every frame.
 
 The commands have a fixed length of 16 words. The format is as follows:
@@ -67,7 +69,7 @@ void shangha3_state::video_start()
 {
 	int i;
 
-	machine().primary_screen->register_screen_bitmap(m_rawbitmap);
+	m_screen->register_screen_bitmap(m_rawbitmap);
 
 	for (i = 0;i < 14;i++)
 		m_drawmode_table[i] = DRAWMODE_SOURCE;
@@ -78,13 +80,16 @@ void shangha3_state::video_start()
 	{
 		/* Prepare the shadow table */
 		for (i = 0;i < 128;i++)
-			machine().shadow_table[i] = i+128;
+			m_palette->shadow_table()[i] = i+128;
 	}
+
+	save_item(NAME(m_gfxlist_addr));
+	save_item(NAME(m_rawbitmap));
 }
 
 
 
-WRITE16_MEMBER(shangha3_state::shangha3_flipscreen_w)
+WRITE16_MEMBER(shangha3_state::flipscreen_w)
 {
 	if (ACCESSING_BITS_0_7)
 	{
@@ -95,13 +100,13 @@ WRITE16_MEMBER(shangha3_state::shangha3_flipscreen_w)
 	}
 }
 
-WRITE16_MEMBER(shangha3_state::shangha3_gfxlist_addr_w)
+WRITE16_MEMBER(shangha3_state::gfxlist_addr_w)
 {
 	COMBINE_DATA(&m_gfxlist_addr);
 }
 
 
-WRITE16_MEMBER(shangha3_state::shangha3_blitter_go_w)
+WRITE16_MEMBER(shangha3_state::blitter_go_w)
 {
 	UINT16 *shangha3_ram = m_ram;
 	bitmap_ind16 &rawbitmap = m_rawbitmap;
@@ -206,7 +211,7 @@ WRITE16_MEMBER(shangha3_state::shangha3_blitter_go_w)
 						if (flipy) dy = sy + sizey-15 - dy;
 						else dy = sy + dy;
 
-						drawgfx_transpen(rawbitmap,myclip,machine().gfx[0],
+						m_gfxdecode->gfx(0)->transpen(rawbitmap,myclip,
 								(tile & 0x0fff) | (code & 0xf000),
 								(tile >> 12) | (color & 0x70),
 								flipx,flipy,
@@ -219,26 +224,26 @@ WRITE16_MEMBER(shangha3_state::shangha3_blitter_go_w)
 				int w;
 
 if (zoomx <= 1 && zoomy <= 1)
-	drawgfxzoom_transtable(rawbitmap,myclip,machine().gfx[0],
+	m_gfxdecode->gfx(0)->zoom_transtable(rawbitmap,myclip,
 			code,
 			color,
 			flipx,flipy,
 			sx,sy,
 			0x1000000,0x1000000,
-			drawmode_table,machine().shadow_table);
+			drawmode_table);
 else
 {
 				w = (sizex+15)/16;
 
 				for (x = 0;x < w;x++)
 				{
-					drawgfxzoom_transtable(rawbitmap,myclip,machine().gfx[0],
+					m_gfxdecode->gfx(0)->zoom_transtable(rawbitmap,myclip,
 							code,
 							color,
 							flipx,flipy,
 							sx + 16*x,sy,
 							(0x200-zoomx)*0x100,(0x200-zoomy)*0x100,
-							drawmode_table,machine().shadow_table);
+							drawmode_table);
 
 					if ((code & 0x000f) == 0x0f)
 						code = (code + 0x100) & 0xfff0;
@@ -254,7 +259,7 @@ else
 }
 
 
-UINT32 shangha3_state::screen_update_shangha3(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 shangha3_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	copybitmap(bitmap, m_rawbitmap, 0, 0, 0, 0, cliprect);
 	return 0;

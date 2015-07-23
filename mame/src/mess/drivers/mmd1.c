@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic, Robbbert
 /***************************************************************************
 
         MMD-1 & MMD-2 driver by Miodrag Milanovic
@@ -408,18 +410,6 @@ READ8_MEMBER( mmd1_state::mmd2_kbd_r )
 	return data;
 }
 
-
-static I8279_INTERFACE( mmd2_intf )
-{
-	DEVCB_NULL,                     // irq
-	DEVCB_DRIVER_MEMBER(mmd1_state, mmd2_scanlines_w),  // scan SL lines
-	DEVCB_DRIVER_MEMBER(mmd1_state, mmd2_digit_w),      // display A&B
-	DEVCB_NULL,                     // BD
-	DEVCB_DRIVER_MEMBER(mmd1_state, mmd2_kbd_r),        // kbd RL lines
-	DEVCB_LINE_VCC,                     // Shift key
-	DEVCB_LINE_VCC
-};
-
 WRITE8_MEMBER( mmd1_state::mmd2_status_callback )
 {
 	// operate the HALT LED
@@ -434,14 +424,6 @@ WRITE_LINE_MEMBER( mmd1_state::mmd2_inte_callback )
 	// operate the INTE LED
 	output_set_value("led_inte", state);
 }
-
-static I8085_CONFIG( mmd2_cpu_config )
-{
-	DEVCB_DRIVER_MEMBER(mmd1_state, mmd2_status_callback),      /* Status changed callback */
-	DEVCB_DRIVER_LINE_MEMBER(mmd1_state, mmd2_inte_callback),           /* INTE changed callback */
-	DEVCB_NULL,                 /* SID changed callback (I8085A only) */
-	DEVCB_NULL                  /* SOD changed callback (I8085A only) */
-};
 
 MACHINE_RESET_MEMBER(mmd1_state,mmd1)
 {
@@ -510,7 +492,8 @@ static MACHINE_CONFIG_START( mmd2, mmd1_state )
 	MCFG_CPU_ADD("maincpu",I8080, 6750000 / 9)
 	MCFG_CPU_PROGRAM_MAP(mmd2_mem)
 	MCFG_CPU_IO_MAP(mmd2_io)
-	MCFG_CPU_CONFIG(mmd2_cpu_config)
+	MCFG_I8085A_STATUS(WRITE8(mmd1_state, mmd2_status_callback))
+	MCFG_I8085A_INTE(WRITELINE(mmd1_state, mmd2_inte_callback))
 
 	MCFG_MACHINE_RESET_OVERRIDE(mmd1_state,mmd2)
 
@@ -518,7 +501,13 @@ static MACHINE_CONFIG_START( mmd2, mmd1_state )
 	MCFG_DEFAULT_LAYOUT(layout_mmd2)
 
 	/* Devices */
-	MCFG_I8279_ADD("i8279", 400000, mmd2_intf) // based on divider
+	MCFG_DEVICE_ADD("i8279", I8279, 400000) // based on divider
+	MCFG_I8279_OUT_SL_CB(WRITE8(mmd1_state, mmd2_scanlines_w))          // scan SL lines
+	MCFG_I8279_OUT_DISP_CB(WRITE8(mmd1_state, mmd2_digit_w))            // display A&B
+	MCFG_I8279_IN_RL_CB(READ8(mmd1_state, mmd2_kbd_r))                  // kbd RL lines
+	MCFG_I8279_IN_SHIFT_CB(VCC)                                     // Shift key
+	MCFG_I8279_IN_CTRL_CB(VCC)
+
 MACHINE_CONFIG_END
 
 /* ROM definition */

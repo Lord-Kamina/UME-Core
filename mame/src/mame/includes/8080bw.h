@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Michael Strutts,Nicola Salmoria,Tormod Tjaberg,Mirko Buffoni,Lee Taylor,Valerio Verrando,Marco Cassili,Zsolt Vasvari,Aaron Giles,Jonathan Gevaryahu,hap,Robbbert
 /***************************************************************************
 
     8080-based black and white hardware
@@ -5,8 +7,9 @@
 ****************************************************************************/
 
 #include "includes/mw8080bw.h"
+#include "sound/sn76477.h"
 #include "sound/speaker.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 /* for games in 8080bw.c */
 #define CABINET_PORT_TAG                  "CAB"
 
@@ -20,7 +23,10 @@ public:
 		m_claybust_gun_on(*this, "claybust_gun"),
 		m_discrete(*this, "discrete"),
 		m_speaker(*this, "speaker"),
-		m_eeprom(*this, "eeprom")
+		m_eeprom(*this, "eeprom"),
+		m_sn(*this, "snsnd"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette")
 	{ }
 
 	/* devices/memory pointers */
@@ -28,8 +34,10 @@ public:
 	optional_device<timer_device> m_claybust_gun_on;
 	optional_device<discrete_device> m_discrete;
 	optional_device<speaker_sound_device> m_speaker;
-	optional_device<eeprom_device> m_eeprom;
-
+	optional_device<eeprom_serial_93cxx_device> m_eeprom;
+	optional_device<sn76477_device> m_sn;
+	required_device<screen_device> m_screen;
+	optional_device<palette_device> m_palette;
 
 	/* misc game specific */
 	UINT8 m_color_map;
@@ -46,6 +54,8 @@ public:
 	UINT8 m_schaser_background_disable;
 	UINT8 m_schaser_background_select;
 	UINT16 m_claybust_gun_pos;
+
+	int m_invmulti_bank;
 
 
 	DECLARE_CUSTOM_INPUT_MEMBER(sflush_80_r);
@@ -92,9 +102,6 @@ public:
 	DECLARE_WRITE8_MEMBER(shuttlei_ff_w);
 	DECLARE_WRITE8_MEMBER(shuttlei_sh_port_1_w);
 	DECLARE_WRITE8_MEMBER(shuttlei_sh_port_2_w);
-	DECLARE_WRITE8_MEMBER(galactic_07_w);
-	DECLARE_WRITE8_MEMBER(galactic_sh_port_1_w);
-	DECLARE_WRITE8_MEMBER(galactic_sh_port_2_w);
 	DECLARE_READ8_MEMBER(claybust_gun_lo_r);
 	DECLARE_READ8_MEMBER(claybust_gun_hi_r);
 	DECLARE_READ8_MEMBER(invmulti_eeprom_r);
@@ -118,6 +125,8 @@ public:
 	DECLARE_MACHINE_START(schaser_sh);
 	DECLARE_MACHINE_RESET(schaser_sh);
 	DECLARE_MACHINE_START(claybust);
+
+	DECLARE_PALETTE_INIT(rollingc);
 
 	UINT32 screen_update_invadpt2(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_cosmo(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
@@ -144,21 +153,18 @@ public:
 	void invadpt2_get_pens( pen_t *pens );
 	void sflush_get_pens( pen_t *pens );
 	void cosmo_get_pens( pen_t *pens );
-	inline void set_pixel( bitmap_rgb32 &bitmap, UINT8 y, UINT8 x, pen_t *pens, UINT8 color );
-	inline void set_8_pixels( bitmap_rgb32 &bitmap, UINT8 y, UINT8 x, UINT8 data, pen_t *pens, UINT8 fore_color, UINT8 back_color );
-	void clear_extra_columns( bitmap_rgb32 &bitmap, pen_t *pens, UINT8 color );
+	inline void set_pixel( bitmap_rgb32 &bitmap, UINT8 y, UINT8 x, const pen_t *pens, UINT8 color );
+	inline void set_8_pixels( bitmap_rgb32 &bitmap, UINT8 y, UINT8 x, UINT8 data, const pen_t *pens, UINT8 fore_color, UINT8 back_color );
+	void clear_extra_columns( bitmap_rgb32 &bitmap, const pen_t *pens, UINT8 color );
+	void invmulti_bankswitch_restore();
 };
 
 
 /*----------- defined in audio/8080bw.c -----------*/
-extern const samples_interface lrescue_samples_interface;
-extern const samples_interface lupin3_samples_interface;
+extern const char *const lrescue_sample_names[];
+extern const char *const lupin3_sample_names[];
 
 DISCRETE_SOUND_EXTERN( ballbomb );
 DISCRETE_SOUND_EXTERN( indianbt );
-DISCRETE_SOUND_EXTERN( galactic );
 DISCRETE_SOUND_EXTERN( polaris );
-
-extern const sn76477_interface lupin3_sn76477_interface;
-extern const sn76477_interface schaser_sn76477_interface;
 DISCRETE_SOUND_EXTERN( schaser );

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Ms.Pac-Man/Galaga - 20 Year Reunion hardware
@@ -49,7 +51,7 @@ void _20pacgal_state::get_pens(pen_t *pens)
 		bit2 = (*color_prom >> 7) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		pens[offs] = MAKE_RGB(r, g, b);
+		pens[offs] = rgb_t(r, g, b);
 
 		color_prom++;
 	}
@@ -68,7 +70,7 @@ void _20pacgal_state::get_pens(pen_t *pens)
 		bits = (offs >> 4) & 0x03;
 		b = map[bits];
 
-		pens[NUM_PENS + offs] = MAKE_RGB(r, g, b);
+		pens[NUM_PENS + offs] = rgb_t(r, g, b);
 	}
 }
 

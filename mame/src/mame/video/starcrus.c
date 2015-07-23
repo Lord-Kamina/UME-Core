@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Frank Palazzolo
 
 /* Ramtek - Star Cruiser */
 
@@ -8,14 +10,14 @@
 /* The collision detection techniques use in this driver
    are well explained in the comments in the sprint2 driver */
 
-WRITE8_MEMBER(starcrus_state::starcrus_s1_x_w){ m_s1_x = data^0xff; }
-WRITE8_MEMBER(starcrus_state::starcrus_s1_y_w){ m_s1_y = data^0xff; }
-WRITE8_MEMBER(starcrus_state::starcrus_s2_x_w){ m_s2_x = data^0xff; }
-WRITE8_MEMBER(starcrus_state::starcrus_s2_y_w){ m_s2_y = data^0xff; }
-WRITE8_MEMBER(starcrus_state::starcrus_p1_x_w){ m_p1_x = data^0xff; }
-WRITE8_MEMBER(starcrus_state::starcrus_p1_y_w){ m_p1_y = data^0xff; }
-WRITE8_MEMBER(starcrus_state::starcrus_p2_x_w){ m_p2_x = data^0xff; }
-WRITE8_MEMBER(starcrus_state::starcrus_p2_y_w){ m_p2_y = data^0xff; }
+WRITE8_MEMBER(starcrus_state::s1_x_w){ m_s1_x = data^0xff; }
+WRITE8_MEMBER(starcrus_state::s1_y_w){ m_s1_y = data^0xff; }
+WRITE8_MEMBER(starcrus_state::s2_x_w){ m_s2_x = data^0xff; }
+WRITE8_MEMBER(starcrus_state::s2_y_w){ m_s2_y = data^0xff; }
+WRITE8_MEMBER(starcrus_state::p1_x_w){ m_p1_x = data^0xff; }
+WRITE8_MEMBER(starcrus_state::p1_y_w){ m_p1_y = data^0xff; }
+WRITE8_MEMBER(starcrus_state::p2_x_w){ m_p2_x = data^0xff; }
+WRITE8_MEMBER(starcrus_state::p2_y_w){ m_p2_y = data^0xff; }
 
 void starcrus_state::video_start()
 {
@@ -24,9 +26,33 @@ void starcrus_state::video_start()
 
 	m_proj1_vid = auto_bitmap_ind16_alloc(machine(), 16, 16);
 	m_proj2_vid = auto_bitmap_ind16_alloc(machine(), 16, 16);
+	
+	save_item(NAME(m_s1_x));
+	save_item(NAME(m_s1_y));
+	save_item(NAME(m_s2_x));
+	save_item(NAME(m_s2_y));
+	save_item(NAME(m_p1_x));
+	save_item(NAME(m_p1_y));
+	save_item(NAME(m_p2_x));
+	save_item(NAME(m_p2_y));
+	save_item(NAME(m_p1_sprite));
+	save_item(NAME(m_p2_sprite));
+	save_item(NAME(m_s1_sprite));
+	save_item(NAME(m_s2_sprite));
+	save_item(NAME(m_engine1_on));
+	save_item(NAME(m_engine2_on));
+	save_item(NAME(m_explode1_on));
+	save_item(NAME(m_explode2_on));
+	save_item(NAME(m_launch1_on));
+	save_item(NAME(m_launch2_on));
+	save_item(NAME(m_collision_reg));
+	save_item(NAME(m_engine_sound_playing));
+	save_item(NAME(m_explode_sound_playing));
+	save_item(NAME(m_launch1_sound_playing));
+	save_item(NAME(m_launch2_sound_playing));
 }
 
-WRITE8_MEMBER(starcrus_state::starcrus_ship_parm_1_w)
+WRITE8_MEMBER(starcrus_state::ship_parm_1_w)
 {
 	m_s1_sprite = data&0x1f;
 	m_engine1_on = ((data&0x20)>>5)^0x01;
@@ -49,7 +75,7 @@ WRITE8_MEMBER(starcrus_state::starcrus_ship_parm_1_w)
 	}
 }
 
-WRITE8_MEMBER(starcrus_state::starcrus_ship_parm_2_w)
+WRITE8_MEMBER(starcrus_state::ship_parm_2_w)
 {
 	m_s2_sprite = data&0x1f;
 	set_led_status(machine(), 2,~data & 0x80);          /* game over lamp */
@@ -75,7 +101,7 @@ WRITE8_MEMBER(starcrus_state::starcrus_ship_parm_2_w)
 
 }
 
-WRITE8_MEMBER(starcrus_state::starcrus_proj_parm_1_w)
+WRITE8_MEMBER(starcrus_state::proj_parm_1_w)
 {
 	m_p1_sprite = data&0x0f;
 	m_launch1_on = ((data&0x20)>>5)^0x01;
@@ -112,7 +138,7 @@ WRITE8_MEMBER(starcrus_state::starcrus_proj_parm_1_w)
 	}
 }
 
-WRITE8_MEMBER(starcrus_state::starcrus_proj_parm_2_w)
+WRITE8_MEMBER(starcrus_state::proj_parm_2_w)
 {
 	m_p2_sprite = data&0x0f;
 	m_launch2_on = ((data&0x20)>>5)^0x01;
@@ -164,18 +190,18 @@ int starcrus_state::collision_check_s1s2()
 	org_y = m_s1_y;
 
 	/* Draw ship 1 */
-	drawgfx_opaque(*m_ship1_vid,
+
+			m_gfxdecode->gfx(8+((m_s1_sprite&0x04)>>2))->opaque(*m_ship1_vid,
 			clip,
-			machine().gfx[8+((m_s1_sprite&0x04)>>2)],
 			(m_s1_sprite&0x03)^0x03,
 			0,
 			(m_s1_sprite&0x08)>>3, (m_s1_sprite&0x10)>>4,
 			m_s1_x-org_x, m_s1_y-org_y);
 
 	/* Draw ship 2 */
-	drawgfx_opaque(*m_ship2_vid,
+
+			m_gfxdecode->gfx(10+((m_s2_sprite&0x04)>>2))->opaque(*m_ship2_vid,
 			clip,
-			machine().gfx[10+((m_s2_sprite&0x04)>>2)],
 			(m_s2_sprite&0x03)^0x03,
 			0,
 			(m_s2_sprite&0x08)>>3, (m_s2_sprite&0x10)>>4,
@@ -215,9 +241,9 @@ int starcrus_state::collision_check_p1p2()
 	if (m_p1_sprite & 0x08)  /* if p1 is a projectile */
 	{
 		/* Draw score/projectile 1 */
-		drawgfx_opaque(*m_proj1_vid,
+
+				m_gfxdecode->gfx((m_p1_sprite&0x0c)>>2)->opaque(*m_proj1_vid,
 				clip,
-				machine().gfx[(m_p1_sprite&0x0c)>>2],
 				(m_p1_sprite&0x03)^0x03,
 				0,
 				0,0,
@@ -227,9 +253,9 @@ int starcrus_state::collision_check_p1p2()
 	if (m_p2_sprite & 0x08)  /* if p2 is a projectile */
 	{
 		/* Draw score/projectile 2 */
-		drawgfx_opaque(*m_proj2_vid,
+
+				m_gfxdecode->gfx(4+((m_p2_sprite&0x0c)>>2))->opaque(*m_proj2_vid,
 				clip,
-				machine().gfx[4+((m_p2_sprite&0x0c)>>2)],
 				(m_p2_sprite&0x03)^0x03,
 				0,
 				0,0,
@@ -269,9 +295,9 @@ int starcrus_state::collision_check_s1p1p2()
 	org_y = m_s1_y;
 
 	/* Draw ship 1 */
-	drawgfx_opaque(*m_ship1_vid,
+
+			m_gfxdecode->gfx(8+((m_s1_sprite&0x04)>>2))->opaque(*m_ship1_vid,
 			clip,
-			machine().gfx[8+((m_s1_sprite&0x04)>>2)],
 			(m_s1_sprite&0x03)^0x03,
 			0,
 			(m_s1_sprite&0x08)>>3, (m_s1_sprite&0x10)>>4,
@@ -280,9 +306,9 @@ int starcrus_state::collision_check_s1p1p2()
 	if (m_p1_sprite & 0x08)  /* if p1 is a projectile */
 	{
 		/* Draw projectile 1 */
-		drawgfx_opaque(*m_proj1_vid,
+
+				m_gfxdecode->gfx((m_p1_sprite&0x0c)>>2)->opaque(*m_proj1_vid,
 				clip,
-				machine().gfx[(m_p1_sprite&0x0c)>>2],
 				(m_p1_sprite&0x03)^0x03,
 				0,
 				0,0,
@@ -292,9 +318,9 @@ int starcrus_state::collision_check_s1p1p2()
 	if (m_p2_sprite & 0x08)  /* if p2 is a projectile */
 	{
 		/* Draw projectile 2 */
-		drawgfx_opaque(*m_proj2_vid,
+
+				m_gfxdecode->gfx(4+((m_p2_sprite&0x0c)>>2))->opaque(*m_proj2_vid,
 				clip,
-				machine().gfx[4+((m_p2_sprite&0x0c)>>2)],
 				(m_p2_sprite&0x03)^0x03,
 				0,
 				0,0,
@@ -340,9 +366,9 @@ int starcrus_state::collision_check_s2p1p2()
 	org_y = m_s2_y;
 
 	/* Draw ship 2 */
-	drawgfx_opaque(*m_ship2_vid,
+
+			m_gfxdecode->gfx(10+((m_s2_sprite&0x04)>>2))->opaque(*m_ship2_vid,
 			clip,
-			machine().gfx[10+((m_s2_sprite&0x04)>>2)],
 			(m_s2_sprite&0x03)^0x03,
 			0,
 			(m_s2_sprite&0x08)>>3, (m_s2_sprite&0x10)>>4,
@@ -351,9 +377,9 @@ int starcrus_state::collision_check_s2p1p2()
 	if (m_p1_sprite & 0x08)  /* if p1 is a projectile */
 	{
 		/* Draw projectile 1 */
-		drawgfx_opaque(*m_proj1_vid,
+
+				m_gfxdecode->gfx((m_p1_sprite&0x0c)>>2)->opaque(*m_proj1_vid,
 				clip,
-				machine().gfx[(m_p1_sprite&0x0c)>>2],
 				(m_p1_sprite&0x03)^0x03,
 				0,
 				0,0,
@@ -363,9 +389,9 @@ int starcrus_state::collision_check_s2p1p2()
 	if (m_p2_sprite & 0x08)  /* if p2 is a projectile */
 	{
 		/* Draw projectile 2 */
-		drawgfx_opaque(*m_proj2_vid,
+
+				m_gfxdecode->gfx(4+((m_p2_sprite&0x0c)>>2))->opaque(*m_proj2_vid,
 				clip,
-				machine().gfx[4+((m_p2_sprite&0x0c)>>2)],
 				(m_p2_sprite&0x03)^0x03,
 				0,
 				0,0,
@@ -388,14 +414,14 @@ int starcrus_state::collision_check_s2p1p2()
 	return 0;
 }
 
-UINT32 starcrus_state::screen_update_starcrus(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 starcrus_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	bitmap.fill(0, cliprect);
 
 	/* Draw ship 1 */
-	drawgfx_transpen(bitmap,
+
+			m_gfxdecode->gfx(8+((m_s1_sprite&0x04)>>2))->transpen(bitmap,
 			cliprect,
-			machine().gfx[8+((m_s1_sprite&0x04)>>2)],
 			(m_s1_sprite&0x03)^0x03,
 			0,
 			(m_s1_sprite&0x08)>>3, (m_s1_sprite&0x10)>>4,
@@ -403,9 +429,9 @@ UINT32 starcrus_state::screen_update_starcrus(screen_device &screen, bitmap_ind1
 			0);
 
 	/* Draw ship 2 */
-	drawgfx_transpen(bitmap,
+
+			m_gfxdecode->gfx(10+((m_s2_sprite&0x04)>>2))->transpen(bitmap,
 			cliprect,
-			machine().gfx[10+((m_s2_sprite&0x04)>>2)],
 			(m_s2_sprite&0x03)^0x03,
 			0,
 			(m_s2_sprite&0x08)>>3, (m_s2_sprite&0x10)>>4,
@@ -413,9 +439,9 @@ UINT32 starcrus_state::screen_update_starcrus(screen_device &screen, bitmap_ind1
 			0);
 
 	/* Draw score/projectile 1 */
-	drawgfx_transpen(bitmap,
+
+			m_gfxdecode->gfx((m_p1_sprite&0x0c)>>2)->transpen(bitmap,
 			cliprect,
-			machine().gfx[(m_p1_sprite&0x0c)>>2],
 			(m_p1_sprite&0x03)^0x03,
 			0,
 			0,0,
@@ -423,9 +449,9 @@ UINT32 starcrus_state::screen_update_starcrus(screen_device &screen, bitmap_ind1
 			0);
 
 	/* Draw score/projectile 2 */
-	drawgfx_transpen(bitmap,
+
+			m_gfxdecode->gfx(4+((m_p2_sprite&0x0c)>>2))->transpen(bitmap,
 			cliprect,
-			machine().gfx[4+((m_p2_sprite&0x0c)>>2)],
 			(m_p2_sprite&0x03)^0x03,
 			0,
 			0,0,
@@ -463,7 +489,7 @@ UINT32 starcrus_state::screen_update_starcrus(screen_device &screen, bitmap_ind1
 	return 0;
 }
 
-READ8_MEMBER(starcrus_state::starcrus_coll_det_r)
+READ8_MEMBER(starcrus_state::coll_det_r)
 {
 	return m_collision_reg ^ 0xff;
 }

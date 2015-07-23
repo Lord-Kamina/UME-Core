@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /*********************************************************************
 
     midiin.c
@@ -8,6 +10,7 @@
 
 #include "emu.h"
 #include "midiin.h"
+#include "osdepend.h"
 
 /***************************************************************************
     IMPLEMENTATION
@@ -20,9 +23,10 @@ const device_type MIDIIN = &device_creator<midiin_device>;
 -------------------------------------------------*/
 
 midiin_device::midiin_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MIDIIN, "MIDI In image device", tag, owner, clock),
+	: device_t(mconfig, MIDIIN, "MIDI In image device", tag, owner, clock, "midiin", __FILE__),
 		device_image_interface(mconfig, *this),
-			device_serial_interface(mconfig, *this)
+			device_serial_interface(mconfig, *this),
+			m_input_cb(*this)
 {
 }
 
@@ -32,7 +36,7 @@ midiin_device::midiin_device(const machine_config &mconfig, const char *tag, dev
 
 void midiin_device::device_start()
 {
-	m_input_func.resolve(m_input_callback, *this);
+	m_input_cb.resolve_safe();
 	m_timer = timer_alloc(0);
 	m_midi = NULL;
 	m_timer->enable(false);
@@ -44,9 +48,9 @@ void midiin_device::device_reset()
 	m_xmit_read = m_xmit_write = 0;
 
 	// we don't Rx, we Tx at 31250 8-N-1
+	set_data_frame(1, 8, PARITY_NONE, STOP_BITS_1);
 	set_rcv_rate(0);
 	set_tra_rate(31250);
-	set_data_frame(8, 1, SERIAL_PARITY_NONE);
 }
 
 /*-------------------------------------------------
@@ -55,15 +59,6 @@ void midiin_device::device_reset()
 
 void midiin_device::device_config_complete(void)
 {
-	const midiin_config *intf = reinterpret_cast<const midiin_config *>(static_config());
-	if(intf != NULL)
-	{
-		*static_cast<midiin_config *>(this) = *intf;
-	}
-	else
-	{
-		memset(&m_input_callback, 0, sizeof(m_input_callback));
-	}
 	update_names();
 }
 
@@ -73,6 +68,11 @@ void midiin_device::device_config_complete(void)
 
 void midiin_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
 {
+	if (id) {
+		device_serial_interface::device_timer(timer, id, param, ptr);
+		return;
+	}
+
 	UINT8 buf[8192*4];
 	int bytesRead;
 
@@ -80,9 +80,9 @@ void midiin_device::device_timer(emu_timer &timer, device_timer_id id, int param
 		return;
 	}
 
-	while (osd_poll_midi_channel(m_midi))
+	while (m_midi->poll())
 	{
-		bytesRead = osd_read_midi_channel(m_midi, buf);
+		bytesRead = m_midi->read(buf);
 
 		if (bytesRead > 0)
 		{
@@ -100,10 +100,12 @@ void midiin_device::device_timer(emu_timer &timer, device_timer_id id, int param
 
 bool midiin_device::call_load(void)
 {
-	m_midi = osd_open_midi_input(filename());
+	m_midi = machine().osd().create_midi_device();
 
-	if (m_midi == NULL)
+	if (!m_midi->open_input(filename()))
 	{
+		global_free(m_midi);
+		m_midi = NULL;
 		return IMAGE_INIT_FAIL;
 	}
 
@@ -120,7 +122,8 @@ void midiin_device::call_unload(void)
 {
 	if (m_midi)
 	{
-		osd_close_midi_channel(m_midi);
+		m_midi->close();
+		global_free(m_midi);
 	}
 		m_timer->enable(false);
 		m_midi = NULL;
@@ -147,7 +150,7 @@ void midiin_device::tra_complete()
 void midiin_device::tra_callback()
 {
 	int bit = transmit_register_get_data_bit();
-	m_input_func(bit);
+	m_input_cb(bit);
 }
 
 void midiin_device::xmit_char(UINT8 data)
@@ -170,8 +173,4 @@ void midiin_device::xmit_char(UINT8 data)
 			m_xmit_write = 0;
 		}
 	}
-}
-
-void midiin_device::input_callback(UINT8 state)
-{
 }

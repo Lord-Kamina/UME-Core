@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /*
  Super Othello (c)1986 Fujiwara/Success
 
@@ -72,6 +74,7 @@ public:
 	DECLARE_READ8_MEMBER(subcpu_status_r);
 	DECLARE_WRITE8_MEMBER(msm_cfg_w);
 
+	virtual void machine_start();
 	virtual void machine_reset();
 	TIMER_CALLBACK_MEMBER(subcpu_suspend);
 	TIMER_CALLBACK_MEMBER(subcpu_resume);
@@ -79,6 +82,7 @@ public:
 	DECLARE_WRITE_LINE_MEMBER(irqhandler);
 	DECLARE_WRITE_LINE_MEMBER(adpcm_int);
 	DECLARE_WRITE_LINE_MEMBER(sothello_vdp_interrupt);
+	void unlock_shared_ram();
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_soundcpu;
 	required_device<cpu_device> m_subcpu;
@@ -97,9 +101,13 @@ public:
 
 /* main Z80 */
 
+void sothello_state::machine_start()
+{
+	membank("bank1")->configure_entries(0, 4, memregion("maincpu")->base() + 0x8000, 0x4000);
+}
+
 WRITE8_MEMBER(sothello_state::bank_w)
 {
-	UINT8 *RAM = memregion("maincpu")->base();
 	int bank=0;
 	switch(data^0xff)
 	{
@@ -108,7 +116,7 @@ WRITE8_MEMBER(sothello_state::bank_w)
 		case 4: bank=2; break;
 		case 8: bank=3; break;
 	}
-	membank("bank1")->set_base(&RAM[bank*0x4000+0x10000]);
+	membank("bank1")->set_entry(bank);
 }
 
 TIMER_CALLBACK_MEMBER(sothello_state::subcpu_suspend)
@@ -222,27 +230,26 @@ ADDRESS_MAP_END
 
 /* sub 6809 */
 
-static void unlock_shared_ram(address_space &space)
+void sothello_state::unlock_shared_ram()
 {
-	sothello_state *state = space.machine().driver_data<sothello_state>();
-	if(!state->m_subcpu->suspended(SUSPEND_REASON_HALT))
+	if(!m_subcpu->suspended(SUSPEND_REASON_HALT))
 	{
-		state->m_subcpu_status|=1;
+		m_subcpu_status|=1;
 	}
 	else
 	{
-		logerror("Sub cpu active! @%x\n",space.device().safe_pc());
+		//logerror("Sub cpu active! @%x\n",device().safe_pc());
 	}
 }
 
 WRITE8_MEMBER(sothello_state::subcpu_status_w)
 {
-	unlock_shared_ram(space);
+	unlock_shared_ram();
 }
 
 READ8_MEMBER(sothello_state::subcpu_status_r)
 {
-	unlock_shared_ram(space);
+	unlock_shared_ram();
 	return 0;
 }
 
@@ -340,26 +347,9 @@ WRITE_LINE_MEMBER(sothello_state::adpcm_int)
 	m_soundcpu->set_input_line(0, ASSERT_LINE );
 }
 
-
-static const msm5205_interface msm_interface =
-{
-	DEVCB_DRIVER_LINE_MEMBER(sothello_state,adpcm_int),      /* interrupt function */
-	MSM5205_S48_4B  /* changed on the fly */
-};
-
 void sothello_state::machine_reset()
 {
 }
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_INPUT_PORT("DSWA"),
-	DEVCB_INPUT_PORT("DSWB"),
-	DEVCB_NULL,
-	DEVCB_NULL,
-};
 
 static MACHINE_CONFIG_START( sothello, sothello_state )
 
@@ -388,15 +378,14 @@ static MACHINE_CONFIG_START( sothello, sothello_state )
 	MCFG_SCREEN_UPDATE_DEVICE("v9938", v9938_device, screen_update)
 	MCFG_SCREEN_SIZE(512 + 32, (212 + 28) * 2)
 	MCFG_SCREEN_VISIBLE_AREA(0, 512 + 32 - 1, 0, (212 + 28) * 2 - 1)
-
-	MCFG_PALETTE_LENGTH(512)
-	MCFG_PALETTE_INIT( v9938 )
+	MCFG_SCREEN_PALETTE("v9938:palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("ymsnd", YM2203, YM_CLOCK)
 	MCFG_YM2203_IRQ_HANDLER(WRITELINE(sothello_state, irqhandler))
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(IOPORT("DSWA"))
+	MCFG_AY8910_PORT_B_READ_CB(IOPORT("DSWB"))
 	MCFG_SOUND_ROUTE(0, "mono", 0.25)
 	MCFG_SOUND_ROUTE(1, "mono", 0.25)
 	MCFG_SOUND_ROUTE(2, "mono", 0.25)
@@ -405,7 +394,8 @@ static MACHINE_CONFIG_START( sothello, sothello_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
 
 	MCFG_SOUND_ADD("msm",MSM5205, MSM_CLOCK)
-	MCFG_SOUND_CONFIG(msm_interface)
+	MCFG_MSM5205_VCLK_CB(WRITELINE(sothello_state, adpcm_int))      /* interrupt function */
+	MCFG_MSM5205_PRESCALER_SELECTOR(MSM5205_S48_4B)  /* changed on the fly */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -417,9 +407,9 @@ MACHINE_CONFIG_END
 
 ROM_START( sothello )
 	ROM_REGION( 0x20000, "maincpu", 0 )
-	ROM_LOAD( "3.7c",   0x0000, 0x8000, CRC(47f97bd4) SHA1(52c9638f098fdcf66903fad7dafe3ab171758572) )
-	ROM_LOAD( "4.8c",   0x10000, 0x8000, CRC(a98414e9) SHA1(6d14e1f9c79b95101e0aa101034f398af09d7f32) )
-	ROM_LOAD( "5.9c",   0x18000, 0x8000, CRC(e5b5d61e) SHA1(2e4b3d85f41d0796a4d61eae40dd824769e1db86) )
+	ROM_LOAD( "3.7c",   0x00000, 0x8000, CRC(47f97bd4) SHA1(52c9638f098fdcf66903fad7dafe3ab171758572) )
+	ROM_LOAD( "4.8c",   0x08000, 0x8000, CRC(a98414e9) SHA1(6d14e1f9c79b95101e0aa101034f398af09d7f32) )
+	ROM_LOAD( "5.9c",   0x10000, 0x8000, CRC(e5b5d61e) SHA1(2e4b3d85f41d0796a4d61eae40dd824769e1db86) )
 
 	ROM_REGION( 0x10000, "soundcpu", 0 )
 	ROM_LOAD( "1.7a",   0x0000, 0x8000, CRC(6951536a) SHA1(64d07a692d6a167334c825dc173630b02584fdf6) )

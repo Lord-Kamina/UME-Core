@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /*****************************************************************************
  *
  * includes/dgn_beta.h
@@ -8,7 +10,7 @@
 #define DGN_BETA_H_
 
 #include "video/mc6845.h"
-#include "machine/wd17xx.h"
+#include "machine/wd_fdc.h"
 #include "machine/6821pia.h"
 #include "machine/ram.h"
 
@@ -56,12 +58,6 @@
 #define KOutDat             KInClk      /* Also used for data into output shifter */
 #define KInDat              0x20        /* Keyboard data in from keyboard (serial stream) */
 
-/***** WD2797 pins *****/
-
-#define DSMask              0x03        /* PA0 & PA1 are binary encoded drive */
-#define ENPCtrl             0x20        /* PA5 on PIA */
-#define DDenCtrl            0x40        /* PA6 on PIA */
-
 /***** Video Modes *****/
 
 enum BETA_VID_MODES
@@ -90,7 +86,15 @@ public:
 			m_mc6845(*this, "crtc"),
 		m_videoram(*this, "videoram"),
 		m_maincpu(*this, "maincpu"),
-		m_ram(*this, RAM_TAG) { }
+		m_ram(*this, RAM_TAG),
+		m_fdc(*this, FDC_TAG),
+		m_floppy0(*this, FDC_TAG ":0"),
+		m_floppy1(*this, FDC_TAG ":1"),
+		m_floppy2(*this, FDC_TAG ":2"),
+		m_floppy3(*this, FDC_TAG ":3"),
+		m_palette(*this, "palette") { }
+
+	DECLARE_FLOPPY_FORMATS(floppy_formats);
 
 	required_device<mc6845_device> m_mc6845;
 	required_shared_ptr<UINT8> m_videoram;
@@ -147,7 +151,7 @@ public:
 	int m_DrawInterlace;
 	virtual void machine_start();
 	virtual void machine_reset();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(dgn);
 	DECLARE_WRITE8_MEMBER(dgnbeta_ram_b0_w);
 	DECLARE_WRITE8_MEMBER(dgnbeta_ram_b1_w);
 	DECLARE_WRITE8_MEMBER(dgnbeta_ram_b2_w);
@@ -169,7 +173,7 @@ public:
 	DECLARE_WRITE8_MEMBER(d_pia0_pa_w);
 	DECLARE_READ8_MEMBER(d_pia0_pb_r);
 	DECLARE_WRITE8_MEMBER(d_pia0_pb_w);
-	DECLARE_WRITE8_MEMBER(d_pia0_cb2_w);
+	DECLARE_WRITE_LINE_MEMBER(d_pia0_cb2_w);
 	DECLARE_WRITE_LINE_MEMBER(d_pia0_irq_a);
 	DECLARE_WRITE_LINE_MEMBER(d_pia0_irq_b);
 	DECLARE_READ8_MEMBER(d_pia1_pa_r);
@@ -192,6 +196,7 @@ public:
 	// Page IO at FE00
 	DECLARE_READ8_MEMBER(dgn_beta_page_r);
 	DECLARE_WRITE8_MEMBER(dgn_beta_page_w);
+	MC6845_UPDATE_ROW(crtc_update_row);
 
 	/*  WD2797 FDC */
 	DECLARE_READ8_MEMBER(dgnbeta_wd2797_r);
@@ -210,17 +215,12 @@ public:
 	void dgn_beta_frame_interrupt (int data);
 	void dgn_beta_line_interrupt (int data);
 	required_device<ram_device> m_ram;
+	required_device<wd2797_t> m_fdc;
+	required_device<floppy_connector> m_floppy0;
+	required_device<floppy_connector> m_floppy1;
+	required_device<floppy_connector> m_floppy2;
+	required_device<floppy_connector> m_floppy3;
+	required_device<palette_device> m_palette;
 };
-
-
-/*----------- defined in machine/dgn_beta.c -----------*/
-
-extern const wd17xx_interface dgnbeta_wd17xx_interface;
-extern const pia6821_interface dgnbeta_pia_intf[];
-
-
-/*----------- defined in video/dgn_beta.c -----------*/
-
-extern const mc6845_interface dgnbeta_crtc6845_interface;
 
 #endif /* DGN_BETA_H_ */

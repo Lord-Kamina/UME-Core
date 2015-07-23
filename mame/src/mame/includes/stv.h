@@ -1,6 +1,18 @@
+// license:LGPL-2.1+
+// copyright-holders:David Haywood, Angelo Salese, Olivier Galibert, Mariusz Wojcieszek, R. Belmont
 /*----------- defined in drivers/stv.c -----------*/
 #include "cdrom.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
+#include "cpu/m68000/m68000.h"
+#include "cpu/adsp2100/adsp2100.h"
+#include "cpu/scudsp/scudsp.h"
+#include "cpu/sh2/sh2.h"
+
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
+
+#include "machine/315-5881_crypt.h"
+#include "machine/315-5838_317-0229_comp.h"
 
 #define MAX_FILTERS (24)
 #define MAX_BLOCKS  (200)
@@ -11,6 +23,7 @@ class saturn_state : public driver_device
 public:
 	saturn_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+			m_rom(*this, "share6"),
 			m_workram_l(*this, "workram_l"),
 			m_workram_h(*this, "workram_h"),
 			m_sound_ram(*this, "sound_ram"),
@@ -18,17 +31,25 @@ public:
 			m_maincpu(*this, "maincpu"),
 			m_slave(*this, "slave"),
 			m_audiocpu(*this, "audiocpu"),
-			m_eeprom(*this, "eeprom")
+			m_scudsp(*this, "scudsp"),
+			m_eeprom(*this, "eeprom"),
+			m_cart1(*this, "stv_slot1"),
+			m_cart2(*this, "stv_slot2"),
+			m_cart3(*this, "stv_slot3"),
+			m_cart4(*this, "stv_slot4"),
+			m_gfxdecode(*this, "gfxdecode"),
+			m_palette(*this, "palette")
 	{
 	}
 
+	required_shared_ptr<UINT32> m_rom;
 	required_shared_ptr<UINT32> m_workram_l;
 	required_shared_ptr<UINT32> m_workram_h;
 	required_shared_ptr<UINT16> m_sound_ram;
 	optional_ioport m_fake_comms;
 
+	memory_region *m_cart_reg[4];
 	UINT8     *m_backupram;
-	UINT8     *m_cart_backupram;
 	UINT32    *m_scu_regs;
 	UINT16    *m_scsp_regs;
 	UINT16    *m_vdp2_regs;
@@ -124,6 +145,8 @@ public:
 	struct {
 		UINT8 status;
 		UINT8 data;
+		UINT8 prev_data;
+		UINT16 repeat_count;
 	}m_keyb;
 
 	/* Saturn specific*/
@@ -139,10 +162,19 @@ public:
 	UINT8     m_system_output;
 	UINT16    m_serial_tx;
 
-	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_slave;
-	required_device<cpu_device> m_audiocpu;
-	optional_device<eeprom_device> m_eeprom;
+	required_device<sh2_device> m_maincpu;
+	required_device<sh2_device> m_slave;
+	required_device<m68000_base_device> m_audiocpu;
+	required_device<scudsp_cpu_device> m_scudsp;
+	optional_device<eeprom_serial_93cxx_device> m_eeprom;
+	optional_device<generic_slot_device> m_cart1;
+	optional_device<generic_slot_device> m_cart2;
+	optional_device<generic_slot_device> m_cart3;
+	optional_device<generic_slot_device> m_cart4;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
+
 
 	bitmap_rgb32 m_tmpbitmap;
 	DECLARE_VIDEO_START(stv_vdp2);
@@ -172,7 +204,7 @@ public:
 	DECLARE_WRITE8_MEMBER(saturn_backupram_w);
 	TIMER_CALLBACK_MEMBER(stv_rtc_increment);
 	DECLARE_WRITE_LINE_MEMBER(scsp_to_main_irq);
-	DECLARE_WRITE_LINE_MEMBER(scsp_irq);
+	DECLARE_WRITE8_MEMBER(scsp_irq);
 	int m_scsp_last_line;
 
 	UINT8 smpc_direct_mode(UINT8 pad_n);
@@ -309,7 +341,7 @@ public:
 	int get_ystep_count( void );
 
 	void refresh_palette_data( void );
-	int stv_vdp2_window_process(int x,int y);
+	inline int stv_vdp2_window_process(int x,int y);
 	void stv_vdp2_get_window0_coordinates(int *s_x, int *e_x, int *s_y, int *e_y);
 	void stv_vdp2_get_window1_coordinates(int *s_x, int *e_x, int *s_y, int *e_y);
 	int get_window_pixel(int s_x,int e_x,int s_y,int e_y,int x, int y,UINT8 win_num);
@@ -345,7 +377,7 @@ public:
 	void stv_vdp2_draw_mosaic(bitmap_rgb32 &bitmap, const rectangle &cliprect, UINT8 is_roz);
 	void stv_vdp2_fade_effects( void );
 	void stv_vdp2_compute_color_offset( int *r, int *g, int *b, int cor );
-	void stv_vdp2_compute_color_offset_UINT32(UINT32 *rgb, int cor);
+	void stv_vdp2_compute_color_offset_UINT32(rgb_t *rgb, int cor);
 	void stv_vdp2_check_fade_control_for_layer( void );
 
 	void stv_vdp2_draw_line(bitmap_rgb32 &bitmap, const rectangle &cliprect);
@@ -356,6 +388,7 @@ public:
 	void stv_vdp2_draw_NBG3(bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	void stv_vdp2_draw_RBG0(bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	void draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprect, UINT8 pri);
+	int true_vcount[263][4];
 
 	void stv_vdp2_state_save_postload( void );
 	void stv_vdp2_exit ( void );
@@ -552,6 +585,7 @@ public:
 	void stvcd_set_tray_close(void);
 
 	int get_track_index(UINT32 fad);
+	int sega_cdrom_get_adr_control(cdrom_file *file, int track);
 	void cr_standard_return(UINT16 cur_status);
 	void cd_free_block(blockT *blktofree);
 	void cd_defragblocks(partitionT *part);
@@ -624,19 +658,54 @@ public:
 	int get_timing_command( void );
 
 	direntryT curroot;       // root entry of current filesystem
-	direntryT *curdir;       // current directory
+	std::vector<direntryT> curdir;       // current directory
 	int numfiles;            // # of entries in current directory
 	int firstfile;           // first non-directory file
 
-	static void m68k_reset_callback(device_t *device);
+	DECLARE_WRITE_LINE_MEMBER(m68k_reset_callback);
 	int DectoBCD(int num);
+
+	DECLARE_WRITE_LINE_MEMBER(scudsp_end_w);
+	DECLARE_READ16_MEMBER(scudsp_dma_r);
+	DECLARE_WRITE16_MEMBER(scudsp_dma_w);
+
+	// FROM smpc.c
+	void stv_select_game(int gameno);
+	void smpc_master_on();
+	TIMER_CALLBACK_MEMBER( smpc_slave_enable );
+	TIMER_CALLBACK_MEMBER( smpc_sound_enable );
+	TIMER_CALLBACK_MEMBER( smpc_cd_enable );
+	void smpc_system_reset();
+	TIMER_CALLBACK_MEMBER( smpc_change_clock );
+	TIMER_CALLBACK_MEMBER( stv_intback_peripheral );
+	TIMER_CALLBACK_MEMBER( stv_smpc_intback );
+	void smpc_digital_pad(UINT8 pad_num, UINT8 offset);
+	void smpc_analog_pad(UINT8 pad_num, UINT8 offset, UINT8 id);
+	void smpc_keyboard(UINT8 pad_num, UINT8 offset);
+	void smpc_mouse(UINT8 pad_num, UINT8 offset, UINT8 id);
+	void smpc_md_pad(UINT8 pad_num, UINT8 offset, UINT8 id);
+	void smpc_unconnected(UINT8 pad_num, UINT8 offset);
+	TIMER_CALLBACK_MEMBER( intback_peripheral );
+	TIMER_CALLBACK_MEMBER( saturn_smpc_intback );
+	void smpc_rtc_write();
+	void smpc_memory_setting();
+	void smpc_nmi_req();
+	TIMER_CALLBACK_MEMBER( smpc_nmi_set );
+	void smpc_comreg_exec(address_space &space, UINT8 data, UINT8 is_stv);
+	DECLARE_READ8_MEMBER( stv_SMPC_r );
+	DECLARE_WRITE8_MEMBER( stv_SMPC_w );
+
 };
 
 class stv_state : public saturn_state
 {
 public:
 	stv_state(const machine_config &mconfig, device_type type, const char *tag)
-		: saturn_state(mconfig, type, tag)
+		: saturn_state(mconfig, type, tag),
+		m_adsp(*this, "adsp"),
+		m_adsp_pram(*this, "adsp_pram"),
+		m_cryptdevice(*this, "315_5881"),
+		m_5838crypt(*this, "315_5838")
 	{
 	}
 
@@ -703,13 +772,55 @@ public:
 	DECLARE_READ32_MEMBER(magzun_hef_hack_r);
 	DECLARE_READ32_MEMBER(magzun_rx_hack_r);
 
-	DECLARE_DEVICE_IMAGE_LOAD_MEMBER( stv_cart );
+	int load_cart(device_image_interface &image, generic_slot_device *slot);
+	DECLARE_DEVICE_IMAGE_LOAD_MEMBER( stv_cart1 ) { return load_cart(image, m_cart1); }
+	DECLARE_DEVICE_IMAGE_LOAD_MEMBER( stv_cart2 ) { return load_cart(image, m_cart2); }
+	DECLARE_DEVICE_IMAGE_LOAD_MEMBER( stv_cart3 ) { return load_cart(image, m_cart3); }
+	DECLARE_DEVICE_IMAGE_LOAD_MEMBER( stv_cart4 ) { return load_cart(image, m_cart4); }
 
 	void install_stvbios_speedups( void );
 
 	DECLARE_MACHINE_START(stv);
 	DECLARE_MACHINE_RESET(stv);
+
+	/* Batman Forever specifics */
+	optional_device<adsp2181_device>    m_adsp;
+	optional_shared_ptr<UINT32> m_adsp_pram;
+
+	struct
+	{
+		UINT16 bdma_internal_addr;
+		UINT16 bdma_external_addr;
+		UINT16 bdma_control;
+		UINT16 bdma_word_count;
+	} m_adsp_regs;
+
+	DECLARE_MACHINE_RESET(batmanfr);
+	DECLARE_READ16_MEMBER( adsp_control_r );
+	DECLARE_WRITE16_MEMBER( adsp_control_w );
+	DECLARE_WRITE32_MEMBER(batmanfr_sound_comms_w);
+
+	// protection specific variables and functions (see machine/stvprot.c)
+	UINT32 m_abus_protenable;
+	UINT32 m_abus_protkey;
+
+	UINT32 m_a_bus[4];
+
+	DECLARE_READ32_MEMBER( common_prot_r );
+	DECLARE_WRITE32_MEMBER( common_prot_w );
+
+	void install_common_protection();
+	void stv_register_protection_savestates();
+
+
+
+	optional_device<sega_315_5881_crypt_device> m_cryptdevice;
+	optional_device<sega_315_5838_comp_device> m_5838crypt;
+	UINT16 crypt_read_callback(UINT32 addr);
+	UINT16 crypt_read_callback_ch1(UINT32 addr);
+	UINT16 crypt_read_callback_ch2(UINT32 addr);
 };
+
 
 #define MASTER_CLOCK_352 57272720
 #define MASTER_CLOCK_320 53693174
@@ -737,5 +848,4 @@ public:
 #define IRQ_VDP1_END   1 << 13
 #define IRQ_ABUS       1 << 15
 
-extern void scsp_irq(device_t *device, int irq);
 GFXDECODE_EXTERN( stv );

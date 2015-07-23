@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood,Bryan McPhail
 
 #include "video/decospr.h"
 #include "sound/okim6295.h"
@@ -15,7 +17,9 @@ public:
 		m_sprgen(*this, "spritegen"),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
-		m_oki(*this, "oki")
+		m_oki(*this, "oki"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")
 	{ }
 
 	/* memory pointers */
@@ -38,13 +42,15 @@ public:
 	tilemap_t   *m_pf2_tilemap;
 	tilemap_t   *m_pf2_alt_tilemap;
 	UINT16      m_control_0[8];
-	int         m_flipscreen;
 	UINT16      m_tilebank;
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
 	optional_device<cpu_device> m_audiocpu;
 	required_device<okim6295_device> m_oki;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	UINT8 m_semicom_prot_offset;
 	UINT16 m_protbase;
 	DECLARE_WRITE16_MEMBER(tumblepb_oki_w);
@@ -82,6 +88,7 @@ public:
 	DECLARE_DRIVER_INIT(tumbleb2);
 	DECLARE_DRIVER_INIT(chokchok);
 	DECLARE_DRIVER_INIT(fncywld);
+	DECLARE_DRIVER_INIT(carket);
 	TILEMAP_MAPPER_MEMBER(tumblep_scan);
 	TILE_GET_INFO_MEMBER(get_bg1_tile_info);
 	TILE_GET_INFO_MEMBER(get_bg2_tile_info);
@@ -116,7 +123,7 @@ public:
 	inline void get_fncywld_bg_tile_info( tile_data &tileinfo, int tile_index, int gfx_bank, UINT16 *gfx_base);
 	inline void pangpang_get_bg_tile_info( tile_data &tileinfo, int tile_index, int gfx_bank, UINT16 *gfx_base );
 	inline void pangpang_get_bg2x_tile_info( tile_data &tileinfo, int tile_index, int gfx_bank, UINT16 *gfx_base );
-	void tumbleb_draw_common(bitmap_ind16 &bitmap, const rectangle &cliprect, int pf1x_offs, int pf1y_offs, int pf2x_offs, int pf2y_offs);
+	void tumbleb_draw_common(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int pf1x_offs, int pf1y_offs, int pf2x_offs, int pf2y_offs);
 	void tumbleb2_set_music_bank( int bank );
 	void tumbleb2_play_sound( okim6295_device *oki, int data );
 	void process_tumbleb2_music_command( okim6295_device *oki, int data );

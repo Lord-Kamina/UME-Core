@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     distate.h
 
     Device state interfaces.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -77,7 +48,8 @@ class device_state_entry
 
 private:
 	// construction/destruction
-	device_state_entry(int index, const char *symbol, void *dataptr, UINT8 size);
+	device_state_entry(int index, const char *symbol, void *dataptr, UINT8 size, device_state_interface *dev);
+	device_state_entry(int index, device_state_interface *dev);
 
 public:
 	// post-construction modifiers
@@ -94,8 +66,10 @@ public:
 	// query information
 	int index() const { return m_index; }
 	void *dataptr() const { return m_dataptr.v; }
-	const char *symbol() const { return m_symbol; }
+	const char *symbol() const { return m_symbol.c_str(); }
 	bool visible() const { return ((m_flags & DSF_NOSHOW) == 0); }
+	bool divider() const { return m_flags & DSF_DIVIDER; }
+	device_state_interface *parent_state() const {return m_device_state;}
 
 protected:
 	// device state flags
@@ -104,6 +78,7 @@ protected:
 	static const UINT8 DSF_IMPORT_SEXT =    0x04;   // sign-extend the data when writing new data
 	static const UINT8 DSF_EXPORT =         0x08;   // call the export function prior to fetching the data
 	static const UINT8 DSF_CUSTOM_STRING =  0x10;   // set if the format has a custom string
+	static const UINT8 DSF_DIVIDER       =  0x20;   // set if this is a divider entry
 
 	// helpers
 	bool needs_custom_string() const { return ((m_flags & DSF_CUSTOM_STRING) != 0); }
@@ -112,7 +87,7 @@ protected:
 	// return the current value -- only for our friends who handle export
 	bool needs_export() const { return ((m_flags & DSF_EXPORT) != 0); }
 	UINT64 value() const;
-	astring &format(astring &dest, const char *string, bool maxout = false) const;
+	std::string &format(std::string &dest, const char *string, bool maxout = false) const;
 
 	// set the current value -- only for our friends who handle import
 	bool needs_import() const { return ((m_flags & DSF_IMPORT) != 0); }
@@ -123,14 +98,15 @@ protected:
 	static const UINT64 k_decimal_divisor[20];      // divisors for outputting decimal values
 
 	// public state description
+	device_state_interface *m_device_state;         // link to parent device state
 	device_state_entry *    m_next;                 // link to next item
 	UINT32                  m_index;                // index by which this item is referred
 	generic_ptr             m_dataptr;              // pointer to where the data lives
 	UINT64                  m_datamask;             // mask that applies to the data
 	UINT8                   m_datasize;             // size of the data
 	UINT8                   m_flags;                // flags for this data
-	astring                 m_symbol;               // symbol for display; all lower-case version for expressions
-	astring                 m_format;               // supported formats
+	std::string             m_symbol;               // symbol for display; all lower-case version for expressions
+	std::string             m_format;               // supported formats
 	bool                    m_default_format;       // true if we are still using default format
 	UINT64                  m_sizemask;             // mask derived from the data size
 };
@@ -152,7 +128,7 @@ public:
 
 	// state getters
 	UINT64 state_int(int index);
-	astring &state_string(int index, astring &dest);
+	std::string &state_string(int index, std::string &dest);
 	int state_string_max_length(int index);
 	offs_t pc() { return state_int(STATE_GENPC); }
 	offs_t pcbase() { return state_int(STATE_GENPCBASE); }
@@ -179,12 +155,15 @@ public: // protected eventually
 	}
 	device_state_entry &state_add(int index, const char *symbol, void *data, UINT8 size);
 
+	// add a new divider entry
+	device_state_entry &state_add_divider(int index);
+
 protected:
 	// derived class overrides
 	virtual void state_import(const device_state_entry &entry);
 	virtual void state_export(const device_state_entry &entry);
-	virtual void state_string_import(const device_state_entry &entry, astring &string);
-	virtual void state_string_export(const device_state_entry &entry, astring &string);
+	virtual void state_string_import(const device_state_entry &entry, std::string &str);
+	virtual void state_string_export(const device_state_entry &entry, std::string &str);
 
 	// internal operation overrides
 	virtual void interface_post_start();

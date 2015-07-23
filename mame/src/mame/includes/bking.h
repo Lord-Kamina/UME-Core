@@ -1,3 +1,7 @@
+// license:???
+// copyright-holders:Ed Mueller, Mike Balfour, Zsolt Vasvari
+#include "machine/buggychl.h"
+
 class bking_state : public driver_device
 {
 public:
@@ -5,14 +9,18 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_playfield_ram(*this, "playfield_ram"),
 		m_audiocpu(*this, "audiocpu"),
-		m_mcu(*this, "mcu"){ }
+		m_mcu(*this, "mcu"),
+		m_bmcu(*this, "bmcu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_playfield_ram;
 
 	/* video-related */
-	bitmap_ind16    m_tmp_bitmap1;
-	bitmap_ind16    m_tmp_bitmap2;
+	bitmap_ind16    m_colmap_bg;
+	bitmap_ind16    m_colmap_ball;
 	tilemap_t     *m_bg_tilemap;
 	int         m_pc3259_output[4];
 	int         m_pc3259_mask;
@@ -41,6 +49,10 @@ public:
 	/* devices */
 	required_device<cpu_device> m_audiocpu;
 	optional_device<cpu_device> m_mcu;
+	optional_device<buggychl_mcu_device> m_bmcu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 
 #if 0
 	/* 68705 */
@@ -86,7 +98,7 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(bking);
 	DECLARE_MACHINE_START(bking3);
 	DECLARE_MACHINE_RESET(bking3);
 	DECLARE_MACHINE_RESET(common);

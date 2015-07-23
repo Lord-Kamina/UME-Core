@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /***************************************************************************
 
     Sord m.5
@@ -25,15 +27,16 @@
 #include "cpu/z80/z80daisy.h"
 #include "formats/m5_dsk.h"
 #include "formats/sord_cas.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/cassette.h"
-#include "machine/ctronics.h"
+#include "bus/centronics/ctronics.h"
 #include "machine/i8255.h"
 #include "machine/ram.h"
 #include "machine/upd765.h"
 #include "machine/z80ctc.h"
 #include "sound/sn76496.h"
 #include "video/tms9928a.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
 #include "includes/m5.h"
 
 
@@ -41,6 +44,11 @@
 //**************************************************************************
 //  MEMORY BANKING
 //**************************************************************************
+
+WRITE_LINE_MEMBER( m5_state::write_centronics_busy )
+{
+	m_centronics_busy = state;
+}
 
 //-------------------------------------------------
 //  sts_r -
@@ -69,7 +77,7 @@ READ8_MEMBER( m5_state::sts_r )
 	data |= m_cassette->input() >= 0 ? 1 : 0;
 
 	// centronics busy
-	data |= m_centronics->busy_r() << 1;
+	data |= m_centronics_busy << 1;
 
 	// RESET key
 	data |= m_reset->read();
@@ -103,7 +111,7 @@ WRITE8_MEMBER( m5_state::com_w )
 	m_cassette->output( BIT(data, 0) ? -1.0 : 1.0);
 
 	// centronics strobe
-	m_centronics->strobe_w(BIT(data, 0));
+	m_centronics->write_strobe(BIT(data, 0));
 
 	// cassette remote
 	m_cassette->change_state(BIT(data,1) ? CASSETTE_MOTOR_ENABLED : CASSETTE_MOTOR_DISABLED, CASSETTE_MASK_MOTOR);
@@ -237,7 +245,7 @@ WRITE8_MEMBER( m5_state::fd5_tc_w )
 static ADDRESS_MAP_START( m5_mem, AS_PROGRAM, 8, m5_state )
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x0000, 0x1fff) AM_ROM
-	AM_RANGE(0x2000, 0x6fff) AM_ROM
+	//AM_RANGE(0x2000, 0x6fff)      // mapped by the cartslot
 	AM_RANGE(0x7000, 0x7fff) AM_RAM
 	AM_RANGE(0x8000, 0xffff) AM_RAM
 ADDRESS_MAP_END
@@ -254,15 +262,15 @@ static ADDRESS_MAP_START( m5_io, AS_IO, 8, m5_state )
 	AM_RANGE(0x10, 0x10) AM_MIRROR(0x0e) AM_DEVREADWRITE("tms9928a", tms9928a_device, vram_read, vram_write)
 	AM_RANGE(0x11, 0x11) AM_MIRROR(0x0e) AM_DEVREADWRITE("tms9928a", tms9928a_device, register_read, register_write)
 	AM_RANGE(0x20, 0x20) AM_MIRROR(0x0f) AM_DEVWRITE(SN76489AN_TAG, sn76489a_device, write)
-	AM_RANGE(0x30, 0x30) AM_READ_PORT("Y0") // 64KBF bank select
-	AM_RANGE(0x31, 0x31) AM_READ_PORT("Y1")
-	AM_RANGE(0x32, 0x32) AM_READ_PORT("Y2")
-	AM_RANGE(0x33, 0x33) AM_READ_PORT("Y3")
-	AM_RANGE(0x34, 0x34) AM_READ_PORT("Y4")
-	AM_RANGE(0x35, 0x35) AM_READ_PORT("Y5")
-	AM_RANGE(0x36, 0x36) AM_READ_PORT("Y6")
-	AM_RANGE(0x37, 0x37) AM_READ_PORT("JOY")
-	AM_RANGE(0x40, 0x40) AM_MIRROR(0x0f) AM_DEVWRITE(CENTRONICS_TAG, centronics_device, write)
+	AM_RANGE(0x30, 0x30) AM_MIRROR(0x08) AM_READ_PORT("Y0") // 64KBF bank select
+	AM_RANGE(0x31, 0x31) AM_MIRROR(0x08) AM_READ_PORT("Y1")
+	AM_RANGE(0x32, 0x32) AM_MIRROR(0x08) AM_READ_PORT("Y2")
+	AM_RANGE(0x33, 0x33) AM_MIRROR(0x08) AM_READ_PORT("Y3")
+	AM_RANGE(0x34, 0x34) AM_MIRROR(0x08) AM_READ_PORT("Y4")
+	AM_RANGE(0x35, 0x35) AM_MIRROR(0x08) AM_READ_PORT("Y5")
+	AM_RANGE(0x36, 0x36) AM_MIRROR(0x08) AM_READ_PORT("Y6")
+	AM_RANGE(0x37, 0x37) AM_MIRROR(0x08) AM_READ_PORT("JOY")
+	AM_RANGE(0x40, 0x40) AM_MIRROR(0x0f) AM_DEVWRITE("cent_data_out", output_latch_device, write)
 	AM_RANGE(0x50, 0x50) AM_MIRROR(0x0f) AM_READWRITE(sts_r, com_w)
 //  AM_RANGE(0x60, 0x63) SIO
 //  AM_RANGE(0x6c, 0x6c) EM-64/64KBI bank select
@@ -390,41 +398,6 @@ static INPUT_PORTS_START( m5 )
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Reset") PORT_CODE(KEYCODE_ESC) PORT_CHAR(UCHAR_MAMEKEY(ESC)) /* 1st line, 1st key from right! */
 INPUT_PORTS_END
 
-
-
-//**************************************************************************
-//  DEVICE CONFIGURATION
-//**************************************************************************
-
-//-------------------------------------------------
-//  Z80CTC_INTERFACE( ctc_intf )
-//-------------------------------------------------
-
-// CK0 = EXINT, CK1 = GND, CK2 = TCK, CK3 = VDP INT
-
-static Z80CTC_INTERFACE( ctc_intf )
-{
-	DEVCB_CPU_INPUT_LINE(Z80_TAG, INPUT_LINE_IRQ0),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL // EXCLK
-};
-
-
-//-------------------------------------------------
-//  cassette_interface cassette_intf
-//-------------------------------------------------
-
-static const cassette_interface cassette_intf =
-{
-	sordm5_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_PLAY),
-	NULL,
-	NULL
-};
-
-
 //-------------------------------------------------
 //  TMS9928a_interface vdp_intf
 //-------------------------------------------------
@@ -438,26 +411,9 @@ WRITE_LINE_MEMBER(m5_state::sordm5_video_interrupt_callback)
 	}
 }
 
-static TMS9928A_INTERFACE(m5_tms9928a_interface)
-{
-	"screen",
-	0x4000,
-	DEVCB_DRIVER_LINE_MEMBER(m5_state,sordm5_video_interrupt_callback)
-};
-
 
 //-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
-
-//-------------------------------------------------
-//  I8255_INTERFACE( ppi_intf )
+//  I8255 Interface
 //-------------------------------------------------
 
 READ8_MEMBER( m5_state::ppi_pa_r )
@@ -543,17 +499,6 @@ WRITE8_MEMBER( m5_state::ppi_pc_w )
 	m_obfa = BIT(data, 7);
 }
 
-static I8255_INTERFACE( ppi_intf )
-{
-	DEVCB_DRIVER_MEMBER(m5_state, ppi_pa_r),
-	DEVCB_DRIVER_MEMBER(m5_state, ppi_pa_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(m5_state, ppi_pb_w),
-	DEVCB_DRIVER_MEMBER(m5_state, ppi_pc_r),
-	DEVCB_DRIVER_MEMBER(m5_state, ppi_pc_w)
-};
-
-
 //-------------------------------------------------
 //  upd765_interface fdc_intf
 //-------------------------------------------------
@@ -565,11 +510,6 @@ FLOPPY_FORMATS_END
 static SLOT_INTERFACE_START( m5_floppies )
 		SLOT_INTERFACE( "525dd", FLOPPY_525_DD )
 SLOT_INTERFACE_END
-
-void m5_state::fdc_irq(bool state)
-{
-	m_fd5cpu->set_input_line(INPUT_LINE_IRQ0, state ? ASSERT_LINE : CLEAR_LINE);
-}
 
 //-------------------------------------------------
 //  z80_daisy_config m5_daisy_chain
@@ -609,7 +549,8 @@ void m5_state::machine_start()
 		break;
 	}
 
-	m_fdc->setup_intrq_cb(upd765a_device::line_cb(FUNC(m5_state::fdc_irq), this));
+	if (m_cart->exists())
+		program.install_read_handler(0x2000, 0x6fff, read8_delegate(FUNC(generic_slot_device::read_rom),(generic_slot_device*)m_cart));
 
 	// register for state saving
 	save_item(NAME(m_fd5_data));
@@ -619,10 +560,6 @@ void m5_state::machine_start()
 	save_item(NAME(m_obfa));
 }
 
-
-//-------------------------------------------------
-//  MACHINE_RESET( m5 )
-//-------------------------------------------------
 
 void m5_state::machine_reset()
 {
@@ -653,24 +590,42 @@ static MACHINE_CONFIG_START( m5, m5_state )
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD(SN76489AN_TAG, SN76489A, XTAL_14_31818MHz/4)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
-	MCFG_SOUND_CONFIG(psg_intf)
 
 	// devices
-	MCFG_Z80CTC_ADD(Z80CTC_TAG, XTAL_14_31818MHz/4, ctc_intf)
-	MCFG_CENTRONICS_PRINTER_ADD(CENTRONICS_TAG, standard_centronics)
-	MCFG_CASSETTE_ADD("cassette", cassette_intf)
-	MCFG_I8255_ADD(I8255A_TAG, ppi_intf)
+	MCFG_DEVICE_ADD(Z80CTC_TAG, Z80CTC, XTAL_14_31818MHz/4)
+	MCFG_Z80CTC_INTR_CB(INPUTLINE(Z80_TAG, INPUT_LINE_IRQ0))
+	// CK0 = EXINT, CK1 = GND, CK2 = TCK, CK3 = VDP INT
+	// ZC2 = EXCLK
+
+	MCFG_CENTRONICS_ADD(CENTRONICS_TAG, centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(WRITELINE(m5_state, write_centronics_busy))
+
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", CENTRONICS_TAG)
+
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(sordm5_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_PLAY)
+	MCFG_CASSETTE_INTERFACE("m5_cass")
+
+	MCFG_DEVICE_ADD(I8255A_TAG, I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(m5_state, ppi_pa_r))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(m5_state, ppi_pa_w))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(m5_state, ppi_pb_w))
+	MCFG_I8255_IN_PORTC_CB(READ8(m5_state, ppi_pc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(m5_state, ppi_pc_w))
+
 	MCFG_UPD765A_ADD(UPD765_TAG, true, true)
+	MCFG_UPD765_INTRQ_CALLBACK(INPUTLINE(Z80_FD5_TAG, INPUT_LINE_IRQ0))
 	MCFG_FLOPPY_DRIVE_ADD(UPD765_TAG ":0", m5_floppies, "525dd", m5_state::floppy_formats)
 
 	// cartridge
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("bin,rom")
-	MCFG_CARTSLOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("m5_cart")
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "m5_cart")
+	MCFG_GENERIC_EXTENSIONS("bin,rom")
+	//MCFG_GENERIC_MANDATORY
 
 	// software lists
-	MCFG_SOFTWARE_LIST_ADD("cart_list", "m5")
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "m5_cart")
+	MCFG_SOFTWARE_LIST_ADD("cass_list", "m5_cass")
 
 	// internal ram
 	MCFG_RAM_ADD(RAM_TAG)
@@ -685,7 +640,9 @@ MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( ntsc, m5 )
 	// video hardware
-	MCFG_TMS9928A_ADD( "tms9928a", TMS9928A, m5_tms9928a_interface )
+	MCFG_DEVICE_ADD( "tms9928a", TMS9928A, XTAL_10_738635MHz / 2 )
+	MCFG_TMS9928A_VRAM_SIZE(0x4000)
+	MCFG_TMS9928A_OUT_INT_LINE_CB(WRITELINE(m5_state, sordm5_video_interrupt_callback))
 	MCFG_TMS9928A_SCREEN_ADD_NTSC( "screen" )
 	MCFG_SCREEN_UPDATE_DEVICE( "tms9928a", tms9928a_device, screen_update )
 MACHINE_CONFIG_END
@@ -697,7 +654,9 @@ MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( pal, m5 )
 	// video hardware
-	MCFG_TMS9928A_ADD( "tms9928a", TMS9929A, m5_tms9928a_interface )
+	MCFG_DEVICE_ADD( "tms9928a", TMS9929A, XTAL_10_738635MHz / 2 )
+	MCFG_TMS9928A_VRAM_SIZE(0x4000)
+	MCFG_TMS9928A_OUT_INT_LINE_CB(WRITELINE(m5_state, sordm5_video_interrupt_callback))
 	MCFG_TMS9928A_SCREEN_ADD_PAL( "screen" )
 	MCFG_SCREEN_UPDATE_DEVICE( "tms9928a", tms9928a_device, screen_update )
 MACHINE_CONFIG_END
@@ -715,7 +674,6 @@ MACHINE_CONFIG_END
 ROM_START( m5 )
 	ROM_REGION( 0x7000, Z80_TAG, ROMREGION_ERASEFF )
 	ROM_LOAD( "sordjap.ic21", 0x0000, 0x2000, CRC(92cf9353) SHA1(b0a4b3658fde68cb1f344dfb095bac16a78e9b3e) )
-	ROM_CART_LOAD( "cart",   0x2000, 0x5000, ROM_NOMIRROR | ROM_OPTIONAL )
 
 	ROM_REGION( 0x4000, Z80_FD5_TAG, 0 )
 	ROM_LOAD( "sordfd5.rom", 0x0000, 0x4000, CRC(7263bbc5) SHA1(b729500d3d2b2e807d384d44b76ea5ad23996f4a))
@@ -729,7 +687,6 @@ ROM_END
 ROM_START( m5p )
 	ROM_REGION( 0x7000, Z80_TAG, ROMREGION_ERASEFF )
 	ROM_LOAD( "sordint.ic21", 0x0000, 0x2000, CRC(78848d39) SHA1(ac042c4ae8272ad6abe09ae83492ef9a0026d0b2) )
-	ROM_CART_LOAD( "cart",   0x2000, 0x5000, ROM_NOMIRROR | ROM_OPTIONAL )
 
 	ROM_REGION( 0x4000, Z80_FD5_TAG, 0 )
 	ROM_LOAD( "sordfd5.rom", 0x0000, 0x4000, CRC(7263bbc5) SHA1(b729500d3d2b2e807d384d44b76ea5ad23996f4a))

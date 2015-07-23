@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #include "sound/msm5205.h"
 #include "sound/2203intf.h"
 
@@ -10,7 +12,9 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
-		m_msm(*this, "msm")
+		m_msm(*this, "msm"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")
 	{
 	}
 
@@ -62,6 +66,8 @@ public:
 	required_device<cpu_device> m_maincpu;
 	optional_device<cpu_device> m_audiocpu;
 	optional_device<msm5205_device> m_msm;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	/* memory buffers */
 	UINT8         m_rambanks[0x1000 * 12];
@@ -143,7 +149,7 @@ public:
 	void taitol_bg19_m( int offset );
 	void taitol_char1a_m( int offset );
 	void taitol_obj1b_m( int offset );
-	void draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect );
+	void draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect );
 	void palette_notifier(int addr);
 	void state_register(  );
 	void taito_machine_reset();

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
   video/rpunch.c
@@ -29,8 +31,7 @@ TILE_GET_INFO_MEMBER(rpunch_state::get_bg0_tile_info)
 	if (m_videoflags & 0x0400)  code = (data & 0x0fff) | 0x2000;
 	else                        code = (data & 0x1fff);
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			code,
 			((m_videoflags & 0x0010) >> 1) | ((data >> 13) & 7),
 			0);
@@ -44,8 +45,7 @@ TILE_GET_INFO_MEMBER(rpunch_state::get_bg1_tile_info)
 	if (m_videoflags & 0x0800)  code = (data & 0x0fff) | 0x2000;
 	else                        code = (data & 0x1fff);
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			((m_videoflags & 0x0020) >> 2) | ((data >> 13) & 7),
 			0);
@@ -62,15 +62,17 @@ TIMER_CALLBACK_MEMBER(rpunch_state::crtc_interrupt_gen)
 {
 	m_maincpu->set_input_line(1, HOLD_LINE);
 	if (param != 0)
-		m_crtc_timer->adjust(machine().primary_screen->frame_period() / param, 0, machine().primary_screen->frame_period() / param);
+		m_crtc_timer->adjust(m_screen->frame_period() / param, 0, m_screen->frame_period() / param);
 }
 
 
-void rpunch_state::video_start()
+VIDEO_START_MEMBER(rpunch_state,rpunch)
 {
+	m_sprite_xoffs = 0;
+
 	/* allocate tilemaps for the backgrounds */
-	m_background[0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(rpunch_state::get_bg0_tile_info),this),TILEMAP_SCAN_COLS,8,8,64,64);
-	m_background[1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(rpunch_state::get_bg1_tile_info),this),TILEMAP_SCAN_COLS,8,8,64,64);
+	m_background[0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(rpunch_state::get_bg0_tile_info),this),TILEMAP_SCAN_COLS,8,8,64,64);
+	m_background[1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(rpunch_state::get_bg1_tile_info),this),TILEMAP_SCAN_COLS,8,8,64,64);
 
 	/* configure the tilemaps */
 	m_background[1]->set_transparent_pen(15);
@@ -81,6 +83,16 @@ void rpunch_state::video_start()
 	/* reset the timer */
 	m_crtc_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(rpunch_state::crtc_interrupt_gen),this));
 }
+
+
+VIDEO_START_MEMBER(rpunch_state,svolley)
+{
+	VIDEO_START_CALL_MEMBER(rpunch);
+	m_background[0]->set_scrolldx(8, 0); // aligns middle net sprite with bg as shown in reference
+	m_sprite_xoffs = -4;
+}
+
+
 
 
 
@@ -149,7 +161,7 @@ WRITE16_MEMBER(rpunch_state::rpunch_crtc_data_w)
 		{
 			/* only register we know about.... */
 			case 0x0b:
-				m_crtc_timer->adjust(machine().primary_screen->time_until_vblank_start(), (data == 0xc0) ? 2 : 1);
+				m_crtc_timer->adjust(m_screen->time_until_vblank_start(), (data == 0xc0) ? 2 : 1);
 				break;
 
 			default:
@@ -216,8 +228,8 @@ void rpunch_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect,
 		if (x >= BITMAP_WIDTH) x -= 512;
 		if (y >= BITMAP_HEIGHT) y -= 512;
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[2],
-				code, color + (m_sprite_palette / 16), xflip, yflip, x, y, 15);
+		m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
+				code, color + (m_sprite_palette / 16), xflip, yflip, x+m_sprite_xoffs, y, 15);
 	}
 }
 
@@ -267,9 +279,9 @@ UINT32 rpunch_state::screen_update_rpunch(screen_device &screen, bitmap_ind16 &b
 	/* this seems like the most plausible explanation */
 	effbins = (m_bins > m_gins) ? m_gins : m_bins;
 
-	m_background[0]->draw(bitmap, cliprect, 0,0);
+	m_background[0]->draw(screen, bitmap, cliprect, 0,0);
 	draw_sprites(bitmap, cliprect, 0, effbins);
-	m_background[1]->draw(bitmap, cliprect, 0,0);
+	m_background[1]->draw(screen, bitmap, cliprect, 0,0);
 	draw_sprites(bitmap, cliprect, effbins, m_gins);
 	if (m_bitmapram)
 		draw_bitmap(bitmap, cliprect);

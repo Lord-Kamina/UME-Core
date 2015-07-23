@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles,Ernesto Corvi
 /*************************************************************************
 
     Midway Wolf-unit system
@@ -114,7 +116,7 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 16, midwunit_state )
 	AM_RANGE(0x01a00000, 0x01a000ff) AM_MIRROR(0x00080000) AM_READWRITE(midtunit_dma_r, midtunit_dma_w)
 	AM_RANGE(0x01b00000, 0x01b0001f) AM_READWRITE(midwunit_control_r, midwunit_control_w)
 	AM_RANGE(0x02000000, 0x06ffffff) AM_READ(midwunit_gfxrom_r)
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("maincpu", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0xff800000, 0xffffffff) AM_ROM AM_REGION("maincpu", 0)
 ADDRESS_MAP_END
 
@@ -609,27 +611,6 @@ INPUT_PORTS_END
 
 /*************************************
  *
- *  34010 configuration
- *
- *************************************/
-
-static const tms34010_config tms_config =
-{
-	FALSE,                          /* halt on reset */
-	"screen",                       /* the screen operated on */
-	PIXEL_CLOCK,                    /* pixel clock */
-	1,                              /* pixels per clock */
-	midtunit_scanline_update,       /* scanline updater (indexed16) */
-	NULL,                           /* scanline updater (rgb32) */
-	NULL,                           /* generate interrupt */
-	midtunit_to_shiftreg,           /* write to shiftreg function */
-	midtunit_from_shiftreg          /* read from shiftreg function */
-};
-
-
-
-/*************************************
- *
  *  Machine drivers
  *
  *************************************/
@@ -637,23 +618,33 @@ static const tms34010_config tms_config =
 static MACHINE_CONFIG_START( wunit, midwunit_state )
 
 	MCFG_CPU_ADD("maincpu", TMS34010, 50000000)
-	MCFG_CPU_CONFIG(tms_config)
 	MCFG_CPU_PROGRAM_MAP(main_map)
+	MCFG_TMS340X0_HALT_ON_RESET(FALSE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(PIXEL_CLOCK) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(1) /* pixels per clock */
+	MCFG_TMS340X0_SCANLINE_IND16_CB(midtunit_state, scanline_update)       /* scanline updater (indexed16) */
+	MCFG_TMS340X0_TO_SHIFTREG_CB(midtunit_state, to_shiftreg)           /* write to shiftreg function */
+	MCFG_TMS340X0_FROM_SHIFTREG_CB(midtunit_state, from_shiftreg)          /* read from shiftreg function */
 
 	MCFG_MACHINE_RESET_OVERRIDE(midwunit_state,midwunit)
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
 	/* video hardware */
-	MCFG_PALETTE_LENGTH(32768)
+	MCFG_PALETTE_ADD("palette", 32768)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
-	MCFG_SCREEN_RAW_PARAMS(PIXEL_CLOCK, 505, 0, 399, 289, 0, 253)
-	MCFG_SCREEN_UPDATE_STATIC(tms340x0_ind16)
+	// from TMS340 registers
+	MCFG_SCREEN_RAW_PARAMS(PIXEL_CLOCK, 506, 101, 501, 289, 20, 274)
+	MCFG_SCREEN_UPDATE_DEVICE("maincpu", tms34010_device, tms340x0_ind16)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_VIDEO_START_OVERRIDE(midwunit_state,midwunit)
 
+	MCFG_DEVICE_ADD("serial_pic", MIDWAY_SERIAL_PIC, 0)
+	MCFG_MIDWAY_SERIAL_PIC_UPPER(528);
+
 	/* sound hardware */
-	MCFG_FRAGMENT_ADD(dcs_audio_8k)
+	MCFG_DEVICE_ADD("dcs", DCS_AUDIO_8K, 0)
 MACHINE_CONFIG_END
 
 
@@ -938,10 +929,10 @@ ROM_END
 
 ROM_START( openice )
 	ROM_REGION16_LE( 0x800000, "dcs", ROMREGION_ERASEFF )   /* sound data */
-	ROM_LOAD16_BYTE( "open_ice_l1.u2", 0x000000, 0x100000, CRC(8adb5aab) SHA1(4c25bc051c90947f3366f83ac5ca8dc78e26b8a4) ) /* These 4 are labeled as L1 */
-	ROM_LOAD16_BYTE( "open_ice_l1.u3", 0x200000, 0x100000, CRC(11c61ad6) SHA1(324621d6b486399b6d5ede1fed39d4e448cdeb32) )
-	ROM_LOAD16_BYTE( "open_ice_l1.u4", 0x400000, 0x100000, CRC(04279290) SHA1(daf1e57137ae1c3434194054e69809bfe3ed1fc3) )
-	ROM_LOAD16_BYTE( "open_ice_l1.u5", 0x600000, 0x100000, CRC(e90ad61f) SHA1(59eeabcae7e0e70cdb4472cde64b8a28b07ede98) )
+	ROM_LOAD16_BYTE( "open_ice_l1.2.u2", 0x000000, 0x100000, CRC(8adb5aab) SHA1(4c25bc051c90947f3366f83ac5ca8dc78e26b8a4) ) /* This one labeled as L1.2 */
+	ROM_LOAD16_BYTE( "open_ice_l1.u3",   0x200000, 0x100000, CRC(11c61ad6) SHA1(324621d6b486399b6d5ede1fed39d4e448cdeb32) ) /* This one labeled as L1 */
+	ROM_LOAD16_BYTE( "open_ice_l1.u4",   0x400000, 0x100000, CRC(04279290) SHA1(daf1e57137ae1c3434194054e69809bfe3ed1fc3) ) /* This one labeled as L1 */
+	ROM_LOAD16_BYTE( "open_ice_l1.u5",   0x600000, 0x100000, CRC(e90ad61f) SHA1(59eeabcae7e0e70cdb4472cde64b8a28b07ede98) ) /* This one labeled as L1 */
 
 	ROM_REGION16_LE( 0x100000, "maincpu", 0 )   /* 34010 code */
 	ROM_LOAD16_BYTE( "open_ice_l1.21.u54", 0x00000, 0x80000, CRC(e4225284) SHA1(d5e267cf35826c106bb0a800363849ed4d489e56) ) /* Labeled as L1.21 */

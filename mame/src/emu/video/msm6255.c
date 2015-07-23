@@ -1,13 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     OKI MSM6255 Dot Matrix LCD Controller implementation
 
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
-
 **********************************************************************/
 
-#include "emu.h"
 #include "msm6255.h"
 
 
@@ -17,21 +15,6 @@
 //**************************************************************************
 
 #define LOG 0
-
-
-// registers
-enum
-{
-	REGISTER_MOR = 0,
-	REGISTER_PR,
-	REGISTER_HNR,
-	REGISTER_DVR,
-	REGISTER_CPR,
-	REGISTER_SLR,
-	REGISTER_SUR,
-	REGISTER_CLR,
-	REGISTER_CUR
-};
 
 
 #define MOR_GRAPHICS        0x01
@@ -84,32 +67,6 @@ ADDRESS_MAP_END
 
 
 //**************************************************************************
-//  INLINE HELPERS
-//**************************************************************************
-
-//-------------------------------------------------
-//  read_byte -
-//-------------------------------------------------
-
-inline UINT8 msm6255_device::read_byte(UINT16 ma, UINT8 ra)
-{
-	offs_t offset;
-
-	if (m_mor & MOR_GRAPHICS)
-	{
-		offset = ma;
-	}
-	else
-	{
-		offset = ((offs_t)ma << 4) | ra;
-	}
-
-	return space().read_byte(offset);
-}
-
-
-
-//**************************************************************************
 //  LIVE DEVICE
 //**************************************************************************
 
@@ -117,27 +74,13 @@ inline UINT8 msm6255_device::read_byte(UINT16 ma, UINT8 ra)
 //  msm6255_device - constructor
 //-------------------------------------------------
 
-msm6255_device::msm6255_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MSM6255, "MSM6255", tag, owner, clock, "msm6255", __FILE__),
-		device_memory_interface(mconfig, *this),
-		m_space_config("videoram", ENDIANNESS_LITTLE, 8, 20, 0, NULL, *ADDRESS_MAP_NAME(msm6255)),
-		m_cursor(0)
+msm6255_device::msm6255_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
+	device_t(mconfig, MSM6255, "MSM6255", tag, owner, clock, "msm6255", __FILE__),
+	device_memory_interface(mconfig, *this),
+	device_video_interface(mconfig, *this),
+	m_space_config("videoram", ENDIANNESS_LITTLE, 8, 20, 0, NULL, *ADDRESS_MAP_NAME(msm6255)),
+	m_cursor(0)
 {
-}
-
-
-//-------------------------------------------------
-//  static_set_config - configuration helper
-//-------------------------------------------------
-
-void msm6255_device::static_set_config(device_t &device, int char_clock, const char *screen_tag)
-{
-	msm6255_device &msm6255 = downcast<msm6255_device &>(device);
-
-	assert(screen_tag != NULL);
-
-	msm6255.m_char_clock = char_clock;
-	msm6255.m_screen_tag = screen_tag;
 }
 
 
@@ -147,9 +90,6 @@ void msm6255_device::static_set_config(device_t &device, int char_clock, const c
 
 void msm6255_device::device_start()
 {
-	// find screen
-	m_screen = machine().device<screen_device>(m_screen_tag);
-
 	// register for state saving
 	save_item(NAME(m_ir));
 	save_item(NAME(m_mor));
@@ -300,6 +240,27 @@ WRITE8_MEMBER( msm6255_device::dr_w )
 		m_cur = data;
 		break;
 	}
+}
+
+
+//-------------------------------------------------
+//  read_byte -
+//-------------------------------------------------
+
+UINT8 msm6255_device::read_byte(UINT16 ma, UINT8 ra)
+{
+	offs_t offset;
+
+	if (m_mor & MOR_GRAPHICS)
+	{
+		offset = ma;
+	}
+	else
+	{
+		offset = ((offs_t)ma << 4) | ra;
+	}
+
+	return space().read_byte(offset);
 }
 
 

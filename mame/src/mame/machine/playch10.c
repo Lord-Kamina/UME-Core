@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi,Brad Oliver
 #include "emu.h"
 #include "video/ppu2c0x.h"
 #include "machine/nvram.h"
@@ -26,11 +28,10 @@ void playch10_state::machine_reset()
 	m_MMC2_bank_latch[0] = m_MMC2_bank_latch[1] = 0xfe;
 
 	/* reset the security chip */
-	address_space &space = generic_space();
-	m_rp5h01->enable_w(space, 0, 0);
-	m_rp5h01->reset_w(space, 0, 0);
-	m_rp5h01->reset_w(space, 0, 1);
-	m_rp5h01->enable_w(space, 0, 1);
+	m_rp5h01->enable_w(1);
+	m_rp5h01->enable_w(0);
+	m_rp5h01->reset_w(0);
+	m_rp5h01->reset_w(1);
 
 	pc10_set_mirroring(m_mirroring);
 }
@@ -160,10 +161,8 @@ READ8_MEMBER(playch10_state::pc10_prot_r)
 	/* we only support a single cart connected at slot 0 */
 	if (m_cart_sel == 0)
 	{
-		m_rp5h01->enable_w(space, 0, 0);
-		data |= ((~m_rp5h01->counter_r(space, 0)) << 4) & 0x10;    /* D4 */
-		data |= ((m_rp5h01->data_r(space, 0)) << 3) & 0x08;        /* D3 */
-		m_rp5h01->enable_w(space, 0, 1);
+		data |= ((~m_rp5h01->counter_r()) << 4) & 0x10;  /* D4 */
+		data |= (m_rp5h01->data_r() << 3) & 0x08;        /* D3 */
 	}
 	return data;
 }
@@ -173,18 +172,9 @@ WRITE8_MEMBER(playch10_state::pc10_prot_w)
 	/* we only support a single cart connected at slot 0 */
 	if (m_cart_sel == 0)
 	{
-		m_rp5h01->enable_w(space, 0, 0);
-		m_rp5h01->test_w(space, 0, data & 0x10);       /* D4 */
-		m_rp5h01->clock_w(space, 0, data & 0x08);      /* D3 */
-		m_rp5h01->reset_w(space, 0, ~data & 0x01); /* D0 */
-		m_rp5h01->enable_w(space, 0, 1);
-
-		/* this thing gets dense at some point                      */
-		/* it wants to jump and execute an opcode at $ffff, wich    */
-		/* is the actual protection memory area                     */
-		/* setting the whole 0x2000 region every time is a waste    */
-		/* so we just set $ffff with the current value              */
-		memregion("maincpu")->base()[0xffff] = pc10_prot_r(space, 0);
+		m_rp5h01->test_w(data & 0x10);       /* D4 */
+		m_rp5h01->clock_w(data & 0x08);      /* D3 */
+		m_rp5h01->reset_w(~data & 0x01);     /* D0 */
 	}
 }
 
@@ -237,7 +227,6 @@ READ8_MEMBER(playch10_state::pc10_in1_r)
 	/* do the gun thing */
 	if (m_pc10_gun_controller)
 	{
-		ppu2c0x_device *ppu = machine().device<ppu2c0x_device>("ppu");
 		int trigger = ioport("P1")->read();
 		int x = ioport("GUNX")->read();
 		int y = ioport("GUNY")->read();
@@ -247,10 +236,10 @@ READ8_MEMBER(playch10_state::pc10_in1_r)
 		ret |= 0x08;
 
 		/* get the pixel at the gun position */
-		pix = ppu->get_pixel(x, y);
+		pix = m_ppu->get_pixel(x, y);
 
 		/* get the color base from the ppu */
-		color_base = ppu->get_colorbase();
+		color_base = m_ppu->get_colorbase();
 
 		/* look at the screen and see if the cursor is over a bright pixel */
 		if ((pix == color_base + 0x20) || (pix == color_base + 0x30) ||
@@ -1087,7 +1076,7 @@ WRITE8_MEMBER(playch10_state::hboard_rom_switch_w)
 			}
 	};
 	gboard_rom_switch_w(space,offset,data);
-};
+}
 
 
 DRIVER_INIT_MEMBER(playch10_state,pchboard)

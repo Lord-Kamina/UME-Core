@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
     drivers/dgn_beta.c
@@ -43,7 +45,8 @@ documentation still exists.
 #include "machine/6821pia.h"
 #include "includes/dgn_beta.h"
 #include "machine/mos6551.h"
-#include "formats/coco_dsk.h"
+#include "formats/vdk_dsk.h"
+#include "formats/dmk_dsk.h"
 #include "imagedev/flopdrv.h"
 #include "machine/ram.h"
 #include "video/mc6845.h"
@@ -277,27 +280,14 @@ static INPUT_PORTS_START( dgnbeta )
 INPUT_PORTS_END
 
 
-void dgn_beta_state::palette_init()
+PALETTE_INIT_MEMBER(dgn_beta_state, dgn)
 {
 	int i;
 
 	for ( i = 0; i < sizeof(dgnbeta_palette) / 3; i++ ) {
-		palette_set_color_rgb(machine(), i, dgnbeta_palette[i*3], dgnbeta_palette[i*3+1], dgnbeta_palette[i*3+2]);
+		palette.set_pen_color(i, dgnbeta_palette[i*3], dgnbeta_palette[i*3+1], dgnbeta_palette[i*3+2]);
 	}
 }
-
-static const floppy_interface dgnbeta_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_DSHD,
-	LEGACY_FLOPPY_OPTIONS_NAME(coco),
-	NULL,
-	NULL
-};
 
 /* F4 Character Displayer */
 static const gfx_layout dgnbeta_charlayout =
@@ -317,6 +307,14 @@ static GFXDECODE_START( dgnbeta )
 	GFXDECODE_ENTRY( "gfx1", 0x0000, dgnbeta_charlayout, 0, 8 )
 GFXDECODE_END
 
+FLOPPY_FORMATS_MEMBER( dgn_beta_state::floppy_formats )
+	FLOPPY_VDK_FORMAT,
+	FLOPPY_DMK_FORMAT
+FLOPPY_FORMATS_END
+
+static SLOT_INTERFACE_START( dgn_beta_floppies )
+	SLOT_INTERFACE("qd", FLOPPY_525_QD)
+SLOT_INTERFACE_END
 
 static MACHINE_CONFIG_START( dgnbeta, dgn_beta_state )
 	/* basic machine hardware */
@@ -327,7 +325,6 @@ static MACHINE_CONFIG_START( dgnbeta, dgn_beta_state )
 	MCFG_CPU_ADD(DMACPU_TAG, M6809E, DGNBETA_CPU_SPEED_HZ)        /* 2 MHz */
 	MCFG_CPU_PROGRAM_MAP(dgnbeta_map)
 
-
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(DGNBETA_FRAMES_PER_SECOND)
@@ -335,20 +332,56 @@ static MACHINE_CONFIG_START( dgnbeta, dgn_beta_state )
 	MCFG_SCREEN_SIZE(700,550)
 	MCFG_SCREEN_VISIBLE_AREA(0, 699, 0, 549)
 	MCFG_SCREEN_UPDATE_DEVICE( "crtc", hd6845_device, screen_update )
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_AFTER_VBLANK)
 
-	MCFG_GFXDECODE(dgnbeta)
-	MCFG_PALETTE_LENGTH(ARRAY_LENGTH(dgnbeta_palette) / 3)
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_AFTER_VBLANK)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", dgnbeta)
+	MCFG_PALETTE_ADD("palette", ARRAY_LENGTH(dgnbeta_palette) / 3)
+	MCFG_PALETTE_INIT_OWNER(dgn_beta_state, dgn)
 
-	MCFG_PIA6821_ADD( PIA_0_TAG, dgnbeta_pia_intf[0] )
-	MCFG_PIA6821_ADD( PIA_1_TAG, dgnbeta_pia_intf[1] )
-	MCFG_PIA6821_ADD( PIA_2_TAG, dgnbeta_pia_intf[2] )
+	/* PIA 0 at $FC20-$FC23 I46 */
+	MCFG_DEVICE_ADD(PIA_0_TAG, PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(dgn_beta_state,d_pia0_pa_r))
+	MCFG_PIA_READPB_HANDLER(READ8(dgn_beta_state,d_pia0_pb_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(dgn_beta_state,d_pia0_pa_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(dgn_beta_state,d_pia0_pb_w))
+	MCFG_PIA_CB2_HANDLER(WRITELINE(dgn_beta_state,d_pia0_cb2_w))
+	MCFG_PIA_IRQA_HANDLER(WRITELINE(dgn_beta_state,d_pia0_irq_a))
+	MCFG_PIA_IRQB_HANDLER(WRITELINE(dgn_beta_state,d_pia0_irq_b))
 
-	MCFG_WD2797_ADD(FDC_TAG, dgnbeta_wd17xx_interface )
+	/* PIA 1 at $FC24-$FC27 I63 */
+	MCFG_DEVICE_ADD(PIA_1_TAG, PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(dgn_beta_state,d_pia1_pa_r))
+	MCFG_PIA_READPB_HANDLER(READ8(dgn_beta_state,d_pia1_pb_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(dgn_beta_state,d_pia1_pa_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(dgn_beta_state,d_pia1_pb_w))
+	MCFG_PIA_IRQA_HANDLER(WRITELINE(dgn_beta_state,d_pia1_irq_a))
+	MCFG_PIA_IRQB_HANDLER(WRITELINE(dgn_beta_state,d_pia1_irq_b))
 
-	MCFG_LEGACY_FLOPPY_4_DRIVES_ADD(dgnbeta_floppy_interface)
+	/* PIA 2 at FCC0-FCC3 I28 */
+	/* This seems to control the RAM paging system, and have the DRQ */
+	/* from the WD2797 */
+	MCFG_DEVICE_ADD(PIA_2_TAG, PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(dgn_beta_state,d_pia2_pa_r))
+	MCFG_PIA_READPB_HANDLER(READ8(dgn_beta_state,d_pia2_pb_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(dgn_beta_state,d_pia2_pa_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(dgn_beta_state,d_pia2_pb_w))
+	MCFG_PIA_IRQA_HANDLER(WRITELINE(dgn_beta_state,d_pia2_irq_a))
+	MCFG_PIA_IRQB_HANDLER(WRITELINE(dgn_beta_state,d_pia2_irq_b))
 
-	MCFG_MC6845_ADD("crtc", HD6845, XTAL_12_288MHz / 16, dgnbeta_crtc6845_interface)    //XTAL is guessed
+	MCFG_WD2797_ADD(FDC_TAG, XTAL_1MHz)
+	MCFG_WD_FDC_INTRQ_CALLBACK(WRITELINE(dgn_beta_state, dgnbeta_fdc_intrq_w))
+	MCFG_WD_FDC_DRQ_CALLBACK(WRITELINE(dgn_beta_state, dgnbeta_fdc_drq_w))
+
+	MCFG_FLOPPY_DRIVE_ADD(FDC_TAG ":0", dgn_beta_floppies, "qd", dgn_beta_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD(FDC_TAG ":1", dgn_beta_floppies, "qd", dgn_beta_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD(FDC_TAG ":2", dgn_beta_floppies, "qd", dgn_beta_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD(FDC_TAG ":3", dgn_beta_floppies, "qd", dgn_beta_state::floppy_formats)
+
+	MCFG_MC6845_ADD("crtc", HD6845, "screen", XTAL_12_288MHz / 16)    //XTAL is guessed
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(16) /*?*/
+	MCFG_MC6845_UPDATE_ROW_CB(dgn_beta_state, crtc_update_row)
+	MCFG_MC6845_OUT_VSYNC_CB(WRITELINE(dgn_beta_state, dgnbeta_vsync_changed))
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)

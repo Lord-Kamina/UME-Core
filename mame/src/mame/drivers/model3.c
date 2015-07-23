@@ -1,7 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Andrew Gardner, R. Belmont, Ville Linde
 /*
     Sega Model 3
     PowerPC 603e + tilemaps + Real3D 1000 + 68000 + 2x SCSP
-    Preliminary driver by Andrew Gardiner, R. Belmont and Ville Linde
+    Preliminary driver by Andrew Gardner, R. Belmont and Ville Linde
 
     Hardware info from Team Supermodel: Bart Trzynadlowski, Ville Linde, and Stefano Teso
 
@@ -13,34 +15,37 @@
     Step 2.1: 166 MHz PPC, same 3D engine as 2.0, differences unknown
 
     Game status:
-    vf3/vf3a/vf3tb - don't boot - stuck in poly_wait()
-    bass - boots and runs with 3D
+    vf3/vf3a/vf3tb - crashes
+    bass - works
     getbass - I/O board error (?)
 
-    scud/scuda - boots and runs with 3D (scuda says "for sale and use only in Japan" but is marked Export?)
-    scudj - boots but hangs up (no SCSI IRQs)
-    scudp - shows initial screen, apparently won't go into test mode or advance
-    lostwsga - SCSI IRQ stuck on (boots and runs with 3D if hacked)
-    vs215 - boots and runs with 3D
-    lemans24 - SCSI IRQ stuck on (boots if hacked)
-    vs29815 - write to unknown 53c810 SCSI register
+    scud/scuda - works (scuda says "for sale and use only in Japan" but is marked Export?)
+    scudj - works
+    scudplus - works
+    lostwsga - works
+    vs215 - works
+    lemans24 - works
+    vs29815 - massive memory trashing and page faults
 
-    vs2 - looks like it should boot but never displays anything
-    harley - boots and runs with 3D after a "NO DAUGHTER BOARD DETECTED" error
-    skichamp - "NO DAUGHTER BOARD DETECTED", doesn't advance (no SCSI IRQs occur)
-    srally2/sraly2dx - doesn't boot (no SCSI IRQs occur, other IRQs look fine)
-    von2/von254g - SCSI IRQ stuck on (boots and runs if SCSI ack is hacked)
-    fvipers2 - says "ONE PROCESSOR DETECTED" and hangs (no SCSI IRQs occur, others look fine)
-    vs298/vs299/vs2v991 - hangs (no SCSI IRQs occur, others look fine)
+    vs2 - works
+    harley - works
+    skichamp - boots after skipping the drive board errors, massive slowdowns
+    srally2/sraly2dx - works
+    von2/von254g - works
+    fvipers2 - crashes after player selection
+    vs298 - works, hangs with an onscreen error code
+    vs299/vs2v991 - works
+    oceanhun - same as daytona2
+    lamachin - works
 
     dayto2pe - bug in DRC MMU page-fault handling, causes infinite loop at PC:0x2270 (or debug assert)
     daytona2 - As above.
     spikeout/spikeofe - As above.
-    dirtdvls/dirtdvla - SCSI IRQ stuck on (boots partially if hacked)
-    swtrilgy - doesn't boot (no SCSI IRQs occur, other IRQs look fine)
-    swtrilga - SCSI IRQ stuck on
-    magtruck - SCSI IRQ stuck on (boots and fails country code check (!) if hacked)
-    eca/ecax - doesn't boot (a few SCSI IRQs occur but then cease, other IRQs look fine)
+    dirtdvls/dirtdvla - works
+    swtrilgy -
+    swtrilga -
+    magtruck - works, broken FPU values in matrices during 2nd part of attract mode (cpu core bug?)
+    eca/ecax - cabinet network error
 
 ===================================================================================
 
@@ -656,41 +661,42 @@ ALL VROM ROMs are 16M MASK
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
 #include "cpu/powerpc/ppc.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "machine/53c810.h"
 #include "machine/nvram.h"
-#include "sound/scsp.h"
 #include "includes/model3.h"
 
 
-static void real3d_dma_callback(running_machine &machine, UINT32 src, UINT32 dst, int length, int byteswap);
+// for now, make buggy GCC/Mingw STFU about I64FMT
+#if (defined(__MINGW32__) && (__GNUC__ >= 5))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat"
+#pragma GCC diagnostic ignored "-Wformat-extra-args"
+#endif
 
 
-
-static void update_irq_state(running_machine &machine)
+void model3_state::update_irq_state()
 {
-	model3_state *state = machine.driver_data<model3_state>();
-	if ((state->m_irq_enable & state->m_irq_state) || state->m_scsi_irq_state)
+	if ((m_irq_enable & m_irq_state) || m_scsi_irq_state)
 	{
-//      printf("IRQ set: state %x enable %x scsi %x\n", state->m_irq_state, state->m_irq_enable, state->m_scsi_irq_state);
-		state->m_maincpu->set_input_line(PPC_IRQ, ASSERT_LINE);
-		state->m_scsi_irq_state = 0;
+//      printf("IRQ set: state %x enable %x scsi %x\n", m_irq_state, m_irq_enable, m_scsi_irq_state);
+		m_maincpu->set_input_line(PPC_IRQ, ASSERT_LINE);
+		m_scsi_irq_state = 0;
 	}
 	else
 	{
-//      printf("IRQ clear: state %x enable %x scsi %x\n", state->m_irq_state, state->m_irq_enable, state->m_scsi_irq_state);
-		state->m_maincpu->set_input_line(PPC_IRQ, CLEAR_LINE);
+//      printf("IRQ clear: state %x enable %x scsi %x\n", m_irq_state, m_irq_enable, m_scsi_irq_state);
+		m_maincpu->set_input_line(PPC_IRQ, CLEAR_LINE);
 	}
 }
 
-void model3_set_irq_line(running_machine &machine, UINT8 bit, int line)
+void model3_state::set_irq_line(UINT8 bit, int line)
 {
-	model3_state *state = machine.driver_data<model3_state>();
 	if (line != CLEAR_LINE)
-		state->m_irq_state |= bit;
+		m_irq_state |= bit;
 	else
-		state->m_irq_state &= ~bit;
-	update_irq_state(machine);
+		m_irq_state &= ~bit;
+	update_irq_state();
 }
 
 
@@ -1057,20 +1063,17 @@ WRITE64_MEMBER(model3_state::scsi_w)
 	}
 }
 
-static UINT32 scsi_fetch(running_machine &machine, UINT32 dsp)
+LSI53C810_FETCH_CB(model3_state::scsi_fetch)
 {
-	model3_state *drvstate = machine.driver_data<model3_state>();
-	address_space &space = drvstate->m_maincpu->space(AS_PROGRAM);
-	UINT32 result;
-	result = space.read_dword(dsp);
+	address_space &space = m_maincpu->space(AS_PROGRAM);
+	UINT32 result = space.read_dword(dsp);
 	return FLIPENDIAN_INT32(result);
 }
 
-static void scsi_irq_callback(running_machine &machine, int state)
+LSI53C810_IRQ_CB(model3_state::scsi_irq_callback)
 {
-	model3_state *drvstate = machine.driver_data<model3_state>();
-	drvstate->m_scsi_irq_state = state;
-	update_irq_state(machine);
+	m_scsi_irq_state = state;
+	update_irq_state();
 }
 
 /*****************************************************************************/
@@ -1082,14 +1085,14 @@ READ64_MEMBER(model3_state::real3d_dma_r)
 	switch(offset)
 	{
 		case 1:
-			return (m_dma_irq << 24) | (m_dma_endian << 8);
+			return (m_dma_irq << 24) | (m_dma_endian << 8) | m_dma_busy;
 		case 2:
 			if(ACCESSING_BITS_0_31) {
 				return m_dma_data;
 			}
 			break;
 	}
-	mame_printf_debug("real3d_dma_r: %08X, %08X%08X\n", offset, (UINT32)(mem_mask >> 32), (UINT32)(mem_mask));
+	osd_printf_debug("real3d_dma_r: %08X, %08X%08X\n", offset, (UINT32)(mem_mask >> 32), (UINT32)(mem_mask));
 	return 0;
 }
 
@@ -1113,21 +1116,21 @@ WRITE64_MEMBER(model3_state::real3d_dma_w)
 				int length = FLIPENDIAN_INT32((UINT32)(data >> 32)) * 4;
 				if (m_dma_endian & 0x80)
 				{
-					real3d_dma_callback(machine(), m_dma_source, m_dma_dest, length, 0);
+					real3d_dma_callback(m_dma_source, m_dma_dest, length, 0);
 				}
 				else
 				{
-					real3d_dma_callback(machine(), m_dma_source, m_dma_dest, length, 1);
+					real3d_dma_callback(m_dma_source, m_dma_dest, length, 1);
 				}
 				m_dma_irq |= 0x01;
-				scsi_irq_callback(machine(), 1);
+				scsi_irq_callback(1);
 				return;
 			}
 			else if(ACCESSING_BITS_16_23)
 			{
 				if(data & 0x10000) {
 					m_dma_irq &= ~0x1;
-					scsi_irq_callback(machine(), 0);
+					scsi_irq_callback(0);
 				}
 				return;
 			}
@@ -1147,6 +1150,8 @@ WRITE64_MEMBER(model3_state::real3d_dma_w)
 					m_dma_status ^= 0xffffffff;
 					m_dma_data = m_dma_status;
 				}
+				m_dma_busy = 0x80000000;
+				m_real3d_dma_timer->adjust(attotime::from_nsec(50000));
 				return;
 			}
 			if(ACCESSING_BITS_0_31) {       /* ??? */
@@ -1158,77 +1163,59 @@ WRITE64_MEMBER(model3_state::real3d_dma_w)
 	logerror("real3d_dma_w: %08X, %08X%08X, %08X%08X", offset, (UINT32)(data >> 32), (UINT32)(data), (UINT32)(mem_mask >> 32), (UINT32)(mem_mask));
 }
 
-static void real3d_dma_callback(running_machine &machine, UINT32 src, UINT32 dst, int length, int byteswap)
+LSI53C810_DMA_CB(model3_state::real3d_dma_callback)
 {
-	model3_state *drvstate = machine.driver_data<model3_state>();
-	address_space &space = drvstate->m_maincpu->space(AS_PROGRAM);
 	switch(dst >> 24)
 	{
 		case 0x88:      /* Display List End Trigger */
-			real3d_display_list_end(machine);
+			real3d_display_list_end();
 			break;
 		case 0x8c:      /* Display List RAM 2 */
-			real3d_display_list2_dma(space, src, dst, length, byteswap);
+			real3d_display_list2_dma(src, dst, length, byteswap);
 			break;
 		case 0x8e:      /* Display List RAM 1 */
-			real3d_display_list1_dma(space, src, dst, length, byteswap);
+			real3d_display_list1_dma(src, dst, length, byteswap);
 			break;
 		case 0x90:      /* VROM Texture Download */
-			real3d_vrom_texture_dma(space, src, dst, length, byteswap);
+			real3d_vrom_texture_dma(src, dst, length, byteswap);
 			break;
 		case 0x94:      /* Texture FIFO */
-			real3d_texture_fifo_dma(space, src, length, byteswap);
+			real3d_texture_fifo_dma(src, length, byteswap);
 			break;
 		case 0x98:      /* Polygon RAM */
-			real3d_polygon_ram_dma(space, src, dst, length, byteswap);
+			real3d_polygon_ram_dma(src, dst, length, byteswap);
 			break;
 		case 0x9c:      /* Unknown */
 			break;
 		default:
-			logerror("dma_callback: %08X, %08X, %d at %08X", src, dst, length, machine.device("maincpu")->safe_pc());
+			logerror("dma_callback: %08X, %08X, %d at %08X", src, dst, length, machine().device("maincpu")->safe_pc());
 			break;
 	}
 }
 
 /*****************************************************************************/
 
-/* this is a 93C46 but with reset delay that is needed by Lost World */
-static const eeprom_interface eeprom_intf =
-{
-	6,              /* address bits */
-	16,             /* data bits */
-	"*110",         /*  read command */
-	"*101",         /* write command */
-	"*111",         /* erase command */
-	"*10000xxxx",   /* lock command */
-	"*10011xxxx",   /* unlock command */
-	1,              /* enable_multi_read */
-	5               /* reset_delay (Lost World needs this, very similar to wbeachvl in playmark.c) */
-};
-
-static const struct LSI53C810interface lsi53c810_intf =
-{
-	&scsi_irq_callback,
-	&real3d_dma_callback,
-	&scsi_fetch,
-};
-
 static void configure_fast_ram(running_machine &machine)
 {
 	model3_state *state = machine.driver_data<model3_state>();
 	/* set conservative DRC options */
-	ppcdrc_set_options(machine.device("maincpu"), PPCDRC_COMPATIBLE_OPTIONS - PPCDRC_ACCURATE_SINGLES);
+	machine.device<ppc_device>("maincpu")->ppcdrc_set_options(PPCDRC_COMPATIBLE_OPTIONS);
 
 	/* configure fast RAM regions for DRC */
-	ppcdrc_add_fastram(machine.device("maincpu"), 0x00000000, 0x007fffff, FALSE, state->m_work_ram);
+	machine.device<ppc_device>("maincpu")->ppcdrc_add_fastram(0x00000000, 0x007fffff, FALSE, state->m_work_ram);
 }
 
 TIMER_CALLBACK_MEMBER(model3_state::model3_sound_timer_tick)
 {
 	if (m_sound_irq_enable)
 	{
-		model3_set_irq_line(machine(), 0x40, ASSERT_LINE);
+		set_irq_line(0x40, ASSERT_LINE);
 	}
+}
+
+TIMER_CALLBACK_MEMBER(model3_state::real3d_dma_timer_callback)
+{
+	m_dma_busy = 0;
 }
 
 MACHINE_START_MEMBER(model3_state,model3_10)
@@ -1236,79 +1223,84 @@ MACHINE_START_MEMBER(model3_state,model3_10)
 	configure_fast_ram(machine());
 
 	m_sound_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(model3_state::model3_sound_timer_tick),this));
+	m_real3d_dma_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(model3_state::real3d_dma_timer_callback),this));
 }
 MACHINE_START_MEMBER(model3_state,model3_15)
 {
 	configure_fast_ram(machine());
 
 	m_sound_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(model3_state::model3_sound_timer_tick),this));
+	m_real3d_dma_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(model3_state::real3d_dma_timer_callback),this));
 }
 MACHINE_START_MEMBER(model3_state,model3_20)
 {
 	configure_fast_ram(machine());
 
 	m_sound_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(model3_state::model3_sound_timer_tick),this));
+	m_real3d_dma_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(model3_state::real3d_dma_timer_callback),this));
 }
 MACHINE_START_MEMBER(model3_state,model3_21)
 {
 	configure_fast_ram(machine());
 
 	m_sound_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(model3_state::model3_sound_timer_tick),this));
+	m_real3d_dma_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(model3_state::real3d_dma_timer_callback),this));
 }
 
-static void model3_init(running_machine &machine, int step)
+void model3_state::model3_init(int step)
 {
-	model3_state *state = machine.driver_data<model3_state>();
-	state->m_step = step;
+	m_step = step;
 
-	state->m_sound_irq_enable = 0;
-	state->m_sound_timer->adjust(attotime::never);
+	m_sound_irq_enable = 0;
+	m_sound_timer->adjust(attotime::never);
 
-	state->membank("bank1")->set_base(state->memregion( "user1" )->base() + 0x800000 ); /* banked CROM */
+	m_dma_busy = 0;
+	m_real3d_dma_timer->adjust(attotime::never);
 
-	state->membank("bank4")->set_base(state->memregion("samples")->base() + 0x200000);
-	state->membank("bank5")->set_base(state->memregion("samples")->base() + 0x600000);
+	membank("bank1")->set_base(memregion( "user1" )->base() + 0x800000 ); /* banked CROM */
+
+	membank("bank4")->set_base(memregion("samples")->base() + 0x200000);
+	membank("bank5")->set_base(memregion("samples")->base() + 0x600000);
 
 	// copy the 68k vector table into RAM
-	memcpy(state->m_soundram, state->memregion("audiocpu")->base()+0x80000, 16);
-	machine.device("audiocpu")->reset();
+	memcpy(m_soundram, memregion("audiocpu")->base()+0x80000, 16);
+	machine().device("audiocpu")->reset();
 
-	model3_machine_init(machine, step); // step 1.5
-	model3_tap_reset(machine);
+	m_m3_step = step; // step = BCD hardware rev.  0x10 for 1.0, 0x15 for 1.5, 0x20 for 2.0, etc.
+	tap_reset();
 
-	if(step < 0x20) {
-		if( mame_stricmp(machine.system().name, "vs215") == 0 ||
-			mame_stricmp(machine.system().name, "vs29815") == 0 ||
-			mame_stricmp(machine.system().name, "bass") == 0 )
+	if (step < 0x20)
+	{
+		if (m_step15_with_mpc106)
 		{
-			mpc106_init(machine);
+			mpc106_init(machine());
 		}
 		else
 		{
-			mpc105_init(machine);
+			mpc105_init(machine());
 		}
-		state->m_real3d_device_id = 0x16c311db; /* PCI Vendor ID (11db = SEGA), Device ID (16c3 = 315-5827) */
+		m_real3d_device_id = 0x16c311db; /* PCI Vendor ID (11db = SEGA), Device ID (16c3 = 315-5827) */
 	}
-	else {
-		mpc106_init(machine);
+	else
+	{
+		mpc106_init(machine());
 		// some step 2+ games need the older PCI ID (obvious symptom:
 		// vbl is enabled briefly then disabled so the game hangs)
-		if (mame_stricmp(machine.system().name, "magtruck") == 0 ||
-			mame_stricmp(machine.system().name, "von254g") == 0)
+		if (m_step20_with_old_real3d)
 		{
-			state->m_real3d_device_id = 0x16c311db; /* PCI Vendor ID (11db = SEGA), Device ID (16c3 = 315-5827) */
+			m_real3d_device_id = 0x16c311db; /* PCI Vendor ID (11db = SEGA), Device ID (16c3 = 315-5827) */
 		}
 		else
 		{
-			state->m_real3d_device_id = 0x178611db; /* PCI Vendor ID (11db = SEGA), Device ID (1786 = 315-6022) */
+			m_real3d_device_id = 0x178611db; /* PCI Vendor ID (11db = SEGA), Device ID (1786 = 315-6022) */
 		}
 	}
 }
 
-MACHINE_RESET_MEMBER(model3_state,model3_10){ model3_init(machine(), 0x10); }
-MACHINE_RESET_MEMBER(model3_state,model3_15){ model3_init(machine(), 0x15); }
-MACHINE_RESET_MEMBER(model3_state,model3_20){ model3_init(machine(), 0x20); }
-MACHINE_RESET_MEMBER(model3_state,model3_21){ model3_init(machine(), 0x21); }
+MACHINE_RESET_MEMBER(model3_state,model3_10){ model3_init(0x10); }
+MACHINE_RESET_MEMBER(model3_state,model3_15){ model3_init(0x15); }
+MACHINE_RESET_MEMBER(model3_state,model3_20){ model3_init(0x20); }
+MACHINE_RESET_MEMBER(model3_state,model3_21){ model3_init(0x21); }
 
 
 READ64_MEMBER(model3_state::model3_ctrl_r)
@@ -1395,9 +1387,9 @@ WRITE64_MEMBER(model3_state::model3_ctrl_w)
 			if (ACCESSING_BITS_56_63)
 			{
 				int reg = (data >> 56) & 0xff;
-				m_eeprom->write_bit((reg & 0x20) ? 1 : 0);
-				m_eeprom->set_clock_line((reg & 0x80) ? ASSERT_LINE : CLEAR_LINE);
-				m_eeprom->set_cs_line((reg & 0x40) ? CLEAR_LINE : ASSERT_LINE);
+				m_eeprom->di_write((reg & 0x20) ? 1 : 0);
+				m_eeprom->clk_write((reg & 0x80) ? ASSERT_LINE : CLEAR_LINE);
+				m_eeprom->cs_write((reg & 0x40) ? ASSERT_LINE : CLEAR_LINE);
 				m_controls_bank = reg & 0xff;
 			}
 			return;
@@ -1458,7 +1450,7 @@ WRITE64_MEMBER(model3_state::model3_ctrl_w)
 						}
 						break;
 					default:
-						//mame_printf_debug("Lightgun: Unknown command %02X at %08X\n", (UINT32)(data >> 24), space.device().safe_pc());
+						//osd_printf_debug("Lightgun: Unknown command %02X at %08X\n", (UINT32)(data >> 24), space.device().safe_pc());
 						break;
 				}
 			}
@@ -1499,7 +1491,7 @@ READ64_MEMBER(model3_state::model3_sys_r)
 		case 0x10/8:
 			if (ACCESSING_BITS_56_63)
 			{
-				UINT64 res = model3_tap_read(machine());
+				UINT64 res = tap_read();
 
 				return res<<61;
 			}
@@ -1571,15 +1563,14 @@ WRITE64_MEMBER(model3_state::model3_sys_w)
 				m_crom_bank = data >> 56;
 
 				data >>= 56;
-				data = (~data) & 0x7;
+				data = (~data) & 0xf;
 
 				membank("bank1")->set_base(memregion( "user1" )->base() + 0x800000 + (data * 0x800000)); /* banked CROM */
 			}
 			if (ACCESSING_BITS_24_31)
 			{
 				data >>= 24;
-				model3_tap_write(machine(),
-					(data >> 6) & 1,// TCK
+				tap_write((data >> 6) & 1,// TCK
 					(data >> 2) & 1,// TMS
 					(data >> 5) & 1,// TDI
 					(data >> 7) & 1 // TRST
@@ -1618,7 +1609,7 @@ READ64_MEMBER(model3_state::real3d_status_r)
 	{
 		/* pretty sure this is VBLANK */
 		m_real3d_status &= ~U64(0x0000000200000000);
-		if (machine().primary_screen->vblank())
+		if (m_screen->vblank())
 			m_real3d_status |= U64(0x0000000200000000);
 		return m_real3d_status;
 	}
@@ -1626,13 +1617,28 @@ READ64_MEMBER(model3_state::real3d_status_r)
 }
 
 /* SCSP interface */
+READ8_MEMBER(model3_state::model3_sound_r)
+{
+	switch (offset)
+	{
+		case 4:
+		{
+			UINT8 res = 0;
+			res |= 1;
+			res |= 0x2;     // magtruck country check
+			return res;
+		}
+	}
+	return 0;
+}
+
 WRITE8_MEMBER(model3_state::model3_sound_w)
 {
 	switch (offset)
 	{
 		case 0:
 			// clear the interrupt
-			model3_set_irq_line(machine(), 0x40, CLEAR_LINE);
+			set_irq_line(0x40, CLEAR_LINE);
 
 			if (m_dsbz80 != NULL)
 			{
@@ -1640,7 +1646,7 @@ WRITE8_MEMBER(model3_state::model3_sound_w)
 			}
 
 			// send to the sound board
-			scsp_midi_in(machine().device("scsp1"), space, 0, data, 0);
+			m_scsp1->midi_in(space, 0, data, 0);
 
 			if (m_sound_irq_enable)
 			{
@@ -1666,165 +1672,79 @@ WRITE8_MEMBER(model3_state::model3_sound_w)
 
 READ64_MEMBER(model3_state::network_r)
 {
-	mame_printf_debug("network_r: %02X at %08X\n", offset, space.device().safe_pc());
+	osd_printf_debug("network_r: %02X at %08X\n", offset, space.device().safe_pc());
 	return m_network_ram[offset];
 }
 
 WRITE64_MEMBER(model3_state::network_w)
 {
 	COMBINE_DATA(m_network_ram + offset);
-	mame_printf_debug("network_w: %02X, %08X%08X at %08X\n", offset, (UINT32)(data >> 32), (UINT32)(data), space.device().safe_pc());
+	osd_printf_debug("network_w: %02X, %08X%08X at %08X\n", offset, (UINT32)(data >> 32), (UINT32)(data), space.device().safe_pc());
 }
 
 
-static const UINT16 vs299_prot_data[] =
-{
-	0xc800, 0x4a20, 0x5041, 0x4e41, 0x4920, 0x4154, 0x594c, 0x4220,
-	0x4152, 0x4953, 0x204c, 0x5241, 0x4547, 0x544e, 0x4e49, 0x2041,
-	0x4547, 0x4d52, 0x4e41, 0x2059, 0x4e45, 0x4c47, 0x4e41, 0x2044,
-	0x454e, 0x4854, 0x5245, 0x414c, 0x444e, 0x2053, 0x5246, 0x4e41,
-	0x4543, 0x4320, 0x4c4f, 0x4d4f, 0x4942, 0x2041, 0x4150, 0x4152,
-	0x5547, 0x5941, 0x4220, 0x4c55, 0x4147, 0x4952, 0x2041, 0x5053,
-	0x4941, 0x204e, 0x5243, 0x414f, 0x4954, 0x2041, 0x4542, 0x474c,
-	0x5549, 0x204d, 0x494e, 0x4547, 0x4952, 0x2041, 0x4153, 0x4455,
-	0x2049, 0x4f4b, 0x4552, 0x2041, 0x4544, 0x4d4e, 0x5241, 0x204b,
-	0x4f52, 0x414d, 0x494e, 0x2041, 0x4353, 0x544f, 0x414c, 0x444e,
-	0x5520, 0x4153, 0x5320, 0x554f, 0x4854, 0x4641, 0x4952, 0x4143,
-	0x4d20, 0x5845, 0x4349, 0x204f, 0x5559, 0x4f47, 0x4c53, 0x5641,
-	0x4149, 0x4620, 0x5f43, 0x4553, 0x4147
-};
 
-static const UINT16 swt_prot_data[] =
+READ64_MEMBER(model3_state::model3_5881prot_r)
 {
-	0xffff,
-	0x3d3d, 0x3d3d, 0x203d, 0x5453, 0x5241, 0x5720, 0x5241, 0x2053,
-	0x3d3d, 0x3d3d, 0x0a3d, 0x6f43, 0x7970, 0x6952, 0x6867, 0x2074,
-	0x4553, 0x4147, 0x4520, 0x746e, 0x7265, 0x7270, 0x7369, 0x7365,
-	0x202c, 0x744c, 0x2e64, 0x410a, 0x756d, 0x6573, 0x656d, 0x746e,
-	0x5220, 0x4426, 0x4420, 0x7065, 0x2e74, 0x2320, 0x3231, 0x4b0a,
-	0x7461, 0x7573, 0x6179, 0x7573, 0x4120, 0x646e, 0x206f, 0x2026,
-	0x614b, 0x6f79, 0x6f6b, 0x5920, 0x6d61, 0x6d61, 0x746f, 0x0a6f,
-};
+	UINT64 retvalue = U64(0xffffffffffffffff);
 
-static const UINT16 fvipers2_prot_data[] =
-{
-	0x2a2a,
-	0x2a2a, 0x2a2a, 0x2a2a, 0x2a2a, 0x2a2a, 0x2a2a, 0x202a, 0x5b5b,
-	0x4620, 0x6769, 0x7468, 0x6e69, 0x2067, 0x6956, 0x6570, 0x7372,
-	0x3220, 0x5d20, 0x205d, 0x6e69, 0x3c20, 0x4d3c, 0x444f, 0x4c45,
-	0x332d, 0x3e3e, 0x4320, 0x706f, 0x7279, 0x6769, 0x7468, 0x2820,
-	0x2943, 0x3931, 0x3839, 0x5320, 0x4745, 0x2041, 0x6e45, 0x6574,
-	0x7072, 0x6972, 0x6573, 0x2c73, 0x544c, 0x2e44, 0x2020, 0x4120,
-	0x6c6c, 0x7220, 0x6769, 0x7468, 0x7220, 0x7365, 0x7265, 0x6576,
-	0x2e64, 0x2a20, 0x2a2a, 0x2a2a, 0x2a2a, 0x2a2a, 0x2a2a, 0x2a2a,
-};
-
-static const UINT16 spikeout_prot_data[] =
-{
-	0x0000,
-	0x4f4d, 0x4544, 0x2d4c, 0x2033, 0x7953, 0x7473, 0x6d65, 0x5020,
-	0x6f72, 0x7267, 0x6d61, 0x4320, 0x706f, 0x7279, 0x6769, 0x7468,
-	0x2820, 0x2943, 0x3120, 0x3939, 0x2035, 0x4553, 0x4147, 0x4520,
-	0x746e, 0x7265, 0x7270, 0x7369, 0x7365, 0x4c2c, 0x4454, 0x202e,
-	0x6c41, 0x206c, 0x6972, 0x6867, 0x2074, 0x6572, 0x6573, 0x7672,
-	0x6465, 0x202e, 0x2020, 0x0020
-};
-
-static const UINT16 eca_prot_data[] =
-{
-	0x0000,
-	0x2d2f, 0x202d, 0x4d45, 0x5245, 0x4547, 0x434e, 0x2059, 0x4143,
-	0x4c4c, 0x4120, 0x424d, 0x4c55, 0x4e41, 0x4543, 0x2d20, 0x0a2d,
-	0x6f43, 0x7970, 0x6952, 0x6867, 0x2074, 0x4553, 0x4147, 0x4520,
-	0x746e, 0x7265, 0x7270, 0x7369, 0x7365, 0x202c, 0x744c, 0x2e64,
-	0x530a, 0x666f, 0x7774, 0x7261, 0x2065, 0x2652, 0x2044, 0x6544,
-	0x7470, 0x202e, 0x3123, 0x660a, 0x726f, 0x7420, 0x7365, 0x0a74,
-};
-
-static const UINT16 oceanhun_prot_data[] =
-{
-	0x0000,    // dummy read
-	0x3d3d, 0x203d, 0x434f, 0x4145, 0x204e, 0x5548, 0x544e, 0x5245,
-	0x3d20, 0x3d3d, 0x430a, 0x706f, 0x5279, 0x6769, 0x7468, 0x5320,
-	0x4745, 0x2041, 0x6e45, 0x6574, 0x7072, 0x6972, 0x6573, 0x2c73,
-	0x4c20, 0x6474, 0x0a2e, 0x6d41, 0x7375, 0x6d65, 0x6e65, 0x2074,
-	0x2652, 0x2044, 0x6544, 0x7470, 0x202e, 0x3123, 0x4b0a, 0x7a61,
-	0x6e75, 0x7261, 0x2069, 0x7354, 0x6b75, 0x6d61, 0x746f, 0x206f,
-	0x6553, 0x7463, 0x6f69, 0x206e, 0x614d, 0x616e, 0x6567, 0x0a72
-};
-/*
-   dirtdvls: first 2 words read are discarded, then every other word
-   is written to char RAM starting at f1013400 (in between words are
-   discarded).
-*/
-
-READ64_MEMBER(model3_state::model3_security_r)
-{
-	switch(offset)
+	if (offset == 0x00 / 8)
 	{
-		case 0x00/8:    return 0;       /* status */
-		case 0x1c/8:                    /* security board data read */
-		{
-			if (mame_stricmp(machine().system().name, "vs299") == 0 ||
-				mame_stricmp(machine().system().name, "vs2v991") == 0)
-			{
-				return (UINT64)vs299_prot_data[m_prot_data_ptr++] << 48;
-			}
-			else if (mame_stricmp(machine().system().name, "swtrilgy") == 0 ||
-						mame_stricmp(machine().system().name, "swtrilgya") == 0)
-			{
-				UINT64 data = (UINT64)swt_prot_data[m_prot_data_ptr++] << 16;
-				if (m_prot_data_ptr > 0x38)
-				{
-					m_prot_data_ptr = 0;
-				}
-				return data;
-			}
-			else if (mame_stricmp(machine().system().name, "fvipers2") == 0)
-			{
-				UINT64 data = (UINT64)fvipers2_prot_data[m_prot_data_ptr++] << 16;
-				if (m_prot_data_ptr >= 0x41)
-				{
-					m_prot_data_ptr = 0;
-				}
-				return data;
-			}
-			else if (mame_stricmp(machine().system().name, "spikeout") == 0 ||
-						mame_stricmp(machine().system().name, "spikeofe") == 0)
-			{
-				UINT64 data = (UINT64)spikeout_prot_data[m_prot_data_ptr++] << 16;
-				if (m_prot_data_ptr >= 0x55)
-				{
-					m_prot_data_ptr = 0;
-				}
-				return data;
-			}
-			else if (mame_stricmp(machine().system().name, "eca") == 0 ||
-						mame_stricmp(machine().system().name, "ecax") == 0)
-			{
-				UINT64 data = (UINT64)eca_prot_data[m_prot_data_ptr++] << 16;
-				if (m_prot_data_ptr >= 0x31)
-				{
-					m_prot_data_ptr = 0;
-				}
-				return data;
-			}
-			else if (mame_stricmp(machine().system().name, "oceanhun") == 0)
-			{
-				UINT64 data = (UINT64)oceanhun_prot_data[m_prot_data_ptr++] << 16;
-				if (m_prot_data_ptr >= 58)
-				{
-					m_prot_data_ptr = 0;
-				}
-				return data;
-			}
-			else
-			{
-				return U64(0xffffffffffffffff);
-			}
-		}
+		retvalue = 0;
 	}
-	return U64(0xffffffffffffffff);
+	else if (offset == 0x18 / 8)
+	{
+		if (first_read == 1)
+		{
+			// the RAM based schemes expect a dummy value before the start of the stream
+			// to match the previous simulation I use 0xffff here
+			first_read = 0;
+			retvalue = 0xffff << 16;
+		}
+		else
+		{
+			UINT8* base;
+			retvalue = m_cryptdevice->do_decrypt(base);
+			//  retvalue = ((retvalue & 0xff00) >> 8) | ((retvalue & 0x00ff) << 8); // don't endian swap the return value on this hardware
+			retvalue <<= 16;
+		}
+
+	//  printf("model3_5881prot_r offset %08x : %08x%08x (%08x%08x)\n", offset * 8, (UINT32)(retvalue >> 32), (UINT32)(retvalue & 0xffffffff), (UINT32)(mem_mask >> 32), (UINT32)(mem_mask & 0xffffffff));
+	}
+	else
+	{
+		printf("model3_5881prot_r offset %08x : %08x%08x (%08x%08x)\n", offset * 8, (UINT32)(retvalue >> 32), (UINT32)(retvalue & 0xffffffff), (UINT32)(mem_mask >> 32), (UINT32)(mem_mask & 0xffffffff));
+	}
+
+	return retvalue;
+
+
+}
+
+WRITE64_MEMBER(model3_state::model3_5881prot_w)
+{
+	if (offset == 0x10 / 8)
+	{
+		// code is copied to RAM first, so base address is always 0
+		m_cryptdevice->set_addr_low(0);
+		m_cryptdevice->set_addr_high(0);
+
+		if (data != 0)
+			printf("model3_5881prot_w address isn't 0?\n");
+
+		first_read = 1;
+	}
+	else if (offset == 0x18 / 8)
+	{
+		UINT16 subkey = data >> (32 + 16);
+		subkey = ((subkey & 0xff00) >> 8) | ((subkey & 0x00ff) << 8); // endian swap the sub-key for this hardware
+		printf("model3_5881prot_w setting subkey %04x\n", subkey);
+		m_cryptdevice->set_subkey(subkey);
+	}
+	else
+	{
+		printf("model3_5881prot_w offset %08x : %08x%08x (%08x%08x)\n", offset * 8, (UINT32)(data >> 32), (UINT32)(data & 0xffffffff), (UINT32)(mem_mask >> 32), (UINT32)(mem_mask & 0xffffffff));
+	}
 }
 
 WRITE64_MEMBER(model3_state::daytona2_rombank_w)
@@ -1847,12 +1767,10 @@ static ADDRESS_MAP_START( model3_mem, AS_PROGRAM, 64, model3_state )
 	AM_RANGE(0x98000000, 0x980fffff) AM_WRITE(real3d_polygon_ram_w )
 
 	AM_RANGE(0xf0040000, 0xf004003f) AM_MIRROR(0x0e000000) AM_READWRITE(model3_ctrl_r, model3_ctrl_w )
-	AM_RANGE(0xf0080000, 0xf008ffff) AM_MIRROR(0x0e000000) AM_WRITE8(model3_sound_w, U64(0xffffffffffffffff) )
+	AM_RANGE(0xf0080000, 0xf008ffff) AM_MIRROR(0x0e000000) AM_READWRITE8(model3_sound_r, model3_sound_w, U64(0xffffffffffffffff) )
 	AM_RANGE(0xf00c0000, 0xf00dffff) AM_MIRROR(0x0e000000) AM_RAM AM_SHARE("backup")    /* backup SRAM */
 	AM_RANGE(0xf0100000, 0xf010003f) AM_MIRROR(0x0e000000) AM_READWRITE(model3_sys_r, model3_sys_w )
 	AM_RANGE(0xf0140000, 0xf014003f) AM_MIRROR(0x0e000000) AM_READWRITE(model3_rtc_r, model3_rtc_w )
-	AM_RANGE(0xf0180000, 0xf019ffff) AM_MIRROR(0x0e000000) AM_RAM                           /* Security Board RAM */
-	AM_RANGE(0xf01a0000, 0xf01a003f) AM_MIRROR(0x0e000000) AM_READ(model3_security_r )  /* Security board */
 
 	AM_RANGE(0xf1000000, 0xf10f7fff) AM_READWRITE(model3_char_r, model3_char_w )    /* character RAM */
 	AM_RANGE(0xf10f8000, 0xf10fffff) AM_READWRITE(model3_tile_r, model3_tile_w )    /* tilemaps */
@@ -1874,7 +1792,7 @@ static INPUT_PORTS_START( common )
 	PORT_BIT( 0xc0, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
 	PORT_START("IN1")
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_SERVICE ) PORT_NAME("Service Button B") PORT_CODE(KEYCODE_8)
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_SERVICE ) PORT_NAME("Test Button B") PORT_CODE(KEYCODE_7)
 	PORT_BIT( 0x1f, IP_ACTIVE_LOW, IPT_UNUSED )
@@ -2109,7 +2027,7 @@ static INPUT_PORTS_START( skichamp )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_START2 )     /* Select 2 */
 
 	PORT_START("IN1")
-	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)
+	PORT_BIT( 0x20, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_SERVICE ) PORT_NAME("Service Button B") PORT_CODE(KEYCODE_8)
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_SERVICE ) PORT_NAME("Test Button B") PORT_CODE(KEYCODE_7)
 	PORT_BIT( 0x1f, IP_ACTIVE_LOW, IPT_UNUSED )
@@ -2135,13 +2053,13 @@ INPUT_PORTS_END
 
 #define ROM_LOAD_VROM(name, offset, length, hash)     ROMX_LOAD(name, offset, length, hash, ROM_GROUPWORD | ROM_SKIP(14) )
 
-ROM_START( lemans24 )   /* step 1.5 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+ROM_START( lemans24 )   /* step 1.5, Sega game ID# is 833-13159, ROM board ID# 834-13160 GAME BD LEMANS 24 */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
-	ROM_LOAD64_WORD_SWAP( "epr-19887.17", 0x600006, 0x080000, CRC(2842bb87) SHA1(2acabf3f7281acaf6bab4d3bae9701df3909cf81) )
-	ROM_LOAD64_WORD_SWAP( "epr-19888.18", 0x600004, 0x080000, CRC(800d763d) SHA1(4f2865a64d6dda638840d359db3bd2f22b6d1404) )
-	ROM_LOAD64_WORD_SWAP( "epr-19889.19", 0x600002, 0x080000, CRC(d1f7e44c) SHA1(5faad711cf39c0fb10c3b9ccce25f5219ddd5a17) )
-	ROM_LOAD64_WORD_SWAP( "epr-19890.20", 0x600000, 0x080000, CRC(9c16c3cc) SHA1(f1fba0c7cbdf7ddc4224356d50fdabea612c129d) )
+	ROM_LOAD64_WORD_SWAP( "epr-19887b.17", 0x600006, 0x080000, CRC(2842bb87) SHA1(2acabf3f7281acaf6bab4d3bae9701df3909cf81) )
+	ROM_LOAD64_WORD_SWAP( "epr-19888b.18", 0x600004, 0x080000, CRC(800d763d) SHA1(4f2865a64d6dda638840d359db3bd2f22b6d1404) )
+	ROM_LOAD64_WORD_SWAP( "epr-19889b.19", 0x600002, 0x080000, CRC(d1f7e44c) SHA1(5faad711cf39c0fb10c3b9ccce25f5219ddd5a17) )
+	ROM_LOAD64_WORD_SWAP( "epr-19890b.20", 0x600000, 0x080000, CRC(9c16c3cc) SHA1(f1fba0c7cbdf7ddc4224356d50fdabea612c129d) )
 
 	// CROM0
 	ROM_LOAD64_WORD_SWAP( "mpr-19857.01", 0x800006, 0x400000, CRC(82c9fcfc) SHA1(31c38483b33606b11d74da21dc49df8fa9f227db) )
@@ -2206,12 +2124,12 @@ ROM_END
 
 ROM_START( scud )   /* step 1.5, Sega game ID# is 833-13041, ROM board ID# 834-13072 SPG COMM AUS */
 	/* There is known to be a ROM board ID# 834-13034 SPG DX AUS with program roms EPR-19634 to EPR-19637 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
-	ROM_LOAD64_WORD_SWAP( "epr-19731.17",  0x0600006,  0x80000,  CRC(3EE6447E) SHA1(124697791d90c1b352dd6e33bd3b45535aa92bb5) )
-	ROM_LOAD64_WORD_SWAP( "epr-19732.18",  0x0600004,  0x80000,  CRC(23E864BB) SHA1(0f34d963ee681ca1006f3dec12b593d961e3e442) )
-	ROM_LOAD64_WORD_SWAP( "epr-19733.19",  0x0600002,  0x80000,  CRC(6565E29A) SHA1(4fb4f3e77fa46a825900a63095307714e71c08f3) )
-	ROM_LOAD64_WORD_SWAP( "epr-19734.20",  0x0600000,  0x80000,  CRC(BE897336) SHA1(690e17f2f9a5fbe63686d197552a298efcc8c8c5) )
+	ROM_LOAD64_WORD_SWAP( "epr-19731.17",  0x0600006,  0x80000,  CRC(3ee6447e) SHA1(124697791d90c1b352dd6e33bd3b45535aa92bb5) )
+	ROM_LOAD64_WORD_SWAP( "epr-19732.18",  0x0600004,  0x80000,  CRC(23e864bb) SHA1(0f34d963ee681ca1006f3dec12b593d961e3e442) )
+	ROM_LOAD64_WORD_SWAP( "epr-19733.19",  0x0600002,  0x80000,  CRC(6565e29a) SHA1(4fb4f3e77fa46a825900a63095307714e71c08f3) )
+	ROM_LOAD64_WORD_SWAP( "epr-19734.20",  0x0600000,  0x80000,  CRC(be897336) SHA1(690e17f2f9a5fbe63686d197552a298efcc8c8c5) )
 
 	// CROM0
 	ROM_LOAD64_WORD_SWAP( "mpr-19658.01",  0x0800006,  0x400000, CRC(d523235c) SHA1(0dbfe746b2bdc185768d82c50a329c4c58ad4a29) )
@@ -2281,7 +2199,7 @@ ROM_START( scud )   /* step 1.5, Sega game ID# is 833-13041, ROM board ID# 834-1
 ROM_END
 
 ROM_START( scudj )  /* step 1.5, Sega game ID# is 833-13041, ROM board ID# 12934 SPG DX */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-19610.17a",  0x0600006,  0x80000,  CRC(53f5cd94) SHA1(e27609165087ef7000b61ce628883561ffe64b22) )
 	ROM_LOAD64_WORD_SWAP( "epr-19609.18a",  0x0600004,  0x80000,  CRC(ec418b68) SHA1(8455db7e174ea00db30b7e61681ac7b7fcd9ba1c) )
@@ -2356,7 +2274,7 @@ ROM_START( scudj )  /* step 1.5, Sega game ID# is 833-13041, ROM board ID# 12934
 ROM_END
 
 ROM_START( scuda )  /* step 1.5, Sega game ID# is 833-13041, ROM board ID# 834-13042 SPG FOR COMMUNICATION */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-19688.17",  0x0600006,  0x80000,  CRC(a4c85103) SHA1(b2e57f86d0a49e3e88fa7d6a77bbd99039c034bb) )
 	ROM_LOAD64_WORD_SWAP( "epr-19689.18",  0x0600004,  0x80000,  CRC(cbce6d62) SHA1(b6051af013ee80406cfadb0c8acf24b8825ccaf2) )
@@ -2431,7 +2349,7 @@ ROM_START( scuda )  /* step 1.5, Sega game ID# is 833-13041, ROM board ID# 834-1
 ROM_END
 
 ROM_START( scudplus )   /* step 1.5, Sega game ID# is 833-13260 SCUD PLUS, ROM board ID# 834-13261 SCUD PLUS */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20092a.17",  0x0600006,  0x80000, CRC(a94ec57e) SHA1(bda1d9cb38e10a25f7cdde38f30ae13541fdbc5e) )
 	ROM_LOAD64_WORD_SWAP( "epr-20093a.18",  0x0600004,  0x80000, CRC(4ed2e35d) SHA1(ac149b369db9fc80e63e1ed943d42ccd056dab1b) )
@@ -2512,7 +2430,7 @@ ROM_START( scudplus )   /* step 1.5, Sega game ID# is 833-13260 SCUD PLUS, ROM b
 ROM_END
 
 ROM_START( scudplusa )  /* step 1.5, Sega game ID# is 833-13260 SCUD PLUS, ROM board ID# 834-13261 SCUD PLUS */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20092.17",  0x0600006,  0x80000, CRC(6f9161c1) SHA1(b1c66eeb1bb67664aafa78ad62515204f231f09b) )
 	ROM_LOAD64_WORD_SWAP( "epr-20093.18",  0x0600004,  0x80000, CRC(9a85c611) SHA1(fb21c29584b205ec14f82318110ecf5821a95c23) )
@@ -2593,7 +2511,7 @@ ROM_START( scudplusa )  /* step 1.5, Sega game ID# is 833-13260 SCUD PLUS, ROM b
 ROM_END
 
 ROM_START( vf3 )    /* step 1.0, Sega game ID# is 833-12712, ROM board ID# 834-12821 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-19227c.17",  0x600006, 0x080000, CRC(a7df4d75) SHA1(1b1186227f830556c5e2b6ca4c2bf20673b22f94) )
 	ROM_LOAD64_WORD_SWAP( "epr-19228c.18",  0x600004, 0x080000, CRC(9c5727e2) SHA1(f9f8b8cf27fdce08ab2975dbaa8c7a03f5c064fb) )
@@ -2668,7 +2586,7 @@ ROM_START( vf3 )    /* step 1.0, Sega game ID# is 833-12712, ROM board ID# 834-1
 ROM_END
 
 ROM_START( vf3a )   /* step 1.0, Sega game ID# is 833-12712, ROM board ID# 834-12821 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr19227a.17",  0x600006, 0x080000, CRC(7139931a) SHA1(57eec80361726143017b1adbfaafbeef0bc4109d) )
 	ROM_LOAD64_WORD_SWAP( "epr19228a.18",  0x600004, 0x080000, CRC(82f17ab5) SHA1(64714d14e64d97ebeedd1c6e1e832969df9e2324) )
@@ -2743,7 +2661,7 @@ ROM_START( vf3a )   /* step 1.0, Sega game ID# is 833-12712, ROM board ID# 834-1
 ROM_END
 
 ROM_START( vf3tb )  /* step 1.0? */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20126.17",  0x600006, 0x080000, CRC(27ecd3b0) SHA1(a9b913294ac925adb501d3b47f346006b70dfcd6) )
 	ROM_LOAD64_WORD_SWAP( "epr-20127.18",  0x600004, 0x080000, CRC(5c0f694b) SHA1(ca346d6b249bb7a3015f016d25bfb3050360c8ec) )
@@ -2818,7 +2736,7 @@ ROM_START( vf3tb )  /* step 1.0? */
 ROM_END
 
 ROM_START( bass )   /* step 1.0, Sega game ID# is 833-13317, ROM board ID# 834-13318 BSS */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20643.17",  0x600006, 0x080000, CRC(daf02716) SHA1(b968f8ca602c78b9ca49969ff01f9440f175049a) )
 	ROM_LOAD64_WORD_SWAP( "epr-20644.18",  0x600004, 0x080000, CRC(c28db2b6) SHA1(0b12fe9e5189714b1aca79c4bba4be57a9e0d5fd) )
@@ -2887,7 +2805,7 @@ ROM_START( bass )   /* step 1.0, Sega game ID# is 833-13317, ROM board ID# 834-1
 ROM_END
 
 ROM_START( bassdx ) /* step 1.0, Sega game ID# is 833-13476 BSS DX JPN, ROM board ID# 834-13477 BSS DX JPN */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20834.17",  0x600006, 0x080000, CRC(17f466a6) SHA1(2abdc432891cc79733fc29903df87af9eba11b32) )
 	ROM_LOAD64_WORD_SWAP( "epr-20835.18",  0x600004, 0x080000, CRC(f8f19bb2) SHA1(8f1704e532e494086fb5989d0c358ea0a0f6aae5) )
@@ -2955,8 +2873,33 @@ ROM_START( bassdx ) /* step 1.0, Sega game ID# is 833-13476 BSS DX JPN, ROM boar
 	ROM_FILL( 0x000000, 0x80000, 0 )
 ROM_END
 
+/*
+In Mame getbass is marked as GET BASS STD, while my pcb came from a DLX cab.
+Rom board 833-13317
+834-13318 sticker is on rom board too.
+On cage the follow sticker are present
+BSS-4500-CVT2
+833-13317 GAME BD BSS-CVT2
+
+I/O board 837-13283 (GET BASS MEC CONT BD in manual)  171-7558c
+
+epr20690.ic11 is controller board prg
+cpu is kl5c80a16cf
+this board have 4 switch (sw3 to sw6)
+a reset switch
+2 bank of 8 dip switch
+SW1 all off
+SW2 all off
+lh52256cn-70 ram (super cap backup)
+sega 315-5296
+sega 315-5649 both seem I/O chip
+gal16v8d (sega 315-6126)
+32 Mhz xtal
+93c45 eeprom
+*/
+
 ROM_START( getbass )    /* step 1.0, Sega game ID# is 833-13416 GET BASS STD, ROM board ID# 834-13417 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20309.17",  0x600006, 0x080000, CRC(a42e1033) SHA1(a834eb973e9529338413220a2d8e66ce98d6cb31) )
 	ROM_LOAD64_WORD_SWAP( "epr-20310.18",  0x600004, 0x080000, CRC(4efcddc9) SHA1(d1362c2a844b605901083e875a6aad817401eb0a) )
@@ -3022,15 +2965,18 @@ ROM_START( getbass )    /* step 1.0, Sega game ID# is 833-13416 GET BASS STD, RO
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	ROM_REGION( 0x10000, "iocpu", 0 ) // kl5c80a16cf code
+	ROM_LOAD( "epr20690.ic11",  0x00000, 0x10000, CRC(b7da201d) SHA1(7e58eb45ee6ec78250ece7b4fcc4e955b8b4f084) )
 ROM_END
 
-ROM_START( lostwsga )   /* Step 1.5, PCB cage labeled 834-13172 THE LOST WORLD U/R   Rev A known to exist, but not dumped */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+ROM_START( lostwsga )   /* Step 1.5, PCB cage labeled 834-13172 THE LOST WORLD U/R. Sega game ID# is 833-13171, ROM board ID# 834-13172 REV.A */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
-	ROM_LOAD64_WORD_SWAP( "epr-19939.17",  0x600006, 0x080000, CRC(8788b939) SHA1(30932057f763545568526f85977aa0afc4b66e7d) )
-	ROM_LOAD64_WORD_SWAP( "epr-19938.18",  0x600004, 0x080000, CRC(38afe27a) SHA1(718a238ee246eeed9fa698b58493806932d0e7cb) )
-	ROM_LOAD64_WORD_SWAP( "epr-19937.19",  0x600002, 0x080000, CRC(9dbf5712) SHA1(ca5923bb5a0b7702391dcacc20e863a7f615929d) )
-	ROM_LOAD64_WORD_SWAP( "epr-19936.20",  0x600000, 0x080000, CRC(2f1ca664) SHA1(9138e28ad6c0219b4b3a4609136ed69f484de9a3) )
+	ROM_LOAD64_WORD_SWAP( "epr-19939a.17",  0x600006, 0x080000, CRC(8788b939) SHA1(30932057f763545568526f85977aa0afc4b66e7d) )
+	ROM_LOAD64_WORD_SWAP( "epr-19938a.18",  0x600004, 0x080000, CRC(38afe27a) SHA1(718a238ee246eeed9fa698b58493806932d0e7cb) )
+	ROM_LOAD64_WORD_SWAP( "epr-19937a.19",  0x600002, 0x080000, CRC(9dbf5712) SHA1(ca5923bb5a0b7702391dcacc20e863a7f615929d) )
+	ROM_LOAD64_WORD_SWAP( "epr-19936a.20",  0x600000, 0x080000, CRC(2f1ca664) SHA1(9138e28ad6c0219b4b3a4609136ed69f484de9a3) )
 
 	// CROM0
 	ROM_LOAD64_WORD_SWAP( "mpr-19918.1",   0x800006, 0x400000, CRC(95b690e9) SHA1(50b71aa41372b9acda1db2e0b7ac70707a5cca4b) )
@@ -3100,7 +3046,7 @@ ROM_START( lostwsga )   /* Step 1.5, PCB cage labeled 834-13172 THE LOST WORLD U
 ROM_END
 
 ROM_START( vs2 )    /* Step 2.0 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20467.17",  0x400006, 0x100000, CRC(25d7ae73) SHA1(433a7c1dac1bd5524b018da2ed09f937d527ac3e) )
 	ROM_LOAD64_WORD_SWAP( "epr-20468.18",  0x400004, 0x100000, CRC(f0f0b6ea) SHA1(b3f545e5a4dd45b97df938093251cc7845c2a1f9) )
@@ -3175,7 +3121,7 @@ ROM_START( vs2 )    /* Step 2.0 */
 ROM_END
 
 ROM_START( vs215 )  /* Step 1.5 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-19900.17",  0x600006, 0x080000, CRC(8fb6045d) SHA1(88497eafc23ba70ab4a43de552a16caccd8dccbe) )
 	ROM_LOAD64_WORD_SWAP( "epr-19899.18",  0x600004, 0x080000, CRC(8cc2be9f) SHA1(ec82b1312c8d58adb200f4d7f6f9a9c8214415d5) )
@@ -3250,7 +3196,7 @@ ROM_START( vs215 )  /* Step 1.5 */
 ROM_END
 
 ROM_START( vs215o ) /* Step 1.5, original release.. might even be for Step 1.0??? */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-19806.17",  0x600006, 0x080000, CRC(95e1b970) SHA1(bcc914088cd08cb0032349b71904757760d947f3) )
 	ROM_LOAD64_WORD_SWAP( "epr-19805.18",  0x600004, 0x080000, CRC(d9e40606) SHA1(b305e607ffe4226c825a73973a5c8ec1322e8b58) )
@@ -3325,7 +3271,7 @@ ROM_START( vs215o ) /* Step 1.5, original release.. might even be for Step 1.0??
 ROM_END
 
 ROM_START( vs298 )  /* Step 2.0, Sega ID# 833-13346, ROM board ID# 834-13347 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20917.17",  0x400006, 0x100000, CRC(c3bbb270) SHA1(16b2342031ff72408f2290e775df5c8aa344c2e4) )
 	ROM_LOAD64_WORD_SWAP( "epr-20918.18",  0x400004, 0x100000, CRC(0e9cdc5b) SHA1(356816d0380c791b9d812ce17fa95123d15bb5e9) )
@@ -3397,10 +3343,13 @@ ROM_START( vs298 )  /* Step 2.0, Sega ID# 833-13346, ROM board ID# 834-13347 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0237-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29234e96" )
 ROM_END
 
 ROM_START( vs29815 )    /* Step 1.5, ROM board ID# 834-13495 VS2 VER98 STEP 1.5 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20909.17",  0x600006, 0x080000, CRC(3dff0d7e) SHA1(c6a6a103f499cd451796ae2480b8c38c3e87a143) )
 	ROM_LOAD64_WORD_SWAP( "epr-20910.18",  0x600004, 0x080000, CRC(dc75a2e3) SHA1(f1b13674ae20b5b964be593171b9d6008d5a51b7) )
@@ -3475,7 +3424,7 @@ ROM_START( vs29815 )    /* Step 1.5, ROM board ID# 834-13495 VS2 VER98 STEP 1.5 
 ROM_END
 
 ROM_START( vs2v991 )    /* Step 2.0 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21535b.17", 0x400006, 0x100000, CRC(76c5fa8e) SHA1(862438198cb7fdd20beeba53e707a7c59e618ad9) )
 	ROM_LOAD64_WORD_SWAP( "epr-21536b.18", 0x400004, 0x100000, CRC(1f2bd190) SHA1(19843e6c5626de03eba3cba79c03ce9f2471c183) )
@@ -3547,10 +3496,13 @@ ROM_START( vs2v991 )    /* Step 2.0 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0245-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29222ac8" )
 ROM_END
 
 ROM_START( vs299b ) /* Step 2.0 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21550b.17",  0x400006, 0x100000, CRC(c508e488) SHA1(3134d418beaee9f824a0bd0e5441a997b5911d16) )
 	ROM_LOAD64_WORD_SWAP( "epr-21551b.18",  0x400004, 0x100000, CRC(0bbc40f7) SHA1(4437c7eab621349b826dcc03d1377731260417e8) )
@@ -3622,10 +3574,13 @@ ROM_START( vs299b ) /* Step 2.0 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0245-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29222ac8" )
 ROM_END
 
 ROM_START( vs299a ) /* Step 2.0 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21535a.17",  0x400006, 0x100000, CRC(8e4ec341) SHA1(973c71e7a48e728cbcb2465b56e90669fee0ec53) )
 	ROM_LOAD64_WORD_SWAP( "epr-21536a.18",  0x400004, 0x100000, CRC(95d49d6e) SHA1(80b6655c1ee0f76620e3e2e9425719819a96ccf7) )
@@ -3697,10 +3652,13 @@ ROM_START( vs299a ) /* Step 2.0 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0245-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "09222ac8" )
 ROM_END
 
 ROM_START( vs299 )  /* Step 2.0 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21535.17",  0x400006, 0x100000, CRC(976a00bf) SHA1(d4be52ff59faa877b169f96ac509a2196cefb908) )
 	ROM_LOAD64_WORD_SWAP( "epr-21536.18",  0x400004, 0x100000, CRC(9af2b0d5) SHA1(6ec296014228782f372611fe774014d252956b63) )
@@ -3772,10 +3730,13 @@ ROM_START( vs299 )  /* Step 2.0 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0245-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29222ac8" )
 ROM_END
 
 ROM_START( von2 )   /* Step 2.0 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20683b.17", 0x000006, 0x200000, CRC(59d9c974) SHA1(c45594ed474a9e8fd074e0d9d5fa6662bc88dee6) )
 	ROM_LOAD64_WORD_SWAP( "epr-20684b.18", 0x000004, 0x200000, CRC(1fc15431) SHA1(c68c77dfcf5e2702214d64095ce07076d3702a5e) )
@@ -3848,10 +3809,13 @@ ROM_START( von2 )   /* Step 2.0 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0234-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "292a0e97" )
 ROM_END
 
 ROM_START( von254g )    /* Step 2.0, Sega game ID# is 833-13789 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21788.17",  0x000006, 0x200000, CRC(97066bcf) SHA1(234c45ee1f23b22f61893825eebf31d867cf420f) )
 	ROM_LOAD64_WORD_SWAP( "epr-21789.18",  0x000004, 0x200000, CRC(3069108f) SHA1(f4e82da677458423abcf07c9c5a837005ed8f1c4) )
@@ -3924,10 +3888,13 @@ ROM_START( von254g )    /* Step 2.0, Sega game ID# is 833-13789 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0234-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "292a0e97" )
 ROM_END
 
 ROM_START( skichamp )   /* Step 2.0 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20352.17",  0x000006, 0x200000, CRC(c92c2545) SHA1(612c39c935b403484fcda6d36fca50cc5ef726fc) )
 	ROM_LOAD64_WORD_SWAP( "epr-20353.19",  0x000004, 0x200000, CRC(badf5f04) SHA1(65a502a3fada114a699d0bf22e004d5bf1f5edf5) )
@@ -3999,7 +3966,7 @@ ROM_START( skichamp )   /* Step 2.0 */
 ROM_END
 
 ROM_START( swtrilgy )   /* Step 2.1, Sega game ID# is 833-13586, ROM board ID# 834-13587 STAR WARS TRILOGY, Security board ID# 837-13588-COM */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21379a.17",  0x000006, 0x200000, CRC(24dc1555) SHA1(0a4b458bb09238de0f38ba2805512b5dbee7d58e) )
 	ROM_LOAD64_WORD_SWAP( "epr-21380a.18",  0x000004, 0x200000, CRC(780fb4e7) SHA1(6650e114bad0e4c3f67b744599dba9845da82f11) )
@@ -4065,10 +4032,16 @@ ROM_START( swtrilgy )   /* Step 2.1, Sega game ID# is 833-13586, ROM board ID# 8
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	ROM_REGION( 0x10000, "ffcpu", 0 )   /* force feedback controller prg */
+	ROM_LOAD( "epr21119.ic8",  0x00000, 0x10000, CRC(65082b14) SHA1(6c3c192dd6ef3780c6202dd63fc6086328928818) )
+
+	//             ????     317-0241-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "31272a01" )
 ROM_END
 
 ROM_START( swtrilgya )  /* Step 2.1, Sega game ID# is 833-13586, ROM board ID# 834-13587 STAR WARS TRILOGY, Security board ID# 837-13588-COM */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21379.17",  0x000006, 0x200000, CRC(61ad51d9) SHA1(b27ea929702bb94c86d03d6c1f479af32230b4d0) )
 	ROM_LOAD64_WORD_SWAP( "epr-21380.18",  0x000004, 0x200000, CRC(49b182f2) SHA1(9a4e3180f2661c95976963ab17e66a5184bca9a3) )
@@ -4134,10 +4107,13 @@ ROM_START( swtrilgya )  /* Step 2.1, Sega game ID# is 833-13586, ROM board ID# 8
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0241-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "31272a01" )
 ROM_END
 
-ROM_START( dirtdvls )   /* Step 2.1, Sega game ID# is 833-13427, ROM board ID# 834-13528 DRT */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+ROM_START( dirtdvls )   /* Step 2.1 - Export version, Sega game ID# is 833-13427, ROM board ID# 834-13528 DRT */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21062a.17", 0x000006, 0x200000, CRC(64b55254) SHA1(0e5de3786edad77dde08652ac837dc9125e7851c) )
 	ROM_LOAD64_WORD_SWAP( "epr-21063a.18", 0x000004, 0x200000, CRC(6ab7eb32) SHA1(3a4226d4c786e7b64688af3b8883b4039b8c8407) )
@@ -4195,10 +4171,13 @@ ROM_START( dirtdvls )   /* Step 2.1, Sega game ID# is 833-13427, ROM board ID# 8
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0238-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29290f17" )
 ROM_END
 
-ROM_START( dirtdvlsa )  /* Step 2.1 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+ROM_START( dirtdvlsa )  /* Step 2.1 - Australia version */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21058a", 0x000006, 0x200000, CRC(4d7fdc8d) SHA1(c45031b4e3ea65519de671e0e11f87e0965e3c93) )
 	ROM_LOAD64_WORD_SWAP( "epr-21059a", 0x000004, 0x200000, CRC(f31a2aa4) SHA1(b7398db217372885f763efdb909f3e43ccbac34a) )
@@ -4256,6 +4235,9 @@ ROM_START( dirtdvlsa )  /* Step 2.1 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0238-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29290f17" )
 ROM_END
 
 ROM_START( daytona2 )   /* Step 2.1, ROM board ID# 834-13428 DAYTONA USA2, Security board ID# 837-13507-COM */
@@ -4336,6 +4318,9 @@ ROM_START( daytona2 )   /* Step 2.1, ROM board ID# 834-13428 DAYTONA USA2, Secur
 
 	ROM_REGION( 0x10000, "drivebd", 0 ) /* drive board ROM */
 	ROM_LOAD( "epr-20985.bin", 0x000000, 0x010000, CRC(b139481d) SHA1(05fca7db7c8b084c53bd157ba3e8296f1a961a99) )
+
+	//             ????     317-0239-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29250e16" )
 ROM_END
 
 ROM_START( dayto2pe )   /* Step 2.1, Sega game ID# is 833-13610 DAYTONA USA2 SP, ROM board ID# 834-13609 DAYTONA USA2 SP, Security board ID# 837-13645-COM */
@@ -4416,10 +4401,13 @@ ROM_START( dayto2pe )   /* Step 2.1, Sega game ID# is 833-13610 DAYTONA USA2 SP,
 
 	ROM_REGION( 0x10000, "drivebd", 0 ) /* drive board ROM */
 	ROM_LOAD( "epr-20985.bin", 0x000000, 0x010000, CRC(b139481d) SHA1(05fca7db7c8b084c53bd157ba3e8296f1a961a99) )
+
+	//             ????     317-5045-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29222cc4" )
 ROM_END
 
 ROM_START( srally2 )    /* Step 2.0, Sega game ID# is 833-13373, ROM board ID# 834-13374 SRT TWIN */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20632.17",  0x000006, 0x200000, CRC(6829a801) SHA1(2aa3834f6a8c53f5db57ab52994b8ab3fde2d7c2) )
 	ROM_LOAD64_WORD_SWAP( "epr-20633.18",  0x000004, 0x200000, CRC(f5a24f24) SHA1(6f741bc53d51ff4b5535dbee35aa490f159945ec) )
@@ -4491,7 +4479,7 @@ ROM_START( srally2 )    /* Step 2.0, Sega game ID# is 833-13373, ROM board ID# 8
 ROM_END
 
 ROM_START( srally2x )   /* Step 2.0 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20502.17",  0x000006, 0x200000, CRC(af16846d) SHA1(a0babc4dc3809ca1e71eaad4dc2f8c1597575e8b) )
 	ROM_LOAD64_WORD_SWAP( "epr-20503.18",  0x000004, 0x200000, CRC(6e238b3d) SHA1(78da9abf39a2371d74d6b72b00f2467dfe86c4d5) )
@@ -4560,7 +4548,7 @@ ROM_START( srally2x )   /* Step 2.0 */
 ROM_END
 
 ROM_START( harley ) /* Step 2.0, Sega game ID# is 833-13325, ROM board ID# 834-13326 HARLEY DAVIDSON */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20393b.17", 0x000006, 0x200000, CRC(7d712105) SHA1(35e0849f498de48fcb357495b6e8039740b8e881) )
 	ROM_LOAD64_WORD_SWAP( "epr-20394b.18", 0x000004, 0x200000, CRC(b4312135) SHA1(79c4306acd8c20f86d16a18de696783f7da9df84) )
@@ -4628,7 +4616,7 @@ ROM_START( harley ) /* Step 2.0, Sega game ID# is 833-13325, ROM board ID# 834-1
 ROM_END
 
 ROM_START( harleya )    /* Step 2.0, Sega game ID# is 833-13325, ROM board ID# 834-13326 HARLEY DAVIDSON */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20393a.17", 0x000006, 0x200000, CRC(b5646556) SHA1(4bff0e140e1d1df7459f7194aa4a335bc4592203) )
 	ROM_LOAD64_WORD_SWAP( "epr-20394a.18", 0x000004, 0x200000, CRC(ce29e2b6) SHA1(482aaf5480b219b8ac6e4e36a6d64359e1834f44) )
@@ -4695,8 +4683,8 @@ ROM_START( harleya )    /* Step 2.0, Sega game ID# is 833-13325, ROM board ID# 8
 	ROM_FILL( 0x000000, 0x80000, 0 )
 ROM_END
 
-ROM_START( fvipers2 )   /* Step 2.0 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+ROM_START( fvipers2 )   /* Step 2.0 - Japan version */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-20596a.17", 0x000006, 0x200000, CRC(969ab801) SHA1(a7a2aa71204d1c38a6a8c0605331fd859cb224f1) )
 	ROM_LOAD64_WORD_SWAP( "epr-20597a.18", 0x000004, 0x200000, CRC(6fcee322) SHA1(d65303f2551902ac5446a35656241628d67f4a63) )
@@ -4768,6 +4756,9 @@ ROM_START( fvipers2 )   /* Step 2.0 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0235-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29260e96" )
 ROM_END
 
 ROM_START( spikeout )   /* Step 2.1 */
@@ -4845,6 +4836,9 @@ ROM_START( spikeout )   /* Step 2.1 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0240-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "292f2b04" )
 ROM_END
 
 ROM_START( spikeofe )   /* Step 2.1, Sega game ID# is 833-13746, ROM board ID# 834-13747 SPK F/E, Security board ID# 837-13726-COM */
@@ -4922,78 +4916,13 @@ ROM_START( spikeofe )   /* Step 2.1, Sega game ID# is 833-13746, ROM board ID# 8
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0247-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29236fc8" )
 ROM_END
 
-ROM_START( eca )    /* Step 2.1, ROM board ID# 834-13946-01 ECA */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
-	// CROM
-	ROM_LOAD64_WORD_SWAP( "epr-22895.17", 0x000006, 0x200000, CRC(07df16a0) SHA1(a9ad2b229854a5f4f761565141db738adde28720) )
-	ROM_LOAD64_WORD_SWAP( "epr-22896.18", 0x000004, 0x200000, CRC(0ff828a8) SHA1(2a74414891ceb5989e6ccb6e9d597f7d2e31fec4) )
-	ROM_LOAD64_WORD_SWAP( "epr-22897.19", 0x000002, 0x200000, CRC(9755dd8c) SHA1(41f27a303f4af179f17520d0c2d6a0aa4467aae8) )
-	ROM_LOAD64_WORD_SWAP( "epr-22898.20", 0x000000, 0x200000, CRC(efb96701) SHA1(168c7763740225f832728ab02b22185c9b7997c3) )
-
-	// CROM0
-	ROM_LOAD64_WORD_SWAP( "mpr-22870.1",   0x800006, 0x400000, CRC(52054043) SHA1(f07c1f95a5847393c9e640c10cd14e2a3750b3ff) )
-	ROM_LOAD64_WORD_SWAP( "mpr-22871.2",   0x800004, 0x400000, CRC(cf5bb5b5) SHA1(fd056fcf9a48854faa357014c2cb4a6ed301c3a6) )
-	ROM_LOAD64_WORD_SWAP( "mpr-22872.3",   0x800002, 0x400000, CRC(4fde63a1) SHA1(72f88e514caea28eeee9e57e55c835c490465df0) )
-	ROM_LOAD64_WORD_SWAP( "mpr-22873.4",   0x800000, 0x400000, CRC(dd406330) SHA1(e17ed1814cb84820f19922eef27bbad65be1d355) )
-
-	// CROM1
-	ROM_LOAD64_WORD_SWAP( "mpr-22874.5",  0x1800006, 0x400000, CRC(5e990497) SHA1(f0df52a19a11ef23f82e88eddbacdcb2a6357ded) )
-	ROM_LOAD64_WORD_SWAP( "mpr-22875.6",  0x1800004, 0x400000, CRC(1bb5c018) SHA1(5d0146c32f6a50613340ba0d2f5cc5430b595965) )
-	ROM_LOAD64_WORD_SWAP( "mpr-22876.7",  0x1800002, 0x400000, CRC(a7561249) SHA1(b4217cb088234831ca2e9486af849866790bf704) )
-	ROM_LOAD64_WORD_SWAP( "mpr-22877.8",  0x1800000, 0x400000, CRC(e53b8764) SHA1(03756ef0526aa0b56c2944336590918d8ff9a9b8) )
-
-	// CROM3
-	ROM_LOAD64_WORD_SWAP( "epr-22882.13", 0x3800006, 0x400000, CRC(b161416f) SHA1(753810fa4db80a2d3a333a257dc92095a112d282) )
-	ROM_LOAD64_WORD_SWAP( "epr-22883.14", 0x3800004, 0x400000, CRC(86d90148) SHA1(4336efb9e3d62cc5e8073993c44cbe49141d987f) )
-	ROM_LOAD64_WORD_SWAP( "epr-22884.15", 0x3800002, 0x400000, CRC(254c3b63) SHA1(b5cd94ecbffb6f0da70fb2cb7541d5bfc96cb67c) )
-	ROM_LOAD64_WORD_SWAP( "epr-22885.16", 0x3800000, 0x400000, CRC(3525b46d) SHA1(d7914cd5c558b50b9115303f77bef63e04316b29) )
-
-	ROM_REGION( 0x2000000, "user3", 0 )  /* Video ROMs Part 1 */
-	ROM_LOAD_VROM( "mpr-22854.26",  0x000002, 0x400000, CRC(97a23d16) SHA1(17a11a3e1b1806f7b994955ae22dd0e5333d47ea) )
-	ROM_LOAD_VROM( "mpr-22855.27",  0x000000, 0x400000, CRC(7249cdc9) SHA1(4bd07d911382cc569e09fb888858806d06809f9f) )
-	ROM_LOAD_VROM( "mpr-22856.28",  0x000006, 0x400000, CRC(9c0d1d1b) SHA1(f15c756fb262e15d784328ed3f731aea40797d98) )
-	ROM_LOAD_VROM( "mpr-22857.29",  0x000004, 0x400000, CRC(44e6ce2b) SHA1(03a33417dc96d3ddcbeb92422654f75f620ef265) )
-	ROM_LOAD_VROM( "mpr-22858.30",  0x00000a, 0x400000, CRC(0af40aae) SHA1(1af762e09af932d267b860712fa46eaf4b1500ac) )
-	ROM_LOAD_VROM( "mpr-22859.31",  0x000008, 0x400000, CRC(c64f0158) SHA1(b92dba07e52b4fdabc9bd4bbd26cc41cdab0414d) )
-	ROM_LOAD_VROM( "mpr-22860.32",  0x00000e, 0x400000, CRC(053af14b) SHA1(6d13609e52a4999d6dca3c4da695ebd973b06b7e) )
-	ROM_LOAD_VROM( "mpr-22861.33",  0x00000c, 0x400000, CRC(d26343da) SHA1(9d8c860c388cc2434cc8d753cde139096c12e79e) )
-
-	ROM_REGION( 0x2000000, "user4", 0 )  /* Video ROMs Part 2 */
-	ROM_LOAD_VROM( "mpr-22862.34",  0x000002, 0x400000, CRC(38347c14) SHA1(6222a5001d3a6ed8e8ff3010284658dbc69edee6) )
-	ROM_LOAD_VROM( "mpr-22863.35",  0x000000, 0x400000, CRC(28b558e6) SHA1(9b4849499baebbd2ea81d00663dff0d40c9db602) )
-	ROM_LOAD_VROM( "mpr-22864.36",  0x000006, 0x400000, CRC(31ed02f6) SHA1(a669aa8a42ff70562c86f348fcf4be6f14c2f650) )
-	ROM_LOAD_VROM( "mpr-22865.37",  0x000004, 0x400000, CRC(3e3a211a) SHA1(422f960914a6604de59b110b18f3e67ed9116f22) )
-	ROM_LOAD_VROM( "mpr-22866.38",  0x00000a, 0x400000, CRC(a863a3c8) SHA1(52e13b76a3698deef05df4c607d047e6362d81c0) )
-	ROM_LOAD_VROM( "mpr-22867.39",  0x000008, 0x400000, CRC(1ce6c7b2) SHA1(d5fd49f9838d3dc636366c436c507ac2b4f2596e) )
-	ROM_LOAD_VROM( "mpr-22868.40",  0x00000e, 0x400000, CRC(2db40cf8) SHA1(be1e04aeb5034c2edc5c0ad153700c385a1b773a) )
-	ROM_LOAD_VROM( "mpr-22869.41",  0x00000c, 0x400000, CRC(c6d62634) SHA1(72d493653b50fb31333f70c7ee143a8c7531106f) )
-
-	ROM_REGION( 0x100000, "audiocpu", 0 )   /* 68000 code */
-	ROM_LOAD16_WORD_SWAP( "epr-22886.21",  0x080000, 0x080000, CRC(374ec1c6) SHA1(b06e678db191971f6701bd1f739815d00d4cfb3e) )
-
-	ROM_REGION( 0x1000000, "samples", 0 )   /* SCSP samples */
-	ROM_LOAD( "mpr-22887.22",  0x000000, 0x400000, CRC(7d04a867) SHA1(053de98105880188b4daff183710d7932617547f) )
-	ROM_LOAD( "mpr-22889.24",  0x400000, 0x400000, CRC(4f9ba45d) SHA1(d60314e852637edf6510be52b9b6576a1f3e1b7e) )
-	ROM_LOAD( "mpr-22888.23",  0x800000, 0x400000, CRC(018fcf22) SHA1(c5133358f591d699f177617463e7dfa22edf5369) )
-	ROM_LOAD( "mpr-22890.25",  0xc00000, 0x400000, CRC(b638bd7c) SHA1(ed9c69175fd0ca4c6f22e542b4e68398a6e4ad07) )
-
-	ROM_REGION( 0x20000, "cpu2", 0 )    /* Z80 code */
-	ROM_FILL( 0x000000, 0x20000, 0 )
-
-	ROM_REGION( 0x1000000, "dsb", 0 )   /* DSB samples */
-	ROM_FILL( 0x000000, 0x1000000, 0 )
-
-	ROM_REGION( 0x80000, "scsp1", 0 )   /* first SCSP's RAM */
-	ROM_FILL( 0x000000, 0x80000, 0 )
-
-	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
-	ROM_FILL( 0x000000, 0x80000, 0 )
-ROM_END
-
-ROM_START( ecax )   /* Step 2.1 */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+ROM_START( eca )   /* Step 2.1 Export version */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-22903.17", 0x000006, 0x200000, CRC(53882217) SHA1(163cbc92ff88671882cc1af377ceec80ba9f36db) )
 	ROM_LOAD64_WORD_SWAP( "epr-22904.18", 0x000004, 0x200000, CRC(0ff828a8) SHA1(2a74414891ceb5989e6ccb6e9d597f7d2e31fec4) ) // == epr-22896.18
@@ -5058,50 +4987,65 @@ ROM_START( ecax )   /* Step 2.1 */
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0265-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "2923aa91" )
 ROM_END
 
-ROM_START( magtruck )   /* Step 2.1, Sega game ID# is 833-13601-01 (Export), ROM board ID# 834-13600-01 RCS EXP (Export), Security board ID# 837-13599-COM */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+ROM_START( ecau )    /* Step 2.1, ROM board ID# 834-13946-01 ECA */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
-		ROM_LOAD64_WORD_SWAP( "epr-21435.17",  0x000006, 0x200000, CRC(9b169446) SHA1(285cbe5afd439d83c50f0499a878f71b8e5b94e5) )
-		ROM_LOAD64_WORD_SWAP( "epr-21433.18",  0x000004, 0x200000, CRC(60aa9d76) SHA1(b27741568a4fd0494b2254e468faea569e2d9fef) )
-		ROM_LOAD64_WORD_SWAP( "epr-21436.19",  0x000002, 0x200000, CRC(22bcbca3) SHA1(fe9c46ad5b01f9f8d19854e59e229d07c0649e8c) )
-		ROM_LOAD64_WORD_SWAP( "epr-21434.20",  0x000000, 0x200000, CRC(e028d7ca) SHA1(7e5d1cef6d9ef767f07320e9c099004e081f52dd) )
+	ROM_LOAD64_WORD_SWAP( "epr-22895.17", 0x000006, 0x200000, CRC(07df16a0) SHA1(a9ad2b229854a5f4f761565141db738adde28720) )
+	ROM_LOAD64_WORD_SWAP( "epr-22896.18", 0x000004, 0x200000, CRC(0ff828a8) SHA1(2a74414891ceb5989e6ccb6e9d597f7d2e31fec4) )
+	ROM_LOAD64_WORD_SWAP( "epr-22897.19", 0x000002, 0x200000, CRC(9755dd8c) SHA1(41f27a303f4af179f17520d0c2d6a0aa4467aae8) )
+	ROM_LOAD64_WORD_SWAP( "epr-22898.20", 0x000000, 0x200000, CRC(efb96701) SHA1(168c7763740225f832728ab02b22185c9b7997c3) )
 
 	// CROM0
-		ROM_LOAD64_WORD_SWAP( "mpr-21423.1",   0x800006, 0x400000, CRC(4ee0060a) SHA1(61e155ea382f2c79ece78eeba12129645ea260f1) )
-		ROM_LOAD64_WORD_SWAP( "mpr-21424.2",   0x800004, 0x400000, CRC(25358fdf) SHA1(168b9e774cbf2722a60050b135b12192b42b15f3) )
-		ROM_LOAD64_WORD_SWAP( "mpr-21425.3",   0x800002, 0x400000, CRC(ad235849) SHA1(3d75caa5c727094613567e5eab4f840cf087052e) )
-		ROM_LOAD64_WORD_SWAP( "mpr-21426.4",   0x800000, 0x400000, CRC(ce77e26e) SHA1(a17b621c2a49b665a3ecf50e4c8f50fdec1d6bd8) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22870.1",   0x800006, 0x400000, CRC(52054043) SHA1(f07c1f95a5847393c9e640c10cd14e2a3750b3ff) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22871.2",   0x800004, 0x400000, CRC(cf5bb5b5) SHA1(fd056fcf9a48854faa357014c2cb4a6ed301c3a6) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22872.3",   0x800002, 0x400000, CRC(4fde63a1) SHA1(72f88e514caea28eeee9e57e55c835c490465df0) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22873.4",   0x800000, 0x400000, CRC(dd406330) SHA1(e17ed1814cb84820f19922eef27bbad65be1d355) )
+
+	// CROM1
+	ROM_LOAD64_WORD_SWAP( "mpr-22874.5",  0x1800006, 0x400000, CRC(5e990497) SHA1(f0df52a19a11ef23f82e88eddbacdcb2a6357ded) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22875.6",  0x1800004, 0x400000, CRC(1bb5c018) SHA1(5d0146c32f6a50613340ba0d2f5cc5430b595965) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22876.7",  0x1800002, 0x400000, CRC(a7561249) SHA1(b4217cb088234831ca2e9486af849866790bf704) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22877.8",  0x1800000, 0x400000, CRC(e53b8764) SHA1(03756ef0526aa0b56c2944336590918d8ff9a9b8) )
+
+	// CROM3
+	ROM_LOAD64_WORD_SWAP( "epr-22882.13", 0x3800006, 0x400000, CRC(b161416f) SHA1(753810fa4db80a2d3a333a257dc92095a112d282) )
+	ROM_LOAD64_WORD_SWAP( "epr-22883.14", 0x3800004, 0x400000, CRC(86d90148) SHA1(4336efb9e3d62cc5e8073993c44cbe49141d987f) )
+	ROM_LOAD64_WORD_SWAP( "epr-22884.15", 0x3800002, 0x400000, CRC(254c3b63) SHA1(b5cd94ecbffb6f0da70fb2cb7541d5bfc96cb67c) )
+	ROM_LOAD64_WORD_SWAP( "epr-22885.16", 0x3800000, 0x400000, CRC(3525b46d) SHA1(d7914cd5c558b50b9115303f77bef63e04316b29) )
 
 	ROM_REGION( 0x2000000, "user3", 0 )  /* Video ROMs Part 1 */
-		ROM_LOAD_VROM( "mpr-21407.26",  0x000002, 0x400000, CRC(3ffb416c) SHA1(3fffe30d27ce6d11cd1f11ab03d77a89f796ef2a) )
-		ROM_LOAD_VROM( "mpr-21408.27",  0x000000, 0x400000, CRC(3e00a7ef) SHA1(b4b025f4d9346b460cf9dbfbc5dff50c51464267) )
-		ROM_LOAD_VROM( "mpr-21409.28",  0x000006, 0x400000, CRC(a4673bbf) SHA1(813c1da0184f5199895072a5bdaabc7f3de712dc) )
-		ROM_LOAD_VROM( "mpr-21410.29",  0x000004, 0x400000, CRC(c9f43b4a) SHA1(590156f42f55fdf251ebf246d06102264c660afd) )
-		ROM_LOAD_VROM( "mpr-21411.30",  0x00000a, 0x400000, CRC(f14957c7) SHA1(2f81f61a5d813c173318746cbab682b3c01689f0) )
-		ROM_LOAD_VROM( "mpr-21412.31",  0x000008, 0x400000, CRC(ec24091f) SHA1(fe8f0f71c6e468a45ae4c466a1f7259222fcf82f) )
-		ROM_LOAD_VROM( "mpr-21413.32",  0x00000e, 0x400000, CRC(ea9049e0) SHA1(4dedbc61b29b6bf3a7d2c3dd310d6e924ff0c453) )
-		ROM_LOAD_VROM( "mpr-21414.33",  0x00000c, 0x400000, CRC(79bc5ffd) SHA1(20a361deb9769293712c7c43c778d1957316ca80) )
+	ROM_LOAD_VROM( "mpr-22854.26",  0x000002, 0x400000, CRC(97a23d16) SHA1(17a11a3e1b1806f7b994955ae22dd0e5333d47ea) )
+	ROM_LOAD_VROM( "mpr-22855.27",  0x000000, 0x400000, CRC(7249cdc9) SHA1(4bd07d911382cc569e09fb888858806d06809f9f) )
+	ROM_LOAD_VROM( "mpr-22856.28",  0x000006, 0x400000, CRC(9c0d1d1b) SHA1(f15c756fb262e15d784328ed3f731aea40797d98) )
+	ROM_LOAD_VROM( "mpr-22857.29",  0x000004, 0x400000, CRC(44e6ce2b) SHA1(03a33417dc96d3ddcbeb92422654f75f620ef265) )
+	ROM_LOAD_VROM( "mpr-22858.30",  0x00000a, 0x400000, CRC(0af40aae) SHA1(1af762e09af932d267b860712fa46eaf4b1500ac) )
+	ROM_LOAD_VROM( "mpr-22859.31",  0x000008, 0x400000, CRC(c64f0158) SHA1(b92dba07e52b4fdabc9bd4bbd26cc41cdab0414d) )
+	ROM_LOAD_VROM( "mpr-22860.32",  0x00000e, 0x400000, CRC(053af14b) SHA1(6d13609e52a4999d6dca3c4da695ebd973b06b7e) )
+	ROM_LOAD_VROM( "mpr-22861.33",  0x00000c, 0x400000, CRC(d26343da) SHA1(9d8c860c388cc2434cc8d753cde139096c12e79e) )
 
 	ROM_REGION( 0x2000000, "user4", 0 )  /* Video ROMs Part 2 */
-		ROM_LOAD_VROM( "mpr-21415.34",  0x000002, 0x400000, CRC(f96fe7a2) SHA1(870e51a83d1b1a4ac652a2fca40ad1b39af373ef) )
-		ROM_LOAD_VROM( "mpr-21416.35",  0x000000, 0x400000, CRC(84a08b3e) SHA1(627fb0e8bfaab33d14969c082bd519d5ea12de01) )
-		ROM_LOAD_VROM( "mpr-21417.36",  0x000006, 0x400000, CRC(6094975c) SHA1(6e2e1bdb42926fbc19502bbb1027866f74f55e50) )
-		ROM_LOAD_VROM( "mpr-21418.37",  0x000004, 0x400000, CRC(7bb868ba) SHA1(32698f542b61efc06193b2186861ef375842b92a) )
-		ROM_LOAD_VROM( "mpr-21419.38",  0x00000a, 0x400000, CRC(be7325c2) SHA1(0bc3672f482bbd6692d88068b5e803b49ed7bff4) )
-		ROM_LOAD_VROM( "mpr-21420.39",  0x000008, 0x400000, CRC(8b577e7b) SHA1(8282d4063e26e51b1b45b1865558b12aab290dd0) )
-		ROM_LOAD_VROM( "mpr-21421.40",  0x00000e, 0x400000, CRC(71e4e9fc) SHA1(24f02ee6d7e4f65b18a4c0939e1b29d7fd642ca5) )
-		ROM_LOAD_VROM( "mpr-21422.41",  0x00000c, 0x400000, CRC(feca77a5) SHA1(e475a96fa3d2efae65f29266ff2322cc23392ac8) )
+	ROM_LOAD_VROM( "mpr-22862.34",  0x000002, 0x400000, CRC(38347c14) SHA1(6222a5001d3a6ed8e8ff3010284658dbc69edee6) )
+	ROM_LOAD_VROM( "mpr-22863.35",  0x000000, 0x400000, CRC(28b558e6) SHA1(9b4849499baebbd2ea81d00663dff0d40c9db602) )
+	ROM_LOAD_VROM( "mpr-22864.36",  0x000006, 0x400000, CRC(31ed02f6) SHA1(a669aa8a42ff70562c86f348fcf4be6f14c2f650) )
+	ROM_LOAD_VROM( "mpr-22865.37",  0x000004, 0x400000, CRC(3e3a211a) SHA1(422f960914a6604de59b110b18f3e67ed9116f22) )
+	ROM_LOAD_VROM( "mpr-22866.38",  0x00000a, 0x400000, CRC(a863a3c8) SHA1(52e13b76a3698deef05df4c607d047e6362d81c0) )
+	ROM_LOAD_VROM( "mpr-22867.39",  0x000008, 0x400000, CRC(1ce6c7b2) SHA1(d5fd49f9838d3dc636366c436c507ac2b4f2596e) )
+	ROM_LOAD_VROM( "mpr-22868.40",  0x00000e, 0x400000, CRC(2db40cf8) SHA1(be1e04aeb5034c2edc5c0ad153700c385a1b773a) )
+	ROM_LOAD_VROM( "mpr-22869.41",  0x00000c, 0x400000, CRC(c6d62634) SHA1(72d493653b50fb31333f70c7ee143a8c7531106f) )
 
 	ROM_REGION( 0x100000, "audiocpu", 0 )   /* 68000 code */
-		ROM_LOAD16_WORD_SWAP( "epr-21438.21",  0x080000, 0x080000, CRC(6815af9e) SHA1(f956b5c5519a94cc60e31a2bd391949109908239) )
+	ROM_LOAD16_WORD_SWAP( "epr-22886.21",  0x080000, 0x080000, CRC(374ec1c6) SHA1(b06e678db191971f6701bd1f739815d00d4cfb3e) )
 
 	ROM_REGION( 0x1000000, "samples", 0 )   /* SCSP samples */
-		ROM_LOAD( "mpr-21427.22",  0x000000, 0x400000, CRC(884566f6) SHA1(02b7243890e25ccb364a7ad3e8d61f8defeaf039) )
-		ROM_LOAD( "mpr-21428.24",  0x400000, 0x400000, CRC(162d1e43) SHA1(0221e5126459d9277d75c7560a251381cea72b37) )
-		ROM_LOAD( "mpr-21431.23",  0x800000, 0x400000, CRC(0ef8f7bb) SHA1(748949b2730dc002b76947d67d7ee3663b96b700) )
-		ROM_LOAD( "mpr-21432.25",  0xc00000, 0x400000, CRC(59c0f6df) SHA1(ab1c6fbcb1244c2b56b6967018fceb82d8c5414c) )
+	ROM_LOAD( "mpr-22887.22",  0x000000, 0x400000, CRC(7d04a867) SHA1(053de98105880188b4daff183710d7932617547f) )
+	ROM_LOAD( "mpr-22889.24",  0x400000, 0x400000, CRC(4f9ba45d) SHA1(d60314e852637edf6510be52b9b6576a1f3e1b7e) )
+	ROM_LOAD( "mpr-22888.23",  0x800000, 0x400000, CRC(018fcf22) SHA1(c5133358f591d699f177617463e7dfa22edf5369) )
+	ROM_LOAD( "mpr-22890.25",  0xc00000, 0x400000, CRC(b638bd7c) SHA1(ed9c69175fd0ca4c6f22e542b4e68398a6e4ad07) )
 
 	ROM_REGION( 0x20000, "cpu2", 0 )    /* Z80 code */
 	ROM_FILL( 0x000000, 0x20000, 0 )
@@ -5114,6 +5058,142 @@ ROM_START( magtruck )   /* Step 2.1, Sega game ID# is 833-13601-01 (Export), ROM
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0265-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "2923aa91" )
+ROM_END
+
+ROM_START( ecap )   /* Step 2.1 - Proto or Location test - No security dongle */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
+	// CROM
+	// Hand written SEGA labels in this form:  TITLE: QQ  ROM NO: IC17  CHECK SUM: 551B  9/12-'99
+	ROM_LOAD64_WORD_SWAP( "qq.ic17", 0x000006, 0x200000, BAD_DUMP CRC(1db889e0) SHA1(b9a5f344685e1d8b5711d8ab426bb886c1008e48) ) /* Check sum: 551B, dated "9/12-'99" */
+	ROM_LOAD64_WORD_SWAP( "qq.ic18", 0x000004, 0x200000, BAD_DUMP CRC(e33da02f) SHA1(2adf9b65b2f56db7f050115d002f520159364983) ) /* Check sum: AC51, dated "9/12-'99" */
+	ROM_LOAD64_WORD_SWAP( "qq.ic19", 0x000002, 0x200000, BAD_DUMP CRC(ca02f571) SHA1(cd797d750d4ef3534225ceb83ad2840421efd192) ) /* Check sum: 9DB5, dated "9/12-'99" */
+	ROM_LOAD64_WORD_SWAP( "qq.ic20", 0x000000, 0x200000, CRC(b12fe61c) SHA1(da8bb643a2b08857265f01a909f46bef98dab9cb) ) /* Check sum: C247, dated "9/12-'99" */
+
+	// CROM0
+	ROM_LOAD64_WORD_SWAP( "mpr-22870.1",   0x800006, 0x400000, CRC(52054043) SHA1(f07c1f95a5847393c9e640c10cd14e2a3750b3ff) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22871.2",   0x800004, 0x400000, CRC(cf5bb5b5) SHA1(fd056fcf9a48854faa357014c2cb4a6ed301c3a6) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22872.3",   0x800002, 0x400000, CRC(4fde63a1) SHA1(72f88e514caea28eeee9e57e55c835c490465df0) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22873.4",   0x800000, 0x400000, CRC(dd406330) SHA1(e17ed1814cb84820f19922eef27bbad65be1d355) )
+
+	// CROM1
+	ROM_LOAD64_WORD_SWAP( "mpr-22874.5",  0x1800006, 0x400000, CRC(5e990497) SHA1(f0df52a19a11ef23f82e88eddbacdcb2a6357ded) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22875.6",  0x1800004, 0x400000, CRC(1bb5c018) SHA1(5d0146c32f6a50613340ba0d2f5cc5430b595965) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22876.7",  0x1800002, 0x400000, CRC(a7561249) SHA1(b4217cb088234831ca2e9486af849866790bf704) )
+	ROM_LOAD64_WORD_SWAP( "mpr-22877.8",  0x1800000, 0x400000, CRC(e53b8764) SHA1(03756ef0526aa0b56c2944336590918d8ff9a9b8) )
+
+	// CROM3
+	// Hand written SEGA labels in this form:  TITLE: QQ  ROM NO: IC13  CHECK SUM: 6B84  9/12-'99
+	ROM_LOAD64_WORD_SWAP( "qq.ic13", 0x3800006, 0x400000, BAD_DUMP CRC(75413a76) SHA1(3c6d1c385938687f8c91c1f293e5e1e1874f5496) ) /* Check sum: 6B84, dated "9/12-'99" */
+	ROM_LOAD64_WORD_SWAP( "qq.ic14", 0x3800004, 0x400000, BAD_DUMP CRC(678b9c2c) SHA1(04168df377850fd496cbd5eb2a3effa05c7c2e7b) ) /* Check sum: 3DC1, dated "9/12-'99" */
+	ROM_LOAD64_WORD_SWAP( "qq.ic15", 0x3800002, 0x400000, BAD_DUMP CRC(6ee8af07) SHA1(1f7d01ad6094e9204d5e1e1674a0ea7b53832263) ) /* Check sum: 4988, dated "9/12-'99" */
+	ROM_LOAD64_WORD_SWAP( "qq.ic16", 0x3800000, 0x400000, CRC(3634f178) SHA1(ac32cfb47c8a33e5f62cc99a99d5c6bebbc6b601) ) /* Check sum: 0461, dated "9/12-'99" */
+
+	ROM_REGION( 0x2000000, "user3", 0 )  /* Video ROMs Part 1 */
+	ROM_LOAD_VROM( "mpr-22854.26",  0x000002, 0x400000, CRC(97a23d16) SHA1(17a11a3e1b1806f7b994955ae22dd0e5333d47ea) )
+	ROM_LOAD_VROM( "mpr-22855.27",  0x000000, 0x400000, CRC(7249cdc9) SHA1(4bd07d911382cc569e09fb888858806d06809f9f) )
+	ROM_LOAD_VROM( "mpr-22856.28",  0x000006, 0x400000, CRC(9c0d1d1b) SHA1(f15c756fb262e15d784328ed3f731aea40797d98) )
+	ROM_LOAD_VROM( "mpr-22857.29",  0x000004, 0x400000, CRC(44e6ce2b) SHA1(03a33417dc96d3ddcbeb92422654f75f620ef265) )
+	ROM_LOAD_VROM( "mpr-22858.30",  0x00000a, 0x400000, CRC(0af40aae) SHA1(1af762e09af932d267b860712fa46eaf4b1500ac) )
+	ROM_LOAD_VROM( "mpr-22859.31",  0x000008, 0x400000, CRC(c64f0158) SHA1(b92dba07e52b4fdabc9bd4bbd26cc41cdab0414d) )
+	ROM_LOAD_VROM( "mpr-22860.32",  0x00000e, 0x400000, CRC(053af14b) SHA1(6d13609e52a4999d6dca3c4da695ebd973b06b7e) )
+	ROM_LOAD_VROM( "mpr-22861.33",  0x00000c, 0x400000, CRC(d26343da) SHA1(9d8c860c388cc2434cc8d753cde139096c12e79e) )
+
+	ROM_REGION( 0x2000000, "user4", 0 )  /* Video ROMs Part 2 */
+	ROM_LOAD_VROM( "mpr-22862.34",  0x000002, 0x400000, CRC(38347c14) SHA1(6222a5001d3a6ed8e8ff3010284658dbc69edee6) )
+	ROM_LOAD_VROM( "mpr-22863.35",  0x000000, 0x400000, CRC(28b558e6) SHA1(9b4849499baebbd2ea81d00663dff0d40c9db602) )
+	ROM_LOAD_VROM( "mpr-22864.36",  0x000006, 0x400000, CRC(31ed02f6) SHA1(a669aa8a42ff70562c86f348fcf4be6f14c2f650) )
+	ROM_LOAD_VROM( "mpr-22865.37",  0x000004, 0x400000, CRC(3e3a211a) SHA1(422f960914a6604de59b110b18f3e67ed9116f22) )
+	ROM_LOAD_VROM( "mpr-22866.38",  0x00000a, 0x400000, CRC(a863a3c8) SHA1(52e13b76a3698deef05df4c607d047e6362d81c0) )
+	ROM_LOAD_VROM( "mpr-22867.39",  0x000008, 0x400000, CRC(1ce6c7b2) SHA1(d5fd49f9838d3dc636366c436c507ac2b4f2596e) )
+	ROM_LOAD_VROM( "mpr-22868.40",  0x00000e, 0x400000, CRC(2db40cf8) SHA1(be1e04aeb5034c2edc5c0ad153700c385a1b773a) )
+	ROM_LOAD_VROM( "mpr-22869.41",  0x00000c, 0x400000, CRC(c6d62634) SHA1(72d493653b50fb31333f70c7ee143a8c7531106f) )
+
+	ROM_REGION( 0x100000, "audiocpu", 0 )   /* 68000 code */
+	// Hand written SEGA labels in this form:  TITLE: QQ  ROM NO: IC21  CHECK SUM: 0994  9/12-'99
+	ROM_LOAD16_WORD_SWAP( "qq.ic21",  0x080000, 0x080000, BAD_DUMP CRC(d8496bca) SHA1(3fa76e2210f04b75c048979f90055854311e306c) ) /* Check sum: 0994, dated "9/12-'99" */
+
+	ROM_REGION( 0x1000000, "samples", 0 )   /* SCSP samples */
+	ROM_LOAD( "mpr-22887.22",  0x000000, 0x400000, CRC(7d04a867) SHA1(053de98105880188b4daff183710d7932617547f) )
+	ROM_LOAD( "mpr-22889.24",  0x400000, 0x400000, CRC(4f9ba45d) SHA1(d60314e852637edf6510be52b9b6576a1f3e1b7e) )
+	ROM_LOAD( "mpr-22888.23",  0x800000, 0x400000, CRC(018fcf22) SHA1(c5133358f591d699f177617463e7dfa22edf5369) )
+	ROM_LOAD( "mpr-22890.25",  0xc00000, 0x400000, CRC(b638bd7c) SHA1(ed9c69175fd0ca4c6f22e542b4e68398a6e4ad07) )
+
+	ROM_REGION( 0x20000, "cpu2", 0 )    /* Z80 code */
+	ROM_FILL( 0x000000, 0x20000, 0 )
+
+	ROM_REGION( 0x1000000, "dsb", 0 )   /* DSB samples */
+	ROM_FILL( 0x000000, 0x1000000, 0 )
+
+	ROM_REGION( 0x80000, "scsp1", 0 )   /* first SCSP's RAM */
+	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
+	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0265-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "2923aa91" )
+ROM_END
+
+ROM_START( magtruck )   /* Step 2.1, Sega game ID# is 833-13601-01 (Export), ROM board ID# 834-13600-01 RCS EXP (Export), Security board ID# 837-13599-COM */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
+	// CROM
+	ROM_LOAD64_WORD_SWAP( "epr-21435.17",  0x000006, 0x200000, CRC(9b169446) SHA1(285cbe5afd439d83c50f0499a878f71b8e5b94e5) )
+	ROM_LOAD64_WORD_SWAP( "epr-21433.18",  0x000004, 0x200000, CRC(60aa9d76) SHA1(b27741568a4fd0494b2254e468faea569e2d9fef) )
+	ROM_LOAD64_WORD_SWAP( "epr-21436.19",  0x000002, 0x200000, CRC(22bcbca3) SHA1(fe9c46ad5b01f9f8d19854e59e229d07c0649e8c) )
+	ROM_LOAD64_WORD_SWAP( "epr-21434.20",  0x000000, 0x200000, CRC(e028d7ca) SHA1(7e5d1cef6d9ef767f07320e9c099004e081f52dd) )
+
+	// CROM0
+	ROM_LOAD64_WORD_SWAP( "mpr-21423.1",   0x800006, 0x400000, CRC(4ee0060a) SHA1(61e155ea382f2c79ece78eeba12129645ea260f1) )
+	ROM_LOAD64_WORD_SWAP( "mpr-21424.2",   0x800004, 0x400000, CRC(25358fdf) SHA1(168b9e774cbf2722a60050b135b12192b42b15f3) )
+	ROM_LOAD64_WORD_SWAP( "mpr-21425.3",   0x800002, 0x400000, CRC(ad235849) SHA1(3d75caa5c727094613567e5eab4f840cf087052e) )
+	ROM_LOAD64_WORD_SWAP( "mpr-21426.4",   0x800000, 0x400000, CRC(ce77e26e) SHA1(a17b621c2a49b665a3ecf50e4c8f50fdec1d6bd8) )
+
+	ROM_REGION( 0x2000000, "user3", 0 )  /* Video ROMs Part 1 */
+	ROM_LOAD_VROM( "mpr-21407.26",  0x000002, 0x400000, CRC(3ffb416c) SHA1(3fffe30d27ce6d11cd1f11ab03d77a89f796ef2a) )
+	ROM_LOAD_VROM( "mpr-21408.27",  0x000000, 0x400000, CRC(3e00a7ef) SHA1(b4b025f4d9346b460cf9dbfbc5dff50c51464267) )
+	ROM_LOAD_VROM( "mpr-21409.28",  0x000006, 0x400000, CRC(a4673bbf) SHA1(813c1da0184f5199895072a5bdaabc7f3de712dc) )
+	ROM_LOAD_VROM( "mpr-21410.29",  0x000004, 0x400000, CRC(c9f43b4a) SHA1(590156f42f55fdf251ebf246d06102264c660afd) )
+	ROM_LOAD_VROM( "mpr-21411.30",  0x00000a, 0x400000, CRC(f14957c7) SHA1(2f81f61a5d813c173318746cbab682b3c01689f0) )
+	ROM_LOAD_VROM( "mpr-21412.31",  0x000008, 0x400000, CRC(ec24091f) SHA1(fe8f0f71c6e468a45ae4c466a1f7259222fcf82f) )
+	ROM_LOAD_VROM( "mpr-21413.32",  0x00000e, 0x400000, CRC(ea9049e0) SHA1(4dedbc61b29b6bf3a7d2c3dd310d6e924ff0c453) )
+	ROM_LOAD_VROM( "mpr-21414.33",  0x00000c, 0x400000, CRC(79bc5ffd) SHA1(20a361deb9769293712c7c43c778d1957316ca80) )
+
+	ROM_REGION( 0x2000000, "user4", 0 )  /* Video ROMs Part 2 */
+	ROM_LOAD_VROM( "mpr-21415.34",  0x000002, 0x400000, CRC(f96fe7a2) SHA1(870e51a83d1b1a4ac652a2fca40ad1b39af373ef) )
+	ROM_LOAD_VROM( "mpr-21416.35",  0x000000, 0x400000, CRC(84a08b3e) SHA1(627fb0e8bfaab33d14969c082bd519d5ea12de01) )
+	ROM_LOAD_VROM( "mpr-21417.36",  0x000006, 0x400000, CRC(6094975c) SHA1(6e2e1bdb42926fbc19502bbb1027866f74f55e50) )
+	ROM_LOAD_VROM( "mpr-21418.37",  0x000004, 0x400000, CRC(7bb868ba) SHA1(32698f542b61efc06193b2186861ef375842b92a) )
+	ROM_LOAD_VROM( "mpr-21419.38",  0x00000a, 0x400000, CRC(be7325c2) SHA1(0bc3672f482bbd6692d88068b5e803b49ed7bff4) )
+	ROM_LOAD_VROM( "mpr-21420.39",  0x000008, 0x400000, CRC(8b577e7b) SHA1(8282d4063e26e51b1b45b1865558b12aab290dd0) )
+	ROM_LOAD_VROM( "mpr-21421.40",  0x00000e, 0x400000, CRC(71e4e9fc) SHA1(24f02ee6d7e4f65b18a4c0939e1b29d7fd642ca5) )
+	ROM_LOAD_VROM( "mpr-21422.41",  0x00000c, 0x400000, CRC(feca77a5) SHA1(e475a96fa3d2efae65f29266ff2322cc23392ac8) )
+
+	ROM_REGION( 0x100000, "audiocpu", 0 )   /* 68000 code */
+	ROM_LOAD16_WORD_SWAP( "epr-21438.21",  0x080000, 0x080000, CRC(6815af9e) SHA1(f956b5c5519a94cc60e31a2bd391949109908239) )
+
+	ROM_REGION( 0x1000000, "samples", 0 )   /* SCSP samples */
+	ROM_LOAD( "mpr-21427.22",  0x000000, 0x400000, CRC(884566f6) SHA1(02b7243890e25ccb364a7ad3e8d61f8defeaf039) )
+	ROM_LOAD( "mpr-21428.24",  0x400000, 0x400000, CRC(162d1e43) SHA1(0221e5126459d9277d75c7560a251381cea72b37) )
+	ROM_LOAD( "mpr-21431.23",  0x800000, 0x400000, CRC(0ef8f7bb) SHA1(748949b2730dc002b76947d67d7ee3663b96b700) )
+	ROM_LOAD( "mpr-21432.25",  0xc00000, 0x400000, CRC(59c0f6df) SHA1(ab1c6fbcb1244c2b56b6967018fceb82d8c5414c) )
+
+	ROM_REGION( 0x20000, "cpu2", 0 )    /* Z80 code */
+	ROM_FILL( 0x000000, 0x20000, 0 )
+
+	ROM_REGION( 0x1000000, "dsb", 0 )   /* DSB samples */
+	ROM_FILL( 0x000000, 0x1000000, 0 )
+
+	ROM_REGION( 0x80000, "scsp1", 0 )   /* first SCSP's RAM */
+	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
+	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0243-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "29266e45" )
 ROM_END
 
 ROM_START( oceanhun )   /* Step 2.0, Sega game ID# is 833-13571, ROM board ID# 834-13572 THE OCEAN HUNTER, 317-0242-COM security chip (837-13576-COM security board) */
@@ -5182,10 +5262,13 @@ ROM_START( oceanhun )   /* Step 2.0, Sega game ID# is 833-13571, ROM board ID# 8
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0242-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "292b6a01" )
 ROM_END
 
 ROM_START( lamachin )   /* Step 2.0, Sega game ID# is 833-13664, ROM board ID# 834-13665 L.A.MACHINEGUNS, 317-0244-COM security chip (837-13666-COM security board) */
-	ROM_REGION64_BE( 0x4800000, "user1", 0 ) /* program + data ROMs */
+	ROM_REGION64_BE( 0x8800000, "user1", 0 ) /* program + data ROMs */
 	// CROM
 	ROM_LOAD64_WORD_SWAP( "epr-21483.17", 0x000006, 0x200000, CRC(940637c2) SHA1(89894b603c17d27f57500ec8030eaa7e0e991479) )
 	ROM_LOAD64_WORD_SWAP( "epr-21484.18", 0x000004, 0x200000, CRC(58102168) SHA1(38dd9a41f653c0a84ac927b476f014c949454ffa) )
@@ -5251,6 +5334,9 @@ ROM_START( lamachin )   /* Step 2.0, Sega game ID# is 833-13664, ROM board ID# 8
 
 	ROM_REGION( 0x80000, "scsp2", 0 )   /* second SCSP's RAM */
 	ROM_FILL( 0x000000, 0x80000, 0 )
+
+	//             ????     317-0244-COM   Model 3
+	ROM_PARAMETER( ":315_5881:key", "292a2bc5" )
 ROM_END
 
 /* Model 3 sound board emulation */
@@ -5276,9 +5362,9 @@ WRITE16_MEMBER(model3_state::model3snd_ctrl)
 
 static ADDRESS_MAP_START( model3_snd, AS_PROGRAM, 16, model3_state )
 	AM_RANGE(0x000000, 0x07ffff) AM_RAM AM_REGION("scsp1", 0) AM_SHARE("soundram")
-	AM_RANGE(0x100000, 0x100fff) AM_DEVREADWRITE_LEGACY("scsp1", scsp_r, scsp_w)
+	AM_RANGE(0x100000, 0x100fff) AM_DEVREADWRITE("scsp1", scsp_device, read, write)
 	AM_RANGE(0x200000, 0x27ffff) AM_RAM AM_REGION("scsp2", 0)
-	AM_RANGE(0x300000, 0x300fff) AM_DEVREADWRITE_LEGACY("scsp2", scsp_r, scsp_w)
+	AM_RANGE(0x300000, 0x300fff) AM_DEVREADWRITE("scsp2", scsp_device, read, write)
 	AM_RANGE(0x400000, 0x400001) AM_WRITE(model3snd_ctrl)
 	AM_RANGE(0x600000, 0x67ffff) AM_ROM AM_REGION("audiocpu", 0x80000)
 	AM_RANGE(0x800000, 0x9fffff) AM_ROM AM_REGION("samples", 0)
@@ -5287,30 +5373,10 @@ static ADDRESS_MAP_START( model3_snd, AS_PROGRAM, 16, model3_state )
 ADDRESS_MAP_END
 
 
-WRITE_LINE_MEMBER(model3_state::scsp_irq)
+WRITE8_MEMBER(model3_state::scsp_irq)
 {
-	if (state > 0)
-	{
-		m_scsp_last_line = state;
-		m_audiocpu->set_input_line(state, ASSERT_LINE);
-	}
-	else
-		m_audiocpu->set_input_line(-state, CLEAR_LINE);
+	m_audiocpu->set_input_line(offset, data);
 }
-
-static const scsp_interface scsp_config =
-{
-	0,
-	DEVCB_DRIVER_LINE_MEMBER(model3_state,scsp_irq),
-	DEVCB_NULL
-};
-
-static const scsp_interface scsp2_interface =
-{
-	0,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
 
 /* IRQs */
 /*
@@ -5322,44 +5388,28 @@ static const scsp_interface scsp2_interface =
     0x04: Video (unknown -- has callback hook in scud)
     0x02: Video (VBLANK start?)
     0x01: Video (unused?)
+
+    IRQ 0x08 and 0x04 directly affect the game speed in magtruck, once per scanline seems fast enough
+    Un-syncing the interrupts breaks the progress bar in magtruck
 */
 TIMER_DEVICE_CALLBACK_MEMBER(model3_state::model3_interrupt)
 {
 	int scanline = param;
 
 	if (scanline == 384)
-		model3_set_irq_line(machine(), 0x02, ASSERT_LINE);
-	else if(scanline == 0)
-		model3_set_irq_line(machine(), 0x0d, ASSERT_LINE);
+	{
+		set_irq_line(0x02, ASSERT_LINE);
+	}
+	else
+	{
+		//if ((scanline & 0x1) == 0)
+			set_irq_line(0x0c, ASSERT_LINE);
+	}
 }
-
-static const powerpc_config model3_10 =
-{
-	/* 603e, Stretch, 1.3 */
-	66000000,       /* Multiplier 1, Bus = 66MHz, Core = 66MHz */
-	NULL,
-	NULL
-};
-
-static const powerpc_config model3_15 =
-{
-	/* 603e, Stretch, 1.3 */
-	66000000,       /* Multiplier 1.5, Bus = 66MHz, Core = 100MHz */
-	NULL,
-	NULL
-};
-
-static const powerpc_config model3_2x =
-{
-	/* 603e-PID7t, Goldeneye, 2.1 */
-	66000000,       /* Multiplier 2.5, Bus = 66MHz, Core = 166MHz */
-	NULL,
-	NULL
-};
 
 static MACHINE_CONFIG_START( model3_10, model3_state )
 	MCFG_CPU_ADD("maincpu", PPC603E, 66000000)
-	MCFG_CPU_CONFIG(model3_10)
+	MCFG_PPC_BUS_FREQUENCY(66000000)   /* Multiplier 1, Bus = 66MHz, Core = 66MHz */
 	MCFG_CPU_PROGRAM_MAP(model3_mem)
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", model3_state, model3_interrupt, "screen", 0, 1)
 
@@ -5371,7 +5421,7 @@ static MACHINE_CONFIG_START( model3_10, model3_state )
 	MCFG_MACHINE_START_OVERRIDE(model3_state,model3_10)
 	MCFG_MACHINE_RESET_OVERRIDE(model3_state,model3_10)
 
-	MCFG_EEPROM_ADD("eeprom", eeprom_intf)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 	MCFG_NVRAM_ADD_1FILL("backup")
 
 
@@ -5381,28 +5431,32 @@ static MACHINE_CONFIG_START( model3_10, model3_state )
 	MCFG_SCREEN_SIZE(512, 400)
 	MCFG_SCREEN_UPDATE_DRIVER(model3_state, screen_update_model3)
 
-	MCFG_PALETTE_LENGTH(32768)
-	MCFG_PALETTE_INIT(RRRRR_GGGGG_BBBBB)
+	MCFG_PALETTE_ADD_RRRRRGGGGGBBBBB("palette")
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", empty)
 
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 	MCFG_SOUND_ADD("scsp1", SCSP, 0)
-	MCFG_SOUND_CONFIG(scsp_config)
+	MCFG_SCSP_IRQ_CB(WRITE8(model3_state, scsp_irq))
 	MCFG_SOUND_ROUTE(0, "lspeaker", 2.0)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 2.0)
 
 	MCFG_SOUND_ADD("scsp2", SCSP, 0)
-	MCFG_SOUND_CONFIG(scsp2_interface)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 2.0)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 2.0)
 
-	MCFG_SCSIBUS_ADD("scsi")
-	MCFG_LSI53C810_ADD( "scsi:lsi53c810", lsi53c810_intf)
+	MCFG_DEVICE_ADD("scsi", SCSI_PORT, 0)
+
+	MCFG_DEVICE_ADD("lsi53c810", LSI53C810, 0)
+	MCFG_LSI53C810_IRQ_CB(model3_state, scsi_irq_callback)
+	MCFG_LSI53C810_DMA_CB(model3_state, real3d_dma_callback)
+	MCFG_LSI53C810_FETCH_CB(model3_state, scsi_fetch)
+	MCFG_LEGACY_SCSI_PORT("scsi")
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_START( model3_15, model3_state )
 	MCFG_CPU_ADD("maincpu", PPC603E, 100000000)
-	MCFG_CPU_CONFIG(model3_15)
+	MCFG_PPC_BUS_FREQUENCY(66000000)       /* Multiplier 1.5, Bus = 66MHz, Core = 100MHz */
 	MCFG_CPU_PROGRAM_MAP(model3_mem)
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", model3_state, model3_interrupt, "screen", 0, 1)
 
@@ -5412,7 +5466,7 @@ static MACHINE_CONFIG_START( model3_15, model3_state )
 	MCFG_MACHINE_START_OVERRIDE(model3_state,model3_15)
 	MCFG_MACHINE_RESET_OVERRIDE(model3_state,model3_15)
 
-	MCFG_EEPROM_ADD("eeprom", eeprom_intf)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 	MCFG_NVRAM_ADD_1FILL("backup")
 
 
@@ -5422,23 +5476,27 @@ static MACHINE_CONFIG_START( model3_15, model3_state )
 	MCFG_SCREEN_SIZE(496, 400)
 	MCFG_SCREEN_UPDATE_DRIVER(model3_state, screen_update_model3)
 
-	MCFG_PALETTE_LENGTH(32768)
-	MCFG_PALETTE_INIT(RRRRR_GGGGG_BBBBB)
+	MCFG_PALETTE_ADD_RRRRRGGGGGBBBBB("palette")
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", empty)
 
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 	MCFG_SOUND_ADD("scsp1", SCSP, 0)
-	MCFG_SOUND_CONFIG(scsp_config)
+	MCFG_SCSP_IRQ_CB(WRITE8(model3_state, scsp_irq))
 	MCFG_SOUND_ROUTE(0, "lspeaker", 2.0)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 2.0)
 
 	MCFG_SOUND_ADD("scsp2", SCSP, 0)
-	MCFG_SOUND_CONFIG(scsp2_interface)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 2.0)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 2.0)
 
-	MCFG_SCSIBUS_ADD("scsi")
-	MCFG_LSI53C810_ADD( "scsi:lsi53c810", lsi53c810_intf)
+	MCFG_DEVICE_ADD("scsi", SCSI_PORT, 0)
+
+	MCFG_DEVICE_ADD("lsi53c810", LSI53C810, 0)
+	MCFG_LSI53C810_IRQ_CB(model3_state, scsi_irq_callback)
+	MCFG_LSI53C810_DMA_CB(model3_state, real3d_dma_callback)
+	MCFG_LSI53C810_FETCH_CB(model3_state, scsi_fetch)
+	MCFG_LEGACY_SCSI_PORT("scsi")
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED(scud, model3_15)
@@ -5447,19 +5505,19 @@ static MACHINE_CONFIG_DERIVED(scud, model3_15)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_START( model3_20, model3_state )
+static MACHINE_CONFIG_START(model3_20, model3_state)
 	MCFG_CPU_ADD("maincpu", PPC603R, 166000000)
-	MCFG_CPU_CONFIG(model3_2x)
+	MCFG_PPC_BUS_FREQUENCY(66000000)    /* Multiplier 2.5, Bus = 66MHz, Core = 166MHz */
 	MCFG_CPU_PROGRAM_MAP(model3_mem)
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", model3_state, model3_interrupt, "screen", 0, 1)
 
 	MCFG_CPU_ADD("audiocpu", M68000, 12000000)
 	MCFG_CPU_PROGRAM_MAP(model3_snd)
 
-	MCFG_MACHINE_START_OVERRIDE(model3_state,model3_20)
-	MCFG_MACHINE_RESET_OVERRIDE(model3_state,model3_20)
+	MCFG_MACHINE_START_OVERRIDE(model3_state, model3_20)
+	MCFG_MACHINE_RESET_OVERRIDE(model3_state, model3_20)
 
-	MCFG_EEPROM_ADD("eeprom", eeprom_intf)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 	MCFG_NVRAM_ADD_1FILL("backup")
 
 
@@ -5469,35 +5527,39 @@ static MACHINE_CONFIG_START( model3_20, model3_state )
 	MCFG_SCREEN_SIZE(496, 400)
 	MCFG_SCREEN_UPDATE_DRIVER(model3_state, screen_update_model3)
 
-	MCFG_PALETTE_LENGTH(32768)
-	MCFG_PALETTE_INIT(RRRRR_GGGGG_BBBBB)
+	MCFG_PALETTE_ADD_RRRRRGGGGGBBBBB("palette")
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", empty)
 
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 	MCFG_SOUND_ADD("scsp1", SCSP, 0)
-	MCFG_SOUND_CONFIG(scsp_config)
+	MCFG_SCSP_IRQ_CB(WRITE8(model3_state, scsp_irq))
 	MCFG_SOUND_ROUTE(0, "lspeaker", 2.0)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 2.0)
 
 	MCFG_SOUND_ADD("scsp2", SCSP, 0)
-	MCFG_SOUND_CONFIG(scsp2_interface)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 2.0)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 2.0)
 MACHINE_CONFIG_END
 
-static MACHINE_CONFIG_START( model3_21, model3_state )
+static MACHINE_CONFIG_DERIVED(model3_20_5881, model3_20)
+	MCFG_DEVICE_ADD("315_5881", SEGA315_5881_CRYPT, 0)
+	MCFG_SET_READ_CALLBACK(model3_state, crypt_read_callback)
+MACHINE_CONFIG_END
+
+static MACHINE_CONFIG_START(model3_21, model3_state)
 	MCFG_CPU_ADD("maincpu", PPC603R, 166000000)
-	MCFG_CPU_CONFIG(model3_2x)
+	MCFG_PPC_BUS_FREQUENCY(66000000)    /* Multiplier 2.5, Bus = 66MHz, Core = 166MHz */
 	MCFG_CPU_PROGRAM_MAP(model3_mem)
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", model3_state, model3_interrupt, "screen", 0, 1)
 
 	MCFG_CPU_ADD("audiocpu", M68000, 12000000)
 	MCFG_CPU_PROGRAM_MAP(model3_snd)
 
-	MCFG_MACHINE_START_OVERRIDE(model3_state,model3_21)
-	MCFG_MACHINE_RESET_OVERRIDE(model3_state,model3_21)
+	MCFG_MACHINE_START_OVERRIDE(model3_state, model3_21)
+	MCFG_MACHINE_RESET_OVERRIDE(model3_state, model3_21)
 
-	MCFG_EEPROM_ADD("eeprom", eeprom_intf)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 	MCFG_NVRAM_ADD_1FILL("backup")
 
 
@@ -5508,21 +5570,40 @@ static MACHINE_CONFIG_START( model3_21, model3_state )
 	MCFG_SCREEN_SIZE(496, 400)
 	MCFG_SCREEN_UPDATE_DRIVER(model3_state, screen_update_model3)
 
-	MCFG_PALETTE_LENGTH(32768)
-	MCFG_PALETTE_INIT(RRRRR_GGGGG_BBBBB)
-
+	MCFG_PALETTE_ADD_RRRRRGGGGGBBBBB("palette")
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", empty)
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 	MCFG_SOUND_ADD("scsp1", SCSP, 0)
-	MCFG_SOUND_CONFIG(scsp_config)
+	MCFG_SCSP_IRQ_CB(WRITE8(model3_state, scsp_irq))
 	MCFG_SOUND_ROUTE(0, "lspeaker", 2.0)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 2.0)
 
 	MCFG_SOUND_ADD("scsp2", SCSP, 0)
-	MCFG_SOUND_CONFIG(scsp2_interface)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 2.0)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 2.0)
 MACHINE_CONFIG_END
+
+
+UINT16 model3_state::crypt_read_callback(UINT32 addr)
+{
+	UINT16 dat = 0;
+	if (addr < 0x8000)
+	{
+		dat = m_maincpu->space().read_word((0xf0180000 + 4 * addr)); // every other word is unused in this RAM, probably 32-bit ram on 64-bit bus?
+	}
+
+//  dat = ((dat & 0xff00) >> 8) | ((dat & 0x00ff) << 8);
+//  printf("reading %04x\n", dat);
+
+	return dat;
+}
+
+static MACHINE_CONFIG_DERIVED( model3_21_5881, model3_21 )
+	MCFG_DEVICE_ADD("315_5881", SEGA315_5881_CRYPT, 0)
+	MCFG_SET_READ_CALLBACK(model3_state, crypt_read_callback)
+MACHINE_CONFIG_END
+
 
 static void interleave_vroms(running_machine &machine)
 {
@@ -5553,6 +5634,16 @@ static void interleave_vroms(running_machine &machine)
 		}
 		j+=8;
 	}
+}
+
+DRIVER_INIT_MEMBER(model3_state, genprot)
+{
+//  std::string key = parameter(":315_5881:key");
+
+	m_maincpu->space(AS_PROGRAM).install_ram(0xf0180000, 0xf019ffff, 0, 0x0e000000);
+
+	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xf01a0000, 0xf01a003f, 0, 0x0e000000, read64_delegate(FUNC(model3_state::model3_5881prot_r), this), write64_delegate(FUNC(model3_state::model3_5881prot_w), this) );
+
 }
 
 DRIVER_INIT_MEMBER(model3_state,model3_10)
@@ -5603,84 +5694,54 @@ DRIVER_INIT_MEMBER(model3_state,lostwsga)
 
 DRIVER_INIT_MEMBER(model3_state,scud)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-
 	DRIVER_INIT_CALL(model3_15);
 	/* TODO: network device at 0xC0000000 - FF */
 	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xf9000000, 0xf90000ff, read64_delegate(FUNC(model3_state::scsi_r),this), write64_delegate(FUNC(model3_state::scsi_w),this));
 
-	rom[(0x71275c^4)/4] = 0x60000000;
-	rom[(0x71277c^4)/4] = 0x60000000;
+//  UINT32 *rom = (UINT32*)memregion("user1")->base();
+//  rom[(0x799de8^4)/4] = 0x00050208;       // secret debug menu
 }
 
 DRIVER_INIT_MEMBER(model3_state,scudplus)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-
 	DRIVER_INIT_CALL(model3_15);
 	/* TODO: network device at 0xC0000000 - FF */
 	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xc1000000, 0xc10000ff, read64_delegate(FUNC(model3_state::scsi_r),this), write64_delegate(FUNC(model3_state::scsi_w),this));
-
-	rom[(0x713724^4)/4] = 0x60000000;
-	rom[(0x713744^4)/4] = 0x60000000;
-
-	rom[(0x741f48^4)/4] = 0x60000000;
-
-	rom[(0x741f68^4)/4] = 0x60000000;
-	rom[(0x741efc^4)/4] = 0x60000000;
 }
 
 DRIVER_INIT_MEMBER(model3_state,scudplusa)
 {
-	//UINT32 *rom = (UINT32*)memregion("user1")->base();
-
 	DRIVER_INIT_CALL(model3_15);
 	/* TODO: network device at 0xC0000000 - FF */
 	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xc1000000, 0xc10000ff, read64_delegate(FUNC(model3_state::scsi_r),this), write64_delegate(FUNC(model3_state::scsi_w),this));
-
-	//rom[(0x713724^4)/4] = 0x60000000; // Fix ME!!!! Needs to corrected for the non REV A version!!!!
-	//rom[(0x713744^4)/4] = 0x60000000;
-
-	//rom[(0x741f48^4)/4] = 0x60000000;
-
-	//rom[(0x741f68^4)/4] = 0x60000000;
-	//rom[(0x741efc^4)/4] = 0x60000000;
 }
 
 DRIVER_INIT_MEMBER(model3_state,lemans24)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_15);
 
 	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xc1000000, 0xc10000ff, read64_delegate(FUNC(model3_state::scsi_r),this), write64_delegate(FUNC(model3_state::scsi_w),this));
 
-	rom[(0x73fe38^4)/4] = 0x38840004;       /* This seems to be an actual bug in the original code */
-
-	rom[(0x73eb5c^4)/4] = 0x60000000;
-	rom[(0x73edd0^4)/4] = 0x60000000;
-	rom[(0x73edc4^4)/4] = 0x60000000;
+//  rom[(0x73fe38^4)/4] = 0x38840004;       /* This seems to be an actual bug in the original code */
 }
 
 DRIVER_INIT_MEMBER(model3_state,vf3)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
+	//UINT32 *rom = (UINT32*)memregion("user1")->base();
 
 	DRIVER_INIT_CALL(model3_10);
 
+	/*
 	rom[(0x713c7c^4)/4] = 0x60000000;
 	rom[(0x713e54^4)/4] = 0x60000000;
 	rom[(0x7125b0^4)/4] = 0x60000000;
 	rom[(0x7125d0^4)/4] = 0x60000000;
-
+	*/
 }
 
 DRIVER_INIT_MEMBER(model3_state,vs215)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-
-	rom[(0x70dde0^4)/4] = 0x60000000;
-	rom[(0x70e6f0^4)/4] = 0x60000000;
-	rom[(0x70e710^4)/4] = 0x60000000;
+	m_step15_with_mpc106 = true;
 
 	interleave_vroms(machine());
 	m_maincpu->space(AS_PROGRAM).install_read_bank(0xff000000, 0xff7fffff, "bank1" );
@@ -5696,6 +5757,8 @@ DRIVER_INIT_MEMBER(model3_state,vs215)
 
 DRIVER_INIT_MEMBER(model3_state,vs29815)
 {
+	m_step15_with_mpc106 = true;
+
 	UINT32 *rom = (UINT32*)memregion("user1")->base();
 
 	rom[(0x6028ec^4)/4] = 0x60000000;
@@ -5715,10 +5778,7 @@ DRIVER_INIT_MEMBER(model3_state,vs29815)
 
 DRIVER_INIT_MEMBER(model3_state,bass)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-
-	rom[(0x7999a8^4)/4] = 0x60000000;
-	rom[(0x7999c8^4)/4] = 0x60000000;
+	m_step15_with_mpc106 = true;
 
 	interleave_vroms(machine());
 	m_maincpu->space(AS_PROGRAM).install_read_bank(0xff000000, 0xff7fffff, "bank1" );
@@ -5746,104 +5806,54 @@ DRIVER_INIT_MEMBER(model3_state,getbass)
 
 DRIVER_INIT_MEMBER(model3_state,vs2)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-
 	DRIVER_INIT_CALL(model3_20);
-
-	rom[(0x705884^4)/4] = 0x60000000;
-	rom[(0x7058a4^4)/4] = 0x60000000;
 }
 
 DRIVER_INIT_MEMBER(model3_state,vs298)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-
 	DRIVER_INIT_CALL(model3_20);
-
-	rom[(0x603868^4)/4] = 0x60000000;
-	rom[(0x603888^4)/4] = 0x60000000;
+	DRIVER_INIT_CALL(genprot);
 }
 
 
-DRIVER_INIT_MEMBER(model3_state,vs2v991)
-{
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
 
-	DRIVER_INIT_CALL(model3_20);
-
-	rom[(0x603868^4)/4] = 0x60000000;
-	rom[(0x603888^4)/4] = 0x60000000;
-}
-
-DRIVER_INIT_MEMBER(model3_state,vs299b)
-{
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-
-	DRIVER_INIT_CALL(model3_20);
-
-	rom[(0x603868^4)/4] = 0x60000000;
-	rom[(0x603888^4)/4] = 0x60000000;
-}
-
-DRIVER_INIT_MEMBER(model3_state,vs299a)
-{
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-
-	DRIVER_INIT_CALL(model3_20);
-
-	rom[(0x603868^4)/4] = 0x60000000;
-	rom[(0x603888^4)/4] = 0x60000000;
-}
 
 DRIVER_INIT_MEMBER(model3_state,vs299)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-
 	DRIVER_INIT_CALL(model3_20);
-
-	rom[(0x603868^4)/4] = 0x60000000;
-	rom[(0x603888^4)/4] = 0x60000000;
+	DRIVER_INIT_CALL(genprot);
 }
 
 DRIVER_INIT_MEMBER(model3_state,harley)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_20);
 
 	m_network_ram = auto_alloc_array_clear(machine(), UINT64, 0x10000);
 	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xc0000000, 0xc00fffff, read64_delegate(FUNC(model3_state::network_r),this), write64_delegate(FUNC(model3_state::network_w),this));
-
-	rom[(0x50ecb4^4)/4] = 0x60000000;
-	rom[(0x50ecd4^4)/4] = 0x60000000;
-	rom[(0x50ff64^4)/4] = 0x60000000;
-	//rom[(0x4f736c^4)/4] = 0x60000000; // Fix ME!! Needs to be updated for the REV B version!!
-	//rom[(0x4f738c^4)/4] = 0x60000000; // Fix ME!! Needs to be updated for the REV B version!!
 }
 
 DRIVER_INIT_MEMBER(model3_state,harleya)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_20);
 
 	m_network_ram = auto_alloc_array_clear(machine(), UINT64, 0x10000);
 	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xc0000000, 0xc00fffff, read64_delegate(FUNC(model3_state::network_r),this), write64_delegate(FUNC(model3_state::network_w),this));
-
-	rom[(0x50e8d4^4)/4] = 0x60000000;
-	rom[(0x50e8f4^4)/4] = 0x60000000;
-	rom[(0x50fb84^4)/4] = 0x60000000;
-	rom[(0x4f736c^4)/4] = 0x60000000;
-	rom[(0x4f738c^4)/4] = 0x60000000;
 }
 
 
 DRIVER_INIT_MEMBER(model3_state,srally2)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_20);
 
+
+	UINT32 *rom = (UINT32*)memregion("user1")->base();
 	rom[(0x7c0c4^4)/4] = 0x60000000;
 	rom[(0x7c0c8^4)/4] = 0x60000000;
 	rom[(0x7c0cc^4)/4] = 0x60000000;
+	// Writes command 000023FFFFFFFFFE to JTAG, expects result 0x0040000000 (41 bits)
+	// Writes command 000003FFFFFFFFFE
+	// Writes command 00003FFFFFFFFFFE 248 times
+	// Writes command 000023FFFFFFFFFE, expects result 0x01000000000 (?? bits)
 }
 
 DRIVER_INIT_MEMBER(model3_state,swtrilgy)
@@ -5851,72 +5861,75 @@ DRIVER_INIT_MEMBER(model3_state,swtrilgy)
 	UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_20);
 
-	rom[(0xf0e48^4)/4] = 0x60000000;
-	rom[(0x043dc^4)/4] = 0x48000090;
-	rom[(0x029a0^4)/4] = 0x60000000;
-	rom[(0x02a0c^4)/4] = 0x60000000;
+	// Unemulated JTAG stuff, see srally2
+	rom[(0xf776c^4)/4] = 0x60000000;
+	rom[(0xf7770^4)/4] = 0x60000000;
+	rom[(0xf7774^4)/4] = 0x60000000;
+
+	rom[(0x043dc^4)/4] = 0x48000090;        // skip force feedback setup
+	rom[(0xf6e44^4)/4] = 0x60000000;
+
+
+	DRIVER_INIT_CALL(genprot);
+
 }
 
 DRIVER_INIT_MEMBER(model3_state,swtrilga)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
+	//UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_20);
+	DRIVER_INIT_CALL(genprot);
 
-	rom[(0xf6dd0^4)/4] = 0x60000000;
+	//rom[(0xf6dd0^4)/4] = 0x60000000;
 }
 
 DRIVER_INIT_MEMBER(model3_state,von2)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-	DRIVER_INIT_CALL(model3_20);
+	m_step20_with_old_real3d = true;
 
-	rom[(0x189168^4)/4] = 0x60000000;
-	rom[(0x1890ac^4)/4] = 0x60000000;
-	rom[(0x1890b8^4)/4] = 0x60000000;
-	rom[(0x1888a8^4)/4] = 0x60000000;
-	rom[(0x1891c8^4)/4] = 0x60000000;
+	DRIVER_INIT_CALL(model3_20);
+	DRIVER_INIT_CALL(genprot);
 }
 
 DRIVER_INIT_MEMBER(model3_state,dirtdvls)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
-	DRIVER_INIT_CALL(model3_20);
+	m_step20_with_old_real3d = true;
 
-	rom[(0x0600a0^4)/4] = 0x60000000;
-	rom[(0x0608a4^4)/4] = 0x60000000;
-	rom[(0x0608b0^4)/4] = 0x60000000;
-	rom[(0x060960^4)/4] = 0x60000000;
-	rom[(0x0609c0^4)/4] = 0x60000000;
-	rom[(0x001e24^4)/4] = 0x60000000;
+	DRIVER_INIT_CALL(model3_20);
+	DRIVER_INIT_CALL(genprot);
 }
 
 DRIVER_INIT_MEMBER(model3_state,daytona2)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
+//  UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_20);
 
 	m_maincpu->space(AS_PROGRAM).install_write_handler(0xc3800000, 0xc3800007, write64_delegate(FUNC(model3_state::daytona2_rombank_w),this));
 	m_maincpu->space(AS_PROGRAM).install_read_bank(0xc3000000, 0xc37fffff, "bank2" );
 
 	//rom[(0x68468c^4)/4] = 0x60000000;
-	rom[(0x6063c4^4)/4] = 0x60000000;
-	rom[(0x616434^4)/4] = 0x60000000;
-	rom[(0x69f4e4^4)/4] = 0x60000000;
+	//rom[(0x6063c4^4)/4] = 0x60000000;
+	//rom[(0x616434^4)/4] = 0x60000000;
+	//rom[(0x69f4e4^4)/4] = 0x60000000;
+
+	DRIVER_INIT_CALL(genprot);
 }
 
 DRIVER_INIT_MEMBER(model3_state,dayto2pe)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
+//  UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_20);
 
 	m_maincpu->space(AS_PROGRAM).install_write_handler(0xc3800000, 0xc3800007, write64_delegate(FUNC(model3_state::daytona2_rombank_w),this));
 	m_maincpu->space(AS_PROGRAM).install_read_bank(0xc3000000, 0xc37fffff, "bank2" );
 
-	rom[(0x606784^4)/4] = 0x60000000;
-	rom[(0x69a3fc^4)/4] = 0x60000000;       // jump to encrypted code
-	rom[(0x618b28^4)/4] = 0x60000000;       // jump to encrypted code
+//  rom[(0x606784^4)/4] = 0x60000000;
+//  rom[(0x69a3fc^4)/4] = 0x60000000;       // jump to encrypted code
+//  rom[(0x618b28^4)/4] = 0x60000000;       // jump to encrypted code
 
-	rom[(0x64ca34^4)/4] = 0x60000000;       // dec
+//  rom[(0x64ca34^4)/4] = 0x60000000;       // dec
+
+	DRIVER_INIT_CALL(genprot);
 }
 
 DRIVER_INIT_MEMBER(model3_state,spikeout)
@@ -5926,6 +5939,7 @@ DRIVER_INIT_MEMBER(model3_state,spikeout)
 
 	rom[(0x6059cc^4)/4] = 0x60000000;
 	rom[(0x6059ec^4)/4] = 0x60000000;
+	DRIVER_INIT_CALL(genprot);
 }
 
 DRIVER_INIT_MEMBER(model3_state,spikeofe)
@@ -5935,27 +5949,36 @@ DRIVER_INIT_MEMBER(model3_state,spikeofe)
 
 	rom[(0x6059cc^4)/4] = 0x60000000;
 	rom[(0x6059ec^4)/4] = 0x60000000;
+	DRIVER_INIT_CALL(genprot);
 }
 
 DRIVER_INIT_MEMBER(model3_state,eca)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_20);
+	DRIVER_INIT_CALL(genprot);
 
-	rom[(0x535580^4)/4] = 0x60000000;
-	rom[(0x5023b4^4)/4] = 0x60000000;
-	rom[(0x5023d4^4)/4] = 0x60000000;
+	// base = 0xffc80000
+	UINT32 *rom = (UINT32*)memregion("user1")->base();
+
+	// cabinet network error
+	rom[(0x4a45e4^4)/4] = 0x60000000;
+
+	// this code sometimes gets stuck waiting for [0x1e0064], changed by the sound irq (sound FIFO overflow?)
+	rom[(0x5523b4^4)/4] = 0x60000000;
+	rom[(0x5523d4^4)/4] = 0x60000000;
 }
 
 DRIVER_INIT_MEMBER(model3_state,skichamp)
 {
-	UINT32 *rom = (UINT32*)memregion("user1")->base();
+	//UINT32 *rom = (UINT32*)memregion("user1")->base();
 	DRIVER_INIT_CALL(model3_20);
 
+	/*
 	rom[(0x5263c8^4)/4] = 0x60000000;
 	rom[(0x5263e8^4)/4] = 0x60000000;
 	rom[(0x516bbc^4)/4] = 0x60000000;
 	rom[(0x516b9c^4)/4] = 0x60000000; // decrementer
+	*/
 }
 
 DRIVER_INIT_MEMBER(model3_state,oceanhun)
@@ -5964,6 +5987,24 @@ DRIVER_INIT_MEMBER(model3_state,oceanhun)
 	DRIVER_INIT_CALL(model3_20);
 
 	rom[(0x57995c^4)/4] = 0x60000000;   // decrementer
+
+	DRIVER_INIT_CALL(genprot);
+}
+
+DRIVER_INIT_MEMBER(model3_state,magtruck)
+{
+	m_step20_with_old_real3d = true;
+
+	DRIVER_INIT_CALL(model3_20);
+	DRIVER_INIT_CALL(genprot);
+}
+
+DRIVER_INIT_MEMBER(model3_state,lamachin)
+{
+	m_step20_with_old_real3d = true;
+
+	DRIVER_INIT_CALL(model3_20);
+	DRIVER_INIT_CALL(genprot);
 }
 
 
@@ -5971,49 +6012,54 @@ DRIVER_INIT_MEMBER(model3_state,oceanhun)
 GAME( 1996, vf3,            0, model3_10, model3, model3_state,        vf3, ROT0, "Sega", "Virtua Fighter 3 (Revision C)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 GAME( 1996, vf3a,         vf3, model3_10, model3, model3_state,        vf3, ROT0, "Sega", "Virtua Fighter 3 (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 GAME( 1996, vf3tb,        vf3, model3_10, model3, model3_state,  model3_10, ROT0, "Sega", "Virtua Fighter 3 Team Battle", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, bass,           0, model3_10, bass, model3_state,         bass, ROT0, "Sega", "Sega Bass Fishing (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, bassdx,      bass, model3_10, bass, model3_state,      getbass, ROT0, "Sega", "Sega Bass Fishing Deluxe (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, getbass,     bass, model3_10, bass, model3_state,      getbass, ROT0, "Sega", "Get Bass", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, bass,           0, model3_10, bass,   model3_state,       bass, ROT0, "Sega", "Sega Bass Fishing (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, bassdx,      bass, model3_10, bass,   model3_state,    getbass, ROT0, "Sega", "Sega Bass Fishing Deluxe (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, getbass,     bass, model3_10, bass,   model3_state,    getbass, ROT0, "Sega", "Get Bass", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 
 /* Model 3 Step 1.5 */
-GAME( 1996, scud,           0,      scud, scud, model3_state,         scud, ROT0, "Sega", "Scud Race Twin (Australia)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1996, scudj,       scud,      scud, scud, model3_state,         scud, ROT0, "Sega", "Scud Race Deluxe (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1996, scuda,       scud,      scud, scud, model3_state,         scud, ROT0, "Sega", "Scud Race Twin (Export)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, scudplus,    scud,      scud, scud, model3_state,     scudplus, ROT0, "Sega", "Scud Race Plus (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, scudplusa,   scud,      scud, scud, model3_state,    scudplusa, ROT0, "Sega", "Scud Race Plus", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, lostwsga,       0, model3_15, lostwsga, model3_state, lostwsga, ROT0, "Sega", "The Lost World", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, vs215,        vs2, model3_15, model3, model3_state,      vs215, ROT0, "Sega", "Virtua Striker 2 (Step 1.5)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, vs215o,       vs2, model3_15, model3, model3_state,      vs215, ROT0, "Sega", "Virtua Striker 2 (Step 1.5, older)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, lemans24,       0, model3_15, scud, model3_state,     lemans24, ROT0, "Sega", "LeMans 24", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, vs29815,    vs298, model3_15, model3, model3_state,    vs29815, ROT0, "Sega", "Virtua Striker 2 '98 (Step 1.5)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1996, scud,           0,      scud, scud,     model3_state,     scud, ROT0, "Sega", "Scud Race Twin (Australia)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1996, scudj,       scud,      scud, scud,     model3_state,     scud, ROT0, "Sega", "Scud Race Deluxe (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1996, scuda,       scud,      scud, scud,     model3_state,     scud, ROT0, "Sega", "Scud Race Twin (Export)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, scudplus,    scud,      scud, scud,     model3_state, scudplus, ROT0, "Sega", "Scud Race Plus (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, scudplusa,   scud,      scud, scud,     model3_state,scudplusa, ROT0, "Sega", "Scud Race Plus", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, lostwsga,       0, model3_15, lostwsga, model3_state, lostwsga, ROT0, "Sega", "The Lost World (Japan, Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, vs215,        vs2, model3_15, model3,   model3_state,    vs215, ROT0, "Sega", "Virtua Striker 2 (Step 1.5)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, vs215o,       vs2, model3_15, model3,   model3_state,    vs215, ROT0, "Sega", "Virtua Striker 2 (Step 1.5, older)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, lemans24,       0, model3_15, scud,     model3_state, lemans24, ROT0, "Sega", "Le Mans 24 (Revision B)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, vs29815,    vs298, model3_15, model3,   model3_state,  vs29815, ROT0, "Sega", "Virtua Striker 2 '98 (Step 1.5)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 
 /* Model 3 Step 2.0 */
-GAME( 1997, vs2,            0, model3_20, model3, model3_state,        vs2, ROT0, "Sega", "Virtua Striker 2 (Step 2.0)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, harley,         0, model3_20, harley, model3_state,     harley, ROT0, "Sega", "Harley-Davidson and L.A. Riders (Revision B)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1997, harleya,   harley, model3_20, harley, model3_state,     harleya, ROT0, "Sega", "Harley-Davidson and L.A. Riders (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, lamachin,       0, model3_20, model3, model3_state,  model3_20, ROT0, "Sega", "L.A. Machineguns", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, oceanhun,       0, model3_20, model3, model3_state,   oceanhun, ROT0, "Sega", "The Ocean Hunter", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, skichamp,       0, model3_20, skichamp, model3_state, skichamp, ROT0, "Sega", "Ski Champ", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, srally2,        0, model3_20, scud, model3_state,      srally2, ROT0, "Sega", "Sega Rally 2", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, srally2x,       0, model3_20, scud, model3_state,      srally2, ROT0, "Sega", "Sega Rally 2 DX", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, von2,           0, model3_20, model3, model3_state,       von2, ROT0, "Sega", "Virtual On 2: Oratorio Tangram (Revision B)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, von254g,     von2, model3_20, model3, model3_state,  model3_20, ROT0, "Sega", "Virtual On 2: Oratorio Tangram (ver 5.4g)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, fvipers2,       0, model3_20, model3, model3_state,  model3_20, ROT0, "Sega", "Fighting Vipers 2 (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, vs298,          0, model3_20, model3, model3_state,      vs298, ROT0, "Sega", "Virtua Striker 2 '98 (Step 2.0)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1999, vs2v991,        0, model3_20, model3, model3_state,    vs2v991, ROT0, "Sega", "Virtua Striker 2 '99.1 (Revision B)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1999, vs299b,   vs2v991, model3_20, model3, model3_state,     vs299b, ROT0, "Sega", "Virtua Striker 2 '99 (Revision B)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1999, vs299a,   vs2v991, model3_20, model3, model3_state,     vs299a, ROT0, "Sega", "Virtua Striker 2 '99 (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1999, vs299,    vs2v991, model3_20, model3, model3_state,      vs299, ROT0, "Sega", "Virtua Striker 2 '99", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, vs2,            0, model3_20,      model3,   model3_state,      vs2, ROT0, "Sega", "Virtua Striker 2 (Step 2.0)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, harley,         0, model3_20,      harley,   model3_state,   harley, ROT0, "Sega", "Harley-Davidson and L.A. Riders (Revision B)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1997, harleya,   harley, model3_20,      harley,   model3_state,  harleya, ROT0, "Sega", "Harley-Davidson and L.A. Riders (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, lamachin,       0, model3_20_5881, model3,   model3_state, lamachin, ROT0, "Sega", "L.A. Machineguns (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, oceanhun,       0, model3_20_5881, model3,   model3_state, oceanhun, ROT0, "Sega", "The Ocean Hunter", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, skichamp,       0, model3_20,      skichamp, model3_state, skichamp, ROT0, "Sega", "Ski Champ (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, srally2,        0, model3_20,      scud,     model3_state,  srally2, ROT0, "Sega", "Sega Rally 2", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, srally2x,       0, model3_20,      scud,     model3_state,  srally2, ROT0, "Sega", "Sega Rally 2 DX", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, von2,           0, model3_20_5881, model3,   model3_state,     von2, ROT0, "Sega", "Virtual On 2: Oratorio Tangram (Revision B)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, von254g,     von2, model3_20_5881, model3,   model3_state,     von2, ROT0, "Sega", "Virtual On 2: Oratorio Tangram (ver 5.4g)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, fvipers2,       0, model3_20_5881, model3,   model3_state,    vs299, ROT0, "Sega", "Fighting Vipers 2 (Japan, Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, vs298,          0, model3_20_5881, model3,   model3_state,    vs298, ROT0, "Sega", "Virtua Striker 2 '98 (Step 2.0)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1999, vs2v991,        0, model3_20_5881, model3,   model3_state,    vs299, ROT0, "Sega", "Virtua Striker 2 '99.1 (Revision B)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1999, vs299b,   vs2v991, model3_20_5881, model3,   model3_state,    vs299, ROT0, "Sega", "Virtua Striker 2 '99 (Revision B)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1999, vs299a,   vs2v991, model3_20_5881, model3,   model3_state,    vs299, ROT0, "Sega", "Virtua Striker 2 '99 (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1999, vs299,    vs2v991, model3_20_5881, model3,   model3_state,    vs299, ROT0, "Sega", "Virtua Striker 2 '99", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
 
 /* Model 3 Step 2.1 */
-GAME( 1998, daytona2,         0, model3_21, daytona2, model3_state, daytona2, ROT0, "Sega", "Daytona USA 2 (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, dayto2pe,         0, model3_21, daytona2, model3_state, dayto2pe, ROT0, "Sega", "Daytona USA 2 Power Edition", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, dirtdvls,         0, model3_21, model3, model3_state,   dirtdvls, ROT0, "Sega", "Dirt Devils (set 1) (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, dirtdvlsa, dirtdvls, model3_21, model3, model3_state,   dirtdvls, ROT0, "Sega", "Dirt Devils (set 2) (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, swtrilgy,         0, model3_21, swtrilgy, model3_state, swtrilgy, ROT0, "Sega / LucasArts", "Star Wars Trilogy (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, swtrilgya, swtrilgy, model3_21, swtrilgy, model3_state, swtrilga, ROT0, "Sega / LucasArts", "Star Wars Trilogy", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, spikeout,         0, model3_21, model3, model3_state,   spikeout, ROT0, "Sega", "Spikeout (Revision C)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, spikeofe,         0, model3_21, model3, model3_state,   spikeofe, ROT0, "Sega", "Spikeout Final Edition", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1998, magtruck,         0, model3_21, model3, model3_state,        eca, ROT0, "Sega", "Magical Truck Adventure", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1999, eca,              0, model3_21, eca, model3_state,           eca, ROT0, "Sega", "Emergency Call Ambulance", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
-GAME( 1999, ecax,           eca, model3_21, eca, model3_state,           eca, ROT0, "Sega", "Emergency Call Ambulance (Export)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, daytona2,         0, model3_21_5881, daytona2, model3_state, daytona2, ROT0, "Sega", "Daytona USA 2 (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, dayto2pe,         0, model3_21_5881, daytona2, model3_state, dayto2pe, ROT0, "Sega", "Daytona USA 2 Power Edition", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, dirtdvls,         0, model3_21_5881, scud,     model3_state, dirtdvls, ROT0, "Sega", "Dirt Devils (Export, Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, dirtdvlsa, dirtdvls, model3_21_5881, scud,     model3_state, dirtdvls, ROT0, "Sega", "Dirt Devils (Australia, Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, swtrilgy,         0, model3_21_5881, swtrilgy, model3_state, swtrilgy, ROT0, "Sega / LucasArts", "Star Wars Trilogy (Revision A)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, swtrilgya, swtrilgy, model3_21_5881, swtrilgy, model3_state, swtrilga, ROT0, "Sega / LucasArts", "Star Wars Trilogy", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, spikeout,         0, model3_21_5881, model3,   model3_state, spikeout, ROT0, "Sega", "Spikeout (Revision C)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, spikeofe,         0, model3_21_5881, model3,   model3_state, spikeofe, ROT0, "Sega", "Spikeout Final Edition", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1998, magtruck,         0, model3_21_5881, eca,      model3_state, magtruck, ROT0, "Sega", "Magical Truck Adventure (Japan)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1999, eca,              0, model3_21_5881, eca,      model3_state, eca,      ROT0, "Sega", "Emergency Call Ambulance (Export)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1999, ecau,           eca, model3_21_5881, eca,      model3_state, eca,      ROT0, "Sega", "Emergency Call Ambulance (USA)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+GAME( 1999, ecap,           eca, model3_21_5881, eca,      model3_state, eca,      ROT0, "Sega", "Emergency Call Ambulance (US location test?)", GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_IMPERFECT_SOUND )
+
+#if (defined(__MINGW32__) && (__GNUC__ >= 5))
+#pragma GCC diagnostic pop
+#endif

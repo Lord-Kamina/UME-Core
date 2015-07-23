@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:James Wallace
 /* Notes 17/07/11 DH
  added most other MPU3 sets
 
@@ -84,7 +86,7 @@ MOD0- 3 - early boards with small RAM allocations
 MOD4- Some modifications on the PCB that didnt work, so field engineers reverted them to MOD3.
 MOD5- board revision with bigger RAM and reset sensitivity circuit added on the PCB.
 
-MOD6- adaption of the PCB to use small daughter card with 6116 RAM
+MOD6- adaptation of the PCB to use small daughter card with 6116 RAM
 
 Collectors have gone further with zero power RAM and the like, but these are the ones out in the wild.
 
@@ -132,12 +134,15 @@ public:
 	mpu3_state(const machine_config &mconfig, device_type type, const char *tag)
 	: driver_device(mconfig, type, tag),
 			m_vfd(*this, "vfd"),
-			m_maincpu(*this, "maincpu") { }
+			m_maincpu(*this, "maincpu"),
+			m_reel0(*this, "reel0"),
+			m_reel1(*this, "reel1"),
+			m_reel2(*this, "reel2"),
+			m_reel3(*this, "reel3")
+			{ }
 	optional_device<roc10937_t> m_vfd;
 
 
-int m_alpha_data_line;
-int m_alpha_clock;
 int m_triac_ic3;
 int m_triac_ic4;
 int m_triac_ic5;
@@ -166,6 +171,11 @@ const mpu3_chr_table* m_current_chr_table;
 int m_prot_col;
 
 int m_optic_pattern;
+
+	DECLARE_WRITE_LINE_MEMBER(reel0_optic_cb) { if (state) m_optic_pattern |= 0x01; else m_optic_pattern &= ~0x01; }
+	DECLARE_WRITE_LINE_MEMBER(reel1_optic_cb) { if (state) m_optic_pattern |= 0x02; else m_optic_pattern &= ~0x02; }
+	DECLARE_WRITE_LINE_MEMBER(reel2_optic_cb) { if (state) m_optic_pattern |= 0x04; else m_optic_pattern &= ~0x04; }
+	DECLARE_WRITE_LINE_MEMBER(reel3_optic_cb) { if (state) m_optic_pattern |= 0x08; else m_optic_pattern &= ~0x08; }
 
 emu_timer *m_ic21_timer;
 	DECLARE_WRITE8_MEMBER(characteriser_w);
@@ -200,12 +210,15 @@ emu_timer *m_ic21_timer;
 	TIMER_DEVICE_CALLBACK_MEMBER(gen_50hz);
 	TIMER_DEVICE_CALLBACK_MEMBER(ic10_callback);
 	void update_triacs();
-	void mpu3_stepper_reset();
-	void ic11_update(mpu3_state *state);
-	void ic21_output(mpu3_state *state,int data);
-	void ic21_setup(mpu3_state *state);
+	void ic11_update();
+	void ic21_output(int data);
+	void ic21_setup();
 	void mpu3_config_common();
 	required_device<cpu_device> m_maincpu;
+	required_device<stepper_device> m_reel0;
+	required_device<stepper_device> m_reel1;
+	required_device<stepper_device> m_reel2;
+	required_device<stepper_device> m_reel3;
 };
 
 #define DISPLAY_PORT 0
@@ -226,22 +239,9 @@ void mpu3_state::update_triacs()
 }
 
 /* called if board is reset */
-void mpu3_state::mpu3_stepper_reset()
-{
-	int pattern = 0,reel;
-	for (reel = 0; reel < 6; reel++)
-	{
-		stepper_reset_position(reel);
-		if (stepper_optic_state(reel)) pattern |= 1<<reel;
-	}
-	m_optic_pattern = pattern;
-}
-
 void mpu3_state::machine_reset()
 {
 	m_vfd->reset();
-
-	mpu3_stepper_reset();
 
 	m_lamp_strobe   = 0;
 	m_led_strobe    = 0;
@@ -290,17 +290,6 @@ WRITE8_MEMBER(mpu3_state::ic2_o3_callback)
 {
 }
 
-
-static const ptm6840_interface ptm_ic2_intf =
-{
-	MPU3_MASTER_CLOCK,///4,
-	{ 0, 0, 0 },
-	{ DEVCB_DRIVER_MEMBER(mpu3_state,ic2_o1_callback),
-		DEVCB_DRIVER_MEMBER(mpu3_state,ic2_o2_callback),
-		DEVCB_DRIVER_MEMBER(mpu3_state,ic2_o3_callback) },
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,cpu0_irq)
-};
-
 /*
 IC23 emulation
 
@@ -308,7 +297,7 @@ IC23 is a 74LS138 1-of-8 Decoder
 
 It is used as a multiplexer for the LEDs, lamp selects and inputs.*/
 
-void mpu3_state::ic11_update(mpu3_state *state)
+void mpu3_state::ic11_update()
 {
 	if (!m_IC11G2A)
 	{
@@ -354,19 +343,19 @@ t/ns = .34 * 47 * 2.2e6 [ 1+ (1/47)]
 
 This seems less stable than the revised version used in MPU4
 */
-void mpu3_state::ic21_output(mpu3_state *state,int data)
+void mpu3_state::ic21_output(int data)
 {
 	m_IC11G1 = data;
-	ic11_update(state);
+	ic11_update();
 }
 
-void mpu3_state::ic21_setup(mpu3_state *state)
+void mpu3_state::ic21_setup()
 {
 	if (m_IC11GA)
 	{
 		{
 			m_ic11_active=1;
-			ic21_output(state,1);
+			ic21_output(1);
 			m_ic21_timer->adjust(attotime::from_nsec( (0.34 * 47 * 2200000) *(1+(1/47))));
 		}
 	}
@@ -375,7 +364,7 @@ void mpu3_state::ic21_setup(mpu3_state *state)
 TIMER_CALLBACK_MEMBER(mpu3_state::ic21_timeout)
 {
 	m_ic11_active=0;
-	ic21_output(this,0);
+	ic21_output(0);
 }
 
 READ8_MEMBER(mpu3_state::pia_ic3_porta_r)
@@ -430,28 +419,11 @@ WRITE8_MEMBER(mpu3_state::pia_ic3_portb_w)
 
 WRITE_LINE_MEMBER(mpu3_state::pia_ic3_ca2_w)
 {
-	mpu3_state *mstate = machine().driver_data<mpu3_state>();
 	LOG(("%s: IC3 PIA Port CA2 Set to %2x (input A)\n", machine().describe_context(),state));
 	m_IC11GA = state;
-	ic21_setup(mstate);
-	ic11_update(mstate);
+	ic21_setup();
+	ic11_update();
 }
-
-static const pia6821_interface pia_ic3_intf =
-{
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic3_porta_r),        /* port A in */
-	DEVCB_NULL,     /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_NULL,     /* port A out */
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic3_portb_w),        /* port B out */
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,pia_ic3_ca2_w),         /* line CA2 out */
-	DEVCB_NULL,                         /* port CB2 out */
-	DEVCB_NULL,                         /* IRQA */
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,cpu0_irq)               /* IRQB */
-};
 
 READ8_MEMBER(mpu3_state::pia_ic4_porta_r)
 {
@@ -524,10 +496,9 @@ WRITE8_MEMBER(mpu3_state::pia_ic4_portb_w)
 
 WRITE_LINE_MEMBER(mpu3_state::pia_ic4_ca2_w)
 {
-	mpu3_state *mstate = machine().driver_data<mpu3_state>();
 	LOG(("%s: IC4 PIA Port CA2 Set to %2x (Input B)\n", machine().describe_context(),state));
 	m_IC11GB = state;
-	ic11_update(mstate);
+	ic11_update();
 }
 
 WRITE_LINE_MEMBER(mpu3_state::pia_ic4_cb2_w)
@@ -536,49 +507,18 @@ WRITE_LINE_MEMBER(mpu3_state::pia_ic4_cb2_w)
 	m_triac_ic4=state;
 }
 
-static const pia6821_interface pia_ic4_intf =
-{
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic4_porta_r),        /* port A in */
-	DEVCB_NULL,     /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic4_porta_w),        /* port A out */
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic4_portb_w),        /* port B out */
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,pia_ic4_ca2_w),     /* line CA2 out */
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,pia_ic4_cb2_w),     /* line CB2 out */
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,cpu0_irq),      /* IRQA */
-	DEVCB_NULL      /* IRQB */
-};
-
 /* IC5, AUX ports, coin lockouts and AY sound chip select (MODs below 4 only) */
 WRITE8_MEMBER(mpu3_state::pia_ic5_porta_w)
 {
 	LOG(("%s: IC5 PIA Port A Set to %2x (Reel)\n", machine().describe_context(),data));
-	stepper_update(0, data & 0x03 );
-	stepper_update(1, (data>>2) & 0x03 );
-	stepper_update(2, (data>>4) & 0x03 );
-	stepper_update(3, (data>>6) & 0x03 );
-	awp_draw_reel(0);
-	awp_draw_reel(1);
-	awp_draw_reel(2);
-	awp_draw_reel(3);
-
-	{
-		if ( stepper_optic_state(0) ) m_optic_pattern |=  0x01;
-		else                          m_optic_pattern &= ~0x01;
-
-		if ( stepper_optic_state(1) ) m_optic_pattern |=  0x02;
-		else                          m_optic_pattern &= ~0x02;
-		if ( stepper_optic_state(2) ) m_optic_pattern |=  0x04;
-		else                          m_optic_pattern &= ~0x04;
-
-		if ( stepper_optic_state(3) ) m_optic_pattern |=  0x08;
-		else                          m_optic_pattern &= ~0x08;
-
-	}
-
+	m_reel0->update( data     & 0x03);
+	m_reel1->update((data>>2) & 0x03);
+	m_reel2->update((data>>4) & 0x03);
+	m_reel3->update((data>>6) & 0x03);
+	awp_draw_reel("reel1", m_reel0);
+	awp_draw_reel("reel2", m_reel1);
+	awp_draw_reel("reel3", m_reel2);
+	awp_draw_reel("reel4", m_reel3);
 }
 
 READ8_MEMBER(mpu3_state::pia_ic5_portb_r)
@@ -602,10 +542,9 @@ WRITE8_MEMBER(mpu3_state::pia_ic5_portb_w)
 
 WRITE_LINE_MEMBER(mpu3_state::pia_ic5_ca2_w)
 {
-	mpu3_state *mstate = machine().driver_data<mpu3_state>();
 	LOG(("%s: IC5 PIA Port CA2 Set to %2x (C)\n", machine().describe_context(),state));
 	m_IC11GC = state;
-	ic11_update(mstate);
+	ic11_update();
 }
 
 WRITE_LINE_MEMBER(mpu3_state::pia_ic5_cb2_w)
@@ -613,22 +552,6 @@ WRITE_LINE_MEMBER(mpu3_state::pia_ic5_cb2_w)
 	LOG(("%s: IC5 PIA Port CB2 Set to %2x (Triac)\n", machine().describe_context(),state));
 	m_triac_ic5 = state;
 }
-
-static const pia6821_interface pia_ic5_intf =
-{
-	DEVCB_NULL,     /* port A in */
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic5_portb_r),    /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic5_porta_w),    /* port A out */
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic5_portb_w),    /* port B out */
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,pia_ic5_ca2_w),     /* line CA2 out */
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,pia_ic5_cb2_w),     /* port CB2 out */
-	DEVCB_NULL,         /* IRQA */
-	DEVCB_NULL          /* IRQB */
-};
 
 
 /* IC6, AUX ports*/
@@ -646,18 +569,9 @@ READ8_MEMBER(mpu3_state::pia_ic6_portb_r)
 WRITE8_MEMBER(mpu3_state::pia_ic6_porta_w)
 {
 	LOG(("%s: IC6 PIA Port A Set to %2x (Alpha)\n", machine().describe_context(),data));
-	if ( data & 0x08 ) m_vfd->reset();
-
-	m_alpha_data_line = ((data & 0x20) >> 5);
-
-	if (m_alpha_clock != ((data & 0x10) >>4))
-	{
-		if (!m_alpha_clock)//falling edge
-		{
-			m_vfd->shift_data(m_alpha_data_line?1:0);
-		}
-	}
-	m_alpha_clock = (data & 0x10) >>4;
+	m_vfd->por(!(data&0x08));
+	m_vfd->data((data & 0x20) >> 5);
+	m_vfd->sclk((data & 0x10) >>4);
 }
 
 WRITE8_MEMBER(mpu3_state::pia_ic6_portb_w)
@@ -665,22 +579,6 @@ WRITE8_MEMBER(mpu3_state::pia_ic6_portb_w)
 	LOG(("%s: IC6 PIA Port B Set to %2x (AUX2)\n", machine().describe_context(),data));
 	m_aux2_input = data;
 }
-
-static const pia6821_interface pia_ic6_intf =
-{
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic6_porta_r),        /* port A in */
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic6_portb_r),        /* port B in */
-	DEVCB_NULL,     /* line CA1 in */
-	DEVCB_NULL,     /* line CB1 in */
-	DEVCB_NULL,     /* line CA2 in */
-	DEVCB_NULL,     /* line CB2 in */
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic6_porta_w),        /* port A out */
-	DEVCB_DRIVER_MEMBER(mpu3_state,pia_ic6_portb_w),        /* port B out */
-	DEVCB_NULL,         /* line CA2 out */
-	DEVCB_NULL,         /* port CB2 out */
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,cpu0_irq),              /* IRQA */
-	DEVCB_DRIVER_LINE_MEMBER(mpu3_state,cpu0_irq)               /* IRQB */
-};
 
 static INPUT_PORTS_START( mpu3 )
 	PORT_START("ORANGE1")
@@ -789,15 +687,6 @@ static INPUT_PORTS_START( mpu3 )
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_COIN4) PORT_NAME("100p")PORT_IMPULSE(5)
 INPUT_PORTS_END
 
-static const stepper_interface mpu3_reel_interface =
-{
-	MPU3_48STEP_REEL,
-	1,
-	3,
-	0x00,
-	2
-};
-
 /* Common configurations */
 void mpu3_state::mpu3_config_common()
 {
@@ -810,12 +699,6 @@ void mpu3_state::machine_start()
 
 	/* setup 8 mechanical meters */
 	MechMtr_config(machine(),8);
-
-	/* setup 4 reels */
-	stepper_config(machine(), 0, &mpu3_reel_interface);
-	stepper_config(machine(), 1, &mpu3_reel_interface);
-	stepper_config(machine(), 2, &mpu3_reel_interface);
-	stepper_config(machine(), 3, &mpu3_reel_interface);
 
 }
 /*
@@ -913,22 +796,69 @@ static ADDRESS_MAP_START( mpu3_basemap, AS_PROGRAM, 8, mpu3_state )
 	AM_RANGE(0x1000, 0xffff) AM_ROM
 ADDRESS_MAP_END
 
+#define MCFG_MPU3_REEL_ADD(_tag)\
+	MCFG_STEPPER_ADD(_tag)\
+	MCFG_STEPPER_REEL_TYPE(MPU3_48STEP_REEL)\
+	MCFG_STEPPER_START_INDEX(1)\
+	MCFG_STEPPER_END_INDEX(3)\
+	MCFG_STEPPER_INDEX_PATTERN(0x00)\
+	MCFG_STEPPER_INIT_PHASE(2)
+
 static MACHINE_CONFIG_START( mpu3base, mpu3_state )
 	MCFG_CPU_ADD("maincpu", M6808, MPU3_MASTER_CLOCK)///4)
 	MCFG_CPU_PROGRAM_MAP(mpu3_basemap)
 
-	MCFG_MSC1937_ADD("vfd",0,LEFT_TO_RIGHT)
+	MCFG_MSC1937_ADD("vfd",0)
 
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("50hz", mpu3_state, gen_50hz, attotime::from_hz(100))
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("555_ic10", mpu3_state, ic10_callback, PERIOD_OF_555_ASTABLE(10000,1000,0.0000001))
 
 	/* 6840 PTM */
-	MCFG_PTM6840_ADD("ptm_ic2", ptm_ic2_intf)
+	MCFG_DEVICE_ADD("ptm_ic2", PTM6840, 0)
+	MCFG_PTM6840_INTERNAL_CLOCK(MPU3_MASTER_CLOCK)
+	MCFG_PTM6840_EXTERNAL_CLOCKS(0, 0, 0)
+	MCFG_PTM6840_OUT0_CB(WRITE8(mpu3_state, ic2_o1_callback))
+	MCFG_PTM6840_OUT1_CB(WRITE8(mpu3_state, ic2_o2_callback))
+	MCFG_PTM6840_OUT2_CB(WRITE8(mpu3_state, ic2_o3_callback))
+	MCFG_PTM6840_IRQ_CB(WRITELINE(mpu3_state, cpu0_irq))
 
-	MCFG_PIA6821_ADD("pia_ic3", pia_ic3_intf)
-	MCFG_PIA6821_ADD("pia_ic4", pia_ic4_intf)
-	MCFG_PIA6821_ADD("pia_ic5", pia_ic5_intf)
-	MCFG_PIA6821_ADD("pia_ic6", pia_ic6_intf)
+	MCFG_DEVICE_ADD("pia_ic3", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(mpu3_state, pia_ic3_porta_r))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(mpu3_state, pia_ic3_portb_w))
+	MCFG_PIA_CA2_HANDLER(WRITELINE(mpu3_state, pia_ic3_ca2_w))
+	MCFG_PIA_IRQB_HANDLER(WRITELINE(mpu3_state, cpu0_irq))
+
+	MCFG_DEVICE_ADD("pia_ic4", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(mpu3_state, pia_ic4_porta_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(mpu3_state, pia_ic4_porta_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(mpu3_state, pia_ic4_portb_w))
+	MCFG_PIA_CA2_HANDLER(WRITELINE(mpu3_state, pia_ic4_ca2_w))
+	MCFG_PIA_CB2_HANDLER(WRITELINE(mpu3_state, pia_ic4_cb2_w))
+	MCFG_PIA_IRQA_HANDLER(WRITELINE(mpu3_state, cpu0_irq))
+
+	MCFG_DEVICE_ADD("pia_ic5", PIA6821, 0)
+	MCFG_PIA_READPB_HANDLER(READ8(mpu3_state, pia_ic5_portb_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(mpu3_state, pia_ic5_porta_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(mpu3_state, pia_ic5_portb_w))
+	MCFG_PIA_CA2_HANDLER(WRITELINE(mpu3_state, pia_ic5_ca2_w))
+	MCFG_PIA_CB2_HANDLER(WRITELINE(mpu3_state, pia_ic5_cb2_w))
+
+	MCFG_DEVICE_ADD("pia_ic6", PIA6821, 0)
+	MCFG_PIA_READPA_HANDLER(READ8(mpu3_state, pia_ic6_porta_r))
+	MCFG_PIA_READPB_HANDLER(READ8(mpu3_state, pia_ic6_portb_r))
+	MCFG_PIA_WRITEPA_HANDLER(WRITE8(mpu3_state, pia_ic6_porta_w))
+	MCFG_PIA_WRITEPB_HANDLER(WRITE8(mpu3_state, pia_ic6_portb_w))
+	MCFG_PIA_IRQA_HANDLER(WRITELINE(mpu3_state, cpu0_irq))
+	MCFG_PIA_IRQB_HANDLER(WRITELINE(mpu3_state, cpu0_irq))
+
+	MCFG_MPU3_REEL_ADD("reel0")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(mpu3_state, reel0_optic_cb))
+	MCFG_MPU3_REEL_ADD("reel1")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(mpu3_state, reel1_optic_cb))
+	MCFG_MPU3_REEL_ADD("reel2")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(mpu3_state, reel2_optic_cb))
+	MCFG_MPU3_REEL_ADD("reel3")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(mpu3_state, reel3_optic_cb))
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 

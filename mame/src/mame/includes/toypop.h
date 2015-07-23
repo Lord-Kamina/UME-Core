@@ -1,4 +1,7 @@
+// license:???
+// copyright-holders:Edgardo E. Contini Salvan
 #include "machine/namcoio.h"
+#include "sound/namco.h"
 
 class toypop_state : public driver_device
 {
@@ -17,9 +20,12 @@ public:
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
 		m_subcpu(*this, "sub"),
+		m_namco15xx(*this, "namco"),
 		m_namco58xx(*this, "58xx"),
 		m_namco56xx_1(*this, "56xx_1"),
-		m_namco56xx_2(*this, "56xx_2") { }
+		m_namco56xx_2(*this, "56xx_2"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_spriteram;
@@ -29,9 +35,12 @@ public:
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
 	required_device<cpu_device> m_subcpu;
+	required_device<namco_15xx_device> m_namco15xx;
 	required_device<namco58xx_device> m_namco58xx;
 	required_device<namco56xx_device> m_namco56xx_1;
 	required_device<namco56xx_device> m_namco56xx_2;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	tilemap_t *m_bg_tilemap;
 
@@ -69,7 +78,7 @@ public:
 	TILE_GET_INFO_MEMBER(get_tile_info);
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(toypop);
 	UINT32 screen_update_toypop(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(toypop_main_vblank_irq);
 	INTERRUPT_GEN_MEMBER(toypop_sound_timer_irq);

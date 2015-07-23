@@ -1,9 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia
 /*************************************************************************
 
     Flak Attack / MX5000
 
 *************************************************************************/
 #include "sound/k007232.h"
+#include "video/k007121.h"
 
 class flkatck_state : public driver_device
 {
@@ -14,7 +17,8 @@ public:
 		m_audiocpu(*this, "audiocpu"),
 		m_k007121(*this, "k007121"),
 		m_k007232(*this, "k007232"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_k007121_ram;
@@ -46,6 +50,7 @@ public:
 	virtual void video_start();
 	UINT32 screen_update_flkatck(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(flkatck_interrupt);
-	DECLARE_WRITE8_MEMBER(volume_callback0);
+	DECLARE_WRITE8_MEMBER(volume_callback);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
 };

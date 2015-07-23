@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Brad Oliver,Sal and John Bugliarisi,Paul Priest
 /***************************************************************************
 
   video.c
@@ -8,10 +10,10 @@
 
 #include "emu.h"
 #include "video/resnet.h"
-#include "audio/pleiads.h"
 #include "includes/naughtyb.h"
 
 
+#if 0
 static const res_net_decode_info naughtyb_decode_info =
 {
 	2,      /*  two proms          */
@@ -32,6 +34,7 @@ static const res_net_info naughtyb_net_info =
 		{ RES_NET_AMP_NONE, 130, 270, 2, { 270, 1 } }  /* no resistor for bit1 */
 	}
 };
+#endif
 
 /***************************************************************************
 
@@ -56,12 +59,11 @@ static const res_net_info naughtyb_net_info =
 
 ***************************************************************************/
 
-void naughtyb_state::palette_init()
+PALETTE_INIT_MEMBER(naughtyb_state, naughtyb)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	static const int resistances[2] = { 270, 130 };
 	double weights[2];
-	int i;
 
 	/* compute the color output resistor weights */
 	compute_resistor_weights(0, 255, -1.0,
@@ -69,7 +71,7 @@ void naughtyb_state::palette_init()
 			2, resistances, weights, 0, 0,
 			0, 0, 0, 0, 0);
 
-	for (i = 0;i < machine().total_colors(); i++)
+	for (int i = 0;i < palette.entries(); i++)
 	{
 		int bit0, bit1;
 		int r, g, b;
@@ -89,7 +91,7 @@ void naughtyb_state::palette_init()
 		bit1 = (color_prom[i+0x100] >> 1) & 0x01;
 		b = combine_2_weights(weights, bit0, bit1);
 
-		palette_set_color(machine(), BITSWAP8(i,5,7,6,2,1,0,4,3), MAKE_RGB(r, g, b));
+		palette.set_pen_color(BITSWAP8(i,5,7,6,2,1,0,4,3), rgb_t(r, g, b));
 	}
 }
 
@@ -104,7 +106,11 @@ void naughtyb_state::video_start()
 	m_palreg = m_bankreg = 0;
 
 	/* Naughty Boy has a virtual screen twice as large as the visible screen */
-	m_tmpbitmap.allocate(68*8,28*8,machine().primary_screen->format());
+	m_tmpbitmap.allocate(68*8,28*8,m_screen->format());
+	
+	save_item(NAME(m_cocktail));
+	save_item(NAME(m_palreg));
+	save_item(NAME(m_bankreg));
 }
 
 
@@ -113,7 +119,7 @@ void naughtyb_state::video_start()
 WRITE8_MEMBER(naughtyb_state::naughtyb_videoreg_w)
 {
 	// bits 4+5 control the sound circuit
-	pleiads_sound_control_c_w(machine().device("cust"),space,offset,data);
+	m_naughtyb_custom->control_c_w(space,offset,data);
 
 	m_cocktail =
 		( ( ioport("DSW0")->read() & 0x80 ) &&  // cabinet == cocktail
@@ -125,7 +131,7 @@ WRITE8_MEMBER(naughtyb_state::naughtyb_videoreg_w)
 WRITE8_MEMBER(naughtyb_state::popflame_videoreg_w)
 {
 	// bits 4+5 control the sound circuit
-	pleiads_sound_control_c_w(machine().device("cust"),space,offset,data);
+	m_popflame_custom->control_c_w(space,offset,data);
 
 	m_cocktail =
 		( ( ioport("DSW0")->read() & 0x80 ) &&  // cabinet == cocktail
@@ -180,19 +186,15 @@ WRITE8_MEMBER(naughtyb_state::popflame_videoreg_w)
 
 
 ***************************************************************************/
-UINT32 naughtyb_state::screen_update_naughtyb(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 naughtyb_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	const rectangle scrollvisiblearea(2*8, 34*8-1, 0*8, 28*8-1);
 	const rectangle leftvisiblearea(0*8, 2*8-1, 0*8, 28*8-1);
 	const rectangle rightvisiblearea(34*8, 36*8-1, 0*8, 28*8-1);
 
-	UINT8 *videoram = m_videoram;
-	bitmap_ind16 &tmpbitmap = m_tmpbitmap;
-	int offs;
-
 	// for every character in the Video RAM
 
-	for (offs = 0x800 - 1; offs >= 0; offs--)
+	for (int offs = 0x800 - 1; offs >= 0; offs--)
 	{
 		int sx,sy;
 
@@ -223,15 +225,15 @@ UINT32 naughtyb_state::screen_update_naughtyb(screen_device &screen, bitmap_ind1
 			}
 		}
 
-		drawgfx_opaque(tmpbitmap,tmpbitmap.cliprect(),machine().gfx[0],
+		m_gfxdecode->gfx(0)->opaque(m_tmpbitmap,m_tmpbitmap.cliprect(),
 				m_videoram2[offs] + 256 * m_bankreg,
 				(m_videoram2[offs] >> 5) + 8 * m_palreg,
 				m_cocktail,m_cocktail,
 				8*sx,8*sy);
 
-		drawgfx_transpen(tmpbitmap,tmpbitmap.cliprect(),machine().gfx[1],
-				videoram[offs] + 256*m_bankreg,
-				(videoram[offs] >> 5) + 8 * m_palreg,
+		m_gfxdecode->gfx(1)->transpen(m_tmpbitmap,m_tmpbitmap.cliprect(),
+				m_videoram[offs] + 256*m_bankreg,
+				(m_videoram[offs] >> 5) + 8 * m_palreg,
 				m_cocktail,m_cocktail,
 				8*sx,8*sy,0);
 	}
@@ -240,11 +242,11 @@ UINT32 naughtyb_state::screen_update_naughtyb(screen_device &screen, bitmap_ind1
 	{
 		int scrollx;
 
-		copybitmap(bitmap,tmpbitmap,0,0,-66*8,0,leftvisiblearea);
-		copybitmap(bitmap,tmpbitmap,0,0,-30*8,0,rightvisiblearea);
+		copybitmap(bitmap,m_tmpbitmap,0,0,-66*8,0,leftvisiblearea);
+		copybitmap(bitmap,m_tmpbitmap,0,0,-30*8,0,rightvisiblearea);
 
 		scrollx = ( m_cocktail ) ? *m_scrollreg - 239 : -*m_scrollreg + 16;
-		copyscrollbitmap(bitmap,tmpbitmap,1,&scrollx,0,0,scrollvisiblearea);
+		copyscrollbitmap(bitmap,m_tmpbitmap,1,&scrollx,0,0,scrollvisiblearea);
 	}
 	return 0;
 }

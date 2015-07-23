@@ -1,41 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 //============================================================
 //
 //  winmain.c - Win32 main program
-//
-//============================================================
-//
-//  Copyright Aaron Giles
-//  All rights reserved.
-//
-//  Redistribution and use in source and binary forms, with or
-//  without modification, are permitted provided that the
-//  following conditions are met:
-//
-//    * Redistributions of source code must retain the above
-//      copyright notice, this list of conditions and the
-//      following disclaimer.
-//    * Redistributions in binary form must reproduce the
-//      above copyright notice, this list of conditions and
-//      the following disclaimer in the documentation and/or
-//      other materials provided with the distribution.
-//    * Neither the name 'MAME' nor the names of its
-//      contributors may be used to endorse or promote
-//      products derived from this software without specific
-//      prior written permission.
-//
-//  THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND
-//  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-//  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
-//  FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
-//  EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-//  INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-//  DAMAGE (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-//  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-//  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-//  ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-//  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-//  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-//  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 //============================================================
 
@@ -62,7 +29,6 @@
 #include "winmain.h"
 #include "window.h"
 #include "video.h"
-#include "sound.h"
 #include "input.h"
 #include "output.h"
 #include "config.h"
@@ -72,12 +38,8 @@
 #include "winutil.h"
 #include "debugger.h"
 #include "winfile.h"
-#ifdef USE_NETWORK
-#include "netdev.h"
-#endif
 
 #define DEBUG_SLOW_LOCKS    0
-
 
 //**************************************************************************
 //  MACROS
@@ -172,8 +134,8 @@ private:
 	// internal helpers
 	bool query_system_for_address(FPTR address);
 	void scan_file_for_address(FPTR address, bool create_cache);
-	bool parse_sym_line(const char *line, FPTR &address, astring &symbol);
-	bool parse_map_line(const char *line, FPTR &address, astring &symbol);
+	bool parse_sym_line(const char *line, FPTR &address, std::string &symbol);
+	bool parse_map_line(const char *line, FPTR &address, std::string &symbol);
 	void scan_cache_for_address(FPTR address);
 	void format_symbol(const char *name, UINT32 displacement, const char *filename = NULL, int linenumber = 0);
 
@@ -187,13 +149,13 @@ private:
 
 		cache_entry *   m_next;
 		FPTR            m_address;
-		astring         m_name;
+		std::string     m_name;
 	};
 	simple_list<cache_entry> m_cache;
 
-	astring         m_mapfile;
-	astring         m_symfile;
-	astring         m_buffer;
+	std::string     m_mapfile;
+	std::string     m_symfile;
+	std::string     m_buffer;
 	HANDLE          m_process;
 	FPTR            m_last_base;
 	FPTR            m_text_base;
@@ -230,10 +192,34 @@ private:
 
 	UINT8           m_stack_depth;
 	UINT8           m_entry_stride;
-	UINT32          m_max_seconds;
-	FPTR *          m_buffer;
+	std::vector<FPTR>    m_buffer;
 	FPTR *          m_buffer_ptr;
 	FPTR *          m_buffer_end;
+};
+
+//============================================================
+//  winui_output_error
+//============================================================
+
+class winui_output_error : public osd_output
+{
+public:
+	virtual void output_callback(osd_output_channel channel, const char *msg, va_list args)
+	{
+		if (channel == OSD_OUTPUT_CHANNEL_ERROR)
+		{
+			char buffer[1024];
+
+			// if we are in fullscreen mode, go to windowed mode
+			if ((video_config.windowed == 0) && (win_window_list != NULL))
+				winwindow_toggle_full_screen();
+
+			vsnprintf(buffer, ARRAY_LENGTH(buffer), msg, args);
+			win_message_box_utf8(win_window_list ? win_window_list->m_hwnd : NULL, buffer, emulator_info::get_appname(), MB_OK);
+		}
+		else
+			chain_output(channel, msg, args);
+	}
 };
 
 
@@ -246,16 +232,9 @@ private:
 // this line prevents globbing on the command line
 int _CRT_glob = 0;
 
-
-
 //**************************************************************************
 //  LOCAL VARIABLES
 //**************************************************************************
-
-//static dynamic_bind<HANDLE (WINAPI *)(LPCTSTR, LPDWORD)> av_set_mm_thread_characteristics(TEXT("avrt.dll"), "AvSetMmThreadCharacteristics" UNICODE_POSTFIX);
-//static dynamic_bind<HANDLE (WINAPI *)(LPCTSTR, LPCTSTR, LPDWORD)> av_set_mm_max_thread_characteristics(TEXT("avrt.dll"), "AvSetMmMaxThreadCharacteristics" UNICODE_POSTFIX);
-//static dynamic_bind<BOOL (WINAPI *)(HANDLE)> av_revert_mm_thread_characteristics(TEXT("avrt.dll"), "AvRevertMmThreadCharacteristics");
-
 
 static LPTOP_LEVEL_EXCEPTION_FILTER pass_thru_filter;
 
@@ -265,11 +244,8 @@ static HANDLE watchdog_thread;
 
 static running_machine *g_current_machine;
 
-//static HANDLE mm_task = NULL;
-//static DWORD task_index = 0;
-static int timeresult;
-//static MMRESULT result;
-static TIMECAPS caps;
+static int timeresult = !TIMERR_NOERROR;
+static TIMECAPS timecaps;
 
 static sampling_profiler *profiler = NULL;
 static symbol_manager *symbols = NULL;
@@ -285,7 +261,6 @@ static BOOL WINAPI control_handler(DWORD type);
 static int is_double_click_start(int argc);
 static DWORD WINAPI watchdog_thread_entry(LPVOID lpParameter);
 static LONG WINAPI exception_filter(struct _EXCEPTION_POINTERS *info);
-static void winui_output_error(delegate_late_bind *__dummy, const char *format, va_list argptr);
 
 
 
@@ -296,48 +271,23 @@ static void winui_output_error(delegate_late_bind *__dummy, const char *format, 
 // struct definitions
 const options_entry windows_options::s_option_entries[] =
 {
-	// debugging options
-	{ NULL,                                           NULL,       OPTION_HEADER,     "WINDOWS DEBUGGING OPTIONS" },
-	{ WINOPTION_OSLOG,                                "0",        OPTION_BOOLEAN,    "output error.log data to the system debugger" },
-	{ WINOPTION_WATCHDOG ";wdog",                     "0",        OPTION_INTEGER,    "force the program to terminate if no updates within specified number of seconds" },
-	{ WINOPTION_DEBUGGER_FONT ";dfont",               "Lucida Console", OPTION_STRING,"specifies the font to use for debugging; defaults to Lucida Console" },
-	{ WINOPTION_DEBUGGER_FONT_SIZE ";dfontsize",      "9",        OPTION_FLOAT,      "specifies the font size to use for debugging; defaults to 9 pt" },
-
 	// performance options
 	{ NULL,                                           NULL,       OPTION_HEADER,     "WINDOWS PERFORMANCE OPTIONS" },
 	{ WINOPTION_PRIORITY "(-15-1)",                   "0",        OPTION_INTEGER,    "thread priority for the main game thread; range from -15 to 1" },
-	{ WINOPTION_MULTITHREADING ";mt",                 "1",        OPTION_BOOLEAN,    "enable multithreading; this enables rendering and blitting on a separate thread" },
-	{ WINOPTION_NUMPROCESSORS ";np",                  "auto",     OPTION_STRING,     "number of processors; this overrides the number the system reports" },
 	{ WINOPTION_PROFILE,                              "0",        OPTION_INTEGER,    "enable profiling, specifying the stack depth to track" },
-	{ WINOPTION_BENCH,                                "0",        OPTION_INTEGER,    "benchmark for the given number of emulated seconds; implies -video none -nosound -nothrottle" },
 
 	// video options
 	{ NULL,                                           NULL,       OPTION_HEADER,     "WINDOWS VIDEO OPTIONS" },
-	{ WINOPTION_VIDEO,                                "d3d",      OPTION_STRING,     "video output method: none, gdi, ddraw, or d3d" },
-	{ WINOPTION_NUMSCREENS "(1-4)",                   "1",        OPTION_INTEGER,    "number of screens to create; usually, you want just one" },
-	{ WINOPTION_WINDOW ";w",                          "0",        OPTION_BOOLEAN,    "enable window mode; otherwise, full screen mode is assumed" },
-	{ WINOPTION_MAXIMIZE ";max",                      "1",        OPTION_BOOLEAN,    "default to maximized windows; otherwise, windows will be minimized" },
-	{ WINOPTION_KEEPASPECT ";ka",                     "1",        OPTION_BOOLEAN,    "constrain to the proper aspect ratio" },
-	{ WINOPTION_PRESCALE,                             "1",        OPTION_INTEGER,    "scale screen rendering by this amount in software" },
-	{ WINOPTION_WAITVSYNC ";vs",                      "0",        OPTION_BOOLEAN,    "enable waiting for the start of VBLANK before flipping screens; reduces tearing effects" },
-	{ WINOPTION_SYNCREFRESH ";srf",                   "0",        OPTION_BOOLEAN,    "enable using the start of VBLANK for throttling instead of the game time" },
 	{ WINOPTION_MENU,                                 "0",        OPTION_BOOLEAN,    "enable menu bar if available by UI implementation" },
 
 	// DirectDraw-specific options
 	{ NULL,                                           NULL,       OPTION_HEADER,     "DIRECTDRAW-SPECIFIC OPTIONS" },
 	{ WINOPTION_HWSTRETCH ";hws",                     "1",        OPTION_BOOLEAN,    "enable hardware stretching" },
 
-	// Direct3D-specific options
-	{ NULL,                                           NULL,       OPTION_HEADER,     "DIRECT3D-SPECIFIC OPTIONS" },
-	{ WINOPTION_FILTER ";d3dfilter;flt",              "1",        OPTION_BOOLEAN,    "enable bilinear filtering on screen output" },
-
 	// post-processing options
 	{ NULL,                                                     NULL,        OPTION_HEADER,     "DIRECT3D POST-PROCESSING OPTIONS" },
 	{ WINOPTION_HLSL_ENABLE";hlsl",                             "0",         OPTION_BOOLEAN,    "enable HLSL post-processing (PS3.0 required)" },
 	{ WINOPTION_HLSLPATH,                                       "hlsl",      OPTION_STRING,     "path to hlsl files" },
-	{ WINOPTION_HLSL_INI_READ,                                  "0",         OPTION_BOOLEAN,    "enable HLSL INI reading" },
-	{ WINOPTION_HLSL_INI_WRITE,                                 "0",         OPTION_BOOLEAN,    "enable HLSL INI writing" },
-	{ WINOPTION_HLSL_INI_NAME,                                  "%g",        OPTION_STRING,     "HLSL INI file name for this game" },
 	{ WINOPTION_HLSL_PRESCALE_X,                                "0",         OPTION_INTEGER,    "HLSL pre-scale override factor for X (0 for auto)" },
 	{ WINOPTION_HLSL_PRESCALE_Y,                                "0",         OPTION_INTEGER,    "HLSL pre-scale override factor for Y (0 for auto)" },
 	{ WINOPTION_HLSL_PRESET";(-1-3)",                           "-1",        OPTION_INTEGER,    "HLSL preset to use (0-3)" },
@@ -346,13 +296,17 @@ const options_entry windows_options::s_option_entries[] =
 	{ WINOPTION_HLSL_SNAP_HEIGHT,                               "1536",      OPTION_STRING,     "HLSL upscaled-snapshot height" },
 	{ WINOPTION_SHADOW_MASK_ALPHA";fs_shadwa(0.0-1.0)",         "0.0",       OPTION_FLOAT,      "shadow mask alpha-blend value (1.0 is fully blended, 0.0 is no mask)" },
 	{ WINOPTION_SHADOW_MASK_TEXTURE";fs_shadwt(0.0-1.0)",       "aperture.png", OPTION_STRING,  "shadow mask texture name" },
-	{ WINOPTION_SHADOW_MASK_COUNT_X";fs_shadww",                "320",       OPTION_INTEGER,    "shadow mask width, in phosphor dots" },
-	{ WINOPTION_SHADOW_MASK_COUNT_Y";fs_shadwh",                "240",       OPTION_INTEGER,    "shadow mask height, in phosphor dots" },
-	{ WINOPTION_SHADOW_MASK_USIZE";fs_shadwu(0.0-1.0)",         "0.09375",   OPTION_FLOAT,      "shadow mask texture size in U direction" },
-	{ WINOPTION_SHADOW_MASK_VSIZE";fs_shadwv(0.0-1.0)",         "0.109375",  OPTION_FLOAT,      "shadow mask texture size in V direction" },
-	{ WINOPTION_CURVATURE";fs_curv(0.0-4.0)",                   "0.03",      OPTION_FLOAT,      "screen curvature amount" },
+	{ WINOPTION_SHADOW_MASK_COUNT_X";fs_shadww",                "6",         OPTION_INTEGER,    "shadow mask width, in phosphor dots" },
+	{ WINOPTION_SHADOW_MASK_COUNT_Y";fs_shadwh",                "6",         OPTION_INTEGER,    "shadow mask height, in phosphor dots" },
+	{ WINOPTION_SHADOW_MASK_USIZE";fs_shadwu(0.0-1.0)",         "0.1875",    OPTION_FLOAT,      "shadow mask texture size in U direction" },
+	{ WINOPTION_SHADOW_MASK_VSIZE";fs_shadwv(0.0-1.0)",         "0.1875",    OPTION_FLOAT,      "shadow mask texture size in V direction" },
+	{ WINOPTION_SHADOW_MASK_UOFFSET";fs_shadwou(-1.0-1.0)",     "0.0",       OPTION_FLOAT,      "shadow mask texture offset in U direction" },
+	{ WINOPTION_SHADOW_MASK_VOFFSET";fs_shadwov(-1.0-1.0)",     "0.0",       OPTION_FLOAT,      "shadow mask texture offset in V direction" },
+	{ WINOPTION_CURVATURE";fs_curv(0.0-1.0)",                   "0.03",      OPTION_FLOAT,      "screen curvature amount" },
+	{ WINOPTION_ROUND_CORNER";fs_rndc(0.0-1.0)",                "0.03",      OPTION_FLOAT,      "screen round corner amount" },
+	{ WINOPTION_REFLECTION";fs_ref(0.0-1.0)",                   "0.03",      OPTION_FLOAT,      "screen reflection amount" },
+	{ WINOPTION_VIGNETTING";fs_vig(0.0-1.0)",                   "0.03",      OPTION_FLOAT,      "image vignetting amount" },
 	/* Beam-related values below this line*/
-	{ WINOPTION_PINCUSHION";fs_pin(0.0-4.0)",                   "0.03",      OPTION_FLOAT,      "pincushion amount" },
 	{ WINOPTION_SCANLINE_AMOUNT";fs_scanam(0.0-4.0)",           "1.0",       OPTION_FLOAT,      "overall alpha scaling value for scanlines" },
 	{ WINOPTION_SCANLINE_SCALE";fs_scansc(0.0-4.0)",            "1.0",       OPTION_FLOAT,      "overall height scaling value for scanlines" },
 	{ WINOPTION_SCANLINE_HEIGHT";fs_scanh(0.0-4.0)",            "1.0",       OPTION_FLOAT,      "individual height scaling value for scanlines" },
@@ -380,7 +334,7 @@ const options_entry windows_options::s_option_entries[] =
 	{ WINOPTION_YIQ_CCVALUE";yiqcc",                            "3.59754545",OPTION_FLOAT,      "Color Carrier frequency for NTSC signal processing" },
 	{ WINOPTION_YIQ_AVALUE";yiqa",                              "0.5",       OPTION_FLOAT,      "A value for NTSC signal processing" },
 	{ WINOPTION_YIQ_BVALUE";yiqb",                              "0.5",       OPTION_FLOAT,      "B value for NTSC signal processing" },
-	{ WINOPTION_YIQ_OVALUE";yiqo",                              "0.0",       OPTION_FLOAT,      "Outgoing Color Carrier phase offset for NTSC signal processing" },
+	{ WINOPTION_YIQ_OVALUE";yiqo",                              "1.570796325",OPTION_FLOAT,     "Outgoing Color Carrier phase offset for NTSC signal processing" },
 	{ WINOPTION_YIQ_PVALUE";yiqp",                              "1.0",       OPTION_FLOAT,      "Incoming Pixel Clock scaling value for NTSC signal processing" },
 	{ WINOPTION_YIQ_NVALUE";yiqn",                              "1.0",       OPTION_FLOAT,      "Y filter notch width for NTSC signal processing" },
 	{ WINOPTION_YIQ_YVALUE";yiqy",                              "6.0",       OPTION_FLOAT,      "Y filter cutoff frequency for NTSC signal processing" },
@@ -410,44 +364,12 @@ const options_entry windows_options::s_option_entries[] =
 	{ WINOPTION_BLOOM_LEVEL9_WEIGHT,                            "0.10",      OPTION_FLOAT,      "Bloom level 9  (.) weight" },
 	{ WINOPTION_BLOOM_LEVEL10_WEIGHT,                           "0.09",      OPTION_FLOAT,      "Bloom level 10 (1x1 target) weight" },
 
-	// per-window options
-	{ NULL,                                           NULL,       OPTION_HEADER,     "PER-WINDOW VIDEO OPTIONS" },
-	{ WINOPTION_SCREEN,                               "auto",     OPTION_STRING,     "explicit name of all screens; 'auto' here will try to make a best guess" },
-	{ WINOPTION_ASPECT ";screen_aspect",              "auto",     OPTION_STRING,     "aspect ratio for all screens; 'auto' here will try to make a best guess" },
-	{ WINOPTION_RESOLUTION ";r",                      "auto",     OPTION_STRING,     "preferred resolution for all screens; format is <width>x<height>[@<refreshrate>] or 'auto'" },
-	{ WINOPTION_VIEW,                                 "auto",     OPTION_STRING,     "preferred view for all screens" },
-
-	{ WINOPTION_SCREEN "0",                           "auto",     OPTION_STRING,     "explicit name of the first screen; 'auto' here will try to make a best guess" },
-	{ WINOPTION_ASPECT "0",                           "auto",     OPTION_STRING,     "aspect ratio of the first screen; 'auto' here will try to make a best guess" },
-	{ WINOPTION_RESOLUTION "0;r0",                    "auto",     OPTION_STRING,     "preferred resolution of the first screen; format is <width>x<height>[@<refreshrate>] or 'auto'" },
-	{ WINOPTION_VIEW "0",                             "auto",     OPTION_STRING,     "preferred view for the first screen" },
-
-	{ WINOPTION_SCREEN "1",                           "auto",     OPTION_STRING,     "explicit name of the second screen; 'auto' here will try to make a best guess" },
-	{ WINOPTION_ASPECT "1",                           "auto",     OPTION_STRING,     "aspect ratio of the second screen; 'auto' here will try to make a best guess" },
-	{ WINOPTION_RESOLUTION "1;r1",                    "auto",     OPTION_STRING,     "preferred resolution of the second screen; format is <width>x<height>[@<refreshrate>] or 'auto'" },
-	{ WINOPTION_VIEW "1",                             "auto",     OPTION_STRING,     "preferred view for the second screen" },
-
-	{ WINOPTION_SCREEN "2",                           "auto",     OPTION_STRING,     "explicit name of the third screen; 'auto' here will try to make a best guess" },
-	{ WINOPTION_ASPECT "2",                           "auto",     OPTION_STRING,     "aspect ratio of the third screen; 'auto' here will try to make a best guess" },
-	{ WINOPTION_RESOLUTION "2;r2",                    "auto",     OPTION_STRING,     "preferred resolution of the third screen; format is <width>x<height>[@<refreshrate>] or 'auto'" },
-	{ WINOPTION_VIEW "2",                             "auto",     OPTION_STRING,     "preferred view for the third screen" },
-
-	{ WINOPTION_SCREEN "3",                           "auto",     OPTION_STRING,     "explicit name of the fourth screen; 'auto' here will try to make a best guess" },
-	{ WINOPTION_ASPECT "3",                           "auto",     OPTION_STRING,     "aspect ratio of the fourth screen; 'auto' here will try to make a best guess" },
-	{ WINOPTION_RESOLUTION "3;r3",                    "auto",     OPTION_STRING,     "preferred resolution of the fourth screen; format is <width>x<height>[@<refreshrate>] or 'auto'" },
-	{ WINOPTION_VIEW "3",                             "auto",     OPTION_STRING,     "preferred view for the fourth screen" },
-
 	// full screen options
 	{ NULL,                                           NULL,       OPTION_HEADER,     "FULL SCREEN OPTIONS" },
 	{ WINOPTION_TRIPLEBUFFER ";tb",                   "0",        OPTION_BOOLEAN,    "enable triple buffering" },
-	{ WINOPTION_SWITCHRES,                            "0",        OPTION_BOOLEAN,    "enable resolution switching" },
 	{ WINOPTION_FULLSCREENBRIGHTNESS ";fsb(0.1-2.0)", "1.0",      OPTION_FLOAT,      "brightness value in full screen mode" },
 	{ WINOPTION_FULLSCREENCONTRAST ";fsc(0.1-2.0)",   "1.0",      OPTION_FLOAT,      "contrast value in full screen mode" },
 	{ WINOPTION_FULLSCREENGAMMA ";fsg(0.1-3.0)",      "1.0",      OPTION_FLOAT,      "gamma value in full screen mode" },
-
-	// sound options
-	{ NULL,                                           NULL,       OPTION_HEADER,     "WINDOWS SOUND OPTIONS" },
-	{ WINOPTION_AUDIO_LATENCY "(1-5)",                "2",        OPTION_INTEGER,    "set audio latency (increase to reduce glitches)" },
 
 	// input options
 	{ NULL,                                           NULL,       OPTION_HEADER,     "INPUT DEVICE OPTIONS" },
@@ -491,29 +413,28 @@ int main(int argc, char *argv[])
 	extern void (*s_debugger_stack_crawler)();
 	s_debugger_stack_crawler = winmain_dump_stack;
 
-	// if we're a GUI app, out errors to message boxes
-	if (win_is_gui_application() || is_double_click_start(argc))
-	{
-		// if we are a GUI app, output errors to message boxes
-		mame_set_output_channel(OUTPUT_CHANNEL_ERROR, output_delegate(FUNC(winui_output_error), (delegate_late_bind *)0));
-
-		// make sure any console window that opened on our behalf is nuked
-		FreeConsole();
-	}
-
-	osd_init_midi();
 
 	// parse config and cmdline options
 	DWORD result = 0;
 	{
 		windows_options options;
-		windows_osd_interface osd;
+		windows_osd_interface osd(options);
+		// if we're a GUI app, out errors to message boxes
+		// Initialize this after the osd interface so that we are first in the
+		// output order
+		winui_output_error winerror;
+		if (win_is_gui_application() || is_double_click_start(argc))
+		{
+			// if we are a GUI app, output errors to message boxes
+			osd_output::push(&winerror);
+			// make sure any console window that opened on our behalf is nuked
+			FreeConsole();
+		}
+		osd.register_options();
 		cli_frontend frontend(options, osd);
 		result = frontend.execute(argc, argv);
+		osd_output::pop(&winerror);
 	}
-
-	osd_shutdown_midi();
-
 	// free symbols
 	symbols = NULL;
 	return result;
@@ -525,6 +446,7 @@ int main(int argc, char *argv[])
 //============================================================
 
 windows_options::windows_options()
+: osd_options()
 {
 	add_entries(s_option_entries);
 }
@@ -567,22 +489,6 @@ static BOOL WINAPI control_handler(DWORD type)
 }
 
 
-//============================================================
-//  winui_output_error
-//============================================================
-
-static void winui_output_error(delegate_late_bind *param, const char *format, va_list argptr)
-{
-	char buffer[1024];
-
-	// if we are in fullscreen mode, go to windowed mode
-	if ((video_config.windowed == 0) && (win_window_list != NULL))
-		winwindow_toggle_full_screen();
-
-	vsnprintf(buffer, ARRAY_LENGTH(buffer), format, argptr);
-	win_message_box_utf8(win_window_list ? win_window_list->hwnd : NULL, buffer, emulator_info::get_appname(), MB_OK);
-}
-
 
 
 //============================================================
@@ -600,7 +506,8 @@ static void output_oslog(running_machine &machine, const char *buffer)
 //  constructor
 //============================================================
 
-windows_osd_interface::windows_osd_interface()
+windows_osd_interface::windows_osd_interface(windows_options &options)
+: osd_common_t(options), m_options(options)
 {
 }
 
@@ -615,27 +522,40 @@ windows_osd_interface::~windows_osd_interface()
 
 
 //============================================================
+//  video_register
+//============================================================
+
+void windows_osd_interface::video_register()
+{
+	video_options_add("gdi", NULL);
+	video_options_add("ddraw", NULL);
+	video_options_add("d3d", NULL);
+	video_options_add("bgfx", NULL);
+	//video_options_add("auto", NULL); // making d3d video default one
+}
+
+//============================================================
 //  init
 //============================================================
 
 void windows_osd_interface::init(running_machine &machine)
 {
 	// call our parent
-	osd_interface::init(machine);
+	osd_common_t::init(machine);
 
 	const char *stemp;
 	windows_options &options = downcast<windows_options &>(machine.options());
 
 	// determine if we are benchmarking, and adjust options appropriately
 	int bench = options.bench();
-	astring error_string;
+	std::string error_string;
 	if (bench > 0)
 	{
 		options.set_value(OPTION_THROTTLE, false, OPTION_PRIORITY_MAXIMUM, error_string);
-		options.set_value(OPTION_SOUND, false, OPTION_PRIORITY_MAXIMUM, error_string);
-		options.set_value(WINOPTION_VIDEO, "none", OPTION_PRIORITY_MAXIMUM, error_string);
+		options.set_value(OSDOPTION_SOUND, "none", OPTION_PRIORITY_MAXIMUM, error_string);
+		options.set_value(OSDOPTION_VIDEO, "none", OPTION_PRIORITY_MAXIMUM, error_string);
 		options.set_value(OPTION_SECONDS_TO_RUN, bench, OPTION_PRIORITY_MAXIMUM, error_string);
-		assert(!error_string);
+		assert(error_string.empty());
 	}
 
 	// determine if we are profiling, and adjust options appropriately
@@ -643,17 +563,14 @@ void windows_osd_interface::init(running_machine &machine)
 	if (profile > 0)
 	{
 		options.set_value(OPTION_THROTTLE, false, OPTION_PRIORITY_MAXIMUM, error_string);
-		options.set_value(WINOPTION_MULTITHREADING, false, OPTION_PRIORITY_MAXIMUM, error_string);
-		options.set_value(WINOPTION_NUMPROCESSORS, 1, OPTION_PRIORITY_MAXIMUM, error_string);
-		assert(!error_string);
+		options.set_value(OSDOPTION_MULTITHREADING, false, OPTION_PRIORITY_MAXIMUM, error_string);
+		options.set_value(OSDOPTION_NUMPROCESSORS, 1, OPTION_PRIORITY_MAXIMUM, error_string);
+		assert(error_string.empty());
 	}
 
 	// thread priority
 	if (!(machine.debug_flags & DEBUG_FLAG_OSD_ENABLED))
 		SetThreadPriority(GetCurrentThread(), options.priority());
-
-	// ensure we get called on the way out
-	machine.add_notifier(MACHINE_NOTIFY_EXIT, machine_notify_delegate(FUNC(osd_exit), &machine));
 
 	// get number of processors
 	stemp = options.numprocessors();
@@ -665,27 +582,20 @@ void windows_osd_interface::init(running_machine &machine)
 		osd_num_processors = atoi(stemp);
 		if (osd_num_processors < 1)
 		{
-			mame_printf_warning("Warning: numprocessors < 1 doesn't make much sense. Assuming auto ...\n");
+			osd_printf_warning("Warning: numprocessors < 1 doesn't make much sense. Assuming auto ...\n");
 			osd_num_processors = 0;
 		}
 	}
 
 	// initialize the subsystems
-	winvideo_init(machine);
-	winsound_init(machine);
-	wininput_init(machine);
-	winoutput_init(machine);
-#ifdef USE_NETWORK
-	winnetdev_init(machine);
-#endif
+	osd_common_t::init_subsystems();
+
 	// notify listeners of screen configuration
-	astring tempstring;
-	for (win_window_info *info = win_window_list; info != NULL; info = info->next)
+	std::string tempstring;
+	for (win_window_info *info = win_window_list; info != NULL; info = info->m_next)
 	{
-		char *tmp = utf8_from_tstring(info->monitor->info.szDevice);
-		tempstring.printf("Orientation(%s)", tmp);
-		output_set_value(tempstring, info->targetorient);
-		osd_free(tmp);
+		strprintf(tempstring, "Orientation(%s)", info->m_monitor->devicename());
+		output_set_value(tempstring.c_str(), info->m_targetorient);
 	}
 
 	// hook up the debugger log
@@ -694,13 +604,9 @@ void windows_osd_interface::init(running_machine &machine)
 
 	// crank up the multimedia timer resolution to its max
 	// this gives the system much finer timeslices
-	timeresult = timeGetDevCaps(&caps, sizeof(caps));
+	timeresult = timeGetDevCaps(&timecaps, sizeof(timecaps));
 	if (timeresult == TIMERR_NOERROR)
-		timeBeginPeriod(caps.wPeriodMin);
-
-	// set our multimedia tasks if we can
-//      if (av_set_mm_thread_characteristics != NULL)
-//          mm_task = (*av_set_mm_thread_characteristics)(TEXT("Playback"), &task_index);
+		timeBeginPeriod(timecaps.wPeriodMin);
 
 	// if a watchdog thread is requested, create one
 	int watchdog = options.watchdog();
@@ -733,7 +639,7 @@ void windows_osd_interface::init(running_machine &machine)
 //  osd_exit
 //============================================================
 
-void windows_osd_interface::osd_exit(running_machine &machine)
+void windows_osd_interface::osd_exit()
 {
 	// no longer have a machine
 	g_current_machine = NULL;
@@ -741,9 +647,7 @@ void windows_osd_interface::osd_exit(running_machine &machine)
 	// cleanup sockets
 	win_cleanup_sockets();
 
-	#ifdef USE_NETWORK
-	winnetdev_deinit(machine);
-	#endif
+	osd_common_t::osd_exit();
 
 	// take down the watchdog thread if it exists
 	if (watchdog_thread != NULL)
@@ -766,239 +670,13 @@ void windows_osd_interface::osd_exit(running_machine &machine)
 		global_free(profiler);
 	}
 
-	// turn off our multimedia tasks
-//      if (av_revert_mm_thread_characteristics)
-//          (*av_revert_mm_thread_characteristics)(mm_task);
-
 	// restore the timer resolution
 	if (timeresult == TIMERR_NOERROR)
-		timeEndPeriod(caps.wPeriodMin);
+		timeEndPeriod(timecaps.wPeriodMin);
 
 	// one last pass at events
-	winwindow_process_events(machine, 0, 0);
+	winwindow_process_events(machine(), 0, 0);
 }
-
-
-//-------------------------------------------------
-//  font_open - attempt to "open" a handle to the
-//  font with the given name
-//-------------------------------------------------
-
-osd_font windows_osd_interface::font_open(const char *_name, int &height)
-{
-	// accept qualifiers from the name
-	astring name(_name);
-	if (name == "default") name = "Tahoma";
-	bool bold = (name.replace(0, "[B]", "") + name.replace(0, "[b]", "") > 0);
-	bool italic = (name.replace(0, "[I]", "") + name.replace(0, "[i]", "") > 0);
-
-	// build a basic LOGFONT description of what we want
-	LOGFONT logfont;
-	logfont.lfHeight = DEFAULT_FONT_HEIGHT;
-	logfont.lfWidth = 0;
-	logfont.lfEscapement = 0;
-	logfont.lfOrientation = 0;
-	logfont.lfWeight = bold ? FW_BOLD : FW_MEDIUM;
-	logfont.lfItalic = italic;
-	logfont.lfUnderline = FALSE;
-	logfont.lfStrikeOut = FALSE;
-	logfont.lfCharSet = ANSI_CHARSET;
-	logfont.lfOutPrecision = OUT_DEFAULT_PRECIS;
-	logfont.lfClipPrecision = CLIP_DEFAULT_PRECIS;
-	logfont.lfQuality = NONANTIALIASED_QUALITY;
-	logfont.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-
-	// copy in the face name
-	TCHAR *face = tstring_from_utf8(name);
-	_tcsncpy(logfont.lfFaceName, face, sizeof(logfont.lfFaceName) / sizeof(TCHAR));
-	logfont.lfFaceName[sizeof(logfont.lfFaceName) / sizeof(TCHAR) - 1] = 0;
-	osd_free(face);
-
-	// create the font
-	height = logfont.lfHeight;
-	osd_font font = reinterpret_cast<osd_font>(CreateFontIndirect(&logfont));
-	if (font == NULL)
-		return NULL;
-
-	// select it into a temp DC and get the real font name
-	HDC dummyDC = CreateCompatibleDC(NULL);
-	HGDIOBJ oldfont = SelectObject(dummyDC, reinterpret_cast<HGDIOBJ>(font));
-	TCHAR realname[100];
-	GetTextFace(dummyDC, ARRAY_LENGTH(realname), realname);
-	SelectObject(dummyDC, oldfont);
-	DeleteDC(dummyDC);
-
-	// if it doesn't match our request, fail
-	char *utf = utf8_from_tstring(realname);
-	int result = mame_stricmp(utf, name);
-	osd_free(utf);
-
-	// if we didn't match, nuke our font and fall back
-	if (result != 0)
-	{
-		DeleteObject(reinterpret_cast<HFONT>(font));
-		font = NULL;
-	}
-	return font;
-}
-
-
-//-------------------------------------------------
-//  font_close - release resources associated with
-//  a given OSD font
-//-------------------------------------------------
-
-void windows_osd_interface::font_close(osd_font font)
-{
-	// delete the font ojbect
-	if (font != NULL)
-		DeleteObject(reinterpret_cast<HFONT>(font));
-}
-
-
-//-------------------------------------------------
-//  font_get_bitmap - allocate and populate a
-//  BITMAP_FORMAT_ARGB32 bitmap containing the
-//  pixel values MAKE_ARGB(0xff,0xff,0xff,0xff)
-//  or MAKE_ARGB(0x00,0xff,0xff,0xff) for each
-//  pixel of a black & white font
-//-------------------------------------------------
-
-bool windows_osd_interface::font_get_bitmap(osd_font font, unicode_char chnum, bitmap_argb32 &bitmap, INT32 &width, INT32 &xoffs, INT32 &yoffs)
-{
-	// create a dummy DC to work with
-	HDC dummyDC = CreateCompatibleDC(NULL);
-	HGDIOBJ oldfont = SelectObject(dummyDC, reinterpret_cast<HGDIOBJ>(font));
-
-	// get the text metrics
-	TEXTMETRIC metrics = { 0 };
-	GetTextMetrics(dummyDC, &metrics);
-
-	// get the width of this character
-	ABC abc;
-	if (!GetCharABCWidths(dummyDC, chnum, chnum, &abc))
-	{
-		abc.abcA = 0;
-		abc.abcC = 0;
-		GetCharWidth32(dummyDC, chnum, chnum, reinterpret_cast<LPINT>(&abc.abcB));
-	}
-	width = abc.abcA + abc.abcB + abc.abcC;
-
-	// determine desired bitmap size
-	int bmwidth = (50 + abc.abcA + abc.abcB + abc.abcC + 50 + 31) & ~31;
-	int bmheight = 50 + metrics.tmHeight + 50;
-
-	// describe the bitmap we want
-	BYTE bitmapinfodata[sizeof(BITMAPINFOHEADER) + 2 * sizeof(RGBQUAD)] = { 0 };
-	BITMAPINFO &info = *reinterpret_cast<BITMAPINFO *>(bitmapinfodata);
-	info.bmiHeader.biSize = sizeof(info.bmiHeader);
-	info.bmiHeader.biWidth = bmwidth;
-	info.bmiHeader.biHeight = -bmheight;
-	info.bmiHeader.biPlanes = 1;
-	info.bmiHeader.biBitCount = 1;
-	info.bmiHeader.biCompression = BI_RGB;
-	info.bmiHeader.biSizeImage = 0;
-	info.bmiHeader.biXPelsPerMeter = GetDeviceCaps(dummyDC, HORZRES) / GetDeviceCaps(dummyDC, HORZSIZE);
-	info.bmiHeader.biYPelsPerMeter = GetDeviceCaps(dummyDC, VERTRES) / GetDeviceCaps(dummyDC, VERTSIZE);
-	info.bmiHeader.biClrUsed = 0;
-	info.bmiHeader.biClrImportant = 0;
-	RGBQUAD col1 = info.bmiColors[0];
-	RGBQUAD col2 = info.bmiColors[1];
-	col1.rgbBlue = col1.rgbGreen = col1.rgbRed = 0x00;
-	col2.rgbBlue = col2.rgbGreen = col2.rgbRed = 0xff;
-
-	// create a DIB to render to
-	BYTE *bits;
-	HBITMAP dib = CreateDIBSection(dummyDC, &info, DIB_RGB_COLORS, reinterpret_cast<VOID **>(&bits), NULL, 0);
-	HGDIOBJ oldbitmap = SelectObject(dummyDC, dib);
-
-	// clear the bitmap
-	int rowbytes = bmwidth / 8;
-	memset(bits, 0, rowbytes * bmheight);
-
-	// now draw the character
-	WCHAR tempchar = chnum;
-	SetTextColor(dummyDC, RGB(0xff,0xff,0xff));
-	SetBkColor(dummyDC, RGB(0x00,0x00,0x00));
-	ExtTextOutW(dummyDC, 50 + abc.abcA, 50, ETO_OPAQUE, NULL, &tempchar, 1, NULL);
-
-	// characters are expected to be full-height
-	rectangle actbounds;
-	actbounds.min_y = 50;
-	actbounds.max_y = 50 + metrics.tmHeight - 1;
-
-	// determine the actual left of the character
-	for (actbounds.min_x = 0; actbounds.min_x < rowbytes; actbounds.min_x++)
-	{
-		BYTE *offs = bits + actbounds.min_x;
-		UINT8 summary = 0;
-		for (int y = 0; y < bmheight; y++)
-			summary |= offs[y * rowbytes];
-		if (summary != 0)
-		{
-			actbounds.min_x *= 8;
-			if (!(summary & 0x80)) actbounds.min_x++;
-			if (!(summary & 0xc0)) actbounds.min_x++;
-			if (!(summary & 0xe0)) actbounds.min_x++;
-			if (!(summary & 0xf0)) actbounds.min_x++;
-			if (!(summary & 0xf8)) actbounds.min_x++;
-			if (!(summary & 0xfc)) actbounds.min_x++;
-			if (!(summary & 0xfe)) actbounds.min_x++;
-			break;
-		}
-	}
-
-	// determine the actual right of the character
-	for (actbounds.max_x = rowbytes - 1; actbounds.max_x >= 0; actbounds.max_x--)
-	{
-		BYTE *offs = bits + actbounds.max_x;
-		UINT8 summary = 0;
-		for (int y = 0; y < bmheight; y++)
-			summary |= offs[y * rowbytes];
-		if (summary != 0)
-		{
-			actbounds.max_x *= 8;
-			if (summary & 0x7f) actbounds.max_x++;
-			if (summary & 0x3f) actbounds.max_x++;
-			if (summary & 0x1f) actbounds.max_x++;
-			if (summary & 0x0f) actbounds.max_x++;
-			if (summary & 0x07) actbounds.max_x++;
-			if (summary & 0x03) actbounds.max_x++;
-			if (summary & 0x01) actbounds.max_x++;
-			break;
-		}
-	}
-
-	// allocate a new bitmap
-	if (actbounds.max_x >= actbounds.min_x && actbounds.max_y >= actbounds.min_y)
-	{
-		bitmap.allocate(actbounds.max_x + 1 - actbounds.min_x, actbounds.max_y + 1 - actbounds.min_y);
-
-		// copy the bits into it
-		for (int y = 0; y < bitmap.height(); y++)
-		{
-			UINT32 *dstrow = &bitmap.pix32(y);
-			UINT8 *srcrow = &bits[(y + actbounds.min_y) * rowbytes];
-			for (int x = 0; x < bitmap.width(); x++)
-			{
-				int effx = x + actbounds.min_x;
-				dstrow[x] = ((srcrow[effx / 8] << (effx % 8)) & 0x80) ? MAKE_ARGB(0xff,0xff,0xff,0xff) : MAKE_ARGB(0x00,0xff,0xff,0xff);
-			}
-		}
-
-		// set the final offset values
-		xoffs = actbounds.min_x - (50 + abc.abcA);
-		yoffs = actbounds.max_y - (50 + metrics.tmAscent);
-	}
-
-	// de-select the font and release the DC
-	SelectObject(dummyDC, oldbitmap);
-	DeleteObject(dib);
-	SelectObject(dummyDC, oldfont);
-	DeleteDC(dummyDC);
-	return bitmap.valid();
-}
-
 
 //============================================================
 //  winmain_dump_stack
@@ -1196,9 +874,6 @@ static LONG WINAPI exception_filter(struct _EXCEPTION_POINTERS *info)
 	// flush stderr, so the data is actually written when output is being redirected
 	fflush(stderr);
 
-	// flush stderr, so the data is actually written when output is being redirected
-	fflush(stderr);
-
 	// exit
 	return EXCEPTION_CONTINUE_SEARCH;
 }
@@ -1339,23 +1014,23 @@ symbol_manager::symbol_manager(const char *argv0)
 {
 #ifdef __GNUC__
 	// compute the name of the mapfile
-	int extoffs = m_mapfile.rchr(0, '.');
+	int extoffs = m_mapfile.find_last_of('.');
 	if (extoffs != -1)
 		m_mapfile.substr(0, extoffs);
-	m_mapfile.cat(".map");
+	m_mapfile.append(".map");
 
 	// and the name of the symfile
-	extoffs = m_symfile.rchr(0, '.');
+	extoffs = m_symfile.find_last_of('.');
 	if (extoffs != -1)
-		m_symfile.substr(0, extoffs);
-	m_symfile.cat(".sym");
+		m_symfile = m_symfile.substr(0, extoffs);
+	m_symfile.append(".sym");
 
 	// figure out the base of the .text section
 	m_text_base = get_text_section_base();
 #endif
 
 	// expand the buffer to be decently large up front
-	m_buffer.printf("%500s", "");
+	strprintf(m_buffer,"%500s", "");
 }
 
 
@@ -1377,7 +1052,7 @@ symbol_manager::~symbol_manager()
 const char *symbol_manager::symbol_for_address(FPTR address)
 {
 	// default the buffer
-	m_buffer.cpy(" (not found)");
+	m_buffer.assign(" (not found)");
 	m_last_base = 0;
 
 	// first try to do it using system APIs
@@ -1391,7 +1066,7 @@ const char *symbol_manager::symbol_for_address(FPTR address)
 		else
 			scan_file_for_address(address, false);
 	}
-	return m_buffer;
+	return m_buffer.c_str();
 }
 
 
@@ -1445,24 +1120,24 @@ void symbol_manager::scan_file_for_address(FPTR address, bool create_cache)
 
 #ifdef __GNUC__
 	// see if we have a symbol file (gcc only)
-	srcfile = fopen(m_symfile, "r");
+	srcfile = fopen(m_symfile.c_str(), "r");
 	is_symfile = (srcfile != NULL);
 #endif
 
 	// if not, see if we have a map file
 	if (srcfile == NULL)
-		srcfile = fopen(m_mapfile, "r");
+		srcfile = fopen(m_mapfile.c_str(), "r");
 
 	// if not, fail
 	if (srcfile == NULL)
 		return;
 
 	// reset the best info
-	astring best_symbol;
+	std::string best_symbol;
 	FPTR best_addr = 0;
 
 	// parse the file, looking for valid entries
-	astring symbol;
+	std::string symbol;
 	char line[1024];
 	while (fgets(line, sizeof(line) - 1, srcfile))
 	{
@@ -1482,7 +1157,7 @@ void symbol_manager::scan_file_for_address(FPTR address, bool create_cache)
 
 			// also create a cache entry if we can
 			if (create_cache)
-				m_cache.append(*global_alloc(cache_entry(addr, symbol)));
+				m_cache.append(*global_alloc(cache_entry(addr, symbol.c_str())));
 		}
 	}
 
@@ -1490,7 +1165,7 @@ void symbol_manager::scan_file_for_address(FPTR address, bool create_cache)
 	fclose(srcfile);
 
 	// format the symbol and remember the last base
-	format_symbol(best_symbol, address - best_addr);
+	format_symbol(best_symbol.c_str(), address - best_addr);
 	m_last_base = best_addr;
 }
 
@@ -1503,7 +1178,7 @@ void symbol_manager::scan_file_for_address(FPTR address, bool create_cache)
 void symbol_manager::scan_cache_for_address(FPTR address)
 {
 	// reset the best info
-	astring best_symbol;
+	std::string best_symbol;
 	FPTR best_addr = 0;
 
 	// walk the cache, looking for valid entries
@@ -1517,7 +1192,7 @@ void symbol_manager::scan_cache_for_address(FPTR address)
 		}
 
 	// format the symbol and remember the last base
-	format_symbol(best_symbol, address - best_addr);
+	format_symbol(best_symbol.c_str(), address - best_addr);
 	m_last_base = best_addr;
 }
 
@@ -1527,7 +1202,7 @@ void symbol_manager::scan_cache_for_address(FPTR address)
 //  which is just the output of objdump
 //-------------------------------------------------
 
-bool symbol_manager::parse_sym_line(const char *line, FPTR &address, astring &symbol)
+bool symbol_manager::parse_sym_line(const char *line, FPTR &address, std::string &symbol)
 {
 #ifdef __GNUC__
 /*
@@ -1567,8 +1242,8 @@ bool symbol_manager::parse_sym_line(const char *line, FPTR &address, astring &sy
 				chptr++;
 
 			// extract the symbol name
-			symbol.cpy(chptr).trimspace();
-			return (symbol.len() > 0);
+			strtrimspace(symbol.assign(chptr));
+			return (symbol.length() > 0);
 		}
 	}
 #endif
@@ -1581,7 +1256,7 @@ bool symbol_manager::parse_sym_line(const char *line, FPTR &address, astring &sy
 //  generated map file
 //-------------------------------------------------
 
-bool symbol_manager::parse_map_line(const char *line, FPTR &address, astring &symbol)
+bool symbol_manager::parse_map_line(const char *line, FPTR &address, std::string &symbol)
 {
 #ifdef __GNUC__
 /*
@@ -1607,8 +1282,8 @@ bool symbol_manager::parse_map_line(const char *line, FPTR &address, astring &sy
 			chptr++;
 
 		// extract the symbol name
-		symbol.cpy(chptr).trimspace();
-		return (symbol.len() > 0);
+		strtrimspace(symbol.assign(chptr));
+		return (symbol.length() > 0);
 	}
 #endif
 	return false;
@@ -1622,16 +1297,16 @@ bool symbol_manager::parse_map_line(const char *line, FPTR &address, astring &sy
 void symbol_manager::format_symbol(const char *name, UINT32 displacement, const char *filename, int linenumber)
 {
 	// start with the address and offset
-	m_buffer.printf(" (%s", name);
+	strprintf(m_buffer, " (%s", name);
 	if (displacement != 0)
-		m_buffer.catprintf("+0x%04x", (UINT32)displacement);
+		strcatprintf(m_buffer, "+0x%04x", (UINT32)displacement);
 
 	// append file/line if present
 	if (filename != NULL)
-		m_buffer.catprintf(", %s:%d", filename, linenumber);
+		strcatprintf(m_buffer, ", %s:%d", filename, linenumber);
 
 	// close up the string
-	m_buffer.cat(")");
+	m_buffer.append(")");
 }
 
 
@@ -1682,10 +1357,9 @@ sampling_profiler::sampling_profiler(UINT32 max_seconds, UINT8 stack_depth = 0)
 		m_thread_exit(false),
 		m_stack_depth(stack_depth),
 		m_entry_stride(stack_depth + 2),
-		m_max_seconds(max_seconds),
-		m_buffer(global_alloc(FPTR[max_seconds * 1000 * m_entry_stride])),
-		m_buffer_ptr(m_buffer),
-		m_buffer_end(m_buffer + max_seconds * 1000 * m_entry_stride)
+		m_buffer(max_seconds * 1000 * m_entry_stride),
+		m_buffer_ptr(&m_buffer[0]),
+		m_buffer_end(&m_buffer[0] + max_seconds * 1000 * m_entry_stride)
 {
 }
 
@@ -1696,7 +1370,6 @@ sampling_profiler::sampling_profiler(UINT32 max_seconds, UINT8 stack_depth = 0)
 
 sampling_profiler::~sampling_profiler()
 {
-	global_free(m_buffer);
 }
 
 
@@ -1786,7 +1459,7 @@ void sampling_profiler::print_results(symbol_manager &symbols)
 	symbols.cache_symbols();
 
 	// step 1: find the base of each entry
-	for (FPTR *current = m_buffer; current < m_buffer_ptr; current += m_entry_stride)
+	for (FPTR *current = &m_buffer[0]; current < m_buffer_ptr; current += m_entry_stride)
 	{
 		assert(current[0] >= 1 && current[0] < m_entry_stride);
 
@@ -1796,11 +1469,11 @@ void sampling_profiler::print_results(symbol_manager &symbols)
 	}
 
 	// step 2: sort the results
-	qsort(m_buffer, (m_buffer_ptr - m_buffer) / m_entry_stride, m_entry_stride * sizeof(FPTR), compare_address);
+	qsort(&m_buffer[0], (m_buffer_ptr - &m_buffer[0]) / m_entry_stride, m_entry_stride * sizeof(FPTR), compare_address);
 
 	// step 3: count and collapse unique entries
 	UINT32 total_count = 0;
-	for (FPTR *current = m_buffer; current < m_buffer_ptr; )
+	for (FPTR *current = &m_buffer[0]; current < m_buffer_ptr; )
 	{
 		int count = 1;
 		FPTR *scan;
@@ -1817,11 +1490,11 @@ void sampling_profiler::print_results(symbol_manager &symbols)
 	}
 
 	// step 4: sort the results again, this time by frequency
-	qsort(m_buffer, (m_buffer_ptr - m_buffer) / m_entry_stride, m_entry_stride * sizeof(FPTR), compare_frequency);
+	qsort(&m_buffer[0], (m_buffer_ptr - &m_buffer[0]) / m_entry_stride, m_entry_stride * sizeof(FPTR), compare_frequency);
 
 	// step 5: print the results
 	UINT32 num_printed = 0;
-	for (FPTR *current = m_buffer; current < m_buffer_ptr && num_printed < 30; current += m_entry_stride)
+	for (FPTR *current = &m_buffer[0]; current < m_buffer_ptr && num_printed < 30; current += m_entry_stride)
 	{
 		// once we hit 0 frequency, we're done
 		if (current[0] == 0)

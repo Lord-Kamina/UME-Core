@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Uki
 /*******************************************************************************
 
 Dr. Micro (c) 1983 Sanritsu
@@ -37,7 +39,7 @@ TILE_GET_INFO_MEMBER(drmicro_state::get_bg1_tile_info)
 	flags = ((col & 0x20) ? TILEMAP_FLIPY : 0) | ((col & 0x10) ? TILEMAP_FLIPX : 0);
 	col &= 0x0f;
 
-	SET_TILE_INFO_MEMBER( 0, code, col, flags);
+	SET_TILE_INFO_MEMBER(0, code, col, flags);
 }
 
 TILE_GET_INFO_MEMBER(drmicro_state::get_bg2_tile_info)
@@ -51,18 +53,15 @@ TILE_GET_INFO_MEMBER(drmicro_state::get_bg2_tile_info)
 	flags = ((col & 0x20) ? TILEMAP_FLIPY : 0) | ((col & 0x10) ? TILEMAP_FLIPX : 0);
 	col &= 0x0f;
 
-	SET_TILE_INFO_MEMBER( 1, code, col, flags);
+	SET_TILE_INFO_MEMBER(1, code, col, flags);
 }
 
 /****************************************************************************/
 
-void drmicro_state::palette_init()
+PALETTE_INIT_MEMBER(drmicro_state, drmicro)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
-
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x20);
 
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x20; i++)
@@ -88,7 +87,7 @@ void drmicro_state::palette_init()
 		bit2 = (color_prom[i] >> 7) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* color_prom now points to the beginning of the lookup table */
@@ -97,7 +96,7 @@ void drmicro_state::palette_init()
 	for (i = 0; i < 0x200; i++)
 	{
 		UINT8 ctabentry = color_prom[i] & 0x0f;
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 }
 
@@ -106,8 +105,8 @@ void drmicro_state::video_start()
 	m_videoram = auto_alloc_array(machine(), UINT8, 0x1000);
 	save_pointer(NAME(m_videoram), 0x1000);
 
-	m_bg1 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(drmicro_state::get_bg1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_bg2 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(drmicro_state::get_bg2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg1 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(drmicro_state::get_bg1_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg2 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(drmicro_state::get_bg2_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_bg2->set_transparent_pen(0);
 }
@@ -118,8 +117,8 @@ UINT32 drmicro_state::screen_update_drmicro(screen_device &screen, bitmap_ind16 
 	int chr, col, attr;
 	int x, y, fx, fy;
 
-	m_bg1->draw(bitmap, cliprect, 0, 0);
-	m_bg2->draw(bitmap, cliprect, 0, 0);
+	m_bg1->draw(screen, bitmap, cliprect, 0, 0);
+	m_bg2->draw(screen, bitmap, cliprect, 0, 0);
 
 	/* draw sprites */
 	for (g = 0; g < 2; g++)
@@ -145,7 +144,7 @@ UINT32 drmicro_state::screen_update_drmicro(screen_device &screen, bitmap_ind16 
 			else
 				x = (240 - x) & 0xff;
 
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[3-g],
+			m_gfxdecode->gfx(3-g)->transpen(bitmap,cliprect,
 					chr,
 					col,
 					fx,fy,
@@ -153,7 +152,7 @@ UINT32 drmicro_state::screen_update_drmicro(screen_device &screen, bitmap_ind16 
 
 			if (x > 240)
 			{
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[3-g],
+				m_gfxdecode->gfx(3-g)->transpen(bitmap,cliprect,
 						chr,
 						col,
 						fx,fy,

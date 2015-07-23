@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Raphael Nabet
 /*
 
 Driver for a PDP1 emulator.
@@ -41,6 +43,15 @@ binary form plus a macro assembler for PDP1 programs.
 For more documentation look at the source for the driver,
 and the cpu/pdp1/pdp1.c file (information about the whereabouts of information
 and the java source).
+
+
+To load and play a game:
+- Load a .rim file into the first tape reader
+- Hold down Left Control, and press Enter. Let go.
+- The lights will flash while the paper tape is being read.
+- At the end, the game will start.
+
+
 
 */
 
@@ -290,7 +301,7 @@ static GFXDECODE_START( pdp1 )
 GFXDECODE_END
 
 /* Initialise the palette */
-void pdp1_state::palette_init()
+PALETTE_INIT_MEMBER(pdp1_state, pdp1)
 {
 	/* rgb components for the two color emissions */
 	const double r1 = .1, g1 = .1, b1 = .924, r2 = .7, g2 = .7, b2 = .076;
@@ -301,8 +312,6 @@ void pdp1_state::palette_init()
 	double decay_1, decay_2;
 	double cur_level_1, cur_level_2;
 	UINT8 i, r, g, b;
-
-	machine().colortable = colortable_alloc(machine(), total_colors_needed);
 
 	/* initialize CRT palette */
 
@@ -319,37 +328,29 @@ void pdp1_state::palette_init()
 		g = (int) ((g1*cur_level_1 + g2*cur_level_2) + .5);
 		b = (int) ((b1*cur_level_1 + b2*cur_level_2) + .5);
 		/* write color in palette */
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		m_palette->set_indirect_color(i, rgb_t(r, g, b));
 		/* apply decay for next iteration */
 		cur_level_1 *= decay_1;
 		cur_level_2 *= decay_2;
 	}
 
-	colortable_palette_set_color(machine().colortable, 0, MAKE_RGB(0, 0, 0));
+	m_palette->set_indirect_color(0, rgb_t(0, 0, 0));
 
 	/* load static palette */
 	for ( i = 0; i < 6; i++ )
 	{
 		r = pdp1_colors[i*3]; g = pdp1_colors[i*3+1]; b = pdp1_colors[i*3+2];
-		colortable_palette_set_color(machine().colortable, pen_crt_num_levels + i, MAKE_RGB(r, g, b));
+		m_palette->set_indirect_color(pen_crt_num_levels + i, rgb_t(r, g, b));
 	}
 
 	/* copy colortable to palette */
 	for( i = 0; i < total_colors_needed; i++ )
-		colortable_entry_set_value(machine().colortable, i, i);
+		m_palette->set_pen_indirect(i, i);
 
 	/* set up palette for text */
 	for( i = 0; i < 6; i++ )
-		colortable_entry_set_value(machine().colortable, total_colors_needed + i, pdp1_palette[i]);
+		m_palette->set_pen_indirect(total_colors_needed + i, pdp1_palette[i]);
 }
-
-
-static const crt_interface pdp1_crt_interface =
-{
-	pen_crt_num_levels,
-	crt_window_offset_x, crt_window_offset_y,
-	crt_window_width, crt_window_height
-};
 
 
 /*
@@ -406,7 +407,7 @@ static void iot_cks(device_t *device, int op2, int nac, int mb, int *io, int ac)
 
 
 /*
-    devices which are known to generate a completion pulse (source: maintainance manual 9-??,
+    devices which are known to generate a completion pulse (source: maintenance manual 9-??,
     and 9-20, 9-21):
     emulated:
     * perforated tape reader
@@ -452,8 +453,8 @@ static pdp1_reset_param_t pdp1_reset_param =
 {
 	{   /* external iot handlers.  NULL means that the iot is unimplemented, unless there are
         parentheses around the iot name, in which case the iot is internal to the cpu core. */
-		/* I put a ? when the source is the handbook, since a) I have used the maintainance manual
-		as the primary source (as it goes more into details) b) the handbook and the maintainance
+		/* I put a ? when the source is the handbook, since a) I have used the maintenance manual
+		as the primary source (as it goes more into details) b) the handbook and the maintenance
 		manual occasionnally contradict each other. */
 		/* dia, dba, dcc, dra are documented in MIT PDP-1 COMPUTER MODIFICATION
 		BULLETIN no. 2 (drumInstrWriteup.bin/drumInstrWriteup.txt), and are
@@ -692,7 +693,7 @@ protected:
 const device_type PDP1_READTAPE = &device_creator<pdp1_readtape_image_device>;
 
 pdp1_readtape_image_device::pdp1_readtape_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, PDP1_READTAPE, "PDP1 Tape Reader", tag, owner, clock),
+	: device_t(mconfig, PDP1_READTAPE, "PDP1 Tape Reader", tag, owner, clock, "pdp1_readtape_image", __FILE__),
 		device_image_interface(mconfig, *this)
 {
 }
@@ -727,7 +728,7 @@ protected:
 const device_type PDP1_PUNCHTAPE = &device_creator<pdp1_punchtape_image_device>;
 
 pdp1_punchtape_image_device::pdp1_punchtape_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, PDP1_PUNCHTAPE, "PDP1 Tape Puncher", tag, owner, clock),
+	: device_t(mconfig, PDP1_PUNCHTAPE, "PDP1 Tape Puncher", tag, owner, clock, "pdp1_punchtape_image", __FILE__),
 		device_image_interface(mconfig, *this)
 {
 }
@@ -763,7 +764,7 @@ protected:
 const device_type PDP1_PRINTER = &device_creator<pdp1_printer_image_device>;
 
 pdp1_printer_image_device::pdp1_printer_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, PDP1_PRINTER, "PDP1 Typewriter", tag, owner, clock),
+	: device_t(mconfig, PDP1_PRINTER, "PDP1 Typewriter", tag, owner, clock, "pdp1_printer_image", __FILE__),
 		device_image_interface(mconfig, *this)
 {
 }
@@ -798,7 +799,7 @@ protected:
 const device_type PDP1_CYLINDER = &device_creator<pdp1_cylinder_image_device>;
 
 pdp1_cylinder_image_device::pdp1_cylinder_image_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, PDP1_CYLINDER, "PDP1 Cylinder", tag, owner, clock),
+	: device_t(mconfig, PDP1_CYLINDER, "PDP1 Cylinder", tag, owner, clock, "pdp1_cylinder_image", __FILE__),
 		device_image_interface(mconfig, *this)
 {
 }
@@ -924,7 +925,7 @@ TIMER_CALLBACK_MEMBER(pdp1_state::reader_callback)
 					if (m_tape_reader.rcp)
 					{
 						m_maincpu->set_state_int(PDP1_IO, m_tape_reader.rb);  /* transfer reader buffer to IO */
-						pdp1_pulse_iot_done(m_maincpu);
+						m_maincpu->set_state_int(PDP1_IOS,1);
 					}
 					else
 						m_io_status |= io_st_ptr;
@@ -1076,7 +1077,7 @@ TIMER_CALLBACK_MEMBER(pdp1_state::puncher_callback)
 	m_io_status |= io_st_ptp;
 	if (nac)
 	{
-		pdp1_pulse_iot_done(m_maincpu);
+		m_maincpu->set_state_int(PDP1_IOS,1);
 	}
 }
 
@@ -1284,7 +1285,7 @@ TIMER_CALLBACK_MEMBER(pdp1_state::tyo_callback)
 	m_io_status |= io_st_tyo;
 	if (nac)
 	{
-		pdp1_pulse_iot_done(m_maincpu);
+		m_maincpu->set_state_int(PDP1_IOS,1);
 	}
 }
 
@@ -1304,7 +1305,7 @@ static void iot_tyo(device_t *device, int op2, int nac, int mb, int *io, int ac)
 	state->typewriter_out(ch);
 	state->m_io_status &= ~io_st_tyo;
 
-	/* compute completion delay (source: maintainance manual 9-12, 9-13 and 9-14) */
+	/* compute completion delay (source: maintenance manual 9-12, 9-13 and 9-14) */
 	switch (ch)
 	{
 	case 072:   /* lower-case */
@@ -1402,7 +1403,7 @@ static void iot_tyi(device_t *device, int op2, int nac, int mb, int *io, int ac)
 */
 TIMER_CALLBACK_MEMBER(pdp1_state::dpy_callback)
 {
-	pdp1_pulse_iot_done(m_maincpu);
+	m_maincpu->set_state_int(PDP1_IOS,1);
 }
 
 
@@ -1812,7 +1813,7 @@ INTERRUPT_GEN_MEMBER(pdp1_state::pdp1_interrupt)
 		}
 		if (control_transitions & pdp1_start_nobrk)
 		{
-			pdp1_pulse_start_clear(m_maincpu);    /* pulse Start Clear line */
+			m_maincpu->pulse_start_clear();    /* pulse Start Clear line */
 			m_maincpu->set_state_int(PDP1_EXD, m_maincpu->state_int(PDP1_EXTEND_SW));
 			m_maincpu->set_state_int(PDP1_SBM, (UINT64)0);
 			m_maincpu->set_state_int(PDP1_OV, (UINT64)0);
@@ -1821,7 +1822,7 @@ INTERRUPT_GEN_MEMBER(pdp1_state::pdp1_interrupt)
 		}
 		if (control_transitions & pdp1_start_brk)
 		{
-			pdp1_pulse_start_clear(m_maincpu);    /* pulse Start Clear line */
+			m_maincpu->pulse_start_clear();    /* pulse Start Clear line */
 			m_maincpu->set_state_int(PDP1_EXD, m_maincpu->state_int(PDP1_EXTEND_SW));
 			m_maincpu->set_state_int(PDP1_SBM, 1);
 			m_maincpu->set_state_int(PDP1_OV, (UINT64)0);
@@ -1841,7 +1842,7 @@ INTERRUPT_GEN_MEMBER(pdp1_state::pdp1_interrupt)
 		}
 		if (control_transitions & pdp1_examine)
 		{
-			pdp1_pulse_start_clear(m_maincpu);    /* pulse Start Clear line */
+			m_maincpu->pulse_start_clear();    /* pulse Start Clear line */
 			m_maincpu->set_state_int(PDP1_PC, m_maincpu->state_int(PDP1_TA));
 			m_maincpu->set_state_int(PDP1_MA, m_maincpu->state_int(PDP1_PC));
 			m_maincpu->set_state_int(PDP1_IR, LAC); /* this instruction is actually executed */
@@ -1851,7 +1852,7 @@ INTERRUPT_GEN_MEMBER(pdp1_state::pdp1_interrupt)
 		}
 		if (control_transitions & pdp1_deposit)
 		{
-			pdp1_pulse_start_clear(m_maincpu);    /* pulse Start Clear line */
+			m_maincpu->pulse_start_clear();    /* pulse Start Clear line */
 			m_maincpu->set_state_int(PDP1_PC, m_maincpu->state_int(PDP1_TA));
 			m_maincpu->set_state_int(PDP1_MA, m_maincpu->state_int(PDP1_PC));
 			m_maincpu->set_state_int(PDP1_AC, m_maincpu->state_int(PDP1_TW));
@@ -1862,7 +1863,7 @@ INTERRUPT_GEN_MEMBER(pdp1_state::pdp1_interrupt)
 		}
 		if (control_transitions & pdp1_read_in)
 		{   /* set cpu to read instructions from perforated tape */
-			pdp1_pulse_start_clear(m_maincpu);    /* pulse Start Clear line */
+			m_maincpu->pulse_start_clear();    /* pulse Start Clear line */
 			m_maincpu->set_state_int(PDP1_PC, (  m_maincpu->state_int(PDP1_TA) & 0170000)
 										|  (m_maincpu->state_int(PDP1_PC) & 0007777));  /* transfer ETA to EPC */
 			/*m_maincpu->set_state_int(PDP1_MA, m_maincpu->state_int(PDP1_PC));*/
@@ -1938,7 +1939,6 @@ static MACHINE_CONFIG_START( pdp1, pdp1_state )
 	MCFG_CPU_PROGRAM_MAP(pdp1_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", pdp1_state,  pdp1_interrupt)   /* dummy interrupt: handles input */
 
-
 	/* video hardware (includes the control panel and typewriter output) */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(refresh_rate)
@@ -1947,16 +1947,22 @@ static MACHINE_CONFIG_START( pdp1, pdp1_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, virtual_width-1, 0, virtual_height-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pdp1_state, screen_update_pdp1)
 	MCFG_SCREEN_VBLANK_DRIVER(pdp1_state, screen_eof_pdp1)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_CRT_ADD( "crt", pdp1_crt_interface )
+	MCFG_DEVICE_ADD("crt", CRT, 0)
+	MCFG_CRT_NUM_LEVELS(pen_crt_num_levels)
+	MCFG_CRT_OFFSETS(crt_window_offset_x, crt_window_offset_y)
+	MCFG_CRT_SIZE(crt_window_width, crt_window_height)
+
 	MCFG_DEVICE_ADD("readt", PDP1_READTAPE, 0)
 	MCFG_DEVICE_ADD("punch", PDP1_PUNCHTAPE, 0)
 	MCFG_DEVICE_ADD("typewriter", PDP1_PRINTER, 0)
 	MCFG_DEVICE_ADD("drum", PDP1_CYLINDER, 0)
 
-	MCFG_GFXDECODE(pdp1)
-	MCFG_PALETTE_LENGTH(pen_crt_num_levels + sizeof(pdp1_colors) / 3 + sizeof(pdp1_palette))
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pdp1)
+	MCFG_PALETTE_ADD("palette", total_colors_needed + sizeof(pdp1_palette))
+	MCFG_PALETTE_INDIRECT_ENTRIES(total_colors_needed)
+	MCFG_PALETTE_INIT_OWNER(pdp1_state, pdp1)
 MACHINE_CONFIG_END
 
 /*
@@ -1973,5 +1979,5 @@ ROM_END
 
 ***************************************************************************/
 
-/*    YEAR  NAME      PARENT    COMPAT  MACHINE   INPUT     INIT    COMPANY FULLNAME */
-COMP( 1961, pdp1,     0,        0,      pdp1,     pdp1, driver_device,  0,      "Digital Equipment Corporation",  "PDP-1" , GAME_NO_SOUND_HW | GAME_NOT_WORKING)
+/*    YEAR  NAME      PARENT    COMPAT  MACHINE   INPUT CLASS         INIT    COMPANY                        FULLNAME */
+COMP( 1961, pdp1,     0,        0,      pdp1,     pdp1, driver_device,  0,  "Digital Equipment Corporation",  "PDP-1" , GAME_NO_SOUND_HW )

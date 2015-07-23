@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Ville Linde, Angelo Salese, hap
 /*************************************************************************
 
   Taito JC System
@@ -7,7 +9,7 @@
 *************************************************************************/
 
 #include "emu.h"
-#include "video/polynew.h"
+#include "video/poly.h"
 #include "includes/taitojc.h"
 
 static const gfx_layout taitojc_char_layout =
@@ -46,7 +48,7 @@ WRITE32_MEMBER(taitojc_state::taitojc_palette_w)
 	g = (color >> 16) & 0xff;
 	b = (color >>  0) & 0xff;
 
-	palette_set_color(machine(),offset, MAKE_RGB(r, g, b));
+	m_palette->set_pen_color(offset, rgb_t(r, g, b));
 }
 
 READ32_MEMBER(taitojc_state::taitojc_tile_r)
@@ -68,7 +70,7 @@ WRITE32_MEMBER(taitojc_state::taitojc_tile_w)
 WRITE32_MEMBER(taitojc_state::taitojc_char_w)
 {
 	COMBINE_DATA(m_char_ram + offset);
-	machine().gfx[m_gfx_index]->mark_dirty(offset/32);
+	m_gfxdecode->gfx(m_gfx_index)->mark_dirty(offset/32);
 }
 
 // Object data format:
@@ -176,7 +178,7 @@ void taitojc_state::draw_object(bitmap_ind16 &bitmap, const rectangle &cliprect,
 		return;
 	}
 
-//  mame_printf_debug("draw_object: %08X %08X, X: %d, Y: %d, W: %d, H: %d\n", w1, w2, x, y, width, height);
+//  osd_printf_debug("draw_object: %08X %08X, X: %d, Y: %d, W: %d, H: %d\n", w1, w2, x, y, width, height);
 
 	ix = 0;
 	iy = 0;
@@ -302,12 +304,12 @@ void taitojc_state::video_start()
 {
 	/* find first empty slot to decode gfx */
 	for (m_gfx_index = 0; m_gfx_index < MAX_GFX_ELEMENTS; m_gfx_index++)
-		if (machine().gfx[m_gfx_index] == 0)
+		if (m_gfxdecode->gfx(m_gfx_index) == 0)
 			break;
 
 	assert(m_gfx_index != MAX_GFX_ELEMENTS);
 
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(taitojc_state::taitojc_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(taitojc_state::taitojc_tile_info),this), TILEMAP_SCAN_ROWS, 16, 16, 64, 64);
 
 	m_tilemap->set_transparent_pen(0);
 
@@ -315,12 +317,12 @@ void taitojc_state::video_start()
 	m_tile_ram = auto_alloc_array_clear(machine(), UINT32, 0x4000/4);
 
 	/* create the char set (gfx will then be updated dynamically from RAM) */
-	machine().gfx[m_gfx_index] = auto_alloc(machine(), gfx_element(machine(), taitojc_char_layout, (UINT8 *)m_char_ram, machine().total_colors() / 16, 0));
+	m_gfxdecode->set_gfx(m_gfx_index, global_alloc(gfx_element(m_palette, taitojc_char_layout, (UINT8 *)m_char_ram, 0, m_palette->entries() / 16, 0)));
 
 	m_texture = auto_alloc_array(machine(), UINT8, 0x400000);
 
-	machine().primary_screen->register_screen_bitmap(m_framebuffer);
-	machine().primary_screen->register_screen_bitmap(m_zbuffer);
+	m_screen->register_screen_bitmap(m_framebuffer);
+	m_screen->register_screen_bitmap(m_zbuffer);
 
 	/* create renderer */
 	m_renderer = auto_alloc(machine(), taitojc_renderer(machine(), &m_framebuffer, &m_zbuffer, m_texture));
@@ -345,7 +347,7 @@ UINT32 taitojc_state::screen_update_taitojc(screen_device &screen, bitmap_ind16 
 
 	// text layer
 	if (m_objlist[0xfc4/4] & 0x10000)
-		m_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
@@ -364,7 +366,7 @@ UINT32 taitojc_state::screen_update_dendego(screen_device &screen, bitmap_ind16 
 	if (level != output_get_value("counter0"))
 		output_set_value("counter0", level);
 
-	btn = (ioport("ANALOG1")->read() & 0xff);
+	btn = m_analog_ports[0]->read() & 0xff;
 	for (level = 10; level > 0; level--)
 		if (btn >= dendego_brake_table[level]) break;
 
@@ -480,10 +482,9 @@ void taitojc_renderer::render_texture_scan(INT32 scanline, const extent_t &exten
 	}
 }
 
-void taitojc_renderer::render_polygons(running_machine &machine, UINT16 *polygon_fifo, int length)
+void taitojc_renderer::render_polygons(UINT16 *polygon_fifo, int length)
 {
-//  taitojc_state *state = machine.driver_data<taitojc_state>();
-	const rectangle visarea = machine.primary_screen->visible_area();
+	const rectangle visarea = machine().first_screen()->visible_area();
 	vertex_t vert[4];
 	int i;
 	int ptr;
@@ -764,6 +765,6 @@ void taitojc_renderer::render_polygons(running_machine &machine, UINT16 *polygon
 
 void taitojc_state::taitojc_clear_frame()
 {
-	m_framebuffer.fill(0, machine().primary_screen->visible_area());
-	m_zbuffer.fill(0xffff, machine().primary_screen->visible_area());
+	m_framebuffer.fill(0, m_screen->visible_area());
+	m_zbuffer.fill(0xffff, m_screen->visible_area());
 }

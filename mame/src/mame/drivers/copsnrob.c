@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
     Atari Cops'n Robbers hardware
@@ -62,26 +64,13 @@ Added Dip locations according to manual.
 
 /*************************************
  *
- *  Palette generation
- *
- *************************************/
-
-void copsnrob_state::palette_init()
-{
-	palette_set_color(machine(),0,MAKE_RGB(0x00,0x00,0x00)); /* black */
-	palette_set_color(machine(),1,MAKE_RGB(0xff,0xff,0xff));  /* white */
-}
-
-
-/*************************************
- *
  *  I/O
  *
  *************************************/
 
 READ8_MEMBER(copsnrob_state::copsnrob_misc_r)
 {
-	return ioport("IN0")->read() & 0x80;
+	return m_screen->vblank() ? 0x00 : 0x80;
 }
 
 WRITE8_MEMBER(copsnrob_state::copsnrob_misc2_w)
@@ -110,8 +99,6 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, copsnrob_state )
 	AM_RANGE(0x0a00, 0x0a03) AM_WRITEONLY AM_SHARE("cary")
 	AM_RANGE(0x0b00, 0x0bff) AM_RAM
 	AM_RANGE(0x0c00, 0x0fff) AM_RAM AM_SHARE("videoram")
-//  AM_RANGE(0x1000, 0x1003) AM_WRITENOP
-//  AM_RANGE(0x1000, 0x1000) AM_READ_PORT("IN0")
 	AM_RANGE(0x1000, 0x1000) AM_READ(copsnrob_misc_r)
 	AM_RANGE(0x1000, 0x1000) AM_WRITE(copsnrob_misc2_w)
 	AM_RANGE(0x1002, 0x1002) AM_READ_PORT("CTRL1")
@@ -135,9 +122,6 @@ ADDRESS_MAP_END
 static const ioport_value gun_table[] = {0x3f, 0x5f, 0x6f, 0x77, 0x7b, 0x7d, 0x7e};
 
 static INPUT_PORTS_START( copsnrob )
-	PORT_START("IN0")
-	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_CUSTOM ) PORT_VBLANK("screen")
-
 	PORT_START("IN1")
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_START1 )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_COIN1 )
@@ -266,7 +250,6 @@ static MACHINE_CONFIG_START( copsnrob, copsnrob_state )
 	MCFG_CPU_ADD("maincpu", M6502,14318180/16)      /* 894886.25 kHz */
 	MCFG_CPU_PROGRAM_MAP(main_map)
 
-
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -274,16 +257,16 @@ static MACHINE_CONFIG_START( copsnrob, copsnrob_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 26*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(copsnrob_state, screen_update_copsnrob)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(copsnrob)
-	MCFG_PALETTE_LENGTH(2)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", copsnrob)
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(copsnrob)
+	MCFG_DISCRETE_INTF(copsnrob)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END

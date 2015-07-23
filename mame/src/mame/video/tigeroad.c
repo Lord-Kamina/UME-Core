@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
 #include "emu.h"
 #include "includes/tigeroad.h"
 
@@ -36,9 +38,11 @@ WRITE16_MEMBER(tigeroad_state::tigeroad_videoctrl_w)
 		}
 
 		/* bits 4-5 are coin lockouts */
-
-		coin_lockout_w(machine(), 0, !(data & 0x10));
-		coin_lockout_w(machine(), 1, !(data & 0x20));
+		if (m_has_coinlock)
+		{
+			coin_lockout_w(machine(), 0, !(data & 0x10));
+			coin_lockout_w(machine(), 1, !(data & 0x20));
+		}
 
 		/* bits 6-7 are coin counters */
 
@@ -64,53 +68,11 @@ WRITE16_MEMBER(tigeroad_state::tigeroad_scroll_w)
 	}
 }
 
-void tigeroad_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, int priority )
-{
-	UINT16 *source = &m_spriteram->buffer()[m_spriteram->bytes()/2] - 4;
-	UINT16 *finish = m_spriteram->buffer();
 
-	// TODO: The Track Map should probably be drawn on top of the background tilemap...
-	//       Also convert the below into a for loop!
-
-	while (source >= finish)
-	{
-		int tile_number = source[0];
-
-		if (tile_number != 0xfff) {
-			int attr = source[1];
-			int sy = source[2] & 0x1ff;
-			int sx = source[3] & 0x1ff;
-
-			int flipx = attr & 0x02;
-			int flipy = attr & 0x01;
-			int color = (attr >> 2) & 0x0f;
-
-			if (sx > 0x100) sx -= 0x200;
-			if (sy > 0x100) sy -= 0x200;
-
-			if (flip_screen())
-			{
-				sx = 240 - sx;
-				sy = 240 - sy;
-				flipx = !flipx;
-				flipy = !flipy;
-			}
-
-			drawgfx_transpen(bitmap, cliprect,
-				machine().gfx[2],
-				tile_number,
-				color,
-				flipx, flipy,
-				sx, 240 - sy, 15);
-		}
-
-		source -= 4;
-	}
-}
 
 TILE_GET_INFO_MEMBER(tigeroad_state::get_bg_tile_info)
 {
-	UINT8 *tilerom = memregion("gfx4")->base();
+	UINT8 *tilerom = memregion("bgmap")->base();
 
 	int data = tilerom[tile_index];
 	int attr = tilerom[tile_index + 1];
@@ -142,10 +104,10 @@ TILEMAP_MAPPER_MEMBER(tigeroad_state::tigeroad_tilemap_scan)
 
 void tigeroad_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tigeroad_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(tigeroad_state::tigeroad_tilemap_scan),this),
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tigeroad_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(tigeroad_state::tigeroad_tilemap_scan),this),
 			32, 32, 128, 128);
 
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(tigeroad_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(tigeroad_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS,
 			8, 8, 32, 32);
 
 	m_bg_tilemap->set_transmask(0, 0xffff, 0);
@@ -156,10 +118,9 @@ void tigeroad_state::video_start()
 
 UINT32 tigeroad_state::screen_update_tigeroad(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
-	draw_sprites(bitmap, cliprect, 0);
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
-	//draw_sprites(bitmap, cliprect, 1); draw priority sprites?
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 2);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+	m_spritegen->draw_sprites(bitmap, cliprect, m_gfxdecode, 2, m_spriteram->buffer(), m_spriteram->bytes(), flip_screen(), 1 );
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 2);
 	return 0;
 }

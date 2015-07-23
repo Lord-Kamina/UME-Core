@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Joseph Zbiciak,Tim Lindner
 /*
    GI SP0256 Narrator Speech Processor
    GI SPB640 Speech Buffer
@@ -55,7 +57,7 @@
 	if (m_sby_line != line_state)           \
 	{                                          \
 		m_sby_line = line_state;             \
-		m_sby(m_sby_line);  \
+		m_sby_cb(m_sby_line);  \
 	}                                          \
 }
 
@@ -94,32 +96,12 @@ const device_type SP0256 = &device_creator<sp0256_device>;
 //**************************************************************************
 
 sp0256_device::sp0256_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-				: device_t(mconfig, SP0256, "SP0256", tag, owner, clock),
-					device_sound_interface(mconfig, *this)
+				: device_t(mconfig, SP0256, "SP0256", tag, owner, clock, "sp0256", __FILE__),
+					device_sound_interface(mconfig, *this),
+					m_rom(*this, DEVICE_SELF),
+					m_drq_cb(*this),
+					m_sby_cb(*this)
 {
-}
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void sp0256_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const sp0256_interface *intf = reinterpret_cast<const sp0256_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<sp0256_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_lrq_cb, 0, sizeof(m_lrq_cb));
-		memset(&m_sby_cb, 0, sizeof(m_sby_cb));
-	}
-
 }
 
 //-------------------------------------------------
@@ -128,12 +110,12 @@ void sp0256_device::device_config_complete()
 
 void sp0256_device::device_start()
 {
-	m_drq.resolve(m_lrq_cb, *this);
-	m_sby.resolve(m_sby_cb, *this);
-	m_drq(1);
-	m_sby(1);
+	m_drq_cb.resolve_safe();
+	m_sby_cb.resolve_safe();
+	m_drq_cb(1);
+	m_sby_cb(1);
 
-	m_stream = machine().sound().stream_alloc(*this, 0, 1, clock() / CLOCK_DIVIDER, this);
+	m_stream = machine().sound().stream_alloc(*this, 0, 1, clock() / CLOCK_DIVIDER);
 
 	/* -------------------------------------------------------------------- */
 	/*  Configure our internal variables.                                   */
@@ -160,7 +142,6 @@ void sp0256_device::device_start()
 	/* -------------------------------------------------------------------- */
 	/*  Setup the ROM.                                                      */
 	/* -------------------------------------------------------------------- */
-	m_rom = *region();
 	// the rom is not supposed to be reversed first; according to Joe Zbiciak.
 	// see http://forums.bannister.org/ubbthreads.php?ubb=showflat&Number=72385#Post72385
 	// TODO: because of this, check if the bitrev functions are even used anywhere else
@@ -221,7 +202,8 @@ void sp0256_device::device_reset()
 	m_mode     = 0;
 	m_page     = 0x1000 << 3;
 	m_silent   = 1;
-	m_drq(1);
+	m_sby_line = 0;
+	m_drq_cb(1);
 	SET_SBY(1)
 
 	m_lrq = 0;
@@ -862,7 +844,7 @@ void sp0256_device::micro()
 			m_ald      = 0;
 			for (i = 0; i < 16; i++)
 				m_filt.r[i] = 0;
-			m_drq(1);
+			m_drq_cb(1);
 		}
 
 		/* ---------------------------------------------------------------- */
@@ -1204,7 +1186,7 @@ WRITE8_MEMBER( sp0256_device::ald_w )
 	/* ---------------------------------------------------------------- */
 	m_lrq = 0;
 	m_ald = (0xff & data) << 4;
-	m_drq(0);
+	m_drq_cb(0);
 	SET_SBY(0)
 
 	return;

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ville Linde
 /* Ricoh RF5C400 emulator */
 
 #pragma once
@@ -96,8 +98,9 @@ private:
 	UINT8 decode80(UINT8 val);
 
 private:
-	INT16 *m_rom;
-	UINT32 m_rom_length;
+	required_region_ptr<INT16> m_rom;
+
+	UINT32 m_rommask;
 
 	sound_stream *m_stream;
 

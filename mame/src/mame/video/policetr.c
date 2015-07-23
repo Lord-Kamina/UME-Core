@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     P&P Marketing Police Trainer hardware
@@ -257,8 +259,8 @@ WRITE32_MEMBER(policetr_state::policetr_video_w)
 READ32_MEMBER(policetr_state::policetr_video_r)
 {
 	int inputval;
-	int width = machine().primary_screen->width();
-	int height = machine().primary_screen->height();
+	int width = m_screen->width();
+	int height = m_screen->height();
 
 	/* the value read is based on the latch */
 	switch (m_video_latch)
@@ -328,7 +330,7 @@ WRITE32_MEMBER(policetr_state::policetr_palette_data_w)
 		m_palette_data[m_palette_index] = (data >> 16) & 0xff;
 		if (++m_palette_index == 3)
 		{
-			palette_set_color(machine(), m_palette_offset, MAKE_RGB(m_palette_data[0], m_palette_data[1], m_palette_data[2]));
+			m_palette->set_pen_color(m_palette_offset, rgb_t(m_palette_data[0], m_palette_data[1], m_palette_data[2]));
 			m_palette_index = 0;
 		}
 	}

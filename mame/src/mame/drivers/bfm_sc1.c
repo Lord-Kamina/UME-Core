@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /*****************************************************************************************
 
     Bellfruit scorpion1 driver, (under heavy construction !!!)
-
-    M.A.M.E Core Copyright Nicola Salmoria and the MAME Team,
-    used under license from http://mamedev.org
 
 ******************************************************************************************
 
@@ -111,21 +110,31 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_vfd0(*this, "vfd0"),
 		m_maincpu(*this, "maincpu"),
-		m_upd7759(*this, "upd"),
-		m_adder2(*this, "adder2") { }
+		m_reel0(*this, "reel0"),
+		m_reel1(*this, "reel1"),
+		m_reel2(*this, "reel2"),
+		m_reel3(*this, "reel3"),
+		m_reel4(*this, "reel4"),
+		m_reel5(*this, "reel5"),
+		m_upd7759(*this, "upd") { }
 
 	optional_device<bfm_bd1_t> m_vfd0;
 
 	int m_mmtr_latch;
 	int m_triac_latch;
-	int m_vfd_latch;
+	int m_vfd_latch;  //initialized but not used
 	int m_irq_status;
 	int m_optic_pattern;
+	DECLARE_WRITE_LINE_MEMBER(reel0_optic_cb) { if (state) m_optic_pattern |= 0x01; else m_optic_pattern &= ~0x01; }
+	DECLARE_WRITE_LINE_MEMBER(reel1_optic_cb) { if (state) m_optic_pattern |= 0x02; else m_optic_pattern &= ~0x02; }
+	DECLARE_WRITE_LINE_MEMBER(reel2_optic_cb) { if (state) m_optic_pattern |= 0x04; else m_optic_pattern &= ~0x04; }
+	DECLARE_WRITE_LINE_MEMBER(reel3_optic_cb) { if (state) m_optic_pattern |= 0x08; else m_optic_pattern &= ~0x08; }
+	DECLARE_WRITE_LINE_MEMBER(reel4_optic_cb) { if (state) m_optic_pattern |= 0x10; else m_optic_pattern &= ~0x10; }
+	DECLARE_WRITE_LINE_MEMBER(reel5_optic_cb) { if (state) m_optic_pattern |= 0x20; else m_optic_pattern &= ~0x20; }
 	int m_acia_status;
 	int m_locked;
 	int m_is_timer_enabled;
-	int m_reel_changed;
-	int m_coin_inhibits;
+	int m_coin_inhibits; //initialized but not used
 	int m_mux1_outputlatch;
 	int m_mux1_datalo;
 	int m_mux1_datahi;
@@ -165,13 +174,11 @@ public:
 	DECLARE_READ8_MEMBER(aciadata_r);
 	DECLARE_WRITE8_MEMBER(triac_w);
 	DECLARE_READ8_MEMBER(triac_r);
-	DECLARE_WRITE8_MEMBER(vid_uart_tx_w);
-	DECLARE_WRITE8_MEMBER(vid_uart_ctrl_w);
-	DECLARE_READ8_MEMBER(vid_uart_rx_r);
-	DECLARE_READ8_MEMBER(vid_uart_ctrl_r);
 	DECLARE_READ8_MEMBER(nec_r);
 	DECLARE_WRITE8_MEMBER(nec_reset_w);
 	DECLARE_WRITE8_MEMBER(nec_latch_w);
+
+	void save_state();
 
 	DECLARE_DRIVER_INIT(toppoker);
 	DECLARE_DRIVER_INIT(lotse_bank0);
@@ -187,8 +194,13 @@ public:
 	int Scorpion1_GetSwitchState(int strobe, int data);
 	int sc1_find_project_string( );
 	required_device<cpu_device> m_maincpu;
+	required_device<stepper_device> m_reel0;
+	required_device<stepper_device> m_reel1;
+	required_device<stepper_device> m_reel2;
+	required_device<stepper_device> m_reel3;
+	required_device<stepper_device> m_reel4;
+	required_device<stepper_device> m_reel5;
 	optional_device<upd7759_device> m_upd7759;
-	optional_device<cpu_device> m_adder2;
 };
 
 #define VFD_RESET  0x20
@@ -196,7 +208,31 @@ public:
 #define VFD_DATA   0x40
 
 #define MASTER_CLOCK    (XTAL_4MHz)
-#define ADDER_CLOCK     (XTAL_8MHz)
+
+
+void bfm_sc1_state::save_state()
+{
+	save_item(NAME(m_mmtr_latch));
+	save_item(NAME(m_triac_latch));
+	// save_item(NAME(m_vfd_latch));  //enable when used
+	save_item(NAME(m_irq_status));
+	save_item(NAME(m_optic_pattern));
+	save_item(NAME(m_acia_status));
+	save_item(NAME(m_locked));
+	//save_item(NAME(m_is_timer_enabled)); //currently always set to 1
+	//save_item(NAME(m_coin_inhibits)); //enable when used
+	save_item(NAME(m_mux1_outputlatch));
+	save_item(NAME(m_mux1_datalo));
+	save_item(NAME(m_mux1_datahi));
+	save_item(NAME(m_mux1_input));
+	save_item(NAME(m_mux2_outputlatch));
+	save_item(NAME(m_mux2_datalo));
+	save_item(NAME(m_mux2_datahi));
+	save_item(NAME(m_mux2_input));
+	save_item(NAME(m_sc1_Inputs));
+	save_item(NAME(m_codec_data));
+	save_item(NAME(m_defaultbank));
+}
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -221,7 +257,6 @@ int bfm_sc1_state::Scorpion1_GetSwitchState(int strobe, int data)
 
 WRITE8_MEMBER(bfm_sc1_state::bankswitch_w)
 {
-//  printf("bankswitch %02x\n", data);
 	membank("bank1")->set_entry(data & 0x03);
 }
 
@@ -260,16 +295,11 @@ WRITE8_MEMBER(bfm_sc1_state::reel12_w)
 	}
 	else
 	{
-		if ( stepper_update(0, (data>>4)&0x0f) ) m_reel_changed |= 0x01;
-		if ( stepper_update(1, data&0x0f   ) ) m_reel_changed |= 0x02;
-
-		if ( stepper_optic_state(0) ) m_optic_pattern |=  0x01;
-		else                          m_optic_pattern &= ~0x01;
-		if ( stepper_optic_state(1) ) m_optic_pattern |=  0x02;
-		else                          m_optic_pattern &= ~0x02;
+		m_reel0->update((data>>4)&0x0f);
+		m_reel1->update( data    &0x0f);
 	}
-	awp_draw_reel(0);
-	awp_draw_reel(1);
+	awp_draw_reel("reel1", m_reel0);
+	awp_draw_reel("reel2", m_reel1);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -282,31 +312,22 @@ WRITE8_MEMBER(bfm_sc1_state::reel34_w)
 	}
 	else
 	{
-		if ( stepper_update(2, (data>>4)&0x0f) ) m_reel_changed |= 0x04;
-		if ( stepper_update(3, data&0x0f   ) ) m_reel_changed |= 0x08;
-
-		if ( stepper_optic_state(2) ) m_optic_pattern |=  0x04;
-		else                          m_optic_pattern &= ~0x04;
-		if ( stepper_optic_state(3) ) m_optic_pattern |=  0x08;
-		else                          m_optic_pattern &= ~0x08;
+		m_reel2->update((data>>4)&0x0f);
+		m_reel3->update( data    &0x0f);
 	}
-	awp_draw_reel(2);
-	awp_draw_reel(3);
+	awp_draw_reel("reel3", m_reel2);
+	awp_draw_reel("reel4", m_reel3);
 }
 
 ///////////////////////////////////////////////////////////////////////////
 
 WRITE8_MEMBER(bfm_sc1_state::reel56_w)
 {
-	if ( stepper_update(4, (data>>4)&0x0f) ) m_reel_changed |= 0x10;
-	if ( stepper_update(5, data&0x0f   ) ) m_reel_changed |= 0x20;
+	m_reel4->update((data>>4)&0x0f);
+	m_reel5->update( data    &0x0f);
 
-	if ( stepper_optic_state(4) ) m_optic_pattern |=  0x10;
-	else                          m_optic_pattern &= ~0x10;
-	if ( stepper_optic_state(5) ) m_optic_pattern |=  0x20;
-	else                          m_optic_pattern &= ~0x20;
-	awp_draw_reel(5);
-	awp_draw_reel(6);
+	awp_draw_reel("reel5", m_reel4);
+	awp_draw_reel("reel6", m_reel5);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -362,27 +383,9 @@ READ8_MEMBER(bfm_sc1_state::nec_r)
 
 WRITE8_MEMBER(bfm_sc1_state::vfd_w)
 {
-	int changed = m_vfd_latch ^ data;
-
-	m_vfd_latch = data;
-
-	if ( changed )
-	{
-		if ( changed & VFD_RESET )
-		{ // vfd reset line changed
-			if ( !(data & VFD_RESET) )
-			{ // reset the vfd
-			m_vfd0->reset();
-			}
-		}
-		if ( changed & VFD_CLOCK1 )
-		{ // clock line changed
-			if ( !(data & VFD_CLOCK1) && (data & VFD_RESET) )
-			{ // new data clocked into vfd
-				m_vfd0->shift_data(data & VFD_DATA );
-			}
-		}
-	}
+	m_vfd0->por(data & VFD_RESET);
+	m_vfd0->data(data & VFD_DATA);
+	m_vfd0->sclk(data & VFD_CLOCK1);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -606,46 +609,17 @@ READ8_MEMBER(bfm_sc1_state::triac_r)
 #ifdef UNUSED_FUNCTION
 WRITE8_MEMBER(bfm_sc1_state::nec_reset_w)
 {
-	upd7759_start_w(device, 0);
-	upd7759_reset_w(device, data);
+	m_upd7759->start_w(0);
+	m_upd7759->reset_w(data);
 }
 #endif
 /////////////////////////////////////////////////////////////////////////////////////
 WRITE8_MEMBER(bfm_sc1_state::nec_latch_w)
 {
-	upd7759_port_w (m_upd7759, space, 0, data&0x3F);   // setup sample
-	upd7759_start_w(m_upd7759, 0);
-	upd7759_start_w(m_upd7759, 1);         // start
+	m_upd7759->port_w (space, 0, data&0x3F);   // setup sample
+	m_upd7759->start_w(0);
+	m_upd7759->start_w(1);         // start
 }
-
-/////////////////////////////////////////////////////////////////////////////////////
-
-WRITE8_MEMBER(bfm_sc1_state::vid_uart_tx_w)
-{
-	adder2_send(data);
-	m_adder2->set_input_line(M6809_IRQ_LINE, ASSERT_LINE );//HOLD_LINE);// trigger IRQ
-}
-
-///////////////////////////////////////////////////////////////////////////
-
-WRITE8_MEMBER(bfm_sc1_state::vid_uart_ctrl_w)
-{
-}
-
-///////////////////////////////////////////////////////////////////////////
-
-READ8_MEMBER(bfm_sc1_state::vid_uart_rx_r)
-{
-	return adder2_receive();
-}
-
-///////////////////////////////////////////////////////////////////////////
-
-READ8_MEMBER(bfm_sc1_state::vid_uart_ctrl_r)
-{
-	return adder2_status();
-}
-
 
 // machine start (called only once) /////////////////////////////////////////////////
 
@@ -667,20 +641,6 @@ void bfm_sc1_state::machine_reset()
 	m_mux2_input        = 0;
 
 	m_vfd0->reset();
-
-// reset stepper motors /////////////////////////////////////////////////////////////
-	{
-		int pattern =0, i;
-
-		for ( i = 0; i < 6; i++)
-		{
-			stepper_reset_position(i);
-			if ( stepper_optic_state(i) ) pattern |= 1<<i;
-		}
-
-		m_optic_pattern = pattern;
-
-	}
 
 	m_acia_status   = 0x02; // MC6850 transmit buffer empty !!!
 	m_locked          = 0x07; // hardware is locked
@@ -741,8 +701,8 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( sc1_adder2, AS_PROGRAM, 8, bfm_sc1_state )
 	AM_IMPORT_FROM( sc1_base )
 
-	AM_RANGE(0x3E00, 0x3E00) AM_READWRITE(vid_uart_ctrl_r,vid_uart_ctrl_w)  // video uart control reg read
-	AM_RANGE(0x3E01, 0x3E01) AM_READWRITE(vid_uart_rx_r,vid_uart_tx_w)      // video uart receive  reg
+	AM_RANGE(0x3E00, 0x3E00) AM_DEVREADWRITE("adder2", bfm_adder2_device, vid_uart_ctrl_r,vid_uart_ctrl_w)  // video uart control reg read
+	AM_RANGE(0x3E01, 0x3E01) AM_DEVREADWRITE("adder2", bfm_adder2_device, vid_uart_rx_r,vid_uart_tx_w)      // video uart receive  reg
 ADDRESS_MAP_END
 
 
@@ -1109,6 +1069,7 @@ static MACHINE_CONFIG_START( scorpion1, bfm_sc1_state )
 	MCFG_CPU_PERIODIC_INT_DRIVER(bfm_sc1_state, timer_irq,  1000)               // generate 1000 IRQ's per second
 	MCFG_WATCHDOG_TIME_INIT(PERIOD_OF_555_MONOSTABLE(120000,100e-9))
 
+
 	MCFG_BFMBD1_ADD("vfd0",0)
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("aysnd",AY8912, MASTER_CLOCK/4)
@@ -1116,6 +1077,19 @@ static MACHINE_CONFIG_START( scorpion1, bfm_sc1_state )
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 	MCFG_DEFAULT_LAYOUT(layout_sc1_vfd)
+
+	MCFG_STARPOINT_48STEP_ADD("reel0")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(bfm_sc1_state, reel0_optic_cb))
+	MCFG_STARPOINT_48STEP_ADD("reel1")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(bfm_sc1_state, reel1_optic_cb))
+	MCFG_STARPOINT_48STEP_ADD("reel2")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(bfm_sc1_state, reel2_optic_cb))
+	MCFG_STARPOINT_48STEP_ADD("reel3")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(bfm_sc1_state, reel3_optic_cb))
+	MCFG_STARPOINT_48STEP_ADD("reel4")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(bfm_sc1_state, reel4_optic_cb))
+	MCFG_STARPOINT_48STEP_ADD("reel5")
+	MCFG_STEPPER_OPTIC_CALLBACK(WRITELINE(bfm_sc1_state, reel5_optic_cb))
 MACHINE_CONFIG_END
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -1128,23 +1102,8 @@ static MACHINE_CONFIG_DERIVED( scorpion1_adder2, scorpion1 )
 	MCFG_CPU_PROGRAM_MAP(sc1_adder2)                // setup read and write memorymap
 
 	MCFG_DEFAULT_LAYOUT(layout_sc1_vid)
-	MCFG_SCREEN_ADD("adder", RASTER)
-	MCFG_SCREEN_REFRESH_RATE(50)
-	MCFG_SCREEN_SIZE( 400, 300)
-	MCFG_SCREEN_VISIBLE_AREA(  0, 400-1, 0, 300-1)
-	MCFG_SCREEN_UPDATE_STATIC(adder2)
 
-	MCFG_VIDEO_START( adder2)
-	MCFG_VIDEO_RESET( adder2)
-
-	MCFG_PALETTE_LENGTH(16)
-
-	MCFG_PALETTE_INIT(adder2)
-	MCFG_GFXDECODE(adder2)
-
-	MCFG_CPU_ADD("adder2", M6809, ADDER_CLOCK/4 )       // adder2 board 6809 CPU at 2 Mhz
-	MCFG_CPU_PROGRAM_MAP(adder2_memmap)             // setup adder2 board memorymap
-	MCFG_CPU_VBLANK_INT("adder",adder2_vbl)             // board has a VBL IRQ
+	MCFG_BFM_ADDER2_ADD("adder2")
 MACHINE_CONFIG_END
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -1162,15 +1121,18 @@ MACHINE_CONFIG_END
 
 void bfm_sc1_state::sc1_common_init(int reels, int decrypt, int defaultbank)
 {
-	UINT8 i;
-
 	memset(m_sc1_Inputs, 0, sizeof(m_sc1_Inputs));
 
 	// setup n default 96 half step reels ///////////////////////////////////////////
-	for ( i = 0; i < reels; i++ )
+	/*switch (reels)
 	{
-		stepper_config(machine(), i, &starpoint_interface_48step);
-	}
+	case 6: m_reel5->configure(&starpoint_interface_48step);
+	case 5: m_reel4->configure(&starpoint_interface_48step);
+	case 4: m_reel3->configure(&starpoint_interface_48step);
+	case 3: m_reel2->configure(&starpoint_interface_48step);
+	case 2: m_reel1->configure(&starpoint_interface_48step);
+	case 1: m_reel0->configure(&starpoint_interface_48step);
+	}*/
 	if (decrypt) bfm_decode_mainrom(machine(),"maincpu", m_codec_data);    // decode main rom
 
 	m_defaultbank = defaultbank;
@@ -1257,9 +1219,9 @@ int bfm_sc1_state::sc1_find_project_string( )
 DRIVER_INIT_MEMBER(bfm_sc1_state,toppoker)
 {
 	sc1_common_init(3,1, 3);
-	adder2_decode_char_roms(machine()); // decode GFX roms
 	MechMtr_config(machine(),8);
 	sc1_find_project_string();
+	save_state();
 }
 
 DRIVER_INIT_MEMBER(bfm_sc1_state,lotse)
@@ -1267,6 +1229,7 @@ DRIVER_INIT_MEMBER(bfm_sc1_state,lotse)
 	sc1_common_init(6,1, 3);
 	MechMtr_config(machine(),8);
 	sc1_find_project_string();
+	save_state();
 }
 
 DRIVER_INIT_MEMBER(bfm_sc1_state,lotse_bank0)
@@ -1274,6 +1237,7 @@ DRIVER_INIT_MEMBER(bfm_sc1_state,lotse_bank0)
 	sc1_common_init(6,1, 0);
 	MechMtr_config(machine(),8);
 	sc1_find_project_string();
+	save_state();
 }
 
 
@@ -1282,6 +1246,7 @@ DRIVER_INIT_MEMBER(bfm_sc1_state,nocrypt)
 	sc1_common_init(6,0, 3);
 	MechMtr_config(machine(),8);
 	sc1_find_project_string();
+	save_state();
 }
 
 DRIVER_INIT_MEMBER(bfm_sc1_state,nocrypt_bank0)
@@ -1289,6 +1254,7 @@ DRIVER_INIT_MEMBER(bfm_sc1_state,nocrypt_bank0)
 	sc1_common_init(6,0, 0);
 	MechMtr_config(machine(),8);
 	sc1_find_project_string();
+	save_state();
 }
 
 
@@ -1299,6 +1265,7 @@ DRIVER_INIT_MEMBER(bfm_sc1_state,rou029)
 	sc1_common_init(6,0, 3);
 	MechMtr_config(machine(),8);
 	sc1_find_project_string();
+	save_state();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -1313,6 +1280,7 @@ DRIVER_INIT_MEMBER(bfm_sc1_state,clatt)
 	Scorpion1_SetSwitchState(3,6,1);
 	Scorpion1_SetSwitchState(4,1,1);
 	sc1_find_project_string();
+	save_state();
 }
 
 
@@ -1353,7 +1321,7 @@ ROM_END
 
 ROM_START( sc1roul )
 	ROM_REGION( 0x10000, "maincpu", 0 )
-	ROM_LOAD( "rou029.bin",   0x8000, 0x8000,  CRC(31723f0A) SHA1(e220976116a0aaf24dc0c4af78a9311a360e8104))
+	ROM_LOAD( "rou029.bin",   0x8000, 0x8000,  CRC(31723f0a) SHA1(e220976116a0aaf24dc0c4af78a9311a360e8104))
 ROM_END
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -1394,6 +1362,7 @@ ROM_END
 
 
 
+#if 0
 ROM_START( sc1barcdb )
 	ROM_REGION( 0x10000, "maincpu", 0 )
 	ROM_LOAD( "barcode.p2", 0x0000, 0x8000, CRC(44b79b14) SHA1(ec0745be0dde818c673c62ca584e22871a73e66e) )
@@ -1403,6 +1372,7 @@ ROM_START( sc1barcdb )
 	ROM_LOAD( "barsnd1.bin", 0x00000, 0x10000, CRC(c9de8ff4) SHA1(c3e77e84d4ecc1c779929a96d1c445a1af24865b) )
 	ROM_LOAD( "barsnd2.bin", 0x10000, 0x10000, CRC(56af984a) SHA1(aebd30f3ca767dc5fc77fb01765833ee627a5aee) )
 ROM_END
+#endif
 
 ROM_START( sc1bigmt )
 	ROM_REGION( 0x10000, "maincpu", 0 )
@@ -2630,7 +2600,7 @@ ROM_END
 #define GAME_FLAGS GAME_SUPPORTS_SAVE|GAME_REQUIRES_ARTWORK|GAME_NOT_WORKING|GAME_MECHANICAL
 
 //Adder 2
-GAME( 1996, m_tppokr        , 0         ,  scorpion1_adder2 , toppoker  , bfm_sc1_state, toppoker       , 0,       "BFM/ELAM",    "Top Poker (Dutch, Game Card 95-750-899)", GAME_FLAGS )
+GAME( 1996, m_tppokr        , 0         ,  scorpion1_adder2 , toppoker  , bfm_sc1_state, toppoker       , 0,       "BFM/ELAM",    "Top Poker (Dutch, Game Card 95-750-899)", GAME_SUPPORTS_SAVE|GAME_NOT_WORKING )
 
 
 /********************************************************************************************************************************************************************************************************************

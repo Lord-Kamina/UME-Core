@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia, David Haywood
 /***************************************************************************
 
                           -= IGS009 Based Games =-
@@ -35,49 +37,61 @@ class igs009_state : public driver_device
 public:
 	igs009_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette"),
 		m_bg_scroll(*this, "bg_scroll"),
-		m_gp98_reel1_ram(*this, "gp98_reel1_ram"),
-		m_gp98_reel2_ram(*this, "gp98_reel2_ram"),
-		m_gp98_reel3_ram(*this, "gp98_reel3_ram"),
-		m_gp98_reel4_ram(*this, "gp98_reel4_ram"),
+		m_reel1_ram(*this, "reel1_ram"),
+		m_reel2_ram(*this, "reel2_ram"),
+		m_reel3_ram(*this, "reel3_ram"),
+		m_reel4_ram(*this, "reel4_ram"),
 		m_bg_scroll2(*this, "bg_scroll2"),
 		m_fg_tile_ram(*this, "fg_tile_ram"),
-		m_fg_color_ram(*this, "fg_color_ram"),
-		m_maincpu(*this, "maincpu") { }
+		m_fg_color_ram(*this, "fg_color_ram") { }
+
+	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 
 	required_shared_ptr<UINT8> m_bg_scroll;
-	required_shared_ptr<UINT8> m_gp98_reel1_ram;
-	required_shared_ptr<UINT8> m_gp98_reel2_ram;
-	required_shared_ptr<UINT8> m_gp98_reel3_ram;
-	required_shared_ptr<UINT8> m_gp98_reel4_ram;
+	required_shared_ptr<UINT8> m_reel1_ram;
+	required_shared_ptr<UINT8> m_reel2_ram;
+	required_shared_ptr<UINT8> m_reel3_ram;
+	required_shared_ptr<UINT8> m_reel4_ram;
 	required_shared_ptr<UINT8> m_bg_scroll2;
 	required_shared_ptr<UINT8> m_fg_tile_ram;
 	required_shared_ptr<UINT8> m_fg_color_ram;
-	tilemap_t *m_gp98_reel1_tilemap;
-	tilemap_t *m_gp98_reel2_tilemap;
-	tilemap_t *m_gp98_reel3_tilemap;
-	tilemap_t *m_gp98_reel4_tilemap;
+
+	tilemap_t *m_reel1_tilemap;
+	tilemap_t *m_reel2_tilemap;
+	tilemap_t *m_reel3_tilemap;
+	tilemap_t *m_reel4_tilemap;
 	tilemap_t *m_fg_tilemap;
 	int m_video_enable;
 	int m_nmi_enable;
 	int m_hopper;
 	UINT8 m_out[3];
 	UINT8 m_igs_magic[2];
-	DECLARE_WRITE8_MEMBER(gp98_reel1_ram_w);
-	DECLARE_WRITE8_MEMBER(gp98_reel2_ram_w);
-	DECLARE_WRITE8_MEMBER(gp98_reel3_ram_w);
-	DECLARE_WRITE8_MEMBER(gp98_reel4_ram_w);
+
+	DECLARE_WRITE8_MEMBER(reel1_ram_w);
+	DECLARE_WRITE8_MEMBER(reel2_ram_w);
+	DECLARE_WRITE8_MEMBER(reel3_ram_w);
+	DECLARE_WRITE8_MEMBER(reel4_ram_w);
 	DECLARE_WRITE8_MEMBER(bg_scroll_w);
 	DECLARE_WRITE8_MEMBER(fg_tile_w);
 	DECLARE_WRITE8_MEMBER(fg_color_w);
-	DECLARE_WRITE8_MEMBER(jingbell_nmi_and_coins_w);
-	DECLARE_WRITE8_MEMBER(jingbell_video_and_leds_w);
-	DECLARE_WRITE8_MEMBER(jingbell_leds_w);
-	DECLARE_WRITE8_MEMBER(jingbell_magic_w);
-	DECLARE_READ8_MEMBER(jingbell_magic_r);
+	DECLARE_WRITE8_MEMBER(nmi_and_coins_w);
+	DECLARE_WRITE8_MEMBER(video_and_leds_w);
+	DECLARE_WRITE8_MEMBER(leds_w);
+	DECLARE_WRITE8_MEMBER(magic_w);
+	DECLARE_READ8_MEMBER(magic_r);
+
 	void show_out();
 	DECLARE_CUSTOM_INPUT_MEMBER(hopper_r);
-	DECLARE_DRIVER_INIT(jingbell);
+	INTERRUPT_GEN_MEMBER(interrupt);
+
 	TILE_GET_INFO_MEMBER(get_jingbell_reel1_tile_info);
 	TILE_GET_INFO_MEMBER(get_gp98_reel1_tile_info);
 	TILE_GET_INFO_MEMBER(get_jingbell_reel2_tile_info);
@@ -87,12 +101,14 @@ public:
 	TILE_GET_INFO_MEMBER(get_jingbell_reel4_tile_info);
 	TILE_GET_INFO_MEMBER(get_gp98_reel4_tile_info);
 	TILE_GET_INFO_MEMBER(get_fg_tile_info);
+
+	DECLARE_DRIVER_INIT(jingbell);
+	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
 	DECLARE_VIDEO_START(gp98);
-	UINT32 screen_update_jingbell(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	INTERRUPT_GEN_MEMBER(jingbell_interrupt);
-	required_device<cpu_device> m_maincpu;
+
+	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 };
 
 
@@ -102,18 +118,17 @@ public:
 
 
 
-WRITE8_MEMBER(igs009_state::gp98_reel1_ram_w)
+WRITE8_MEMBER(igs009_state::reel1_ram_w)
 {
-	m_gp98_reel1_ram[offset] = data;
-	m_gp98_reel1_tilemap->mark_tile_dirty(offset);
+	m_reel1_ram[offset] = data;
+	m_reel1_tilemap->mark_tile_dirty(offset);
 }
 
 TILE_GET_INFO_MEMBER(igs009_state::get_jingbell_reel1_tile_info)
 {
-	int code = m_gp98_reel1_ram[tile_index];
+	int code = m_reel1_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			(code)+(((tile_index+1)&0x3)*0x100),
 			(code & 0x80) ? 0xc : 0,
 			0);
@@ -122,28 +137,26 @@ TILE_GET_INFO_MEMBER(igs009_state::get_jingbell_reel1_tile_info)
 
 TILE_GET_INFO_MEMBER(igs009_state::get_gp98_reel1_tile_info)
 {
-	int code = m_gp98_reel1_ram[tile_index];
+	int code = m_reel1_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			(code*4)+(tile_index&0x3),
 			0,
 			0);
 }
 
 
-WRITE8_MEMBER(igs009_state::gp98_reel2_ram_w)
+WRITE8_MEMBER(igs009_state::reel2_ram_w)
 {
-	m_gp98_reel2_ram[offset] = data;
-	m_gp98_reel2_tilemap->mark_tile_dirty(offset);
+	m_reel2_ram[offset] = data;
+	m_reel2_tilemap->mark_tile_dirty(offset);
 }
 
 TILE_GET_INFO_MEMBER(igs009_state::get_jingbell_reel2_tile_info)
 {
-	int code = m_gp98_reel2_ram[tile_index];
+	int code = m_reel2_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			(code)+(((tile_index+1)&0x3)*0x100),
 			(code & 0x80) ? 0xc : 0,
 			0);
@@ -151,10 +164,9 @@ TILE_GET_INFO_MEMBER(igs009_state::get_jingbell_reel2_tile_info)
 
 TILE_GET_INFO_MEMBER(igs009_state::get_gp98_reel2_tile_info)
 {
-	int code = m_gp98_reel2_ram[tile_index];
+	int code = m_reel2_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			(code*4)+(tile_index&0x3),
 			0,
 			0);
@@ -162,18 +174,17 @@ TILE_GET_INFO_MEMBER(igs009_state::get_gp98_reel2_tile_info)
 
 
 
-WRITE8_MEMBER(igs009_state::gp98_reel3_ram_w)
+WRITE8_MEMBER(igs009_state::reel3_ram_w)
 {
-	m_gp98_reel3_ram[offset] = data;
-	m_gp98_reel3_tilemap->mark_tile_dirty(offset);
+	m_reel3_ram[offset] = data;
+	m_reel3_tilemap->mark_tile_dirty(offset);
 }
 
 TILE_GET_INFO_MEMBER(igs009_state::get_jingbell_reel3_tile_info)
 {
-	int code = m_gp98_reel3_ram[tile_index];
+	int code = m_reel3_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			(code)+(((tile_index+1)&0x3)*0x100),
 			(code & 0x80) ? 0xc : 0,
 			0);
@@ -181,10 +192,9 @@ TILE_GET_INFO_MEMBER(igs009_state::get_jingbell_reel3_tile_info)
 
 TILE_GET_INFO_MEMBER(igs009_state::get_gp98_reel3_tile_info)
 {
-	int code = m_gp98_reel3_ram[tile_index];
+	int code = m_reel3_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			(code*4)+(tile_index&0x3),
 			0,
 			0);
@@ -192,18 +202,17 @@ TILE_GET_INFO_MEMBER(igs009_state::get_gp98_reel3_tile_info)
 
 
 
-WRITE8_MEMBER(igs009_state::gp98_reel4_ram_w)
+WRITE8_MEMBER(igs009_state::reel4_ram_w)
 {
-	m_gp98_reel4_ram[offset] = data;
-	m_gp98_reel4_tilemap->mark_tile_dirty(offset);
+	m_reel4_ram[offset] = data;
+	m_reel4_tilemap->mark_tile_dirty(offset);
 }
 
 TILE_GET_INFO_MEMBER(igs009_state::get_jingbell_reel4_tile_info)
 {
-	int code = m_gp98_reel4_ram[tile_index];
+	int code = m_reel4_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			(code)+(((tile_index+1)&0x3)*0x100),
 			(code & 0x80) ? 0xc : 0,
 			0);
@@ -211,10 +220,9 @@ TILE_GET_INFO_MEMBER(igs009_state::get_jingbell_reel4_tile_info)
 
 TILE_GET_INFO_MEMBER(igs009_state::get_gp98_reel4_tile_info)
 {
-	int code = m_gp98_reel4_ram[tile_index];
+	int code = m_reel4_ram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			(code*4)+(tile_index&0x3),
 			0,
 			0);
@@ -253,39 +261,39 @@ WRITE8_MEMBER(igs009_state::fg_color_w)
 
 void igs009_state::video_start()
 {
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8,  8,  0x80,0x20);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8,  8,  0x80,0x20);
 	m_fg_tilemap->set_transparent_pen(0);
 
-	m_gp98_reel1_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_jingbell_reel1_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
-	m_gp98_reel2_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_jingbell_reel2_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
-	m_gp98_reel3_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_jingbell_reel3_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
-	m_gp98_reel4_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_jingbell_reel4_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
+	m_reel1_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_jingbell_reel1_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
+	m_reel2_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_jingbell_reel2_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
+	m_reel3_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_jingbell_reel3_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
+	m_reel4_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_jingbell_reel4_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
 
-	m_gp98_reel1_tilemap->set_scroll_cols(128);
-	m_gp98_reel2_tilemap->set_scroll_cols(128);
-	m_gp98_reel3_tilemap->set_scroll_cols(128);
-	m_gp98_reel4_tilemap->set_scroll_cols(128);
+	m_reel1_tilemap->set_scroll_cols(128);
+	m_reel2_tilemap->set_scroll_cols(128);
+	m_reel3_tilemap->set_scroll_cols(128);
+	m_reel4_tilemap->set_scroll_cols(128);
 }
 
 
 VIDEO_START_MEMBER(igs009_state,gp98)
 {
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8,  8,  0x80,0x20);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8,  8,  0x80,0x20);
 	m_fg_tilemap->set_transparent_pen(0);
 
-	m_gp98_reel1_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_gp98_reel1_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
-	m_gp98_reel2_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_gp98_reel2_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
-	m_gp98_reel3_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_gp98_reel3_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
-	m_gp98_reel4_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(igs009_state::get_gp98_reel4_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
+	m_reel1_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_gp98_reel1_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
+	m_reel2_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_gp98_reel2_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
+	m_reel3_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_gp98_reel3_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
+	m_reel4_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(igs009_state::get_gp98_reel4_tile_info),this),TILEMAP_SCAN_ROWS,8,32, 128, 8);
 
-	m_gp98_reel1_tilemap->set_scroll_cols(128);
-	m_gp98_reel2_tilemap->set_scroll_cols(128);
-	m_gp98_reel3_tilemap->set_scroll_cols(128);
-	m_gp98_reel4_tilemap->set_scroll_cols(128);
+	m_reel1_tilemap->set_scroll_cols(128);
+	m_reel2_tilemap->set_scroll_cols(128);
+	m_reel3_tilemap->set_scroll_cols(128);
+	m_reel4_tilemap->set_scroll_cols(128);
 }
 
 
-UINT32 igs009_state::screen_update_jingbell(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 igs009_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int layers_ctrl = m_video_enable ? -1 : 0;
 
@@ -309,10 +317,10 @@ UINT32 igs009_state::screen_update_jingbell(screen_device &screen, bitmap_ind16 
 
 		for (i= 0;i < 0x80;i++)
 		{
-			m_gp98_reel1_tilemap->set_scrolly(i, m_bg_scroll[i]*2);
-			m_gp98_reel2_tilemap->set_scrolly(i, m_bg_scroll[i+0x80]*2);
-			m_gp98_reel3_tilemap->set_scrolly(i, m_bg_scroll[i+0x100]*2);
-			m_gp98_reel4_tilemap->set_scrolly(i, m_bg_scroll[i+0x180]*2);
+			m_reel1_tilemap->set_scrolly(i, m_bg_scroll[i]*2);
+			m_reel2_tilemap->set_scrolly(i, m_bg_scroll[i+0x80]*2);
+			m_reel3_tilemap->set_scrolly(i, m_bg_scroll[i+0x100]*2);
+			m_reel4_tilemap->set_scrolly(i, m_bg_scroll[i+0x180]*2);
 		}
 
 
@@ -326,23 +334,23 @@ UINT32 igs009_state::screen_update_jingbell(screen_device &screen, bitmap_ind16 
 			/* draw top of screen */
 			clip.set(visarea.min_x, visarea.max_x, startclipmin, startclipmin+2);
 
-			bitmap.fill(machine().pens[rowenable], clip);
+			bitmap.fill(m_palette->pen(rowenable), clip);
 
 			if (rowenable==0)
 			{ // 0 and 1 are the same? or is there a global switchoff?
-				m_gp98_reel1_tilemap->draw(bitmap, clip, 0,0);
+				m_reel1_tilemap->draw(screen, bitmap, clip, 0,0);
 			}
 			else if (rowenable==1)
 			{
-				m_gp98_reel2_tilemap->draw(bitmap, clip, 0,0);
+				m_reel2_tilemap->draw(screen, bitmap, clip, 0,0);
 			}
 			else if (rowenable==2)
 			{
-				m_gp98_reel3_tilemap->draw(bitmap, clip, 0,0);
+				m_reel3_tilemap->draw(screen, bitmap, clip, 0,0);
 			}
 			else if (rowenable==3)
 			{
-				m_gp98_reel4_tilemap->draw(bitmap, clip, 0,0);
+				m_reel4_tilemap->draw(screen, bitmap, clip, 0,0);
 			}
 
 
@@ -350,10 +358,10 @@ UINT32 igs009_state::screen_update_jingbell(screen_device &screen, bitmap_ind16 
 		}
 
 	}
-	else                    bitmap.fill(get_black_pen(machine()), cliprect);
+	else                    bitmap.fill(m_palette->black_pen(), cliprect);
 
 
-	if (layers_ctrl & 2)    m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	if (layers_ctrl & 2)    m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }
@@ -365,7 +373,7 @@ UINT32 igs009_state::screen_update_jingbell(screen_device &screen, bitmap_ind16 
 
 CUSTOM_INPUT_MEMBER(igs009_state::hopper_r)
 {
-	return m_hopper && !(machine().primary_screen->frame_number()%10);
+	return m_hopper && !(m_screen->frame_number()%10);
 }
 
 
@@ -376,7 +384,7 @@ void igs009_state::show_out()
 #endif
 }
 
-WRITE8_MEMBER(igs009_state::jingbell_nmi_and_coins_w)
+WRITE8_MEMBER(igs009_state::nmi_and_coins_w)
 {
 	if ((m_nmi_enable ^ data) & (~0xdd))
 	{
@@ -397,7 +405,7 @@ WRITE8_MEMBER(igs009_state::jingbell_nmi_and_coins_w)
 	show_out();
 }
 
-WRITE8_MEMBER(igs009_state::jingbell_video_and_leds_w)
+WRITE8_MEMBER(igs009_state::video_and_leds_w)
 {
 	set_led_status(machine(), 4,      data & 0x01); // start?
 	set_led_status(machine(), 5,      data & 0x04); // l_bet?
@@ -409,7 +417,7 @@ WRITE8_MEMBER(igs009_state::jingbell_video_and_leds_w)
 	show_out();
 }
 
-WRITE8_MEMBER(igs009_state::jingbell_leds_w)
+WRITE8_MEMBER(igs009_state::leds_w)
 {
 	set_led_status(machine(), 0, data & 0x01);  // stop_1
 	set_led_status(machine(), 1, data & 0x02);  // stop_2
@@ -422,7 +430,7 @@ WRITE8_MEMBER(igs009_state::jingbell_leds_w)
 }
 
 
-WRITE8_MEMBER(igs009_state::jingbell_magic_w)
+WRITE8_MEMBER(igs009_state::magic_w)
 {
 	m_igs_magic[offset] = data;
 
@@ -440,7 +448,7 @@ WRITE8_MEMBER(igs009_state::jingbell_magic_w)
 	}
 }
 
-READ8_MEMBER(igs009_state::jingbell_magic_r)
+READ8_MEMBER(igs009_state::magic_r)
 {
 	switch(m_igs_magic[0])
 	{
@@ -473,32 +481,32 @@ static ADDRESS_MAP_START( jingbell_portmap, AS_IO, 8, igs009_state )
 
 	AM_RANGE( 0x1000, 0x11ff ) AM_RAM_WRITE(bg_scroll_w ) AM_SHARE("bg_scroll")
 
-	AM_RANGE( 0x2000, 0x23ff ) AM_RAM_WRITE(paletteram_xBBBBBGGGGGRRRRR_byte_split_lo_w ) AM_SHARE("paletteram")
-	AM_RANGE( 0x2400, 0x27ff ) AM_RAM_WRITE(paletteram_xBBBBBGGGGGRRRRR_byte_split_hi_w ) AM_SHARE("paletteram2")
+	AM_RANGE( 0x2000, 0x23ff ) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
+	AM_RANGE( 0x2400, 0x27ff ) AM_RAM_DEVWRITE("palette", palette_device, write_ext) AM_SHARE("palette_ext")
 
-	AM_RANGE( 0x3000, 0x33ff ) AM_RAM_WRITE(gp98_reel1_ram_w )  AM_SHARE("gp98_reel1_ram")
-	AM_RANGE( 0x3400, 0x37ff ) AM_RAM_WRITE(gp98_reel2_ram_w )  AM_SHARE("gp98_reel2_ram")
-	AM_RANGE( 0x3800, 0x3bff ) AM_RAM_WRITE(gp98_reel3_ram_w )  AM_SHARE("gp98_reel3_ram")
-	AM_RANGE( 0x3c00, 0x3fff ) AM_RAM_WRITE(gp98_reel4_ram_w )  AM_SHARE("gp98_reel4_ram")
+	AM_RANGE( 0x3000, 0x33ff ) AM_RAM_WRITE(reel1_ram_w )  AM_SHARE("reel1_ram")
+	AM_RANGE( 0x3400, 0x37ff ) AM_RAM_WRITE(reel2_ram_w )  AM_SHARE("reel2_ram")
+	AM_RANGE( 0x3800, 0x3bff ) AM_RAM_WRITE(reel3_ram_w )  AM_SHARE("reel3_ram")
+	AM_RANGE( 0x3c00, 0x3fff ) AM_RAM_WRITE(reel4_ram_w )  AM_SHARE("reel4_ram")
 
 	AM_RANGE( 0x4000, 0x407f ) AM_RAM AM_SHARE("bg_scroll2")
 
 	AM_RANGE( 0x5000, 0x5fff ) AM_RAM_WRITE(fg_tile_w )  AM_SHARE("fg_tile_ram")
 
-	AM_RANGE( 0x6480, 0x6480 ) AM_WRITE(jingbell_nmi_and_coins_w )
+	AM_RANGE( 0x6480, 0x6480 ) AM_WRITE(nmi_and_coins_w )
 
 	AM_RANGE( 0x6481, 0x6481 ) AM_READ_PORT( "SERVICE" )
 	AM_RANGE( 0x6482, 0x6482 ) AM_READ_PORT( "COINS" )
 	AM_RANGE( 0x6490, 0x6490 ) AM_READ_PORT( "BUTTONS1" )
-	AM_RANGE( 0x6491, 0x6491 ) AM_WRITE(jingbell_video_and_leds_w )
-	AM_RANGE( 0x6492, 0x6492 ) AM_WRITE(jingbell_leds_w )
+	AM_RANGE( 0x6491, 0x6491 ) AM_WRITE(video_and_leds_w )
+	AM_RANGE( 0x6492, 0x6492 ) AM_WRITE(leds_w )
 	AM_RANGE( 0x64a0, 0x64a0 ) AM_READ_PORT( "BUTTONS2" )
 
 	AM_RANGE( 0x64b0, 0x64b1 ) AM_DEVWRITE("ymsnd", ym2413_device, write)
 
 	AM_RANGE( 0x64c0, 0x64c0 ) AM_DEVREADWRITE("oki", okim6295_device, read, write)
 
-	AM_RANGE( 0x64d0, 0x64d1 ) AM_READWRITE(jingbell_magic_r, jingbell_magic_w )    // DSW1-5
+	AM_RANGE( 0x64d0, 0x64d1 ) AM_READWRITE(magic_r, magic_w )    // DSW1-5
 
 	AM_RANGE( 0x7000, 0x7fff ) AM_RAM_WRITE(fg_color_w ) AM_SHARE("fg_color_ram")
 
@@ -512,41 +520,41 @@ ADDRESS_MAP_END
 
 static INPUT_PORTS_START( jingbell )
 	PORT_START("DSW1")
-	PORT_DIPNAME( 0x01, 0x00, DEF_STR( Demo_Sounds ) )
+	PORT_DIPNAME( 0x01, 0x00, DEF_STR( Demo_Sounds ) )  PORT_DIPLOCATION("DSW1:1")
 	PORT_DIPSETTING(    0x01, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x02, 0x00, "W-Up Bonus" )
+	PORT_DIPNAME( 0x02, 0x00, "W-Up Bonus" )        PORT_DIPLOCATION("DSW1:2")
 	PORT_DIPSETTING(    0x02, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )   // it's shown in attract mode
-	PORT_DIPNAME( 0x04, 0x04, "Min Bet" )
+	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
+	PORT_DIPNAME( 0x04, 0x04, "Min Bet" )           PORT_DIPLOCATION("DSW1:3")
 	PORT_DIPSETTING(    0x04, "1" )
 	PORT_DIPSETTING(    0x00, "8" )
-	PORT_DIPNAME( 0x08, 0x08, "Spin Speed" )
+	PORT_DIPNAME( 0x08, 0x08, "Spin Speed" )        PORT_DIPLOCATION("DSW1:4")
 	PORT_DIPSETTING(    0x08, "Slow" )
 	PORT_DIPSETTING(    0x00, "Quick" )
-	PORT_DIPNAME( 0x10, 0x00, "Strip Girl" )
+	PORT_DIPNAME( 0x10, 0x00, "Strip Girl" )        PORT_DIPLOCATION("DSW1:5")
 	PORT_DIPSETTING(    0x10, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x20, 0x20, "Payout Mode" )
+	PORT_DIPNAME( 0x20, 0x20, "Payout Mode" )       PORT_DIPLOCATION("DSW1:6")
 	PORT_DIPSETTING(    0x20, DEF_STR( Normal ) )
 	PORT_DIPSETTING(    0x00, "Auto" )
-	PORT_DIPNAME( 0xc0, 0xc0, "Player's Panel" )
+	PORT_DIPNAME( 0xc0, 0xc0, "Player's Panel" )    PORT_DIPLOCATION("DSW1:7,8")
 	PORT_DIPSETTING(    0x00, "Type A" )
 	PORT_DIPSETTING(    0xc0, "Type A" )
 	PORT_DIPSETTING(    0x80, "Type B" )
 	PORT_DIPSETTING(    0x40, "Type C" )
 
 	PORT_START("DSW2")
-	PORT_DIPNAME( 0x07, 0x07, "Main Game Rate (%)" )
-	PORT_DIPSETTING(    0x07, "89" )
-	PORT_DIPSETTING(    0x06, "90" )
-	PORT_DIPSETTING(    0x05, "91" )
-	PORT_DIPSETTING(    0x04, "92" )
-	PORT_DIPSETTING(    0x03, "93" )
-	PORT_DIPSETTING(    0x02, "94" )
-	PORT_DIPSETTING(    0x01, "95" )
-	PORT_DIPSETTING(    0x00, "96" )
-	PORT_DIPNAME( 0x38, 0x38, "W-Up Chance (%)" )
+	PORT_DIPNAME( 0x07, 0x07, "Main Game Rate (%)" )    PORT_DIPLOCATION("DSW2:1,2,3")
+	PORT_DIPSETTING(    0x07, "55" )
+	PORT_DIPSETTING(    0x06, "60" )
+	PORT_DIPSETTING(    0x05, "65" )
+	PORT_DIPSETTING(    0x04, "70" )
+	PORT_DIPSETTING(    0x03, "75" )
+	PORT_DIPSETTING(    0x02, "80" )
+	PORT_DIPSETTING(    0x01, "85" )
+	PORT_DIPSETTING(    0x00, "90" )
+	PORT_DIPNAME( 0x38, 0x38, "W-Up Chance (%)" )   PORT_DIPLOCATION("DSW2:4,5,6")
 	PORT_DIPSETTING(    0x38, "93" )
 	PORT_DIPSETTING(    0x30, "94" )
 	PORT_DIPSETTING(    0x28, "95" )
@@ -555,14 +563,14 @@ static INPUT_PORTS_START( jingbell )
 	PORT_DIPSETTING(    0x10, "98" )
 	PORT_DIPSETTING(    0x08, "99" )
 	PORT_DIPSETTING(    0x00, "100" )
-	PORT_DIPNAME( 0xc0, 0xc0, "Key In Limit" )
+	PORT_DIPNAME( 0xc0, 0xc0, "Key In Limit" )      PORT_DIPLOCATION("DSW2:7,8")
 	PORT_DIPSETTING(    0xc0, "1k" )
 	PORT_DIPSETTING(    0x80, "3k" )
 	PORT_DIPSETTING(    0x40, "5k" )
 	PORT_DIPSETTING(    0x00, "10k" )
 
 	PORT_START("DSW3")
-	PORT_DIPNAME( 0x07, 0x07, "Key In Rate" )
+	PORT_DIPNAME( 0x07, 0x07, "Key In Rate" )       PORT_DIPLOCATION("DSW3:1,2,3")
 	PORT_DIPSETTING(    0x07, "1" )
 	PORT_DIPSETTING(    0x06, "5" )
 	PORT_DIPSETTING(    0x05, "10" )
@@ -571,7 +579,7 @@ static INPUT_PORTS_START( jingbell )
 	PORT_DIPSETTING(    0x02, "100" )
 	PORT_DIPSETTING(    0x01, "200" )
 	PORT_DIPSETTING(    0x00, "500" )
-	PORT_DIPNAME( 0x38, 0x38, "Coin 1 Rate" )
+	PORT_DIPNAME( 0x38, 0x38, "Coin 1 Rate" )       PORT_DIPLOCATION("DSW3:4,5,6")
 	PORT_DIPSETTING(    0x38, "1" )
 	PORT_DIPSETTING(    0x30, "2" )
 	PORT_DIPSETTING(    0x28, "5" )
@@ -580,20 +588,20 @@ static INPUT_PORTS_START( jingbell )
 	PORT_DIPSETTING(    0x10, "25" )
 	PORT_DIPSETTING(    0x08, "50" )
 	PORT_DIPSETTING(    0x00, "100" )
-	PORT_DIPNAME( 0xc0, 0xc0, "System Limit" )
+	PORT_DIPNAME( 0xc0, 0xc0, "System Limit" )      PORT_DIPLOCATION("DSW3:7,8")
 	PORT_DIPSETTING(    0xc0, "5k" )
 	PORT_DIPSETTING(    0x80, "10k" )
 	PORT_DIPSETTING(    0x40, "30k" )
-	PORT_DIPSETTING(    0x00, "50k" )
+	PORT_DIPSETTING(    0x00, "Unlimited" )
 
 	PORT_START("DSW4")
-	PORT_DIPNAME( 0x01, 0x01, "Min Play For Fever" )
+	PORT_DIPNAME( 0x01, 0x01, "Min Play For Fever" )    PORT_DIPLOCATION("DSW4:1")
 	PORT_DIPSETTING(    0x01, "8" )
 	PORT_DIPSETTING(    0x00, "16" )
-	PORT_DIPNAME( 0x02, 0x02, DEF_STR( Unknown ) )
+	PORT_DIPNAME( 0x02, 0x02, "Max Bet" )           PORT_DIPLOCATION("DSW4:2")
 	PORT_DIPSETTING(    0x02, "16" )
 	PORT_DIPSETTING(    0x00, "32" )
-	PORT_DIPNAME( 0x1c, 0x1c, "Coin 2 Rate" )
+	PORT_DIPNAME( 0x1c, 0x1c, "Coin 2 Rate" )       PORT_DIPLOCATION("DSW4:3,4,5")
 	PORT_DIPSETTING(    0x1c, "1" )
 	PORT_DIPSETTING(    0x18, "2" )
 	PORT_DIPSETTING(    0x14, "5" )
@@ -602,24 +610,39 @@ static INPUT_PORTS_START( jingbell )
 	PORT_DIPSETTING(    0x08, "40" )
 	PORT_DIPSETTING(    0x04, "50" )
 	PORT_DIPSETTING(    0x00, "100" )
-	PORT_DIPNAME( 0x60, 0x60, "Key Out Rate" )
+	PORT_DIPNAME( 0x60, 0x60, "Key Out Rate" )      PORT_DIPLOCATION("DSW4:6,7")
 	PORT_DIPSETTING(    0x60, "1" )
 	PORT_DIPSETTING(    0x40, "10" )
 	PORT_DIPSETTING(    0x20, "50" )
 	PORT_DIPSETTING(    0x00, "100" )
-	PORT_DIPNAME( 0x80, 0x80, "Play Line" )
+	PORT_DIPNAME( 0x80, 0x80, "Play Line" )         PORT_DIPLOCATION("DSW4:8")
 	PORT_DIPSETTING(    0x80, "8" )
 	PORT_DIPSETTING(    0x00, "16" )
 
+// These are from the manual for v201us - DSW1-DSW4 match but DSW5 doesn't seem to match or actuallly do anything
 	PORT_START("DSW5")
-	PORT_DIPUNKNOWN( 0x01, 0x01 )
-	PORT_DIPUNKNOWN( 0x02, 0x02 )
-	PORT_DIPUNKNOWN( 0x04, 0x04 )
-	PORT_DIPUNKNOWN( 0x08, 0x08 )
-	PORT_DIPUNKNOWN( 0x10, 0x10 )
-	PORT_DIPUNKNOWN( 0x20, 0x20 )
-	PORT_DIPUNKNOWN( 0x40, 0x40 )
-	PORT_DIPUNKNOWN( 0x80, 0x80 )
+	PORT_DIPNAME( 0x03, 0x00, "Maximum Play" )      PORT_DIPLOCATION("DSW5:1,2")
+	PORT_DIPSETTING(    0x00, "64" )
+	PORT_DIPSETTING(    0x01, "32" )
+	PORT_DIPSETTING(    0x02, "16" )
+	PORT_DIPSETTING(    0x03, "8" )
+	PORT_DIPNAME( 0x04, 0x04, "Skill Stop" )        PORT_DIPLOCATION("DSW5:3")
+	PORT_DIPSETTING(    0x04, "On" )
+	PORT_DIPSETTING(    0x00, "Off" )
+	PORT_DIPNAME( 0x08, 0x00, "Hands Count" )       PORT_DIPLOCATION("DSW5:4")
+	PORT_DIPSETTING(    0x08, "No" )
+	PORT_DIPSETTING(    0x00, "Yes" )
+	PORT_DIPNAME( 0x30, 0x00, "Hands Coin Rate" )   PORT_DIPLOCATION("DSW5:5,6")
+	PORT_DIPSETTING(    0x00, "25" )
+	PORT_DIPSETTING(    0x20, "10" )
+	PORT_DIPSETTING(    0x10, "5" )
+	PORT_DIPSETTING(    0x30, "1" )
+	PORT_DIPNAME( 0x40, 0x40, "Hands Coin Value" )  PORT_DIPLOCATION("DSW5:7")
+	PORT_DIPSETTING(    0x00, "40" )
+	PORT_DIPSETTING(    0x40, "20" )
+	PORT_DIPNAME( 0x80, 0x80, "Unused" )            PORT_DIPLOCATION("DSW5:8")
+	PORT_DIPSETTING(    0x00, "On" )
+	PORT_DIPSETTING(    0x80, "Off" )
 
 	PORT_START("SERVICE")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNKNOWN )
@@ -636,7 +659,7 @@ static INPUT_PORTS_START( jingbell )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN       )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_COIN2         )
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_GAMBLE_KEYIN  )
-	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_GAMBLE_KEYOUT ) PORT_NAME("Key Down")    // pays out
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_GAMBLE_KEYOUT ) PORT_NAME("Key Down")
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
@@ -652,11 +675,11 @@ static INPUT_PORTS_START( jingbell )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
 	PORT_START("BUTTONS2")
-	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_START1      ) PORT_NAME("Start / H_Dup")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_START1      ) PORT_NAME("Start / Half D-Up Bet")
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_GAMBLE_LOW  ) PORT_NAME("Small")
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_BUTTON1     ) PORT_NAME("Left Bet / D_Dup")
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_BUTTON1     ) PORT_NAME("Left Bet / 2X D-Up Bet")
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_GAMBLE_TAKE )
-	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_BUTTON2     ) PORT_NAME("Right Bet / Dup")
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_BUTTON2     ) PORT_NAME("Right Bet / D-Up Bet")
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_GAMBLE_HIGH ) PORT_NAME("Big")
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
@@ -729,6 +752,15 @@ GFXDECODE_END
                                 Machine Drivers
 ***************************************************************************/
 
+void igs009_state::machine_start()
+{
+	save_item(NAME(m_video_enable));
+	save_item(NAME(m_nmi_enable));
+	save_item(NAME(m_hopper));
+	save_item(NAME(m_out));
+	save_item(NAME(m_igs_magic));
+}
+
 void igs009_state::machine_reset()
 {
 	m_nmi_enable        =   0;
@@ -736,7 +768,7 @@ void igs009_state::machine_reset()
 	m_video_enable  =   1;
 }
 
-INTERRUPT_GEN_MEMBER(igs009_state::jingbell_interrupt)
+INTERRUPT_GEN_MEMBER(igs009_state::interrupt)
 {
 		if (m_nmi_enable & 0x80)
 		device.execute().set_input_line(INPUT_LINE_NMI, PULSE_LINE);
@@ -747,7 +779,7 @@ static MACHINE_CONFIG_START( jingbell, igs009_state )
 	MCFG_CPU_ADD("maincpu", Z180, XTAL_12MHz / 2)   /* HD64180RP8, 8 MHz? */
 	MCFG_CPU_PROGRAM_MAP(jingbell_map)
 	MCFG_CPU_IO_MAP(jingbell_portmap)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", igs009_state, jingbell_interrupt)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", igs009_state, interrupt)
 
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
@@ -758,10 +790,12 @@ static MACHINE_CONFIG_START( jingbell, igs009_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(512, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 512-1, 0, 256-16-1)
-	MCFG_SCREEN_UPDATE_DRIVER(igs009_state, screen_update_jingbell)
+	MCFG_SCREEN_UPDATE_DRIVER(igs009_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(jingbell)
-	MCFG_PALETTE_LENGTH(0x400)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", jingbell)
+	MCFG_PALETTE_ADD("palette", 0x400)
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
 
 
 	/* sound hardware */
@@ -774,7 +808,7 @@ static MACHINE_CONFIG_START( jingbell, igs009_state )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( gp98, jingbell )
-	MCFG_GFXDECODE(gp98)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", gp98)
 
 	MCFG_VIDEO_START_OVERRIDE(igs009_state,gp98)
 MACHINE_CONFIG_END
@@ -931,5 +965,5 @@ ROM_START( gp98 )
 	// no OKI on this
 ROM_END
 
-GAME( 1995?, jingbell, 0, jingbell, jingbell, igs009_state, jingbell, ROT0, "IGS",            "Jingle Bell (Italy, V133I)", 0 )
-GAME( 1998,  gp98,     0, gp98,     jingbell, driver_device, 0,        ROT0, "Romtec Co. Ltd", "Grand Prix '98 (V100K)",     GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS )
+GAME( 1995?, jingbell, 0, jingbell, jingbell, igs009_state, jingbell, ROT0, "IGS",            "Jingle Bell (Italy, V133I)", GAME_SUPPORTS_SAVE )
+GAME( 1998,  gp98,     0, gp98,     jingbell, driver_device, 0,        ROT0, "Romtec Co. Ltd", "Grand Prix '98 (V100K)",     GAME_NOT_WORKING | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )

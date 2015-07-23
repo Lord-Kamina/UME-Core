@@ -1,10 +1,12 @@
-	/***************************************************************************
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont,Ryan Holtz
+/***************************************************************************
 
-	gba.c
+    gba.c
 
-	File to handle emulation of the video hardware of the Game Boy Advance
+    File to handle emulation of the video hardware of the Game Boy Advance
 
-	By R. Belmont, MooglyGuy, Harmony
+    By R. Belmont, MooglyGuy
 
 ***************************************************************************/
 
@@ -13,7 +15,7 @@
 
 #define VERBOSE_LEVEL   (0)
 
-INLINE void verboselog(running_machine &machine, int n_level, const char *s_fmt, ...)
+INLINE void ATTR_PRINTF(3,4) verboselog(running_machine &machine, int n_level, const char *s_fmt, ...)
 {
 	if( VERBOSE_LEVEL >= n_level )
 	{
@@ -1877,7 +1879,6 @@ void gba_state::draw_scanline(int y)
 			break;
 		default:
 			fatalerror("Invalid screen mode (6 or 7)!\n");
-			break;
 	}
 
 	for (int x = 0; x < 240; x++)
@@ -1890,7 +1891,7 @@ void gba_state::draw_scanline(int y)
 
 void gba_state::video_start()
 {
-	machine().primary_screen->register_screen_bitmap(m_bitmap);
+	machine().first_screen()->register_screen_bitmap(m_bitmap);
 }
 
 UINT32 gba_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)

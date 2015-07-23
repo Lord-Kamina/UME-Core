@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*** DRIVER INFO **************************************************************
 
 Macross Plus                        (c)1996 Banpresto
@@ -6,24 +8,11 @@ Quiz Bisyoujo Senshi Sailor Moon    (c)1997 Banpresto
 Driver by David Haywood
 
 TODO:
-- macrossp: tilemap zoom is wrong, see title screen (misplaced) and level 2 boss
-  (background scrolls faster than sprites)
-- should use VIDEO_RGB_DIRECT for alpha blending to work, but tilemap_draw_roz()
-  doesn't support it.
-- Sprite Zoom on quizmoon title screen isn't right
-- Tilemap zoom effect on macrossp title screen and probably other places
-- Priorities (Sprites & Backgrounds) - see quizmoon attract mode
-- sprite/tilemap priorities might not be 100% correct
-- Sound
-- optimize palette fading in macrossp.quizmoon doesn't use that register.
-- All Other Unused Reads / Writes
-- Correct unknown ports if/as needed
-- Clean Up
-- Flip Screen support (both games have a dipswitch for it's selection)
-
- Notes:
-
- Whats the BIOS rom? should it be in the 68020 map, its different between games.
+ - what is the 'bios' rom for? it appears to be data tables and is very different between games but we don't map it anywhere
+ - priorities
+ - zooming is wrong
+ - is alpha REALLY alpha or sprite flicker?
+ - convert tilemaps to devices?
 
  68020 interrupts
  lev 1 : 0x64 : 0000 084c - unknown..
@@ -313,7 +302,7 @@ WRITE32_MEMBER(macrossp_state::paletteram32_macrossp_w)
 	g = ((m_paletteram[offset] & 0x00ff0000) >>16);
 	r = ((m_paletteram[offset] & 0xff000000) >>24);
 
-	palette_set_color(machine(), offset, MAKE_RGB(r,g,b));
+	m_palette->set_pen_color(offset, rgb_t(r,g,b));
 }
 
 
@@ -374,7 +363,7 @@ void macrossp_state::update_colors(  )
 		else
 			r -= m_fade_effect;
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		m_palette->set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -397,20 +386,20 @@ static ADDRESS_MAP_START( macrossp_map, AS_PROGRAM, 32, macrossp_state )
 	AM_RANGE(0x800000, 0x802fff) AM_RAM AM_SHARE("spriteram")
 	/* SCR A Layer */
 	AM_RANGE(0x900000, 0x903fff) AM_RAM_WRITE(macrossp_scra_videoram_w) AM_SHARE("scra_videoram")
-	AM_RANGE(0x904200, 0x9043ff) AM_WRITEONLY /* W/O? */
-	AM_RANGE(0x905000, 0x90500b) AM_WRITEONLY AM_SHARE("scra_videoregs") /* W/O? */
+	AM_RANGE(0x904200, 0x9043ff) AM_RAM AM_SHARE("scra_linezoom") /* W/O? */
+	AM_RANGE(0x905000, 0x90500b) AM_RAM AM_SHARE("scra_videoregs") /* W/O? */
 	/* SCR B Layer */
 	AM_RANGE(0x908000, 0x90bfff) AM_RAM_WRITE(macrossp_scrb_videoram_w) AM_SHARE("scrb_videoram")
-	AM_RANGE(0x90c200, 0x90c3ff) AM_WRITEONLY /* W/O? */
-	AM_RANGE(0x90d000, 0x90d00b) AM_WRITEONLY AM_SHARE("scrb_videoregs") /* W/O? */
+	AM_RANGE(0x90c200, 0x90c3ff) AM_RAM AM_SHARE("scrb_linezoom") /* W/O? */
+	AM_RANGE(0x90d000, 0x90d00b) AM_RAM AM_SHARE("scrb_videoregs") /* W/O? */
 	/* SCR C Layer */
 	AM_RANGE(0x910000, 0x913fff) AM_RAM_WRITE(macrossp_scrc_videoram_w) AM_SHARE("scrc_videoram")
-	AM_RANGE(0x914200, 0x9143ff) AM_WRITEONLY /* W/O? */
-	AM_RANGE(0x915000, 0x91500b) AM_WRITEONLY AM_SHARE("scrc_videoregs") /* W/O? */
+	AM_RANGE(0x914200, 0x9143ff) AM_RAM AM_SHARE("scrc_linezoom")/* W/O? */
+	AM_RANGE(0x915000, 0x91500b) AM_RAM AM_SHARE("scrc_videoregs") /* W/O? */
 	/* Text Layer */
 	AM_RANGE(0x918000, 0x91bfff) AM_RAM_WRITE(macrossp_text_videoram_w) AM_SHARE("text_videoram")
-	AM_RANGE(0x91c200, 0x91c3ff) AM_WRITEONLY /* W/O? */
-	AM_RANGE(0x91d000, 0x91d00b) AM_WRITEONLY AM_SHARE("text_videoregs") /* W/O? */
+	AM_RANGE(0x91c200, 0x91c3ff) AM_RAM AM_SHARE("text_linezoom") /* W/O? */
+	AM_RANGE(0x91d000, 0x91d00b) AM_RAM AM_SHARE("text_videoregs") /* W/O? */
 
 	AM_RANGE(0xa00000, 0xa03fff) AM_RAM_WRITE(paletteram32_macrossp_w) AM_SHARE("paletteram")
 
@@ -430,7 +419,7 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( macrossp_sound_map, AS_PROGRAM, 16, macrossp_state )
 	AM_RANGE(0x000000, 0x0fffff) AM_ROM
 	AM_RANGE(0x200000, 0x207fff) AM_RAM
-	AM_RANGE(0x400000, 0x40007f) AM_DEVREADWRITE8_LEGACY("ensoniq", es5506_r, es5506_w, 0x00ff)
+	AM_RANGE(0x400000, 0x40007f) AM_DEVREADWRITE8("ensoniq", es5506_device, read, write, 0x00ff)
 	AM_RANGE(0x600000, 0x600001) AM_READ(macrossp_soundcmd_r)
 ADDRESS_MAP_END
 
@@ -581,16 +570,6 @@ WRITE_LINE_MEMBER(macrossp_state::irqhandler)
 	//  m_audiocpu->set_input_line(1, state ? ASSERT_LINE : CLEAR_LINE);
 }
 
-static const es5506_interface es5506_config =
-{
-	"ensoniq.0",
-	"ensoniq.1",
-	"ensoniq.2",
-	"ensoniq.3",
-	DEVCB_DRIVER_LINE_MEMBER(macrossp_state,irqhandler)
-};
-
-
 void macrossp_state::machine_start()
 {
 	save_item(NAME(m_sndpending));
@@ -627,17 +606,22 @@ static MACHINE_CONFIG_START( macrossp, macrossp_state )
 	MCFG_SCREEN_UPDATE_DRIVER(macrossp_state, screen_update_macrossp)
 	MCFG_SCREEN_VBLANK_DRIVER(macrossp_state, screen_eof_macrossp)
 
-	MCFG_GFXDECODE(macrossp)
-	MCFG_PALETTE_LENGTH(0x1000)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", macrossp)
+	MCFG_PALETTE_ADD("palette", 0x1000)
 
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
 	MCFG_SOUND_ADD("ensoniq", ES5506, 16000000)
-	MCFG_SOUND_CONFIG(es5506_config)
-	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
-	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
+	MCFG_ES5506_REGION0("ensoniq.0")
+	MCFG_ES5506_REGION1("ensoniq.1")
+	MCFG_ES5506_REGION2("ensoniq.2")
+	MCFG_ES5506_REGION3("ensoniq.3")
+	MCFG_ES5506_CHANNELS(1)               /* channels */
+	MCFG_ES5506_IRQ_CB(WRITELINE(macrossp_state, irqhandler))
+	MCFG_SOUND_ROUTE(0, "lspeaker", 0.1)
+	MCFG_SOUND_ROUTE(1, "rspeaker", 0.1)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( quizmoon, macrossp )
@@ -777,5 +761,5 @@ DRIVER_INIT_MEMBER(macrossp_state,quizmoon)
 #endif
 }
 
-GAME( 1996, macrossp, 0, macrossp, macrossp, macrossp_state, macrossp, ROT270, "Banpresto", "Macross Plus", GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
+GAME( 1996, macrossp, 0, macrossp, macrossp, macrossp_state, macrossp, ROT270, "MOSS / Banpresto", "Macross Plus", GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
 GAME( 1997, quizmoon, 0, quizmoon, quizmoon, macrossp_state, quizmoon, ROT0,   "Banpresto", "Quiz Bisyoujo Senshi Sailor Moon - Chiryoku Tairyoku Toki no Un", GAME_IMPERFECT_GRAPHICS | GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )

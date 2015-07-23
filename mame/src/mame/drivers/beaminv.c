@@ -1,6 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /***************************************************************************
 
-    Tekunon Kougyou Beam Invader hardware
+    Tekunon Kougyou(Teknon Kogyo) Beam Invader hardware
 
     driver by Zsolt Vasvari
 
@@ -62,7 +64,8 @@ public:
 	beaminv_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_videoram(*this, "videoram"),
-		m_maincpu(*this, "maincpu"){ }
+		m_maincpu(*this, "maincpu"),
+		m_screen(*this, "screen") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
@@ -75,6 +78,7 @@ public:
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
+	required_device<screen_device> m_screen;
 	DECLARE_READ8_MEMBER(v128_r);
 	DECLARE_WRITE8_MEMBER(controller_select_w);
 	DECLARE_READ8_MEMBER(controller_r);
@@ -113,7 +117,7 @@ TIMER_CALLBACK_MEMBER(beaminv_state::interrupt_callback)
 	next_interrupt_number = (interrupt_number + 1) % INTERRUPTS_PER_FRAME;
 	next_vpos = interrupt_lines[next_interrupt_number];
 
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(next_vpos), next_interrupt_number);
+	m_interrupt_timer->adjust(m_screen->time_until_pos(next_vpos), next_interrupt_number);
 }
 
 
@@ -126,7 +130,7 @@ void beaminv_state::create_interrupt_timer()
 void beaminv_state::start_interrupt_timer()
 {
 	int vpos = interrupt_lines[0];
-	m_interrupt_timer->adjust(machine().primary_screen->time_until_pos(vpos));
+	m_interrupt_timer->adjust(m_screen->time_until_pos(vpos));
 }
 
 
@@ -183,7 +187,7 @@ UINT32 beaminv_state::screen_update_beaminv(screen_device &screen, bitmap_rgb32 
 
 		for (i = 0; i < 8; i++)
 		{
-			pen_t pen = (data & 0x01) ? RGB_WHITE : RGB_BLACK;
+			pen_t pen = (data & 0x01) ? rgb_t::white : rgb_t::black;
 			bitmap.pix32(y, x) = pen;
 
 			data = data >> 1;
@@ -197,7 +201,7 @@ UINT32 beaminv_state::screen_update_beaminv(screen_device &screen, bitmap_rgb32 
 
 READ8_MEMBER(beaminv_state::v128_r)
 {
-	return (machine().primary_screen->vpos() >> 7) & 0x01;
+	return (m_screen->vpos() >> 7) & 0x01;
 }
 
 
@@ -383,5 +387,5 @@ ROM_END
  *
  *************************************/
 
-GAMEL( 1979, beaminv,  0,       beaminv, beaminv, driver_device,  0, ROT270, "Tekunon Kougyou",   "Beam Invader",  GAME_NO_SOUND | GAME_SUPPORTS_SAVE, layout_beaminv )
+GAMEL( 1979, beaminv,  0,       beaminv, beaminv,  driver_device, 0, ROT270, "Teknon Kogyo", "Beam Invader", GAME_NO_SOUND | GAME_SUPPORTS_SAVE, layout_beaminv )
 GAMEL( 1979, pacominv, beaminv, beaminv, pacominv, driver_device, 0, ROT270, "Pacom Corporation", "Pacom Invader", GAME_NO_SOUND | GAME_SUPPORTS_SAVE, layout_beaminv )

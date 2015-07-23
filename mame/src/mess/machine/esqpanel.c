@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /*
     Ensoniq panel/display device
 */
@@ -26,24 +28,12 @@ const device_type ESQPANEL2x40_SQ1 = &device_creator<esqpanel2x40_sq1_device>;
 
 esqpanel_device::esqpanel_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source) :
 	device_t(mconfig, type, name, tag, owner, clock, shortname, source),
-	device_serial_interface(mconfig, *this)
+	device_serial_interface(mconfig, *this),
+	m_write_tx(*this),
+	m_write_analog(*this)
 {
 }
 
-void esqpanel_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const esqpanel_interface *intf = reinterpret_cast<const esqpanel_interface *>(static_config());
-	if (intf != NULL)
-	{
-		*static_cast<esqpanel_interface *>(this) = *intf;
-	}
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_out_tx_cb, 0, sizeof(m_out_tx_cb));
-	}
-}
 
 //-------------------------------------------------
 //  device_start - device-specific startup
@@ -51,7 +41,8 @@ void esqpanel_device::device_config_complete()
 
 void esqpanel_device::device_start()
 {
-	m_out_tx_func.resolve(m_out_tx_cb, *this);
+	m_write_tx.resolve_safe();
+	m_write_analog.resolve_safe();
 }
 
 
@@ -62,13 +53,19 @@ void esqpanel_device::device_start()
 void esqpanel_device::device_reset()
 {
 	// panel comms is at 62500 baud (double the MIDI rate), 8N2
+	set_data_frame(1, 8, PARITY_NONE, STOP_BITS_2);
 	set_rcv_rate(62500);
 	set_tra_rate(62500);
-	set_data_frame(8, 2, SERIAL_PARITY_NONE);
 
 	m_tx_busy = false;
 	m_xmit_read = m_xmit_write = 0;
 	m_bCalibSecondByte = false;
+	m_bButtonLightSecondByte = false;
+}
+
+void esqpanel_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+{
+	device_serial_interface::device_timer(timer, id, param, ptr);
 }
 
 void esqpanel_device::rcv_complete()    // Rx completed receiving byte
@@ -90,9 +87,45 @@ void esqpanel_device::rcv_complete()    // Rx completed receiving byte
 		}
 		m_bCalibSecondByte = false;
 	}
+	else if (m_bButtonLightSecondByte)
+	{
+		// Lights on the Buttons, on the VFX-SD:
+		// Number   Button
+		// 0        1-6
+		// 1        8
+		// 2        6
+		// 3        4
+		// 4        2
+		// 5        Compare
+		// 6        1
+		// 7        Presets
+		// 8        7-12
+		// 9        9
+		// a        7
+		// b        5
+		// c        3
+		// d        Sounds
+		// e        0
+		// f        Cart
+//      int lightNumber = data & 0x3f;
+
+		// Light states:
+		// 0 = Off
+		// 2 = On
+		// 3 = Blinking
+//      int lightState = (data & 0xc0) >> 6;
+
+		// TODO: do something with the button information!
+		// printf("Setting light %d to %s\n", lightNumber, lightState == 3 ? "Blink" : lightState == 2 ? "On" : "Off");
+		m_bButtonLightSecondByte = false;
+	}
 	else if (data == 0xfb)   // request calibration
 	{
 		m_bCalibSecondByte = true;
+	}
+	else if (data == 0xff)  // button light state command
+	{
+		m_bButtonLightSecondByte = true;
 	}
 	else
 	{
@@ -136,12 +169,7 @@ void esqpanel_device::tra_complete()    // Tx completed sending byte
 
 void esqpanel_device::tra_callback()    // Tx send bit
 {
-	int bit = transmit_register_get_data_bit();
-	m_out_tx_func(bit);
-}
-
-void esqpanel_device::input_callback(UINT8 state)
-{
+	m_write_tx(transmit_register_get_data_bit());
 }
 
 void esqpanel_device::xmit_char(UINT8 data)
@@ -163,6 +191,11 @@ void esqpanel_device::xmit_char(UINT8 data)
 			m_xmit_write = 0;
 		}
 	}
+}
+
+void esqpanel_device::set_analog_value(offs_t offset, UINT16 value)
+{
+	m_write_analog(offset, value);
 }
 
 /* panel with 1x22 VFD display used in the EPS-16 and EPS-16 Plus */

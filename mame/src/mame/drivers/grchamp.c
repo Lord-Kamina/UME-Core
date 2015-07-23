@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi, Phil Stroffolino
 /***************************************************************************
 
     Grand Champion
@@ -76,7 +78,20 @@
  *
  *************************************/
 
-void grchamp_state::machine_reset()
+void grchamp_state::machine_start()
+{
+	save_item(NAME(m_cpu0_out));
+	save_item(NAME(m_cpu1_out));
+	save_item(NAME(m_comm_latch));
+	save_item(NAME(m_comm_latch2));
+	save_item(NAME(m_ledlatch));
+	save_item(NAME(m_ledaddr));
+	save_item(NAME(m_ledram));
+	save_item(NAME(m_collide));
+	save_item(NAME(m_collmode));
+}
+
+	void grchamp_state::machine_reset()
 {
 	/* if the coin system is 1 way, lock Coin B (Page 40) */
 	coin_lockout_w(machine(), 1, (ioport("DSWB")->read() & 0x10) ? 1 : 0);
@@ -90,14 +105,14 @@ void grchamp_state::machine_reset()
  *
  *************************************/
 
-INTERRUPT_GEN_MEMBER(grchamp_state::grchamp_cpu0_interrupt)
+INTERRUPT_GEN_MEMBER(grchamp_state::cpu0_interrupt)
 {
 	if (m_cpu0_out[0] & 0x01)
 		device.execute().set_input_line(0, ASSERT_LINE);
 }
 
 
-INTERRUPT_GEN_MEMBER(grchamp_state::grchamp_cpu1_interrupt)
+INTERRUPT_GEN_MEMBER(grchamp_state::cpu1_interrupt)
 {
 	if (m_cpu1_out[4] & 0x01)
 		device.execute().set_input_line(0, ASSERT_LINE);
@@ -176,7 +191,7 @@ WRITE8_MEMBER(grchamp_state::cpu0_outputs_w)
 			/* bit 5: n/c */
 			/* bit 6: G-Z */
 			if (diff)
-				mame_printf_debug("OUT10=%02X\n", data);
+				osd_printf_debug("OUT10=%02X\n", data);
 			break;
 
 		case 0x0d:  /* OUT13 */
@@ -300,18 +315,18 @@ WRITE8_MEMBER(grchamp_state::cpu1_outputs_w)
 			/* bit 2-4: ATTACK UP 1-3 */
 			/* bit 5-6: SIFT 1-2 */
 			/* bit 7:   ENGINE CS */
-			discrete_sound_w(m_discrete, space, GRCHAMP_ENGINE_CS_EN, data & 0x80);
-			discrete_sound_w(m_discrete, space, GRCHAMP_SIFT_DATA, (data >> 5) & 0x03);
-			discrete_sound_w(m_discrete, space, GRCHAMP_ATTACK_UP_DATA, (data >> 2) & 0x07);
-			discrete_sound_w(m_discrete, space, GRCHAMP_IDLING_EN, data & 0x02);
-			discrete_sound_w(m_discrete, space, GRCHAMP_FOG_EN, data & 0x01);
+			m_discrete->write(space, GRCHAMP_ENGINE_CS_EN, data & 0x80);
+			m_discrete->write(space, GRCHAMP_SIFT_DATA, (data >> 5) & 0x03);
+			m_discrete->write(space, GRCHAMP_ATTACK_UP_DATA, (data >> 2) & 0x07);
+			m_discrete->write(space, GRCHAMP_IDLING_EN, data & 0x02);
+			m_discrete->write(space, GRCHAMP_FOG_EN, data & 0x01);
 			break;
 
 		case 0x0d: /* OUTD */
 			/* bit 0-3: ATTACK SPEED 1-4 */
 			/* bit 4-7: PLAYER SPEED 1-4 */
-			discrete_sound_w(m_discrete, space, GRCHAMP_PLAYER_SPEED_DATA, (data >> 4) & 0x0f);
-			discrete_sound_w(m_discrete, space, GRCHAMP_ATTACK_SPEED_DATA,  data & 0x0f);
+			m_discrete->write(space, GRCHAMP_PLAYER_SPEED_DATA, (data >> 4) & 0x0f);
+			m_discrete->write(space, GRCHAMP_ATTACK_SPEED_DATA,  data & 0x0f);
 			break;
 
 		default:
@@ -334,7 +349,7 @@ UINT8 grchamp_state::get_pc3259_bits(int offs)
 	int bits;
 
 	/* force a partial update to the current position */
-	machine().primary_screen->update_partial(machine().primary_screen->vpos());
+	m_screen->update_partial(m_screen->vpos());
 
 	/* get the relevant 4 bits */
 	bits = (m_collide >> (offs*4)) & 0x0f;
@@ -407,54 +422,25 @@ READ8_MEMBER(grchamp_state::main_to_sub_comm_r)
  *
  *************************************/
 
-WRITE8_MEMBER(grchamp_state::grchamp_portA_0_w)
+WRITE8_MEMBER(grchamp_state::portA_0_w)
 {
-	discrete_sound_w(m_discrete, space, GRCHAMP_A_DATA, data);
+	m_discrete->write(space, GRCHAMP_A_DATA, data);
 }
 
-WRITE8_MEMBER(grchamp_state::grchamp_portB_0_w)
+WRITE8_MEMBER(grchamp_state::portB_0_w)
 {
-	discrete_sound_w(m_discrete, space, GRCHAMP_B_DATA, 255-data);
+	m_discrete->write(space, GRCHAMP_B_DATA, 255-data);
 }
 
-WRITE8_MEMBER(grchamp_state::grchamp_portA_2_w)
+WRITE8_MEMBER(grchamp_state::portA_2_w)
 {
 	/* A0/A1 modify the output of AY8910 #2 */
 	/* A7 contributes to the discrete logic hanging off of AY8910 #0 */
 }
-WRITE8_MEMBER(grchamp_state::grchamp_portB_2_w)
+WRITE8_MEMBER(grchamp_state::portB_2_w)
 {
 	/* B0 connects elsewhere */
 }
-
-
-
-/*************************************
- *
- *  Sound interfaces
- *
- *************************************/
-
-static const ay8910_interface ay8910_interface_1 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(grchamp_state,grchamp_portA_0_w),
-	DEVCB_DRIVER_MEMBER(grchamp_state,grchamp_portB_0_w)
-};
-
-static const ay8910_interface ay8910_interface_3 =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(grchamp_state,grchamp_portA_2_w),
-	DEVCB_DRIVER_MEMBER(grchamp_state,grchamp_portB_2_w)
-};
-
 
 
 /*************************************
@@ -468,7 +454,7 @@ static const gfx_layout sprite_layout =
 	16,16,
 	RGN_FRAC(1,2),
 	2,
-	{ 0,RGN_FRAC(1,2) },
+	{ RGN_FRAC(1,2),0 },
 	{ STEP8(0,1),STEP8(64,1) },
 	{ STEP8(0,8),STEP8(128,8) },
 	16*16
@@ -487,10 +473,10 @@ static const gfx_layout tile_layout =
 
 static GFXDECODE_START( grchamp )
 	GFXDECODE_ENTRY( "gfx1", 0x0000, gfx_8x8x2_planar,  0, 8 )
-	GFXDECODE_ENTRY( "gfx2", 0x0000, tile_layout,       0, 16 )
-	GFXDECODE_ENTRY( "gfx3", 0x0000, tile_layout,       0, 16 )
-	GFXDECODE_ENTRY( "gfx4", 0x0000, tile_layout,       0, 16 )
-	GFXDECODE_ENTRY( "gfx1", 0x0000, sprite_layout,     0, 32 )
+	GFXDECODE_ENTRY( "gfx2", 0x0000, tile_layout,       0, 2 )
+	GFXDECODE_ENTRY( "gfx3", 0x0000, tile_layout,       0, 2 )
+	GFXDECODE_ENTRY( "gfx4", 0x0000, tile_layout,       0, 2 )
+	GFXDECODE_ENTRY( "gfx1", 0x0000, sprite_layout,     0, 8 )
 GFXDECODE_END
 
 
@@ -532,9 +518,9 @@ ADDRESS_MAP_END
 /* complete memory map derived from schematics */
 static ADDRESS_MAP_START( sub_map, AS_PROGRAM, 8, grchamp_state )
 	AM_RANGE(0x0000, 0x1fff) AM_ROM
-	AM_RANGE(0x2000, 0x27ff) AM_RAM_WRITE(grchamp_left_w) AM_SHARE("leftram")
-	AM_RANGE(0x2800, 0x2fff) AM_RAM_WRITE(grchamp_right_w) AM_SHARE("rightram")
-	AM_RANGE(0x3000, 0x37ff) AM_RAM_WRITE(grchamp_center_w) AM_SHARE("centerram")
+	AM_RANGE(0x2000, 0x27ff) AM_RAM_WRITE(left_w) AM_SHARE("leftram")
+	AM_RANGE(0x2800, 0x2fff) AM_RAM_WRITE(right_w) AM_SHARE("rightram")
+	AM_RANGE(0x3000, 0x37ff) AM_RAM_WRITE(center_w) AM_SHARE("centerram")
 	AM_RANGE(0x4000, 0x43ff) AM_MIRROR(0x0400) AM_RAM
 	AM_RANGE(0x5000, 0x6fff) AM_ROM
 ADDRESS_MAP_END
@@ -663,13 +649,13 @@ static MACHINE_CONFIG_START( grchamp, grchamp_state )
 	MCFG_CPU_ADD("maincpu", Z80, PIXEL_CLOCK/2)
 	MCFG_CPU_PROGRAM_MAP(main_map)
 	MCFG_CPU_IO_MAP(main_portmap)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", grchamp_state,  grchamp_cpu0_interrupt)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", grchamp_state,  cpu0_interrupt)
 
 	/* GAME BOARD */
 	MCFG_CPU_ADD("sub", Z80, PIXEL_CLOCK/2)
 	MCFG_CPU_PROGRAM_MAP(sub_map)
 	MCFG_CPU_IO_MAP(sub_portmap)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", grchamp_state,  grchamp_cpu1_interrupt)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", grchamp_state,  cpu1_interrupt)
 
 	/* SOUND BOARD */
 	MCFG_CPU_ADD("audiocpu", Z80, SOUND_CLOCK/2)
@@ -680,30 +666,34 @@ static MACHINE_CONFIG_START( grchamp, grchamp_state )
 	MCFG_QUANTUM_TIME(attotime::from_hz(6000))
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
-	MCFG_GFXDECODE(grchamp)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", grchamp)
+	MCFG_PALETTE_ADD("palette", 32)
+	MCFG_PALETTE_INIT_OWNER(grchamp_state, grchamp)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_ALWAYS_UPDATE)
 	MCFG_SCREEN_RAW_PARAMS(PIXEL_CLOCK, HTOTAL, HBEND, HBSTART, VTOTAL, VBEND, VBSTART)
-	MCFG_SCREEN_UPDATE_DRIVER(grchamp_state, screen_update_grchamp)
+	MCFG_SCREEN_UPDATE_DRIVER(grchamp_state, screen_update)
 
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("ay1", AY8910, SOUND_CLOCK/4)    /* 3B */
-	MCFG_SOUND_CONFIG(ay8910_interface_1)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(grchamp_state, portA_0_w))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(grchamp_state, portB_0_w))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.2)
 
 	MCFG_SOUND_ADD("ay2", AY8910, SOUND_CLOCK/4)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.2)
 
 	MCFG_SOUND_ADD("ay3", AY8910, SOUND_CLOCK/4)    /* 1B */
-	MCFG_SOUND_CONFIG(ay8910_interface_3)
+	MCFG_AY8910_PORT_A_WRITE_CB(WRITE8(grchamp_state, portA_2_w))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(grchamp_state, portB_2_w))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.2)
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(grchamp)
+	MCFG_DISCRETE_INTF(grchamp)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -733,8 +723,8 @@ ROM_START( grchamp )
 	ROM_LOAD( "gm08",   0x1000, 0x1000, CRC(224d880c) SHA1(68aaaa0213d09cf34ba50c91d8c031d041f8a76f) )
 
 	ROM_REGION( 0x2000, "gfx1", 0 ) /* characters/sprites */
-	ROM_LOAD( "gm01",   0x0000, 0x1000, CRC(846f8e89) SHA1(346bfd69268606fde27643b4d135b481536b73b1) )
-	ROM_LOAD( "gm02",   0x1000, 0x1000, CRC(5911948d) SHA1(6f3a9a7f8d6a04b8e6d83756764c9c4185983d9b) )
+	ROM_LOAD( "gm02",   0x0000, 0x1000, CRC(5911948d) SHA1(6f3a9a7f8d6a04b8e6d83756764c9c4185983d9b) )
+	ROM_LOAD( "gm01",   0x1000, 0x1000, CRC(846f8e89) SHA1(346bfd69268606fde27643b4d135b481536b73b1) )
 
 	ROM_REGION( 0x2000, "gfx2", 0 ) /* left tiles */
 	ROM_LOAD( "gr20",   0x0000, 0x1000, CRC(88ba2c03) SHA1(4dfd136f122663223043c6cd79566f8eeec72681) )
@@ -770,4 +760,4 @@ ROM_END
  *
  *************************************/
 
-GAMEL( 1981, grchamp, 0, grchamp, grchamp, driver_device, 0, ROT270, "Taito", "Grand Champion", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS, layout_grchamp )
+GAMEL( 1981, grchamp, 0, grchamp, grchamp, driver_device, 0, ROT270, "Taito", "Grand Champion", GAME_IMPERFECT_SOUND | GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE, layout_grchamp )

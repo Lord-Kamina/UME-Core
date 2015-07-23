@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett, Luca Elia
 /*****************************************************************************************************
 
     Skimaxx
@@ -45,15 +47,21 @@ class skimaxx_state : public driver_device
 public:
 	skimaxx_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_maincpu(*this, "maincpu"),
+		m_subcpu(*this, "subcpu"),
+		m_tms(*this, "tms"),
 		m_blitter_regs(*this, "blitter_regs"),
 		m_fpga_ctrl(*this, "fpga_ctrl"),
-		m_fg_buffer(*this, "fg_buffer"),
-		m_maincpu(*this, "maincpu"),
-		m_subcpu(*this, "subcpu") { }
+		m_fg_buffer(*this, "fg_buffer") { }
+
+	required_device<cpu_device> m_maincpu;
+	required_device<cpu_device> m_subcpu;
+	required_device<tms34010_device> m_tms;
 
 	required_shared_ptr<UINT32> m_blitter_regs;
 	required_shared_ptr<UINT32> m_fpga_ctrl;
 	required_shared_ptr<UINT16> m_fg_buffer;
+
 	UINT32 *m_bg_buffer;
 	UINT32 *m_bg_buffer_front;
 	UINT32 *m_bg_buffer_back;
@@ -63,21 +71,23 @@ public:
 	UINT32 m_blitter_src_dx;
 	UINT32 m_blitter_src_y;
 	UINT32 m_blitter_src_dy;
+
 	DECLARE_WRITE32_MEMBER(skimaxx_blitter_w);
 	DECLARE_READ32_MEMBER(skimaxx_blitter_r);
-	DECLARE_WRITE32_MEMBER(m68k_tms_w);
-	DECLARE_READ32_MEMBER(m68k_tms_r);
 	DECLARE_WRITE32_MEMBER(skimaxx_fpga_ctrl_w);
 	DECLARE_READ32_MEMBER(unk_r);
 	DECLARE_READ32_MEMBER(skimaxx_unk1_r);
 	DECLARE_WRITE32_MEMBER(skimaxx_unk1_w);
 	DECLARE_WRITE32_MEMBER(skimaxx_sub_ctrl_w);
 	DECLARE_READ32_MEMBER(skimaxx_analog_r);
+	DECLARE_WRITE_LINE_MEMBER(tms_irq);
+
+	TMS340X0_TO_SHIFTREG_CB_MEMBER(to_shiftreg);
+	TMS340X0_FROM_SHIFTREG_CB_MEMBER(from_shiftreg);
+	TMS340X0_SCANLINE_IND16_CB_MEMBER(scanline_update);
+
 	virtual void machine_reset();
 	virtual void video_start();
-	UINT32 screen_update_skimaxx(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_subcpu;
 };
 
 
@@ -154,15 +164,6 @@ void skimaxx_state::video_start()
 	membank("bank1")->configure_entry(1, m_bg_buffer_front);
 }
 
-UINT32 skimaxx_state::screen_update_skimaxx(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
-{
-//  popmessage("%02x %02x", ioport("X")->read(), ioport("Y")->read() );
-
-	SCREEN_UPDATE16_CALL(tms340x0_ind16);
-
-	return 0;
-}
-
 /*************************************
  *
  *  VRAM shift register callbacks
@@ -170,16 +171,14 @@ UINT32 skimaxx_state::screen_update_skimaxx(screen_device &screen, bitmap_ind16 
  *************************************/
 
 // TODO: Might not be used
-static void skimaxx_to_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_TO_SHIFTREG_CB_MEMBER(skimaxx_state::to_shiftreg)
 {
-	skimaxx_state *state = space.machine().driver_data<skimaxx_state>();
-	memcpy(shiftreg, &state->m_fg_buffer[TOWORD(address)], 512 * sizeof(UINT16));
+	memcpy(shiftreg, &m_fg_buffer[TOWORD(address)], 512 * sizeof(UINT16));
 }
 
-static void skimaxx_from_shiftreg(address_space &space, UINT32 address, UINT16 *shiftreg)
+TMS340X0_FROM_SHIFTREG_CB_MEMBER(skimaxx_state::from_shiftreg)
 {
-	skimaxx_state *state = space.machine().driver_data<skimaxx_state>();
-	memcpy(&state->m_fg_buffer[TOWORD(address)], shiftreg, 512 * sizeof(UINT16));
+	memcpy(&m_fg_buffer[TOWORD(address)], shiftreg, 512 * sizeof(UINT16));
 }
 
 
@@ -189,16 +188,15 @@ static void skimaxx_from_shiftreg(address_space &space, UINT32 address, UINT16 *
  *
  *************************************/
 
-static void skimaxx_scanline_update(screen_device &screen, bitmap_ind16 &bitmap, int scanline, const tms34010_display_params *params)
+TMS340X0_SCANLINE_IND16_CB_MEMBER(skimaxx_state::scanline_update)
 {
-	skimaxx_state *state = screen.machine().driver_data<skimaxx_state>();
 	// TODO: This isn't correct. I just hacked it together quickly so I could see something!
 
 	if (params->rowaddr >= 0x220)
 	{
 		UINT32 rowaddr = (params->rowaddr - 0x220);
-		UINT16 *fg = &state->m_fg_buffer[rowaddr << 8];
-		UINT32 *bg = &state->m_bg_buffer_front[rowaddr/2 * 1024/2];
+		UINT16 *fg = &m_fg_buffer[rowaddr << 8];
+		UINT32 *bg = &m_bg_buffer_front[rowaddr/2 * 1024/2];
 		UINT16 *dest = &bitmap.pix16(scanline);
 		//int coladdr = params->coladdr;
 		int x;
@@ -226,22 +224,6 @@ static void skimaxx_scanline_update(screen_device &screen, bitmap_ind16 &bitmap,
 	}
 }
 
-
-/*************************************
- *
- *  TMS34010 host interface
- *
- *************************************/
-
-WRITE32_MEMBER(skimaxx_state::m68k_tms_w)
-{
-	tms34010_host_w(machine().device("tms"), offset, data);
-}
-
-READ32_MEMBER(skimaxx_state::m68k_tms_r)
-{
-	return tms34010_host_r(machine().device("tms"), offset);
-}
 
 
 /*************************************
@@ -324,7 +306,7 @@ READ32_MEMBER(skimaxx_state::skimaxx_analog_r)
 static ADDRESS_MAP_START( 68030_1_map, AS_PROGRAM, 32, skimaxx_state )
 	AM_RANGE(0x00000000, 0x001fffff) AM_ROM
 	AM_RANGE(0x10000000, 0x10000003) AM_WRITE(skimaxx_sub_ctrl_w )
-	AM_RANGE(0x10100000, 0x1010000f) AM_READWRITE(m68k_tms_r, m68k_tms_w)//AM_NOP
+	AM_RANGE(0x10100000, 0x1010000f) AM_DEVREADWRITE16("tms", tms34010_device, host_r, host_w, 0x0000ffff)
 //  AM_RANGE(0x10180000, 0x10187fff) AM_RAM AM_SHARE("share1")
 	AM_RANGE(0x10180000, 0x1018ffff) AM_RAM AM_SHARE("share1")  // above 10188000 accessed at level end (game bug?)
 	AM_RANGE(0x20000000, 0x20000003) AM_READNOP // watchdog_r?
@@ -386,7 +368,7 @@ static ADDRESS_MAP_START( tms_program_map, AS_PROGRAM, 16, skimaxx_state )
 	AM_RANGE(0x02000000, 0x0200000f) AM_RAM
 	AM_RANGE(0x02100000, 0x0210000f) AM_RAM
 	AM_RANGE(0x04000000, 0x047fffff) AM_ROM AM_REGION("tmsgfx", 0)
-	AM_RANGE(0xc0000000, 0xc00001ff) AM_READWRITE_LEGACY(tms34010_io_register_r, tms34010_io_register_w)
+	AM_RANGE(0xc0000000, 0xc00001ff) AM_DEVREADWRITE("tms", tms34010_device, io_register_r, io_register_w)
 	AM_RANGE(0xff800000, 0xffffffff) AM_ROM AM_REGION("tms", 0)
 ADDRESS_MAP_END
 
@@ -488,24 +470,10 @@ INPUT_PORTS_END
  *
  *************************************/
 
-static void skimaxx_tms_irq(device_t *device, int state)
+WRITE_LINE_MEMBER(skimaxx_state::tms_irq)
 {
 	// TODO
 }
-
-static const tms34010_config tms_config =
-{
-	FALSE,                     /* halt on reset */
-	"screen",                  /* the screen operated on */
-	50000000/8,                /* pixel clock */
-	2,                         /* pixels per clock */
-	skimaxx_scanline_update,   /* scanline updater (indexed16) */
-	NULL,                      /* scanline updater (rgb32) */
-	skimaxx_tms_irq,           /* generate interrupt */
-	skimaxx_to_shiftreg,       /* write to shiftreg function */
-	skimaxx_from_shiftreg      /* read from shiftreg function */
-};
-
 
 /*************************************
  *
@@ -534,8 +502,14 @@ static MACHINE_CONFIG_START( skimaxx, skimaxx_state )
 
 	/* video hardware */
 	MCFG_CPU_ADD("tms", TMS34010, XTAL_50MHz)
-	MCFG_CPU_CONFIG(tms_config)
 	MCFG_CPU_PROGRAM_MAP(tms_program_map)
+	MCFG_TMS340X0_HALT_ON_RESET(FALSE) /* halt on reset */
+	MCFG_TMS340X0_PIXEL_CLOCK(50000000/8) /* pixel clock */
+	MCFG_TMS340X0_PIXELS_PER_CLOCK(2) /* pixels per clock */
+	MCFG_TMS340X0_SCANLINE_IND16_CB(skimaxx_state, scanline_update)     /* scanline updater (indexed16) */
+	MCFG_TMS340X0_OUTPUT_INT_CB(WRITELINE(skimaxx_state, tms_irq))
+	MCFG_TMS340X0_TO_SHIFTREG_CB(skimaxx_state, to_shiftreg)  /* write to shiftreg function */
+	MCFG_TMS340X0_FROM_SHIFTREG_CB(skimaxx_state, from_shiftreg) /* read from shiftreg function */
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 //  MCFG_SCREEN_RAW_PARAMS(40000000/4, 156*4, 0, 100*4, 328, 0, 300) // TODO - Wrong but TMS overrides it anyway
@@ -543,14 +517,12 @@ static MACHINE_CONFIG_START( skimaxx, skimaxx_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500))
 	MCFG_SCREEN_SIZE(0x400, 0x100)
 	MCFG_SCREEN_VISIBLE_AREA(0, 0x280-1, 0, 0xf0-1)
-//  MCFG_SCREEN_UPDATE_STATIC(tms340x0_ind16)
-	MCFG_SCREEN_UPDATE_DRIVER(skimaxx_state, screen_update_skimaxx)
+	MCFG_SCREEN_UPDATE_DEVICE("tms", tms34010_device, tms340x0_ind16)
+	MCFG_SCREEN_PALETTE("palette")
 
+//  MCFG_GFXDECODE_ADD("gfxdecode", "palette", skimaxx )
 
-//  MCFG_GFXDECODE( skimaxx )
-
-	MCFG_PALETTE_INIT(RRRRR_GGGGG_BBBBB)
-	MCFG_PALETTE_LENGTH(32768)
+	MCFG_PALETTE_ADD_RRRRRGGGGGBBBBB("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")

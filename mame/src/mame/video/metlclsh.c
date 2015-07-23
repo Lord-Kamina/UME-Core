@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                               -= Metal Clash =-
@@ -133,8 +135,8 @@ void metlclsh_state::video_start()
 {
 	m_otherram = auto_alloc_array(machine(), UINT8, 0x800); // banked ram
 
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(metlclsh_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(metlclsh_state::metlclsh_bgtilemap_scan),this), 16, 16, 32, 16);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(metlclsh_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(metlclsh_state::get_bg_tile_info),this), tilemap_mapper_delegate(FUNC(metlclsh_state::metlclsh_bgtilemap_scan),this), 16, 16, 32, 16);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(metlclsh_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_bg_tilemap->set_transparent_pen(0);
 	m_fg_tilemap->set_transparent_pen(0);
@@ -166,7 +168,7 @@ void metlclsh_state::video_start()
 void metlclsh_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
 	UINT8 *spriteram = m_spriteram;
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 	int offs;
 
 	for (offs = 0; offs < m_spriteram.bytes(); offs += 4)
@@ -201,15 +203,15 @@ void metlclsh_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 		{
 			if (sizey)
 			{
-				drawgfx_transpen(bitmap,cliprect,gfx, code & ~1, color, flipx,flipy,
+				gfx->transpen(bitmap,cliprect, code & ~1, color, flipx,flipy,
 						sx, sy + (flipy ? 0 : -16) + wrapy,0);
 
-				drawgfx_transpen(bitmap,cliprect,gfx, code |  1, color, flipx,flipy,
+				gfx->transpen(bitmap,cliprect, code |  1, color, flipx,flipy,
 						sx,sy + (flipy ? -16 : 0) + wrapy,0);
 			}
 			else
 			{
-				drawgfx_transpen(bitmap,cliprect,gfx, code, color, flipx,flipy,
+				gfx->transpen(bitmap,cliprect, code, color, flipx,flipy,
 						sx,sy + wrapy,0);
 			}
 		}
@@ -234,17 +236,17 @@ UINT32 metlclsh_state::screen_update_metlclsh(screen_device &screen, bitmap_ind1
 {
 	bitmap.fill(0x10, cliprect);
 
-	m_fg_tilemap->draw(bitmap, cliprect, 1, 0); // low priority tiles of foreground
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 1, 0); // low priority tiles of foreground
 
 	if (m_scrollx[0] & 0x08)                    // background (if enabled)
 	{
 		/* The background seems to be always flipped along x */
 		m_bg_tilemap->set_flip((flip_screen() ? (TILEMAP_FLIPX | TILEMAP_FLIPY) : 0) ^ TILEMAP_FLIPX);
 		m_bg_tilemap->set_scrollx(0, m_scrollx[1] + ((m_scrollx[0] & 0x02) << 7) );
-		m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	}
 	draw_sprites(bitmap, cliprect);          // sprites
-	m_fg_tilemap->draw(bitmap, cliprect, 2, 0); // high priority tiles of foreground
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 2, 0); // high priority tiles of foreground
 
 //  popmessage("%02X", m_scrollx[0]);
 	return 0;

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi
 /******************************************************************************
 * FILE
 *   Yamaha 3812 emulator interface - MAME VERSION
@@ -49,13 +51,13 @@ void ym3812_device::device_timer(emu_timer &timer, device_timer_id id, int param
 	}
 }
 
-static void timer_handler(void *param,int c,attotime period)
+static void timer_handler(void *param,int c,const attotime &period)
 {
 	ym3812_device *ym3812 = (ym3812_device *) param;
 	ym3812->_timer_handler(c, period);
 }
 
-void ym3812_device::_timer_handler(int c, attotime period)
+void ym3812_device::_timer_handler(int c, const attotime &period)
 {
 	if( period == attotime::zero )
 	{   /* Reset FM Timer */
@@ -152,7 +154,7 @@ WRITE8_MEMBER( ym3812_device::write_port_w ) { write(   space, 1, data); }
 const device_type YM3812 = &device_creator<ym3812_device>;
 
 ym3812_device::ym3812_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, YM3812, "YM3812", tag, owner, clock),
+	: device_t(mconfig, YM3812, "YM3812", tag, owner, clock, "ym3812", __FILE__),
 		device_sound_interface(mconfig, *this),
 		m_irq_handler(*this)
 {

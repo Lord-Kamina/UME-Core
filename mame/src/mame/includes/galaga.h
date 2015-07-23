@@ -1,4 +1,7 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 #include "sound/discrete.h"
+#include "sound/namco.h"
 #include "sound/samples.h"
 
 class galaga_state : public driver_device
@@ -13,7 +16,11 @@ public:
 		m_galaga_starcontrol(*this, "starcontrol"),
 		m_maincpu(*this, "maincpu"),
 		m_subcpu(*this, "sub"),
-		m_subcpu2(*this, "sub2") { }
+		m_subcpu2(*this, "sub2"),
+		m_namco_sound(*this, "namco"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	optional_shared_ptr<UINT8> m_videoram;
@@ -21,6 +28,13 @@ public:
 	optional_shared_ptr<UINT8> m_galaga_ram2;
 	optional_shared_ptr<UINT8> m_galaga_ram3;
 	optional_shared_ptr<UINT8> m_galaga_starcontrol;    // 6 addresses
+	required_device<cpu_device> m_maincpu;
+	required_device<cpu_device> m_subcpu;
+	required_device<cpu_device> m_subcpu2;
+	required_device<namco_device> m_namco_sound;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 	emu_timer *m_cpu3_interrupt_timer;
 	UINT8 m_custom_mod;
 
@@ -74,9 +88,6 @@ public:
 	};
 
 	static struct star m_star_seed_tab[];
-	required_device<cpu_device> m_maincpu;
-	required_device<cpu_device> m_subcpu;
-	required_device<cpu_device> m_subcpu2;
 };
 
 class xevious_state : public galaga_state
@@ -183,8 +194,8 @@ public:
 	void screen_eof_bosco(screen_device &screen, bool state);
 
 	inline void get_tile_info_bosco(tile_data &tileinfo,int tile_index,int ram_offs);
-	void draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect);
-	void draw_bullets(bitmap_ind16 &bitmap, const rectangle &cliprect);
+	void draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, int flip);
+	void draw_bullets(bitmap_ind16 &bitmap, const rectangle &cliprect, int flip);
 	void draw_stars(bitmap_ind16 &bitmap, const rectangle &cliprect, int flip);
 	DECLARE_WRITE8_MEMBER( bosco_videoram_w );
 	DECLARE_WRITE8_MEMBER( bosco_scrollx_w );

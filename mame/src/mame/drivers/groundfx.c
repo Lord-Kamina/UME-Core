@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, David Graves
 /***************************************************************************
 
     Ground Effects / Super Ground FX                    (c) 1993 Taito
@@ -48,8 +50,8 @@
 
     Ground Effects combines the sprite system used in Taito Z games with
     the TC0480SCP tilemap chip plus some features from the Taito F3 system.
-    It has an extra tilemap chip which is a dead ringer for the TC0100SCN
-    (check the inits), like Under Fire.
+    It has an extra TC0620SCC tilemap chip which is a 6bpp version of the
+    TC0100SCN (check the inits), like Under Fire.
 
     Ground Effects is effectively a 30Hz game - though the vblank interrupts
     still come in at 60Hz, the game uses a hardware frame counter to limit
@@ -64,34 +66,10 @@
 
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
-#include "video/taitoic.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "sound/es5506.h"
 #include "audio/taito_en.h"
 #include "includes/groundfx.h"
-
-
-/***********************************************************
-                COLOR RAM
-
-Extract a standard version of this
-("taito_8bpg_palette_word_w"?) to Taitoic.c ?
-***********************************************************/
-
-WRITE32_MEMBER(groundfx_state::color_ram_w)
-{
-	int a,r,g,b;
-	COMBINE_DATA(&m_generic_paletteram_32[offset]);
-
-	{
-		a = m_generic_paletteram_32[offset];
-		r = (a &0xff0000) >> 16;
-		g = (a &0xff00) >> 8;
-		b = (a &0xff);
-
-		palette_set_color(machine(),offset,MAKE_RGB(r,g,b));
-	}
-}
 
 
 /***********************************************************
@@ -109,22 +87,6 @@ void groundfx_state::device_timer(emu_timer &timer, device_timer_id id, int para
 		assert_always(FALSE, "Unknown id in groundfx_state::device_timer");
 	}
 }
-
-
-/**********************************************************
-                EPROM
-**********************************************************/
-
-static const eeprom_interface groundfx_eeprom_interface =
-{
-	6,              /* address bits */
-	16,             /* data bits */
-	"0110",         /* read command */
-	"0101",         /* write command */
-	"0111",         /* erase command */
-	"0100000000",   /* unlock command */
-	"0100110000",   /* lock command */
-};
 
 
 /**********************************************************
@@ -228,11 +190,11 @@ static ADDRESS_MAP_START( groundfx_map, AS_PROGRAM, 32, groundfx_state )
 	AM_RANGE(0x500000, 0x500007) AM_WRITE(groundfx_input_w) /* eeprom etc. */
 	AM_RANGE(0x600000, 0x600003) AM_READWRITE(groundfx_adc_r,groundfx_adc_w)
 	AM_RANGE(0x700000, 0x7007ff) AM_RAM AM_SHARE("snd_shared")
-	AM_RANGE(0x800000, 0x80ffff) AM_DEVREADWRITE_LEGACY("tc0480scp", tc0480scp_long_r, tc0480scp_long_w)      /* tilemaps */
-	AM_RANGE(0x830000, 0x83002f) AM_DEVREADWRITE_LEGACY("tc0480scp", tc0480scp_ctrl_long_r, tc0480scp_ctrl_long_w)  // debugging
-	AM_RANGE(0x900000, 0x90ffff) AM_DEVREADWRITE_LEGACY("tc0100scn", tc0100scn_long_r, tc0100scn_long_w)    /* piv tilemaps */
-	AM_RANGE(0x920000, 0x92000f) AM_DEVREADWRITE_LEGACY("tc0100scn", tc0100scn_ctrl_long_r, tc0100scn_ctrl_long_w)
-	AM_RANGE(0xa00000, 0xa0ffff) AM_RAM_WRITE(color_ram_w) AM_SHARE("paletteram") /* palette ram */
+	AM_RANGE(0x800000, 0x80ffff) AM_DEVREADWRITE("tc0480scp", tc0480scp_device, long_r, long_w)      /* tilemaps */
+	AM_RANGE(0x830000, 0x83002f) AM_DEVREADWRITE("tc0480scp", tc0480scp_device, ctrl_long_r, ctrl_long_w)  // debugging
+	AM_RANGE(0x900000, 0x90ffff) AM_DEVREADWRITE("tc0100scn", tc0100scn_device, long_r, long_w)    /* 6bpp tilemaps */
+	AM_RANGE(0x920000, 0x92000f) AM_DEVREADWRITE("tc0100scn", tc0100scn_device, ctrl_long_r, ctrl_long_w)
+	AM_RANGE(0xa00000, 0xa0ffff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xb00000, 0xb003ff) AM_RAM                     // ?? single bytes, blending ??
 	AM_RANGE(0xc00000, 0xc00007) AM_READNOP /* Network? */
 	AM_RANGE(0xd00000, 0xd00003) AM_WRITE(rotate_control_w) /* perhaps port based rotate control? */
@@ -252,7 +214,7 @@ static INPUT_PORTS_START( groundfx )
 	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x00000020, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x00000040, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_device, read_bit)
+	PORT_BIT( 0x00000080, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, do_read)
 	PORT_BIT( 0x00000100, IP_ACTIVE_LOW, IPT_BUTTON3 )      /* shift hi */
 	PORT_BIT( 0x00000200, IP_ACTIVE_LOW, IPT_BUTTON1 )      /* brake */
 	PORT_BIT( 0x00000400, IP_ACTIVE_LOW, IPT_UNUSED )
@@ -264,9 +226,9 @@ static INPUT_PORTS_START( groundfx )
 	PORT_BIT( 0xffff0000, IP_ACTIVE_LOW, IPT_UNUSED )
 
 	PORT_START( "EEPROMOUT" )
-	PORT_BIT( 0x00000010, IP_ACTIVE_LOW, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_device, set_cs_line)
-	PORT_BIT( 0x00000020, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_device, set_clock_line)
-	PORT_BIT( 0x00000040, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_device, write_bit)
+	PORT_BIT( 0x00000010, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, cs_write)
+	PORT_BIT( 0x00000020, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, clk_write)
+	PORT_BIT( 0x00000040, IP_ACTIVE_HIGH, IPT_OUTPUT ) PORT_WRITE_LINE_DEVICE_MEMBER("eeprom", eeprom_serial_93cxx_device, di_write)
 
 	PORT_START("SYSTEM")
 	PORT_SERVICE_NO_TOGGLE( 0x00000001, IP_ACTIVE_LOW )
@@ -319,7 +281,7 @@ static const gfx_layout charlayout =
 	128*8     /* every sprite takes 128 consecutive bytes */
 };
 
-static const gfx_layout pivlayout =
+static const gfx_layout scclayout =
 {
 	8,8,    /* 8*8 characters */
 	RGN_FRAC(1,2),
@@ -333,33 +295,13 @@ static const gfx_layout pivlayout =
 static GFXDECODE_START( groundfx )
 	GFXDECODE_ENTRY( "gfx2", 0x0, tile16x16_layout,  4096, 512 )
 	GFXDECODE_ENTRY( "gfx1", 0x0, charlayout,        0, 512 )
-	GFXDECODE_ENTRY( "gfx3", 0x0, pivlayout,         0, 512 )
+	GFXDECODE_ENTRY( "gfx3", 0x0, scclayout,         0, 512 )
 GFXDECODE_END
 
 
 /***********************************************************
                  MACHINE DRIVERS
 ***********************************************************/
-
-static const tc0100scn_interface groundfx_tc0100scn_intf =
-{
-	"screen",
-	2, 3,       /* gfxnum, txnum */
-	50, 8,      /* x_offset, y_offset */
-	0, 0,       /* flip_xoff, flip_yoff */
-	0, 0,       /* flip_text_xoff, flip_text_yoff */
-	0, 0
-};
-
-static const tc0480scp_interface groundfx_tc0480scp_intf =
-{
-	1, 4,       /* gfxnum, txnum */
-	0,      /* pixels */
-	0x24, 0,        /* x_offset, y_offset */
-	-1, 0,      /* text_xoff, text_yoff */
-	0, 0,       /* flip_xoff, flip_yoff */
-	0       /* col_base */
-};
 
 INTERRUPT_GEN_MEMBER(groundfx_state::groundfx_interrupt)
 {
@@ -374,7 +316,7 @@ static MACHINE_CONFIG_START( groundfx, groundfx_state )
 	MCFG_CPU_PROGRAM_MAP(groundfx_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", groundfx_state,  groundfx_interrupt)
 
-	MCFG_EEPROM_ADD("eeprom", groundfx_eeprom_interface)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -383,13 +325,26 @@ static MACHINE_CONFIG_START( groundfx, groundfx_state )
 	MCFG_SCREEN_SIZE(40*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 40*8-1, 3*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(groundfx_state, screen_update_groundfx)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(groundfx)
-	MCFG_PALETTE_LENGTH(16384)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", groundfx)
+	MCFG_PALETTE_ADD("palette", 16384)
+	MCFG_PALETTE_FORMAT(XRGB)
 
+	MCFG_DEVICE_ADD("tc0100scn", TC0100SCN, 0)
+	MCFG_TC0100SCN_GFX_REGION(2)
+	MCFG_TC0100SCN_TX_REGION(3)
+	MCFG_TC0100SCN_OFFSETS(50, 8)
+	MCFG_TC0100SCN_GFXDECODE("gfxdecode")
+	MCFG_TC0100SCN_PALETTE("palette")
 
-	MCFG_TC0100SCN_ADD("tc0100scn", groundfx_tc0100scn_intf)
-	MCFG_TC0480SCP_ADD("tc0480scp", groundfx_tc0480scp_intf)
+	MCFG_DEVICE_ADD("tc0480scp", TC0480SCP, 0)
+	MCFG_TC0480SCP_GFX_REGION(1)
+	MCFG_TC0480SCP_TX_REGION(4)
+	MCFG_TC0480SCP_OFFSETS(0x24, 0)
+	MCFG_TC0480SCP_OFFSETS_TX(-1, 0)
+	MCFG_TC0480SCP_GFXDECODE("gfxdecode")
+	MCFG_TC0480SCP_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_FRAGMENT_ADD(taito_en_sound)
@@ -422,7 +377,7 @@ ROM_START( groundfx )
 	ROM_LOAD32_BYTE( "d51-07.51", 0x000003, 0x200000, CRC(24b2f97d) SHA1(6980e67b435d189ce897c0301e0411763410ab47) )
 
 	ROM_REGION( 0x400000, "gfx3", 0 )
-	ROM_LOAD16_BYTE( "d51-10.95", 0x000000, 0x100000, CRC(d5910604) SHA1(8efe13884cfdef208394ddfe19f43eb1b9f78ff3) )    /* PIV 8x8 tiles, 6bpp */
+	ROM_LOAD16_BYTE( "d51-10.95", 0x000000, 0x100000, CRC(d5910604) SHA1(8efe13884cfdef208394ddfe19f43eb1b9f78ff3) )    /* SCC 8x8 tiles, 6bpp */
 	ROM_LOAD16_BYTE( "d51-11.96", 0x000001, 0x100000, CRC(fee5f5c6) SHA1(1be88747f9c71c348dd61a8f0040007df3a3e6a6) )
 	ROM_LOAD       ( "d51-12.97", 0x300000, 0x100000, CRC(d630287b) SHA1(2fa09e1821b7280d193ca9a2a270759c3c3189d1) )
 	ROM_FILL       (              0x200000, 0x100000, 0 )
@@ -465,7 +420,7 @@ DRIVER_INIT_MEMBER(groundfx_state,groundfx)
 	/* Speedup handlers */
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x20b574, 0x20b577, read32_delegate(FUNC(groundfx_state::irq_speedup_r_groundfx),this));
 
-	/* make piv tile GFX format suitable for gfxdecode */
+	/* make SCC tile GFX format suitable for gfxdecode */
 	offset = size/2;
 	for (i = size/2+size/4; i<size; i++)
 	{

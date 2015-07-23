@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Antoine Mine
 /**********************************************************************
 
   Copyright (C) Antoine Mine' 2006
@@ -29,8 +31,7 @@
 
 int thomson_state::thom_update_screen_size()
 {
-	screen_device *screen = machine().first_screen();
-	const rectangle &visarea = screen->visible_area();
+	const rectangle &visarea = m_screen->visible_area();
 	UINT8 p = ioport("vconfig")->read();
 	int new_w, new_h, changed = 0;
 
@@ -53,7 +54,7 @@ int thomson_state::thom_update_screen_size()
 	if ( ( visarea.max_x != new_w ) || ( visarea.max_y != new_h ) )
 	{
 		changed = 1;
-		machine().primary_screen->set_visible_area(0, new_w, 0, new_h );
+		m_screen->set_visible_area(0, new_w, 0, new_h );
 	}
 
 	return changed;
@@ -406,6 +407,31 @@ UPDATE_LOW( mo5 )
 END_UPDATE
 
 
+/* as mo5, but with pastel bit switched */
+
+UPDATE_HI( mo5alt )
+{
+	int i;
+	pen_t c[2];
+	c[0] = pal[ (ramb & 15) ^ 8 ];
+		c[1] = pal[ (ramb >> 4) ^ 8 ];
+	for ( i = 0; i < 16; i += 2, rama >>= 1 )
+		dst[ 15 - i ] = dst[ 14 - i ] = c[ rama & 1 ];
+}
+END_UPDATE
+
+UPDATE_LOW( mo5alt )
+{
+	int i;
+	pen_t c[2];
+	c[0] = pal[ (ramb & 15) ^ 8 ];
+	c[1] = pal[ (ramb >> 4) ^ 8 ];
+	for ( i = 0; i < 8; i++, rama >>= 1 )
+		dst[ 7 - i ] = c[ rama & 1 ];
+}
+END_UPDATE
+
+
 
 /* as to770, but with pastel color bit unswitched */
 
@@ -492,6 +518,29 @@ UPDATE_LOW( bitmap4alt )
 		dst[ 7 - i ] = c[ ramb & 3 ];
 	for ( i = 0; i < 4; i++, rama >>= 2 )
 		dst[ 3 - i ] = c[ rama & 3 ];
+}
+END_UPDATE
+
+
+/* 160x200, 4 colors, no constraint, using only one memory page (undocumented) */
+
+UPDATE_HI( bitmap4althalf )
+{
+	dst[ 0] = dst[ 1] = dst[ 2] = dst[ 3] = pal[ rama >> 6 ];
+	dst[ 4] = dst[ 5] = dst[ 6] = dst[ 7] = pal[ (rama >> 4) & 3 ];
+	dst[ 8] = dst[ 9] = dst[10] = dst[11] = pal[ (rama >> 2) & 3];
+	dst[12] = dst[13] = dst[14] = dst[15] = pal[ rama & 3 ];
+	(void)ramb; // ramb is not used
+}
+END_UPDATE
+
+UPDATE_LOW( bitmap4althalf )
+{
+	dst[0] = dst[1] = pal[ rama >> 6 ];
+	dst[2] = dst[3] = pal[ (rama >> 4) & 3 ];
+	dst[4] = dst[5] = pal[ (rama >> 2) & 3];
+	dst[6] = dst[7] = pal[ rama & 3 ];
+	(void)ramb; // ramb is not used
 }
 END_UPDATE
 
@@ -632,7 +681,7 @@ END_UPDATE
 
 
 
-/* 320x200, 2-colors, two overlaid pages (untested) */
+/* 320x200, 2-colors, two overlaid pages */
 
 UPDATE_HI( overlay )
 {
@@ -659,14 +708,49 @@ UPDATE_LOW( overlay )
 END_UPDATE
 
 
+/* 160x200 undocumented variant of the above (2-colors, two overlaid pages) */
 
-/* 160x200, 4-colors, four overlaid pages (untested) */
+UPDATE_HI( overlayhalf )
+{
+	int i;
+	pen_t c[2][2];
+	c[0][0] = pal[ 0 ];
+	c[0][1] = c[1][1] = pal[ 1 ];
+	c[1][0] = pal[ 2 ];
+		rama >>= 4;
+		ramb >>= 4;
+	for ( i = 0; i < 16; i += 4, rama >>= 1, ramb >>= 1 )
+		dst[ 15 - i ] =  dst[ 14 - i ] = dst[ 13 - i ] =  dst[ 12 - i ] =
+						c[ ramb & 1 ] [ rama & 1 ];
+}
+END_UPDATE
+
+UPDATE_LOW( overlayhalf )
+{
+	int i;
+	pen_t c[2][2];
+	c[0][0] = pal[ 0 ];
+	c[0][1] = c[1][1] = pal[ 1 ];
+	c[1][0] = pal[ 2 ];
+		rama >>= 4;
+		ramb >>= 4;
+	for ( i = 0; i < 8; i += 2, rama >>= 1, ramb >>= 1 )
+		dst[ 7 - i ] = dst[ 6 - i ] = c[ ramb & 1 ] [ rama & 1 ];
+}
+END_UPDATE
+
+
+
+/* 160x200, 4-colors, four overlaid pages */
 
 UPDATE_HI( overlay3 )
 {
+	/* Note: "Manuel Technique" doc implies that the palette entries are 0,1,2,4,8;
+	   we now use palette entries 0,1,2,3,4 instead, as this is what the TEO emulator uses and it has been confirmed correct
+	*/
 	static const int p[2][2][2][2] = {
-			{ { { 0, 1 }, { 2, 1 }, }, { { 4, 1 }, { 2, 1 } } },
-			{ { { 8, 1 }, { 2, 1 }, }, { { 4, 1 }, { 2, 1 } } }
+			{ { { 0, 1 }, { 2, 1 } }, { { 3, 1 }, { 2, 1 } } },
+			{ { { 4, 1 }, { 2, 1 } }, { { 3, 1 }, { 2, 1 } } }
 	};
 	int i;
 	for ( i = 0; i < 16; i += 4, rama >>= 1, ramb >>= 1 )
@@ -679,8 +763,8 @@ END_UPDATE
 UPDATE_LOW( overlay3 )
 {
 	static const int p[2][2][2][2] = {
-			{ { { 0, 1 }, { 2, 1 }, }, { { 4, 1 }, { 2, 1 } } },
-			{ { { 8, 1 }, { 2, 1 }, }, { { 4, 1 }, { 2, 1 } } }
+			{ { { 0, 1 }, { 2, 1 } }, { { 3, 1 }, { 2, 1 } } },
+			{ { { 4, 1 }, { 2, 1 } }, { { 3, 1 }, { 2, 1 } } }
 	};
 	int i;
 	for ( i = 0; i < 8; i += 2, rama >>= 1, ramb >>= 1 )
@@ -700,6 +784,7 @@ static const thom_scandraw thom_scandraw_funcs[THOM_VMODE_NB][2] =
 	FUN(to770),    FUN(mo5),    FUN(bitmap4), FUN(bitmap4alt),  FUN(mode80),
 	FUN(bitmap16), FUN(page1),  FUN(page2),   FUN(overlay),     FUN(overlay3),
 	FUN(to9), FUN(mode80_to9),
+		FUN(bitmap4althalf), FUN(mo5alt), FUN(overlayhalf),
 };
 
 
@@ -1000,7 +1085,10 @@ void thomson_state::thom_vblank( screen_device &screen, bool state )
 /* -------------- initialization --------------- */
 
 
-
+/* TO7, TO7/70 palette, hardcoded in ROM
+   without further information, we assume that the hardcoded values
+   are the same as those setup by the TO8/TO9+/MO6 when booting up
+ */
 static const UINT16 thom_pal_init[16] =
 {
 	0x1000, /* 0: black */        0x000f, /* 1: red */
@@ -1010,9 +1098,23 @@ static const UINT16 thom_pal_init[16] =
 	0x0777, /* 8: gray */         0x033a, /* 9: pink */
 	0x03a3, /* a: light green */  0x03aa, /* b: light yellow */
 	0x0a33, /* c: light blue */   0x0a3a, /* d: redish pink */
-	0x0ee7, /* e: light cyan */   0x003b, /* f: orange */
+	0x0ee7, /* e: light cyan */   0x007b, /* f: orange */
 };
 
+/* MO5 palette, hardcoded in a ROM
+   values are from "Manuel Technique du MO5", p.19
+ */
+static const UINT16 mo5_pal_init[16] =
+{
+	0x1000, /* 0: black */        0x055f, /* 1: red */
+	0x00f0, /* 2: geen */         0x00ff, /* 3: yellow */
+	0x0f55, /* 4: blue */         0x0f0f, /* 5: purple */
+	0x0ff5, /* 6: cyan */         0x0fff, /* 7: white */
+	0x0aaa, /* 8: gray */         0x0aaf, /* 9: pink */
+	0x0afa, /* a: light green */  0x0aff, /* b: light yellow */
+	0x0fa5, /* c: light blue */   0x0faf, /* d: parama pink */
+	0x0ffa, /* e: light cyan */   0x05af, /* f: orange */
+};
 
 
 VIDEO_START_MEMBER( thomson_state, thom )
@@ -1020,8 +1122,6 @@ VIDEO_START_MEMBER( thomson_state, thom )
 	LOG (( "thom: video start called\n" ));
 
 	/* scan-line state */
-	memcpy( m_thom_last_pal, thom_pal_init, 32 );
-	memcpy( m_thom_pal, thom_pal_init, 32 );
 	memset( m_thom_border_l, 0xff, sizeof( m_thom_border_l ) );
 	memset( m_thom_border_r, 0xff, sizeof( m_thom_border_r ) );
 	memset( m_thom_vbody, 0, sizeof( m_thom_vbody ) );
@@ -1080,22 +1180,48 @@ VIDEO_START_MEMBER( thomson_state, thom )
 }
 
 
-
-PALETTE_INIT ( thom )
+/* sets the fixed palette (for MO5,TO7,TO7/70) and gamma correction */
+void thomson_state::thom_configure_palette(double gamma, const UINT16* pal, palette_device& palette)
 {
-	double gamma = 0.6f;
-	unsigned i;
+	memcpy( m_thom_last_pal, pal, 32 );
+	memcpy( m_thom_pal, pal, 32 );
 
-	LOG (( "thom: palette init called\n" ));
-
-	for ( i = 0; i < 4097; i++ )
+	for ( int i = 0; i < 4097; i++ )
 	{
 		UINT8 r = 255. * pow( (i & 15) / 15., gamma );
 		UINT8 g = 255. * pow( ((i>> 4) & 15) / 15., gamma );
 		UINT8 b = 255. * pow( ((i >> 8) & 15) / 15., gamma );
 		/* UINT8 alpha = i & 0x1000 ? 0 : 255;  TODO: transparency */
-		palette_set_color_rgb(machine,  i, r, g, b );
+		palette.set_pen_color(i, r, g, b );
 	}
+}
+
+
+PALETTE_INIT_MEMBER(thomson_state, thom)
+{
+	LOG (( "thom: palette init called\n" ));
+
+		/* TO8 and later use an EF9369 color palette chip
+		   The spec shows a built-in gamma correction for gamma=2.8
+		   i.e., output is out = in ^ (1/2.8)
+
+		   For the TO7, the gamma correction is irrelevant.
+
+		   For the TO7/70, we use the same palette and gamma has the TO8,
+		   which gives good results (but is not verified).
+		 */
+		thom_configure_palette(1.0 / 2.8, thom_pal_init, palette);
+}
+
+PALETTE_INIT_MEMBER(thomson_state, mo5)
+{
+	LOG (( "thom: MO5 palette init called\n" ));
+
+		/* The MO5 has a different fixed palette than the TO7/70.
+		   We use a smaller gamma correction which gives intutively better
+		   results (but is not verified).
+		 */
+		thom_configure_palette(1.0, mo5_pal_init, palette);
 }
 
 
@@ -1225,6 +1351,32 @@ WRITE8_MEMBER( thomson_state::to8_vcart_w )
 {
 	UINT8* dst = m_thom_vram + ( ( offset + 0x4000 * m_to8_cart_vpage ) & m_ram->mask() );
 	assert( offset < 0x4000 );
+	if ( *dst == data )
+		return;
+	*dst = data;
+	/* dirty whole scanline */
+	if ( m_to8_cart_vpage >= 4  )
+		return;
+	m_thom_vmem_dirty[ (offset & 0x1fff) / 40 ] = 1;
+}
+
+WRITE8_MEMBER( thomson_state::mo6_vcart_lo_w )
+{
+	UINT8* dst = m_thom_vram + ( ( offset + 0x3000 + 0x4000 * m_to8_cart_vpage ) & m_ram->mask() );
+	assert( offset < 0x1000 );
+	if ( *dst == data )
+		return;
+	*dst = data;
+	/* dirty whole scanline */
+	if ( m_to8_cart_vpage >= 4  )
+		return;
+	m_thom_vmem_dirty[ (offset & 0x1fff) / 40 ] = 1;
+}
+
+WRITE8_MEMBER( thomson_state::mo6_vcart_hi_w )
+{
+	UINT8* dst = m_thom_vram + ( ( offset + 0x4000 * m_to8_cart_vpage ) & m_ram->mask() );
+	assert( offset < 0x3000 );
 	if ( *dst == data )
 		return;
 	*dst = data;

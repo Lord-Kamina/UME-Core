@@ -1,153 +1,9 @@
-/***************************************************************************
-
-    NOTE: ****** Specbusy: press N, R, or E to boot *************
-
-
-        Spectrum/Inves/TK90X etc. memory map:
-
-    CPU:
-        0000-3fff ROM
-        4000-ffff RAM
-
-        Spectrum 128/+2/+2a/+3 memory map:
-
-        CPU:
-                0000-3fff Banked ROM/RAM (banked rom only on 128/+2)
-                4000-7fff Banked RAM
-                8000-bfff Banked RAM
-                c000-ffff Banked RAM
-
-        TS2068 memory map: (Can't have both EXROM and DOCK active)
-        The 8K EXROM can be loaded into multiple pages.
-
-    CPU:
-                0000-1fff     ROM / EXROM / DOCK (Cartridge)
-                2000-3fff     ROM / EXROM / DOCK
-                4000-5fff \
-                6000-7fff  \
-                8000-9fff  |- RAM / EXROM / DOCK
-                a000-bfff  |
-                c000-dfff  /
-                e000-ffff /
-
-
-Interrupts:
-
-Changes:
-
-29/1/2000   KT -    Implemented initial +3 emulation.
-30/1/2000   KT -    Improved input port decoding for reading and therefore
-            correct keyboard handling for Spectrum and +3.
-31/1/2000   KT -    Implemented buzzer sound for Spectrum and +3.
-            Implementation copied from Paul Daniel's Jupiter driver.
-            Fixed screen display problems with dirty chars.
-            Added support to load .Z80 snapshots. 48k support so far.
-13/2/2000   KT -    Added Interface II, Kempston, Fuller and Mikrogen
-            joystick support.
-17/2/2000   DJR -   Added full key descriptions and Spectrum+ keys.
-            Fixed Spectrum +3 keyboard problems.
-17/2/2000   KT -    Added tape loading from WAV/Changed from DAC to generic
-            speaker code.
-18/2/2000   KT -    Added tape saving to WAV.
-27/2/2000   KT -    Took DJR's changes and added my changes.
-27/2/2000   KT -    Added disk image support to Spectrum +3 driver.
-27/2/2000   KT -    Added joystick I/O code to the Spectrum +3 I/O handler.
-14/3/2000   DJR -   Tape handling dipswitch.
-26/3/2000   DJR -   Snapshot files are now classifed as snapshots not
-            cartridges.
-04/4/2000   DJR -   Spectrum 128 / +2 Support.
-13/4/2000   DJR -   +4 Support (unofficial 48K hack).
-13/4/2000   DJR -   +2a Support (rom also used in +3 models).
-13/4/2000   DJR -   TK90X, TK95 and Inves support (48K clones).
-21/4/2000   DJR -   TS2068 and TC2048 support (TC2048 Supports extra video
-            modes but doesn't have bank switching or sound chip).
-09/5/2000   DJR -   Spectrum +2 (France, Spain), +3 (Spain).
-17/5/2000   DJR -   Dipswitch to enable/disable disk drives on +3 and clones.
-27/6/2000   DJR -   Changed 128K/+3 port decoding (sound now works in Zub 128K).
-06/8/2000   DJR -   Fixed +3 Floppy support
-10/2/2001   KT  -   Re-arranged code and split into each model emulated.
-            Code is split into 48k, 128k, +3, tc2048 and ts2048
-            segments. 128k uses some of the functions in 48k, +3
-            uses some functions in 128, and tc2048/ts2048 use some
-            of the functions in 48k. The code has been arranged so
-            these functions come in some kind of "override" order,
-            read functions changed to use  READ8_HANDLER and write
-            functions changed to use WRITE8_HANDLER.
-            Added Scorpion256 preliminary.
-18/6/2001   DJR -   Added support for Interface 2 cartridges.
-xx/xx/2001  KS -    TS-2068 sound fixed.
-            Added support for DOCK cartridges for TS-2068.
-            Added Spectrum 48k Psycho modified rom driver.
-            Added UK-2086 driver.
-23/12/2001  KS -    48k machines are now able to run code in screen memory.
-                Programs which keep their code in screen memory
-                like monitors, tape copiers, decrunchers, etc.
-                works now.
-                Fixed problem with interrupt vector set to 0xffff (much
-            more 128k games works now).
-                A useful used trick on the Spectrum is to set
-                interrupt vector to 0xffff (using the table
-                which contain 0xff's) and put a byte 0x18 hex,
-                the opcode for JR, at this address. The first
-                byte of the ROM is a 0xf3 (DI), so the JR will
-                jump to 0xfff4, where a long JP to the actual
-                interrupt routine is put. Due to unideal
-                bankswitching in MAME this JP were to 0001 what
-                causes Spectrum to reset. Fixing this problem
-                made much more software runing (i.e. Paperboy).
-            Corrected frames per second value for 48k and 128k
-            Sincalir machines.
-                There are 50.08 frames per second for Spectrum
-                48k what gives 69888 cycles for each frame and
-                50.021 for Spectrum 128/+2/+2A/+3 what gives
-                70908 cycles for each frame.
-            Remaped some Spectrum+ keys.
-                Presing F3 to reset was seting 0xf7 on keyboard
-                input port. Problem occurred for snapshots of
-                some programms where it was readed as pressing
-                key 4 (which is exit in Tapecopy by R. Dannhoefer
-                for example).
-            Added support to load .SP snapshots.
-            Added .BLK tape images support.
-                .BLK files are identical to .TAP ones, extension
-                is an only difference.
-08/03/2002  KS -    #FF port emulation added.
-                Arkanoid works now, but is not playable due to
-                completly messed timings.
-
-Initialisation values used when determining which model is being emulated:
- 48K        Spectrum doesn't use either port.
- 128K/+2    Bank switches with port 7ffd only.
- +3/+2a     Bank switches with both ports.
-
-Notes:
- 1. No contented memory.
- 2. No hi-res colour effects (need contended memory first for accurate timing).
- 3. Multiface 1 and Interface 1 not supported.
- 4. Horace and the Spiders cartridge doesn't run properly.
- 5. Tape images not supported:
-    .TZX, .SPC, .ITM, .PAN, .TAP(Warajevo), .VOC, .ZXS.
- 6. Snapshot images not supported:
-    .ACH, .PRG, .RAW, .SEM, .SIT, .SNX, .ZX, .ZXS, .ZX82.
- 7. 128K emulation is not perfect - the 128K machines crash and hang while
-    running quite a lot of games.
- 8. Disk errors occur on some +3 games.
- 9. Video hardware of all machines is timed incorrectly.
-10. EXROM and HOME cartridges are not emulated.
-11. The TK90X and TK95 roms output 0 to port #df on start up.
-12. The purpose of this port is unknown (probably display mode as TS2068) and
-    thus is not emulated.
-
-Very detailed infos about the ZX Spectrum +3e can be found at
-
-http://www.z88forever.org.uk/zxplus3e/
-
-*******************************************************************************/
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 
 #include "emu.h"
 #include "includes/spectrum.h"
 #include "imagedev/snapquik.h"
-#include "imagedev/cartslot.h"
 #include "imagedev/cassette.h"
 #include "sound/ay8910.h"
 #include "sound/speaker.h"
@@ -179,7 +35,7 @@ protected:
 	required_memory_bank m_bank2;
 	required_memory_bank m_bank3;
 	required_memory_bank m_bank4;
-	required_device<device_t> m_beta;
+	required_device<beta_disk_device> m_beta;
 private:
 	UINT8 *m_p_ram;
 	void scorpion_update_memory();
@@ -257,10 +113,10 @@ DIRECT_UPDATE_MEMBER(scorpion_state::scorpion_direct)
 	UINT16 pc = m_maincpu->device_t::safe_pcbase(); // works, but...
 
 	m_ram_disabled_by_beta = 0;
-	if (betadisk_is_active(m_beta) && (pc >= 0x4000))
+	if (m_beta->is_active() && (pc >= 0x4000))
 	{
 		m_ROMSelection = BIT(m_port_7ffd_data, 4);
-		betadisk_disable(m_beta);
+		m_beta->disable();
 		m_ram_disabled_by_beta = 1;
 		m_bank1->set_base(&m_p_ram[0x10000 + (m_ROMSelection<<14)]);
 	}
@@ -268,7 +124,7 @@ DIRECT_UPDATE_MEMBER(scorpion_state::scorpion_direct)
 	if (((pc & 0xff00) == 0x3d00) && (m_ROMSelection==1))
 	{
 		m_ROMSelection = 3;
-		betadisk_enable(m_beta);
+		m_beta->enable();
 	}
 
 	if(address<=0x3fff)
@@ -313,16 +169,16 @@ WRITE8_MEMBER(scorpion_state::scorpion_port_1ffd_w)
 
 static ADDRESS_MAP_START (scorpion_io, AS_IO, 8, scorpion_state )
 	ADDRESS_MAP_UNMAP_HIGH
-	AM_RANGE(0x001f, 0x001f) AM_DEVREADWRITE_LEGACY(BETA_DISK_TAG, betadisk_status_r,betadisk_command_w) AM_MIRROR(0xff00)
-	AM_RANGE(0x003f, 0x003f) AM_DEVREADWRITE_LEGACY(BETA_DISK_TAG, betadisk_track_r,betadisk_track_w) AM_MIRROR(0xff00)
-	AM_RANGE(0x005f, 0x005f) AM_DEVREADWRITE_LEGACY(BETA_DISK_TAG, betadisk_sector_r,betadisk_sector_w) AM_MIRROR(0xff00)
-	AM_RANGE(0x007f, 0x007f) AM_DEVREADWRITE_LEGACY(BETA_DISK_TAG, betadisk_data_r,betadisk_data_w) AM_MIRROR(0xff00)
+	AM_RANGE(0x001f, 0x001f) AM_DEVREADWRITE(BETA_DISK_TAG, beta_disk_device, status_r, command_w) AM_MIRROR(0xff00)
+	AM_RANGE(0x003f, 0x003f) AM_DEVREADWRITE(BETA_DISK_TAG, beta_disk_device, track_r, track_w) AM_MIRROR(0xff00)
+	AM_RANGE(0x005f, 0x005f) AM_DEVREADWRITE(BETA_DISK_TAG, beta_disk_device, sector_r, sector_w) AM_MIRROR(0xff00)
+	AM_RANGE(0x007f, 0x007f) AM_DEVREADWRITE(BETA_DISK_TAG, beta_disk_device, data_r, data_w) AM_MIRROR(0xff00)
 	AM_RANGE(0x00fe, 0x00fe) AM_READWRITE(spectrum_port_fe_r,spectrum_port_fe_w) AM_MIRROR(0xff00) AM_MASK(0xffff)
-	AM_RANGE(0x00ff, 0x00ff) AM_DEVREADWRITE_LEGACY(BETA_DISK_TAG, betadisk_state_r, betadisk_param_w) AM_MIRROR(0xff00)
-	AM_RANGE(0x4000, 0x4000) AM_WRITE(scorpion_port_7ffd_w)  AM_MIRROR(0x3ffd)
-	AM_RANGE(0x8000, 0x8000) AM_DEVWRITE("ay8912", ay8910_device, data_w) AM_MIRROR(0x3ffd)
-	AM_RANGE(0xc000, 0xc000) AM_DEVREADWRITE("ay8912", ay8910_device, data_r, address_w) AM_MIRROR(0x3ffd)
-	AM_RANGE(0x1000, 0x1000) AM_WRITE(scorpion_port_1ffd_w) AM_MIRROR(0x0ffd)
+	AM_RANGE(0x00ff, 0x00ff) AM_DEVREADWRITE(BETA_DISK_TAG, beta_disk_device, state_r, param_w) AM_MIRROR(0xff00)
+	AM_RANGE(0x4021, 0x4021) AM_WRITE(scorpion_port_7ffd_w)  AM_MIRROR(0x3fdc)
+	AM_RANGE(0x8021, 0x8021) AM_DEVWRITE("ay8912", ay8910_device, data_w) AM_MIRROR(0x3fdc)
+	AM_RANGE(0xc021, 0xc021) AM_DEVREADWRITE("ay8912", ay8910_device, data_r, address_w) AM_MIRROR(0x3fdc)
+	AM_RANGE(0x0021, 0x0021) AM_WRITE(scorpion_port_1ffd_w) AM_MIRROR(0x3fdc)
 ADDRESS_MAP_END
 
 
@@ -336,8 +192,7 @@ MACHINE_RESET_MEMBER(scorpion_state,scorpion)
 	space.install_read_bank(0x0000, 0x3fff, "bank1");
 	space.install_write_handler(0x0000, 0x3fff, write8_delegate(FUNC(scorpion_state::scorpion_0000_w),this));
 
-	betadisk_disable(m_beta);
-	betadisk_clear_status(m_beta);
+	m_beta->disable();
 	space.set_direct_update_handler(direct_update_delegate(FUNC(scorpion_state::scorpion_direct), this));
 
 	memset(messram,0,256*1024);
@@ -417,7 +272,7 @@ static MACHINE_CONFIG_DERIVED_CLASS( scorpion, spectrum_128, scorpion_state )
 
 	MCFG_MACHINE_START_OVERRIDE(scorpion_state, scorpion )
 	MCFG_MACHINE_RESET_OVERRIDE(scorpion_state, scorpion )
-	MCFG_GFXDECODE(scorpion)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", scorpion)
 
 	MCFG_BETA_DISK_ADD(BETA_DISK_TAG)
 
@@ -429,11 +284,11 @@ static MACHINE_CONFIG_DERIVED_CLASS( scorpion, spectrum_128, scorpion_state )
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( profi, scorpion )
-	MCFG_GFXDECODE(profi)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", profi)
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( quorum, scorpion )
-	MCFG_GFXDECODE(quorum)
+	MCFG_GFXDECODE_MODIFY("gfxdecode", quorum)
 MACHINE_CONFIG_END
 
 
@@ -466,7 +321,6 @@ ROM_START(scorpio)
 	ROMX_LOAD("scorp1.rom",   0x014000, 0x4000, CRC(9d513013) SHA1(367b5a102fb663beee8e7930b8c4acc219c1f7b3), ROM_BIOS(7))
 	ROMX_LOAD("scorp2.rom",   0x018000, 0x4000, CRC(fd0d3ce1) SHA1(07783ee295274d8ff15d935bfd787c8ac1d54900), ROM_BIOS(7))
 	ROMX_LOAD("scorp3.rom",   0x01c000, 0x4000, CRC(1fe1d003) SHA1(33703e97cc93b7edfcc0334b64233cf81b7930db), ROM_BIOS(7))
-	ROM_CART_LOAD("cart", 0x0000, 0x4000, ROM_NOCLEAR | ROM_NOMIRROR | ROM_OPTIONAL)
 
 	ROM_REGION(0x01000, "keyboard", 0)
 	ROM_LOAD( "scrpkey.rom", 0x0000, 0x1000, CRC(e938a510) SHA1(2753993c97ff0fc6cff26ed792929abc1288dc6f))
@@ -492,13 +346,11 @@ ROM_START(profi)
 	ROMX_LOAD( "profi32.rom", 0x010000, 0x10000, CRC(77327f52) SHA1(019bd00cc7939741d99b99beac6ae1298652e652), ROM_BIOS(6))
 	ROM_SYSTEM_BIOS(6, "v7", "Power Of Sound Group")
 	ROMX_LOAD( "profi1k.rom", 0x010000, 0x10000, CRC(a932676f) SHA1(907ac56219f325949a7c2fe8168799d9cdd5ba6c), ROM_BIOS(7))
-	ROM_CART_LOAD("cart", 0x0000, 0x4000, ROM_NOCLEAR | ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START(quorum)
 	ROM_REGION(0x020000, "maincpu", 0)
 	ROM_LOAD("qu7v42.rom",   0x010000, 0x10000, CRC(e950eee5) SHA1(f8e22672722b0038689c6c8bc4acf5392acc9d8c))
-	ROM_CART_LOAD("cart", 0x0000, 0x4000, ROM_NOCLEAR | ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 ROM_START(bestzx)
@@ -515,11 +367,10 @@ ROM_START( kay1024 )
 	ROMX_LOAD( "kay1024b.rom", 0x010000, 0x10000, CRC(ab99c31e) SHA1(cfa9e6553aea72956fce4f0130c007981d684734), ROM_BIOS(2))
 	ROM_SYSTEM_BIOS(2, "v3", "Kramis V0.3")
 	ROMX_LOAD( "kay1024s.rom", 0x010000, 0x10000, CRC(67351caa) SHA1(1d9c0606b380c000ca1dfa33f90a122ecf9df1f1), ROM_BIOS(3))
-	ROM_CART_LOAD("cart", 0x0000, 0x4000, ROM_NOCLEAR | ROM_NOMIRROR | ROM_OPTIONAL)
 ROM_END
 
 /*    YEAR  NAME      PARENT    COMPAT  MACHINE     INPUT   CLASS         INIT      COMPANY     FULLNAME */
-COMP( 1994, scorpio,  spec128,   0, scorpion,   spec_plus, driver_device,   0,      "Zonov and Co.",        "Scorpion ZS-256", GAME_NOT_WORKING )
+COMP( 1994, scorpio,  spec128,   0, scorpion,   spec_plus, driver_device,   0,      "Zonov and Co.",        "Scorpion ZS-256", 0 )
 COMP( 1991, profi,    spec128,   0, profi,      spec_plus, driver_device,   0,      "Kondor and Kramis",        "Profi", GAME_NOT_WORKING )
 COMP( 1998, kay1024,  spec128,   0, scorpion,   spec_plus, driver_device,   0,      "NEMO",     "Kay 1024", GAME_NOT_WORKING )
 COMP( 19??, quorum,   spec128,   0, quorum,     spec_plus, driver_device,   0,      "<unknown>",        "Quorum", GAME_NOT_WORKING )

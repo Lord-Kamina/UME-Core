@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Carlos A. Lozano
 /***************************************************************************
 
   video.c
@@ -10,13 +12,10 @@
 #include "includes/cop01.h"
 
 
-void cop01_state::palette_init()
+PALETTE_INIT_MEMBER(cop01_state, cop01)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
-
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
 
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x100; i++)
@@ -25,7 +24,7 @@ void cop01_state::palette_init()
 		int g = pal4bit(color_prom[i + 0x100]);
 		int b = pal4bit(color_prom[i + 0x200]);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* color_prom now points to the beginning of the lookup table */
@@ -33,7 +32,7 @@ void cop01_state::palette_init()
 
 	/* characters use colors 0x00-0x0f (or 0x00-0x7f, but the eight rows are identical) */
 	for (i = 0; i < 0x10; i++)
-		colortable_entry_set_value(machine().colortable, i, i);
+		palette.set_pen_indirect(i, i);
 
 	/* background tiles use colors 0xc0-0xff */
 	/* I don't know how much of the lookup table PROM is hooked up, */
@@ -42,14 +41,14 @@ void cop01_state::palette_init()
 	{
 		UINT8 ctabentry = 0xc0 | ((i - 0x10) & 0x30) |
 							(color_prom[(((i - 0x10) & 0x40) >> 2) | ((i - 0x10) & 0x0f)] & 0x0f);
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 
 	/* sprites use colors 0x80-0x8f (or 0x80-0xbf, but the four rows are identical) */
 	for (i = 0x90; i < 0x190; i++)
 	{
 		UINT8 ctabentry = 0x80 | (color_prom[i - 0x90 + 0x100] & 0x0f);
-		colortable_entry_set_value(machine().colortable, i, ctabentry);
+		palette.set_pen_indirect(i, ctabentry);
 	}
 }
 
@@ -100,8 +99,8 @@ TILE_GET_INFO_MEMBER(cop01_state::get_fg_tile_info)
 
 void cop01_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(cop01_state::get_bg_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(cop01_state::get_fg_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(cop01_state::get_bg_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(cop01_state::get_fg_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(15);
 
@@ -191,7 +190,7 @@ void cop01_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect 
 		if (code & 0x80)
 			code += (m_vreg[0] & 0x30) << 3;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+		m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 			code,
 			color,
 			flipx,flipy,
@@ -205,9 +204,9 @@ UINT32 cop01_state::screen_update_cop01(screen_device &screen, bitmap_ind16 &bit
 	m_bg_tilemap->set_scrollx(0, m_vreg[1] + 256 * (m_vreg[2] & 1));
 	m_bg_tilemap->set_scrolly(0, m_vreg[3]);
 
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
 	draw_sprites(bitmap, cliprect);
-	m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0 );
+	m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0 );
 	return 0;
 }

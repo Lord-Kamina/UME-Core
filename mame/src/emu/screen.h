@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     screen.h
 
     Core MAME screen device.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -64,6 +35,20 @@ enum screen_type_enum
 // screen_update callback flags
 const UINT32 UPDATE_HAS_NOT_CHANGED = 0x0001;   // the video has not changed
 
+// ----- flags for video_attributes -----
+
+// should VIDEO_UPDATE by called at the start of VBLANK or at the end?
+#define VIDEO_UPDATE_BEFORE_VBLANK      0x0000
+#define VIDEO_UPDATE_AFTER_VBLANK       0x0004
+
+// indicates VIDEO_UPDATE will add container bits its
+#define VIDEO_SELF_RENDER               0x0008
+
+// force VIDEO_UPDATE to be called even for skipped frames
+#define VIDEO_ALWAYS_UPDATE             0x0080
+
+// calls VIDEO_UPDATE for every visible scanline, even for skipped frames
+#define VIDEO_UPDATE_SCANLINE           0x0100
 
 
 //**************************************************************************
@@ -194,10 +179,13 @@ public:
 	static void static_set_screen_update(device_t &device, screen_update_ind16_delegate callback);
 	static void static_set_screen_update(device_t &device, screen_update_rgb32_delegate callback);
 	static void static_set_screen_vblank(device_t &device, screen_vblank_delegate callback);
+	static void static_set_palette(device_t &device, const char *tag);
+	static void static_set_video_attributes(device_t &device, UINT32 flags);
 
 	// information getters
 	render_container &container() const { assert(m_container != NULL); return *m_container; }
-
+	bitmap_ind8 &priority() { return m_priority; }
+	palette_device *palette() { return m_palette; }
 	// dynamic configuration
 	void configure(int width, int height, const rectangle &visarea, attoseconds_t frame_period);
 	void reset_origin(int beamy = 0, int beamx = 0);
@@ -207,13 +195,14 @@ public:
 	int vpos() const;
 	int hpos() const;
 	bool vblank() const { return (machine().time() < m_vblank_end_time); }
-	bool hblank() const { int curpos = hpos(); return (curpos < m_visarea.min_x || curpos > m_visarea.max_x); }
+	DECLARE_READ_LINE_MEMBER(vblank) { return (machine().time() < m_vblank_end_time) ? ASSERT_LINE : CLEAR_LINE; }
+	DECLARE_READ_LINE_MEMBER(hblank) { int curpos = hpos(); return (curpos < m_visarea.min_x || curpos > m_visarea.max_x) ? ASSERT_LINE : CLEAR_LINE; }
 
 	// timing
 	attotime time_until_pos(int vpos, int hpos = 0) const;
 	attotime time_until_vblank_start() const { return time_until_pos(m_visarea.max_y + 1); }
 	attotime time_until_vblank_end() const;
-	attotime time_until_update() const { return (machine().config().m_video_attributes & VIDEO_UPDATE_AFTER_VBLANK) ? time_until_vblank_end() : time_until_vblank_start(); }
+	attotime time_until_update() const { return (m_video_attributes & VIDEO_UPDATE_AFTER_VBLANK) ? time_until_vblank_end() : time_until_vblank_start(); }
 	attotime scan_period() const { return attotime(0, m_scantime); }
 	attotime frame_period() const { return (this == NULL) ? DEFAULT_FRAME_PERIOD : attotime(0, m_frame_period); };
 	UINT64 frame_number() const { return m_frame_number; }
@@ -272,6 +261,8 @@ private:
 	screen_update_ind16_delegate m_screen_update_ind16; // screen update callback (16-bit palette)
 	screen_update_rgb32_delegate m_screen_update_rgb32; // screen update callback (32-bit RGB)
 	screen_vblank_delegate m_screen_vblank;         // screen vblank callback
+	optional_device<palette_device> m_palette;      // our palette
+	UINT32              m_video_attributes;         // flags describing the video system
 
 	// internal state
 	render_container *  m_container;                // pointer to our container
@@ -285,6 +276,7 @@ private:
 	texture_format      m_texformat;                // texture format
 	render_texture *    m_texture[2];               // 2x textures for the screen bitmap
 	screen_bitmap       m_bitmap[2];                // 2x bitmaps for rendering
+	bitmap_ind8         m_priority;                 // priority bitmap
 	bitmap_ind64        m_burnin;                   // burn-in bitmap
 	UINT8               m_curbitmap;                // current bitmap index
 	UINT8               m_curtexture;               // current texture index
@@ -352,16 +344,6 @@ typedef device_type_iterator<&device_creator<screen_device>, screen_device> scre
 //  SCREEN DEVICE CONFIGURATION MACROS
 //**************************************************************************
 
-#define SCREEN_UPDATE_NAME(name)        screen_update_##name
-#define SCREEN_UPDATE_IND16(name)       UINT32 SCREEN_UPDATE_NAME(name)(device_t *, screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
-#define SCREEN_UPDATE_RGB32(name)       UINT32 SCREEN_UPDATE_NAME(name)(device_t *, screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
-#define SCREEN_UPDATE16_CALL(name)      SCREEN_UPDATE_NAME(name)(NULL, screen, bitmap, cliprect)
-#define SCREEN_UPDATE32_CALL(name)      SCREEN_UPDATE_NAME(name)(NULL, screen, bitmap, cliprect)
-
-#define SCREEN_VBLANK_NAME(name)        screen_vblank_##name
-#define SCREEN_VBLANK(name)             void SCREEN_VBLANK_NAME(name)(device_t *, screen_device &screen, bool vblank_on)
-#define SCREEN_VBLANK_CALL(name)        SCREEN_VBLANK_NAME(name)(NULL, screen, vblank_on)
-
 #define MCFG_SCREEN_ADD(_tag, _type) \
 	MCFG_DEVICE_ADD(_tag, SCREEN, 0) \
 	MCFG_SCREEN_TYPE(_type)
@@ -370,33 +352,78 @@ typedef device_type_iterator<&device_creator<screen_device>, screen_device> scre
 
 #define MCFG_SCREEN_TYPE(_type) \
 	screen_device::static_set_type(*device, SCREEN_TYPE_##_type);
+
+/*!
+ @brief Configures screen parameters for the given screen.
+ 
+ @param _pixclock Pixel Clock frequency value
+ @param _htotal Total number of horizontal pixels, including hblank period.
+ @param _hbend Horizontal pixel position for HBlank end event, also first pixel where screen rectangle is visible.
+ @param _hbstart Horizontal pixel position for HBlank start event, also last pixel where screen rectangle is visible.
+ @param _vtotal Total number of vertical pixels, including vblank period.
+ @param _vbend Vertical pixel position for VBlank end event, also first pixel where screen rectangle is visible.
+ @param _vbstart Vertical pixel position for VBlank start event, also last pixel where screen rectangle is visible.
+ */
 #define MCFG_SCREEN_RAW_PARAMS(_pixclock, _htotal, _hbend, _hbstart, _vtotal, _vbend, _vbstart) \
 	screen_device::static_set_raw(*device, _pixclock, _htotal, _hbend, _hbstart, _vtotal, _vbend, _vbstart);
 
+/*!
+ @brief Sets the number of Frames Per Second for this screen
+ 
+ @param _rate FPS number
+ @deprecated Please use MCFG_SCREEN_RAW_PARAMS instead. Gives imprecise timings.
+ */
 #define MCFG_SCREEN_REFRESH_RATE(_rate) \
 	screen_device::static_set_refresh(*device, HZ_TO_ATTOSECONDS(_rate));
+
+/*!
+ @brief Sets the vblank time of the given screen
+ 
+ @param _time Time parameter, in attotime value\
+ @deprecated Please use MCFG_SCREEN_RAW_PARAMS instead. Gives imprecise timings.
+ */
 #define MCFG_SCREEN_VBLANK_TIME(_time) \
 	screen_device::static_set_vblank_time(*device, _time);
+
+/*!
+ @brief Sets total screen size, including H/V-Blanks
+ 
+ @param _width Screen horizontal size
+ @param _height Screen vertical size
+ @deprecated Please use MCFG_SCREEN_RAW_PARAMS instead. Gives imprecise timings.
+ */
 #define MCFG_SCREEN_SIZE(_width, _height) \
 	screen_device::static_set_size(*device, _width, _height);
+
+/*!
+ @brief Sets screen visible area
+ 
+ @param _minx Screen left border
+ @param _maxx Screen right border, must be in N-1 format
+ @param _miny Screen top border
+ @param _maxx Screen bottom border, must be in N-1 format
+ @deprecated Please use MCFG_SCREEN_RAW_PARAMS instead. Gives imprecise timings.
+ */
 #define MCFG_SCREEN_VISIBLE_AREA(_minx, _maxx, _miny, _maxy) \
 	screen_device::static_set_visarea(*device, _minx, _maxx, _miny, _maxy);
 #define MCFG_SCREEN_DEFAULT_POSITION(_xscale, _xoffs, _yscale, _yoffs)  \
 	screen_device::static_set_default_position(*device, _xscale, _xoffs, _yscale, _yoffs);
-#define MCFG_SCREEN_UPDATE_STATIC(_func) \
-	screen_device::static_set_screen_update(*device, screen_update_delegate_smart(&screen_update_##_func, "screen_update_" #_func));
 #define MCFG_SCREEN_UPDATE_DRIVER(_class, _method) \
 	screen_device::static_set_screen_update(*device, screen_update_delegate_smart(&_class::_method, #_class "::" #_method, NULL));
 #define MCFG_SCREEN_UPDATE_DEVICE(_device, _class, _method) \
 	screen_device::static_set_screen_update(*device, screen_update_delegate_smart(&_class::_method, #_class "::" #_method, _device));
 #define MCFG_SCREEN_VBLANK_NONE() \
 	screen_device::static_set_screen_vblank(*device, screen_vblank_delegate());
-#define MCFG_SCREEN_VBLANK_STATIC(_func) \
-	screen_device::static_set_screen_vblank(*device, screen_vblank_delegate(&screen_vblank_##_func, "screen_vblank_" #_func));
 #define MCFG_SCREEN_VBLANK_DRIVER(_class, _method) \
 	screen_device::static_set_screen_vblank(*device, screen_vblank_delegate(&_class::_method, #_class "::" #_method, NULL, (_class *)0));
 #define MCFG_SCREEN_VBLANK_DEVICE(_device, _class, _method) \
 	screen_device::static_set_screen_vblank(*device, screen_vblank_delegate(&_class::_method, #_class "::" #_method, _device, (_class *)0));
+#define MCFG_SCREEN_PALETTE(_palette_tag) \
+	screen_device::static_set_palette(*device, "^" _palette_tag);
+#define MCFG_SCREEN_NO_PALETTE \
+	screen_device::static_set_palette(*device, FINDER_DUMMY_TAG);
+#define MCFG_SCREEN_VIDEO_ATTRIBUTES(_flags) \
+	screen_device::static_set_video_attributes(*device, _flags);
 
 
 //**************************************************************************
@@ -409,16 +436,6 @@ typedef device_type_iterator<&device_creator<screen_device>, screen_device> scre
 //  screen_update_delegate based on the input
 //  function type
 //-------------------------------------------------
-
-inline screen_update_ind16_delegate screen_update_delegate_smart(UINT32 (*callback)(device_t *, screen_device &, bitmap_ind16 &, const rectangle &), const char *name)
-{
-	return screen_update_ind16_delegate(callback, name);
-}
-
-inline screen_update_rgb32_delegate screen_update_delegate_smart(UINT32 (*callback)(device_t *, screen_device &, bitmap_rgb32 &, const rectangle &), const char *name)
-{
-	return screen_update_rgb32_delegate(callback, name);
-}
 
 template<class _FunctionClass>
 inline screen_update_ind16_delegate screen_update_delegate_smart(UINT32 (_FunctionClass::*callback)(screen_device &, bitmap_ind16 &, const rectangle &), const char *name, const char *devname)

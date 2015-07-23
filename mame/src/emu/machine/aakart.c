@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Angelo Salese
 /***************************************************************************
 
 Acorn Archimedes KART interface
@@ -38,7 +40,9 @@ const device_type AAKART = &device_creator<aakart_device>;
 //-------------------------------------------------
 
 aakart_device::aakart_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, AAKART, "aakart", tag, owner, clock)
+	: device_t(mconfig, AAKART, "AAKART", tag, owner, clock, "aakart", __FILE__),
+		m_out_tx_cb(*this),
+		m_out_rx_cb(*this)
 {
 }
 
@@ -59,8 +63,8 @@ void aakart_device::device_validity_check(validity_checker &valid) const
 
 void aakart_device::device_start()
 {
-	m_out_tx_func.resolve(m_out_tx_cb, *this);
-	m_out_rx_func.resolve(m_out_rx_cb, *this);
+	m_out_tx_cb.resolve_safe();
+	m_out_rx_cb.resolve_safe();
 	m_rxtimer = timer_alloc(RX_TIMER);
 	m_rxtimer->adjust(attotime::from_hz(clock()), 0, attotime::from_hz(clock()));
 	m_txtimer = timer_alloc(TX_TIMER);
@@ -72,33 +76,12 @@ void aakart_device::device_start()
 }
 
 //-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void aakart_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const aakart_interface *intf = reinterpret_cast<const aakart_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<aakart_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_out_tx_cb, 0, sizeof(m_out_tx_cb));
-		memset(&m_out_rx_cb, 0, sizeof(m_out_rx_cb));
-	}
-}
-
-//-------------------------------------------------
 //  device_reset - device-specific reset
 //-------------------------------------------------
 
 void aakart_device::device_reset()
 {
-	m_status = STATUS_NORMAL;
+	m_status = STATUS_HRST;
 	m_new_command = 0;
 	m_rx = -1;
 	m_mouse_enable = 0;
@@ -110,145 +93,103 @@ void aakart_device::device_reset()
 
 void aakart_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
 {
-	#if 0
-	if(id == KEYB_TIMER && m_keyb_enable && m_status == STATUS_NORMAL)
-	{
-		m_new_command |= 2;
-		m_rx_latch = 0xd0 | 0; // keyb scancode (0xd0=up 0xc0=down, bits 3-0 row)
-		m_status = STATUS_KEYUP;
-		//m_ff ^= 1;
-		return;
-	}
-	#endif
-
-	if(id == MOUSE_TIMER && m_mouse_enable && m_status == STATUS_NORMAL)
-	{
-		m_new_command |= 2;
-		m_rx_latch = 0; // mouse X position
-		m_status = STATUS_MOUSE;
-		//m_ff ^= 1;
-		return;
-	}
-
-	if(m_new_command == 0)
-		return;
-
-	if(id == RX_TIMER && m_new_command & 2)
-	{
-		m_out_rx_func(ASSERT_LINE);
-		m_new_command &= ~2;
-		m_rx = m_rx_latch;
-		return;
-	}
-
 	if(id == TX_TIMER && m_new_command & 1)
 	{
-		switch(m_status)
+		switch(m_tx_latch)
 		{
-			case STATUS_NORMAL:
-			{
-				switch(m_tx_latch)
-				{
-					case 0x00: // set leds
-						break;
-					case RQID:
-						m_rx_latch = 0x81; //keyboard ID
-						break;
-					case SMAK:
-					case MACK:
-					case SACK:
-					case NACK:
-						if(m_tx_latch & 2) { m_mouse_enable = 1; }
-						if(m_tx_latch & 1) { m_keyb_enable = 1; }
-						break;
-					case HRST:
-						m_rx_latch = HRST;
-						m_status = STATUS_HRST;
-						break;
-					default:
-						//printf("%02x\n",m_tx_latch);
-						break;
-				}
+			case 0x00:
+			case 0x02:
+			case 0x03:
+			case 0x07:
+				// ---- -x-- scroll lock
+				// ---- --x- num lock
+				// ---- ---x caps lock
 				break;
-			}
-			case STATUS_KEYDOWN:
-			{
-				switch(m_tx_latch)
-				{
-					case BACK:
-						m_rx_latch = 0xc0 | 0; // keyb scancode (0xd0=up 0xc0=down, bits 3-0 col)
-						m_status = STATUS_NORMAL;
-						break;
-					case HRST:
-						m_rx_latch = HRST;
-						m_status = STATUS_HRST;
-						break;
-				}
+			case 0x20:
+				m_rx = 0x81;
+				m_out_tx_cb(ASSERT_LINE);
 				break;
-			}
-			case STATUS_KEYUP:
-			{
-				switch(m_tx_latch)
+			case 0x30:
+			case 0x31:
+			case 0x32:
+			case 0x33:
+				m_keyb_enable = m_tx_latch & 1;
+				m_mouse_enable = (m_tx_latch & 2) >> 1;
+				if(m_keyb_enable & 1 && m_keyb_state & 1)
 				{
-					case BACK:
-						m_rx_latch = 0xd0 | 0; // keyb scancode (0xd0=up 0xc0=down, bits 3-0 col)
-						m_status = STATUS_NORMAL;
-						break;
-					case HRST:
-						m_rx_latch = HRST;
-						m_status = STATUS_HRST;
-						break;
+					//printf("Got row\n");
+					m_rx = m_keyb_row;
+					m_out_tx_cb(ASSERT_LINE);
 				}
+
 				break;
-			}
-			case STATUS_MOUSE:
-			{
-				switch(m_tx_latch)
+			case 0x3f:
+				if(m_keyb_enable & 1 && m_keyb_state & 1)
 				{
-					case BACK:
-						m_rx_latch = 0; // mouse Y
-						m_status = STATUS_NORMAL;
-						break;
-					case HRST:
-						m_rx_latch = HRST;
-						m_status = STATUS_HRST;
-						break;
+					//printf("Got col\n");
+					m_rx = m_keyb_col;
+					m_out_tx_cb(ASSERT_LINE);
+					m_keyb_state = 0;
 				}
+
 				break;
-			}
-			case STATUS_HRST:
-			{
-				switch(m_tx_latch)
-				{
-					case HRST:  { m_rx_latch = HRST; m_keyb_enable = m_mouse_enable = 0; break; }
-					case RAK1:  { m_rx_latch = RAK1; m_keyb_enable = m_mouse_enable = 0; break; }
-					case RAK2:  { m_rx_latch = RAK2; m_status = STATUS_NORMAL; break; }
-				}
+			case 0xfd:
+				m_rx = 0xfd;
+				m_out_tx_cb(ASSERT_LINE);
 				break;
-			}
+			case 0xfe:
+				m_rx = 0xfe;
+				m_out_tx_cb(ASSERT_LINE);
+				break;
+			case 0xff:
+				m_rx = 0xff;
+				m_out_tx_cb(ASSERT_LINE);
+				break;
+			default:
+				//printf("%02x %02x %02x\n",m_tx_latch,m_rx_latch,m_keyb_enable);
+				break;
 		}
-		m_out_tx_func(ASSERT_LINE);
-		m_new_command &= ~1;
-		m_new_command |= 2;
+
+		//m_new_command &= ~1;
+		m_out_rx_cb(ASSERT_LINE);
 	}
+
 }
 
 //**************************************************************************
 //  READ/WRITE HANDLERS
 //**************************************************************************
 
+#include "debugger.h"
+
 READ8_MEMBER( aakart_device::read )
 {
-	m_out_tx_func(CLEAR_LINE);
+	m_out_tx_cb(CLEAR_LINE);
+	//debugger_break(machine());
 	return m_rx;
 }
 
 WRITE8_MEMBER( aakart_device::write )
 {
-	if(m_new_command)
-		printf("skip cmd %02x\n",data);
+	// if(m_new_command) printf("skip cmd %02x\n",data);
 
 	m_tx_latch = data;
+	m_out_rx_cb(CLEAR_LINE);
 	m_new_command |= 1;
-	m_out_rx_func(CLEAR_LINE);
+}
+
+void aakart_device::send_keycode_down(UINT8 row, UINT8 col)
+{
+	//printf("keycode down\n");
+	m_keyb_row = row | 0xc0;
+	m_keyb_col = col | 0xc0;
+	m_keyb_state = 1;
+}
+
+void aakart_device::send_keycode_up(UINT8 row, UINT8 col)
+{
+	//printf("keycode up\n");
+	m_keyb_row = row | 0xd0;
+	m_keyb_col = col | 0xd0;
+	m_keyb_state = 1;
 }

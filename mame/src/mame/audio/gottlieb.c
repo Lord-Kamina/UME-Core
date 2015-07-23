@@ -1,46 +1,16 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
-    gottlieb.h
+    gottlieb.c
 
     Gottlieb 6502-based sound hardware implementations.
 
     Dedicated to Warren Davis, Jeff Lee, Tim Skelly & David Thiel
 
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
-
 ***************************************************************************/
 
-#include "emu.h"
-#include "includes/gottlieb.h"
+#include "audio/gottlieb.h"
 
 
 #define SOUND1_CLOCK        XTAL_3_579545MHz
@@ -52,6 +22,7 @@
 //  GLOBAL VARIABLES
 //**************************************************************************
 
+extern const device_type GOTTLIEB_SOUND_REV0 = &device_creator<gottlieb_sound_r0_device>;
 extern const device_type GOTTLIEB_SOUND_REV1 = &device_creator<gottlieb_sound_r1_device>;
 extern const device_type GOTTLIEB_SOUND_REV1_WITH_VOTRAX = &device_creator<gottlieb_sound_r1_with_votrax_device>;
 extern const device_type GOTTLIEB_SOUND_REV2 = &device_creator<gottlieb_sound_r2_device>;
@@ -160,7 +131,7 @@ logerror("Votrax: intonation %d, phoneme %02x %s\n",data >> 6,data & 0x3f,Phonem
 				else strcat(phonemes,PhonemeTable[phoneme]);
 			}
 
-			mame_printf_debug("Votrax played '%s'\n", phonemes);
+			osd_printf_debug("Votrax played '%s'\n", phonemes);
 
 			if (strcmp(phonemes, "[0] HEH3LOOW     AH1EH3I3YMTERI2NDAHN") == 0)   /* Q-Bert & Tylz - Hello, I am turned on */
 								m_samples->start(0, 42);
@@ -259,73 +230,146 @@ static const char *const qbert_sample_names[] =
 	0   /* end of array */
 };
 
-static const samples_interface reactor_samples_interface =
-{
-	1,  /* one channel */
-	reactor_sample_names
-};
-
-static const samples_interface qbert_samples_interface =
-{
-	1,  /* one channel */
-	qbert_sample_names
-};
-
 MACHINE_CONFIG_FRAGMENT( reactor_samples )
-	MCFG_SAMPLES_ADD("samples", reactor_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(1)
+	MCFG_SAMPLES_NAMES(reactor_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
 MACHINE_CONFIG_FRAGMENT( qbert_samples )
-	MCFG_SAMPLES_ADD("samples", qbert_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(1)
+	MCFG_SAMPLES_NAMES(qbert_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
 #endif
 
 
-
 //**************************************************************************
-//  QBERT MECHANICAL KNOCKER
+//  REV 0 SOUND BOARD: 6502 + 6530 + DAC
 //**************************************************************************
 
 //-------------------------------------------------
-//  qbert cabinets have a mechanical knocker near the floor,
-//  MAME simulates this with a sample.
-//  (like all MAME samples, it is optional. If you actually have
-//   a real kicker/knocker, hook it up via output "knocker0")
+//  gottlieb_sound_r0_device - constructors
 //-------------------------------------------------
 
-void gottlieb_state::qbert_knocker(UINT8 knock)
+gottlieb_sound_r0_device::gottlieb_sound_r0_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
+	: device_t(mconfig, GOTTLIEB_SOUND_REV1, "Gottlieb Sound rev. 0", tag, owner, clock, "gotsndr0", __FILE__)
+	, device_mixer_interface(mconfig, *this)
+	, m_audiocpu(*this, "audiocpu")
+	, m_r6530(*this, "r6530")
+	, m_dac(*this, "dac")
+	, m_sndcmd(0)
 {
-	output_set_value("knocker0", knock);
-
-	// start sound on rising edge
-	if (knock & ~m_knocker_prev)
-		m_knocker_sample->start(0, 0);
-	m_knocker_prev = knock;
 }
 
-static const char *const qbert_knocker_names[] =
+
+//-------------------------------------------------
+//  read port -
+//-------------------------------------------------
+
+READ8_MEMBER( gottlieb_sound_r0_device::r6530b_r )
 {
-	"*qbert",
-	"knocker",
-	0   /* end of array */
-};
+	return m_sndcmd;
+}
 
-static const samples_interface qbert_knocker_interface =
+
+//-------------------------------------------------
+//  write - handle an external command write
+//-------------------------------------------------
+
+WRITE8_MEMBER( gottlieb_sound_r0_device::write )
 {
-	1,  /* one channel */
-	qbert_knocker_names
-};
+	// write the command data to the low 4 bits
+	UINT8 pb0_3 = data ^ 15;
+	UINT8 pb4_7 = ioport("SB0")->read() & 0x90;
+	m_sndcmd = pb0_3 | pb4_7;
+	m_r6530->write(space, offset, m_sndcmd);
+}
 
-MACHINE_CONFIG_FRAGMENT( qbert_knocker )
-	MCFG_SPEAKER_ADD("knocker", 0.0, 0.0, 1.0)
 
-	MCFG_SAMPLES_ADD("knocker_sam", qbert_knocker_interface)
-	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "knocker", 1.0)
+//-------------------------------------------------
+//  audio CPU map
+//-------------------------------------------------
+
+static ADDRESS_MAP_START( gottlieb_sound_r0_map, AS_PROGRAM, 8, gottlieb_sound_r0_device )
+	ADDRESS_MAP_GLOBAL_MASK(0x0fff)
+	AM_RANGE(0x0000, 0x003f) AM_RAM AM_MIRROR(0x1c0)
+	AM_RANGE(0x0200, 0x020f) AM_DEVREADWRITE("r6530", mos6530_device, read, write)
+	AM_RANGE(0x0400, 0x0fff) AM_ROM
+ADDRESS_MAP_END
+
+
+//-------------------------------------------------
+//  machine configuration
+//-------------------------------------------------
+
+MACHINE_CONFIG_FRAGMENT( gottlieb_sound_r0 )
+	// audio CPU
+	MCFG_CPU_ADD("audiocpu", M6502, SOUND1_CLOCK/4) // M6503 - clock is a gate, a resistor and a capacitor. Freq unknown.
+	MCFG_CPU_PROGRAM_MAP(gottlieb_sound_r0_map)
+
+	// I/O configuration
+	MCFG_DEVICE_ADD("r6530", MOS6530, SOUND1_CLOCK/4) // unknown - same as cpu
+	MCFG_MOS6530_OUT_PA_CB(DEVWRITE8("dac", dac_device, write_unsigned8))
+	MCFG_MOS6530_IN_PB_CB(READ8(gottlieb_sound_r0_device, r6530b_r))
+
+	// sound devices
+	MCFG_DAC_ADD("dac")
+	MCFG_SOUND_ROUTE(ALL_OUTPUTS, DEVICE_SELF_OWNER, 0.50)
 MACHINE_CONFIG_END
 
+
+//-------------------------------------------------
+//  input ports
+//-------------------------------------------------
+
+INPUT_PORTS_START( gottlieb_sound_r0 )
+	PORT_START("SB0")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_OTHER) PORT_NAME("Audio Diag") PORT_CODE(KEYCODE_0) PORT_CHANGED_MEMBER(DEVICE_SELF, gottlieb_sound_r0_device, audio_nmi, 1)
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_OTHER) PORT_NAME("Attract") PORT_CODE(KEYCODE_F1) PORT_TOGGLE
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_OTHER) PORT_NAME("Music") PORT_CODE(KEYCODE_F2) PORT_TOGGLE
+INPUT_PORTS_END
+
+INPUT_CHANGED_MEMBER( gottlieb_sound_r0_device::audio_nmi )
+{
+	// Diagnostic button sends a pulse to NMI pin
+	if (newval==CLEAR_LINE)
+		m_audiocpu->set_input_line(INPUT_LINE_NMI, PULSE_LINE);
+}
+
+
+//-------------------------------------------------
+//  device_mconfig_additions - return a pointer to
+//  the device's machine fragment
+//-------------------------------------------------
+
+machine_config_constructor gottlieb_sound_r0_device::device_mconfig_additions() const
+{
+	return MACHINE_CONFIG_NAME( gottlieb_sound_r0 );
+}
+
+
+//-------------------------------------------------
+//  device_input_ports - return a pointer to
+//  the device's I/O ports
+//-------------------------------------------------
+
+ioport_constructor gottlieb_sound_r0_device::device_input_ports() const
+{
+	return INPUT_PORTS_NAME( gottlieb_sound_r0 );
+}
+
+
+//-------------------------------------------------
+//  device_start - device-specific startup
+//-------------------------------------------------
+
+void gottlieb_sound_r0_device::device_start()
+{
+}
 
 
 //**************************************************************************
@@ -439,12 +483,15 @@ WRITE8_MEMBER( gottlieb_sound_r1_device::votrax_data_w )
 
 WRITE8_MEMBER( gottlieb_sound_r1_device::speech_clock_dac_w )
 {
+	// prevent negative clock values (and possible crash)
+	if (data < 0x65) data = 0x65;
+
 	if (m_votrax != NULL)
 	{
 		// nominal clock is 0xa0
 		if (data != m_last_speech_clock)
 		{
-			mame_printf_debug("clock = %02X\n", data);
+			osd_printf_debug("clock = %02X\n", data);
 
 			// totally random guesswork; would like to get real measurements on a board
 			if (m_votrax != NULL)
@@ -464,30 +511,6 @@ WRITE_LINE_MEMBER( gottlieb_sound_r1_device::votrax_request )
 {
 	m_audiocpu->set_input_line(INPUT_LINE_NMI, state);
 }
-
-
-//-------------------------------------------------
-//  RIOT interface
-//-------------------------------------------------
-
-static const riot6532_interface gottlieb_riot6532_intf =
-{
-	DEVCB_NULL,
-	DEVCB_INPUT_PORT("SB1"),
-	DEVCB_NULL,
-	DEVCB_DEVICE_MEMBER(DEVICE_SELF_OWNER, gottlieb_sound_r1_device, r6532_portb_w),
-	DEVCB_DEVICE_LINE_MEMBER(DEVICE_SELF_OWNER, gottlieb_sound_r1_device, snd_interrupt)
-};
-
-
-//-------------------------------------------------
-//  VOTRAX interface
-//-------------------------------------------------
-
-static const votrax_sc01_interface gottlieb_votrax_interface =
-{
-	DEVCB_DEVICE_LINE_MEMBER(DEVICE_SELF_OWNER, gottlieb_sound_r1_device, votrax_request)
-};
 
 
 //-------------------------------------------------
@@ -516,7 +539,10 @@ MACHINE_CONFIG_FRAGMENT( gottlieb_sound_r1 )
 	MCFG_CPU_PROGRAM_MAP(gottlieb_sound_r1_map)
 
 	// I/O configuration
-	MCFG_RIOT6532_ADD("riot", SOUND1_CLOCK/4, gottlieb_riot6532_intf)
+	MCFG_DEVICE_ADD("riot", RIOT6532, SOUND1_CLOCK/4)
+	MCFG_RIOT6532_IN_PB_CB(IOPORT("SB1"))
+	MCFG_RIOT6532_OUT_PB_CB(WRITE8(gottlieb_sound_r1_device, r6532_portb_w))
+	MCFG_RIOT6532_IRQ_CB(WRITELINE(gottlieb_sound_r1_device, snd_interrupt))
 
 	// sound devices
 	MCFG_DAC_ADD("dac")
@@ -527,7 +553,8 @@ MACHINE_CONFIG_FRAGMENT( gottlieb_sound_r1_with_votrax )
 	MCFG_FRAGMENT_ADD(gottlieb_sound_r1)
 
 	// add the VOTRAX
-	MCFG_VOTRAX_SC01_ADD("votrax", 720000, gottlieb_votrax_interface)
+	MCFG_DEVICE_ADD("votrax", VOTRAX_SC01, 720000)
+	MCFG_VOTRAX_SC01_REQUEST_CB(DEVWRITELINE(DEVICE_SELF, gottlieb_sound_r1_device, votrax_request))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, DEVICE_SELF_OWNER, 0.50)
 MACHINE_CONFIG_END
 
@@ -771,7 +798,7 @@ WRITE8_MEMBER( gottlieb_sound_r2_device::nmi_rate_w )
 
 CUSTOM_INPUT_MEMBER( gottlieb_sound_r2_device::speech_drq_custom_r )
 {
-	return sp0250_drq_r(m_sp0250);
+	return m_sp0250->drq_r();
 }
 
 
@@ -837,7 +864,7 @@ WRITE8_MEMBER( gottlieb_sound_r2_device::speech_control_w )
 
 	// bit 6 = speech chip DATA PRESENT pin; high then low to make the chip read data
 	if ((previous & 0x40) == 0 && (data & 0x40) != 0)
-		sp0250_w(m_sp0250, space, 0, m_sp0250_latch);
+		m_sp0250->write(space, 0, m_sp0250_latch);
 
 	// bit 7 goes to the speech chip RESET pin
 	if ((previous ^ data) & 0x80)
@@ -1003,7 +1030,7 @@ void gottlieb_sound_r2_device::device_timer(emu_timer &timer, device_timer_id id
 			m_nmi_state = 1;
 			nmi_state_update();
 
-			// set a timer to turn it off again on hte next SOUND_CLOCK/16
+			// set a timer to turn it off again on the next SOUND_CLOCK/16
 			timer_set(attotime::from_hz(SOUND2_CLOCK/16), TID_NMI_CLEAR);
 
 			// adjust the NMI timer for the next time

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia, Peter Ferrie
 /***************************************************************************
 
   Gaelco Type 1 Video Hardware Rev B
@@ -81,8 +83,8 @@ void thoop2_state::video_start()
 {
 	int i;
 
-	m_pant[0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(thoop2_state::get_tile_info_thoop2_screen0),this),TILEMAP_SCAN_ROWS,16,16,32,32);
-	m_pant[1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(thoop2_state::get_tile_info_thoop2_screen1),this),TILEMAP_SCAN_ROWS,16,16,32,32);
+	m_pant[0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(thoop2_state::get_tile_info_thoop2_screen0),this),TILEMAP_SCAN_ROWS,16,16,32,32);
+	m_pant[1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(thoop2_state::get_tile_info_thoop2_screen1),this),TILEMAP_SCAN_ROWS,16,16,32,32);
 
 	m_pant[0]->set_transmask(0,0xff01,0x00ff); /* pens 1-7 opaque, pens 0, 8-15 transparent */
 	m_pant[1]->set_transmask(0,0xff01,0x00ff); /* pens 1-7 opaque, pens 0, 8-15 transparent */
@@ -146,7 +148,7 @@ void thoop2_state::thoop2_sort_sprites()
 void thoop2_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect, int pri)
 {
 	int j, x, y, ex, ey;
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 
 	static const int x_offset[2] = {0x0,0x2};
 	static const int y_offset[2] = {0x0,0x1};
@@ -178,7 +180,7 @@ void thoop2_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect,
 				ex = xflip ? (spr_size-1-x) : x;
 				ey = yflip ? (spr_size-1-y) : y;
 
-				drawgfx_transpen(bitmap,cliprect,gfx,number + x_offset[ex] + y_offset[ey],
+				gfx->transpen(bitmap,cliprect,number + x_offset[ex] + y_offset[ey],
 						color,xflip,yflip,
 						sx-0x0f+x*8,sy+y*8,0);
 			}
@@ -204,29 +206,29 @@ UINT32 thoop2_state::screen_update_thoop2(screen_device &screen, bitmap_ind16 &b
 
 	bitmap.fill(0, cliprect );
 
-	m_pant[1]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3,0);
-	m_pant[0]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3,0);
+	m_pant[1]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3,0);
+	m_pant[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 3,0);
 	draw_sprites(bitmap,cliprect,3);
-	m_pant[1]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3,0);
-	m_pant[0]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3,0);
+	m_pant[1]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3,0);
+	m_pant[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 3,0);
 
-	m_pant[1]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2,0);
-	m_pant[0]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2,0);
+	m_pant[1]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2,0);
+	m_pant[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 2,0);
 	draw_sprites(bitmap,cliprect,2);
-	m_pant[1]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2,0);
-	m_pant[0]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2,0);
+	m_pant[1]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2,0);
+	m_pant[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 2,0);
 
-	m_pant[1]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1,0);
-	m_pant[0]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1,0);
+	m_pant[1]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1,0);
+	m_pant[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 1,0);
 	draw_sprites(bitmap,cliprect,1);
-	m_pant[1]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1,0);
-	m_pant[0]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1,0);
+	m_pant[1]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1,0);
+	m_pant[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 1,0);
 
-	m_pant[1]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0,0);
-	m_pant[0]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0,0);
+	m_pant[1]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0,0);
+	m_pant[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1 | 0,0);
 	draw_sprites(bitmap,cliprect,0);
-	m_pant[1]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0,0);
-	m_pant[0]->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0,0);
+	m_pant[1]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0,0);
+	m_pant[0]->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0 | 0,0);
 
 	draw_sprites(bitmap,cliprect,4);
 	return 0;

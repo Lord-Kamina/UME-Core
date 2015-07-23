@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, Luca Elia
 /***********************************************************************
 
     Kaneko Pandora Sprite Chip
@@ -53,31 +55,34 @@
 const device_type KANEKO_PANDORA = &device_creator<kaneko_pandora_device>;
 
 kaneko_pandora_device::kaneko_pandora_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, KANEKO_PANDORA, "Kaneko Pandora - PX79C480FP-3", tag, owner, clock)
+	: device_t(mconfig, KANEKO_PANDORA, "Kaneko PANDORA GFX", tag, owner, clock, "kaneko_pandora", __FILE__),
+		device_video_interface(mconfig, *this),
+		m_gfx_region(0),
+		m_xoffset(0),
+		m_yoffset(0),
+		m_gfxdecode(*this),
+		m_palette(*this)
 {
 }
 
 //-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
+//  static_set_gfxdecode_tag: Set the tag of the
+//  gfx decoder
 //-------------------------------------------------
 
-void kaneko_pandora_device::device_config_complete()
+void kaneko_pandora_device::static_set_gfxdecode_tag(device_t &device, const char *tag)
 {
-	// inherit a copy of the static data
-	const kaneko_pandora_interface *intf = reinterpret_cast<const kaneko_pandora_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<kaneko_pandora_interface *>(this) = *intf;
+	downcast<kaneko_pandora_device &>(device).m_gfxdecode.set_tag(tag);
+}
 
-	// or initialize to defaults if none provided
-	else
-	{
-		m_screen_tag = "";
-		m_gfx_region = 0;
-		m_xoffset = 0;
-		m_yoffset = 0;
-	}
+//-------------------------------------------------
+//  static_set_palette_tag: Set the tag of the
+//  palette device
+//-------------------------------------------------
+
+void kaneko_pandora_device::static_set_palette_tag(device_t &device, const char *tag)
+{
+	downcast<kaneko_pandora_device &>(device).m_palette.set_tag(tag);
 }
 
 //-------------------------------------------------
@@ -86,7 +91,6 @@ void kaneko_pandora_device::device_config_complete()
 
 void kaneko_pandora_device::device_start()
 {
-	m_screen = machine().device<screen_device>(m_screen_tag);
 	m_bg_pen = 0;
 
 	m_spriteram = auto_alloc_array(machine(), UINT8, 0x1000);
@@ -212,7 +216,7 @@ void kaneko_pandora_device::draw( bitmap_ind16 &bitmap, const rectangle &cliprec
 		if (sy & 0x100)
 			sy -= 0x200;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[m_gfx_region],
+		m_gfxdecode->gfx(m_gfx_region)->transpen(bitmap,cliprect,
 				tile,
 				(tilecolour & 0xf0) >> 4,
 				flipx, flipy,
@@ -258,7 +262,7 @@ WRITE8_MEMBER ( kaneko_pandora_device::spriteram_w )
 
 READ8_MEMBER( kaneko_pandora_device::spriteram_r )
 {
-	// it's either hooked up oddly on this, or ont the 16-bit games
+	// it's either hooked up oddly on this, or on the 16-bit games
 	// either way, we swap the address lines so that the spriteram is in the same format
 	offset = BITSWAP16(offset,  15,14,13,12, 11,  7,6,5,4,3,2,1,0,  10,9,8  );
 

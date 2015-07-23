@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Coates
 #include "sound/discrete.h"
 
 class circus_state : public driver_device
@@ -8,7 +10,9 @@ public:
 		m_videoram(*this, "videoram"),
 		m_maincpu(*this, "maincpu"),
 		m_samples(*this, "samples"),
-		m_discrete(*this, "discrete"){ }
+		m_discrete(*this, "discrete"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
@@ -23,6 +27,8 @@ public:
 	required_device<cpu_device> m_maincpu;
 	required_device<samples_device> m_samples;
 	required_device<discrete_device> m_discrete;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	/* game id */
 	int m_game_id;
@@ -58,7 +64,7 @@ public:
 DISCRETE_SOUND_EXTERN( circus );
 DISCRETE_SOUND_EXTERN( robotbwl );
 DISCRETE_SOUND_EXTERN( crash );
-extern const samples_interface circus_samples_interface;
-extern const samples_interface crash_samples_interface;
-extern const samples_interface ripcord_samples_interface;
-extern const samples_interface robotbwl_samples_interface;
+extern const char *const circus_sample_names[];
+extern const char *const crash_sample_names[];
+extern const char *const ripcord_sample_names[];
+extern const char *const robotbwl_sample_names[];

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ryan Holtz
 /******************************************************************************
 
 
@@ -30,7 +32,7 @@ const device_type MACHINE_CDISLAVE = &device_creator<cdislave_device>;
 
 
 #if ENABLE_VERBOSE_LOG
-INLINE void verboselog(running_machine &machine, int n_level, const char *s_fmt, ...)
+INLINE void ATTR_PRINTF(3,4) verboselog(running_machine &machine, int n_level, const char *s_fmt, ...)
 {
 	if( VERBOSE_LEVEL >= n_level )
 	{
@@ -43,7 +45,7 @@ INLINE void verboselog(running_machine &machine, int n_level, const char *s_fmt,
 	}
 }
 #else
-#define verboselog(x,y,z,...)
+#define verboselog(x,y,z, ...)
 #endif
 
 //**************************************************************************
@@ -54,13 +56,13 @@ TIMER_CALLBACK_MEMBER( cdislave_device::trigger_readback_int )
 {
 	cdi_state *state = machine().driver_data<cdi_state>();
 
-	verboselog(machine(), 0, "Asserting IRQ2\n" );
+	verboselog(machine(), 0, "%s", "Asserting IRQ2\n" );
 	state->m_maincpu->set_input_line_vector(M68K_IRQ_2, 26);
 	state->m_maincpu->set_input_line(M68K_IRQ_2, ASSERT_LINE);
 	m_interrupt_timer->adjust(attotime::never);
 }
 
-void cdislave_device::prepare_readback(attotime delay, UINT8 channel, UINT8 count, UINT8 data0, UINT8 data1, UINT8 data2, UINT8 data3, UINT8 cmd)
+void cdislave_device::prepare_readback(const attotime &delay, UINT8 channel, UINT8 count, UINT8 data0, UINT8 data1, UINT8 data2, UINT8 data3, UINT8 cmd)
 {
 	m_channel[channel].m_out_index = 0;
 	m_channel[channel].m_out_count = count;
@@ -138,7 +140,7 @@ READ16_MEMBER( cdislave_device::slave_r )
 				case 0xf3:
 				case 0xf4:
 				case 0xf7:
-					verboselog(machine(), 0, "slave_r: De-asserting IRQ2\n" );
+					verboselog(machine(), 0, "%s", "slave_r: De-asserting IRQ2\n" );
 					state->m_maincpu->set_input_line(M68K_IRQ_2, CLEAR_LINE);
 					break;
 			}
@@ -417,7 +419,7 @@ WRITE16_MEMBER( cdislave_device::slave_w )
 //-------------------------------------------------
 
 cdislave_device::cdislave_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MACHINE_CDISLAVE, "CDISLAVE", tag, owner, clock)
+	: device_t(mconfig, MACHINE_CDISLAVE, "CDISLAVE", tag, owner, clock, "cdislave", __FILE__)
 {
 }
 

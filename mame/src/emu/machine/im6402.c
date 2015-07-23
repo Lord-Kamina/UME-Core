@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /***************************************************************************
 
     Intersil IM6402 Universal Asynchronous Receiver/Transmitter emulation
-
-    Copyright the MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 ***************************************************************************/
 
@@ -39,7 +38,7 @@ inline void im6402_device::set_dr(int state)
 {
 	m_dr = state;
 
-	m_out_dr_func(state);
+	m_write_dr(state);
 }
 
 
@@ -51,7 +50,7 @@ inline void im6402_device::set_tbre(int state)
 {
 	m_tbre = state;
 
-	m_out_tbre_func(state);
+	m_write_tbre(state);
 }
 
 
@@ -63,7 +62,7 @@ inline void im6402_device::set_tre(int state)
 {
 	m_tre = state;
 
-	m_out_tre_func(state);
+	m_write_tre(state);
 }
 
 
@@ -76,37 +75,16 @@ inline void im6402_device::set_tre(int state)
 //  im6402_device - constructor
 //-------------------------------------------------
 
-im6402_device::im6402_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, IM6402, "Intersil IM6402", tag, owner, clock),
-		device_serial_interface(mconfig, *this),
-		m_rrc_count(0),
-		m_trc_count(0)
+im6402_device::im6402_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
+	device_t(mconfig, IM6402, "Intersil IM6402", tag, owner, clock, "im6402", __FILE__),
+	device_serial_interface(mconfig, *this),
+	m_write_tro(*this),
+	m_write_dr(*this),
+	m_write_tbre(*this),
+	m_write_tre(*this),
+	m_rrc_count(0),
+	m_trc_count(0)
 {
-}
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void im6402_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const im6402_interface *intf = reinterpret_cast<const im6402_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<im6402_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_in_rri_cb, 0, sizeof(m_in_rri_cb));
-		memset(&m_out_tro_cb, 0, sizeof(m_out_tro_cb));
-		memset(&m_out_dr_cb, 0, sizeof(m_out_dr_cb));
-		memset(&m_out_tbre_cb, 0, sizeof(m_out_tbre_cb));
-		memset(&m_out_tre_cb, 0, sizeof(m_out_tre_cb));
-	}
 }
 
 
@@ -117,11 +95,10 @@ void im6402_device::device_config_complete()
 void im6402_device::device_start()
 {
 	// resolve callbacks
-	m_in_rri_func.resolve(m_in_rri_cb, *this);
-	m_out_tro_func.resolve(m_out_tro_cb, *this);
-	m_out_dr_func.resolve(m_out_dr_cb, *this);
-	m_out_tbre_func.resolve(m_out_tbre_cb, *this);
-	m_out_tre_func.resolve(m_out_tre_cb, *this);
+	m_write_tro.resolve_safe();
+	m_write_dr.resolve_safe();
+	m_write_tbre.resolve_safe();
+	m_write_tre.resolve_safe();
 
 	// create the timers
 	if (m_rrc > 0)
@@ -163,9 +140,7 @@ void im6402_device::device_reset()
 	receive_register_reset();
 	transmit_register_reset();
 
-	m_out_tro_func(1);
-	set_out_data_bit(1);
-	serial_connection_out();
+	m_write_tro(1);
 
 	m_rrc_count = 0;
 	m_trc_count = 0;
@@ -182,15 +157,22 @@ void im6402_device::device_reset()
 
 
 //-------------------------------------------------
+//  device_timer - handler timer events
+//-------------------------------------------------
+
+void im6402_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+{
+	device_serial_interface::device_timer(timer, id, param, ptr);
+}
+
+
+//-------------------------------------------------
 //  tra_callback -
 //-------------------------------------------------
 
 void im6402_device::tra_callback()
 {
-	if (m_out_tro_func.isnull())
-		transmit_register_send_bit();
-	else
-		m_out_tro_func(transmit_register_get_data_bit());
+	m_write_tro(transmit_register_get_data_bit());
 }
 
 
@@ -218,10 +200,6 @@ void im6402_device::tra_complete()
 
 void im6402_device::rcv_callback()
 {
-	if (m_in_rri_func.isnull())
-		receive_register_update_bit(get_in_data_bit());
-	else
-		receive_register_update_bit(m_in_rri_func());
 }
 
 
@@ -242,18 +220,6 @@ void im6402_device::rcv_complete()
 	}
 
 	set_dr(ASSERT_LINE);
-}
-
-
-//-------------------------------------------------
-//  input_callback -
-//-------------------------------------------------
-
-void im6402_device::input_callback(UINT8 state)
-{
-	m_input_state = state;
-
-	rcv_clock(); // HACK for Wang PC keyboard
 }
 
 
@@ -291,13 +257,8 @@ WRITE_LINE_MEMBER( im6402_device::rrc_w )
 {
 	if (state)
 	{
-		m_rrc_count++;
-
-		if (m_rrc_count == 16)
-		{
-			rcv_clock();
-			m_rrc_count = 0;
-		}
+		rx_clock_w(m_rrc_count < 8);
+		m_rrc_count = (m_rrc_count + 1) & 15;
 	}
 }
 
@@ -310,13 +271,8 @@ WRITE_LINE_MEMBER( im6402_device::trc_w )
 {
 	if (state)
 	{
-		m_trc_count++;
-
-		if (m_trc_count == 16)
-		{
-			tra_clock();
-			m_trc_count = 0;
-		}
+		tx_clock_w(m_trc_count < 8);
+		m_trc_count = (m_trc_count + 1) & 15;
 	}
 }
 
@@ -375,15 +331,15 @@ WRITE_LINE_MEMBER( im6402_device::crl_w )
 	{
 		if (LOG) logerror("IM6402 '%s' Control Register Load\n", tag());
 
-		int word_length = 5 + ((m_cls2 << 1) | m_cls1);
-		float stop_bits = 1 + (m_sbs ? ((word_length == 5) ? 0.5 : 1) : 0);
-		int parity_code;
+		int data_bit_count = 5 + ((m_cls2 << 1) | m_cls1);
+		stop_bits_t stop_bits = (m_sbs ? ((data_bit_count == 5) ? STOP_BITS_1_5 : STOP_BITS_2) : STOP_BITS_1);
+		parity_t parity;
 
-		if (m_pi) parity_code = SERIAL_PARITY_NONE;
-		else if (m_epe) parity_code = SERIAL_PARITY_EVEN;
-		else parity_code = SERIAL_PARITY_ODD;
+		if (m_pi) parity = PARITY_NONE;
+		else if (m_epe) parity = PARITY_EVEN;
+		else parity = PARITY_ODD;
 
-		set_data_frame(word_length, stop_bits, parity_code);
+		set_data_frame(1, data_bit_count, parity, stop_bits);
 	}
 }
 
@@ -445,4 +401,12 @@ WRITE_LINE_MEMBER( im6402_device::epe_w )
 	if (LOG) logerror("IM6402 '%s' Even Parity Enable %u\n", tag(), state);
 
 	m_epe = state;
+}
+
+WRITE_LINE_MEMBER(im6402_device::write_rri)
+{
+	// HACK derive clock from data line as wangpckb sends bytes instantly to make up for mcs51 serial implementation
+	receive_register_update_bit(state);
+	rx_clock_w(1);
+	rx_clock_w(0);
 }

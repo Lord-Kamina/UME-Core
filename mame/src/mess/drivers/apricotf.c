@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese, Robbbert
 /***************************************************************************
 
     ACT Apricot F1 series
@@ -22,8 +24,88 @@
 
 */
 
-#include "includes/apricotf.h"
+#include "emu.h"
+#include "cpu/i86/i86.h"
+#include "cpu/z80/z80daisy.h"
+#include "imagedev/flopdrv.h"
+#include "machine/apricotkb.h"
+#include "machine/buffer.h"
+#include "bus/centronics/ctronics.h"
+#include "machine/wd_fdc.h"
+#include "machine/z80ctc.h"
+#include "machine/z80dart.h"
+#include "formats/apridisk.h"
 
+
+//**************************************************************************
+//  MACROS / CONSTANTS
+//**************************************************************************
+
+#define SCREEN_TAG      "screen"
+#define I8086_TAG       "10d"
+#define Z80CTC_TAG      "13d"
+#define Z80SIO2_TAG     "15d"
+#define WD2797_TAG      "5f"
+#define CENTRONICS_TAG  "centronics"
+
+
+//**************************************************************************
+//  TYPE DEFINITIONS
+//**************************************************************************
+
+// ======================> f1_state
+
+class f1_state : public driver_device
+{
+public:
+	f1_state(const machine_config &mconfig, device_type type, const char *tag)
+		: driver_device(mconfig, type, tag),
+			m_maincpu(*this, I8086_TAG),
+			m_ctc(*this, Z80CTC_TAG),
+			m_sio(*this, Z80SIO2_TAG),
+			m_fdc(*this, WD2797_TAG),
+			m_floppy0(*this, WD2797_TAG ":0"),
+			m_floppy1(*this, WD2797_TAG ":1"),
+			m_centronics(*this, CENTRONICS_TAG),
+			m_cent_data_out(*this, "cent_data_out"),
+			m_ctc_int(CLEAR_LINE),
+			m_sio_int(CLEAR_LINE),
+			m_p_scrollram(*this, "p_scrollram"),
+			m_p_paletteram(*this, "p_paletteram"),
+			m_palette(*this, "palette")
+	{ }
+
+	DECLARE_FLOPPY_FORMATS(floppy_formats);
+
+	virtual void machine_start();
+
+	required_device<cpu_device> m_maincpu;
+	required_device<z80ctc_device> m_ctc;
+	required_device<z80sio2_device> m_sio;
+	required_device<wd2797_t> m_fdc;
+	required_device<floppy_connector> m_floppy0;
+	required_device<floppy_connector> m_floppy1;
+	required_device<centronics_device> m_centronics;
+	required_device<output_latch_device> m_cent_data_out;
+	int m_ctc_int;
+	int m_sio_int;
+	required_shared_ptr<UINT16> m_p_scrollram;
+	required_shared_ptr<UINT16> m_p_paletteram;
+	required_device<palette_device> m_palette;
+
+	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+
+	DECLARE_READ16_MEMBER( palette_r );
+	DECLARE_WRITE16_MEMBER( palette_w );
+	DECLARE_WRITE8_MEMBER( system_w );
+	DECLARE_WRITE_LINE_MEMBER( sio_int_w );
+	DECLARE_WRITE_LINE_MEMBER( ctc_int_w );
+	DECLARE_WRITE_LINE_MEMBER( ctc_z1_w );
+	DECLARE_WRITE_LINE_MEMBER( ctc_z2_w );
+
+	int m_40_80;
+	int m_200_256;
+};
 
 
 //**************************************************************************
@@ -91,7 +173,7 @@ WRITE16_MEMBER( f1_state::palette_w )
 		g = ((m_p_paletteram[offset] & 4)>>1) | i;
 		b = ((m_p_paletteram[offset] & 8)>>2) | i;
 
-		palette_set_color_rgb(machine(), offset, pal2bit(r), pal2bit(g), pal2bit(b));
+		m_palette->set_pen_color(offset, pal2bit(r), pal2bit(g), pal2bit(b));
 	}
 }
 
@@ -118,18 +200,19 @@ WRITE8_MEMBER( f1_state::system_w )
 	switch(offset)
 	{
 	case 0: // centronics data port
-		m_centronics->write(space, 0, data);
+		m_cent_data_out->write(space, 0, data);
 		break;
 
 	case 1: // drive select
-		wd17xx_set_drive(m_fdc, !BIT(data, 0));
+		m_fdc->set_floppy(BIT(data, 0) ? m_floppy0->get_device() : m_floppy1->get_device());
 		break;
 
 	case 3: // drive head load
 		break;
 
 	case 5: // drive motor on
-		floppy_mon_w(m_floppy0, !BIT(data, 0));
+		m_floppy0->get_device()->mon_w(!BIT(data, 0));
+		m_floppy1->get_device()->mon_w(!BIT(data, 0));
 		break;
 
 	case 7: // video lines (1=200, 0=256)
@@ -147,9 +230,14 @@ WRITE8_MEMBER( f1_state::system_w )
 		break;
 
 	case 0x0f: // centronics strobe output
-		m_centronics->strobe_w(!BIT(data, 0));
+		m_centronics->write_strobe(!BIT(data, 0));
 		break;
 	}
+}
+
+
+void f1_state::machine_start()
+{
 }
 
 
@@ -182,7 +270,7 @@ static ADDRESS_MAP_START( act_f1_io, AS_IO, 16, f1_state )
 	AM_RANGE(0x0010, 0x0017) AM_DEVREADWRITE8(Z80CTC_TAG, z80ctc_device, read, write, 0x00ff)
 	AM_RANGE(0x0020, 0x0027) AM_DEVREADWRITE8(Z80SIO2_TAG, z80sio2_device, ba_cd_r, ba_cd_w, 0x00ff)
 //  AM_RANGE(0x0030, 0x0031) AM_WRITE8(ctc_ack_w, 0x00ff)
-	AM_RANGE(0x0040, 0x0047) AM_DEVREADWRITE8_LEGACY(WD2797_TAG, wd17xx_r, wd17xx_w, 0x00ff)
+	AM_RANGE(0x0040, 0x0047) AM_DEVREADWRITE8(WD2797_TAG, wd2797_t, read, write, 0x00ff)
 //  AM_RANGE(0x01e0, 0x01ff) winchester
 ADDRESS_MAP_END
 
@@ -206,17 +294,7 @@ INPUT_PORTS_END
 //**************************************************************************
 
 //-------------------------------------------------
-//  APRICOT_KEYBOARD_INTERFACE( kb_intf )
-//-------------------------------------------------
-
-static APRICOT_KEYBOARD_INTERFACE( kb_intf )
-{
-	DEVCB_NULL
-};
-
-
-//-------------------------------------------------
-//  Z80SIO_INTERFACE( sio_intf )
+//  Z80SIO
 //-------------------------------------------------
 
 WRITE_LINE_MEMBER( f1_state::sio_int_w )
@@ -226,30 +304,8 @@ WRITE_LINE_MEMBER( f1_state::sio_int_w )
 	m_maincpu->set_input_line(INPUT_LINE_IRQ0, m_ctc_int || m_sio_int);
 }
 
-static Z80SIO_INTERFACE( sio_intf )
-{
-	0, 0, 0, 0,
-
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-
-	DEVCB_DRIVER_LINE_MEMBER(f1_state, sio_int_w)
-};
-
-
 //-------------------------------------------------
-//  Z80CTC_INTERFACE( ctc_intf )
+//  Z80CTC
 //-------------------------------------------------
 
 WRITE_LINE_MEMBER( f1_state::ctc_int_w )
@@ -270,60 +326,18 @@ WRITE_LINE_MEMBER( f1_state::ctc_z2_w )
 	m_sio->txca_w(state);
 }
 
-static Z80CTC_INTERFACE( ctc_intf )
-{
-	DEVCB_DRIVER_LINE_MEMBER(f1_state, ctc_int_w),      // interrupt handler
-	DEVCB_NULL,     // ZC/TO0 callback
-	DEVCB_DRIVER_LINE_MEMBER(f1_state, ctc_z1_w),   // ZC/TO1 callback
-	DEVCB_DRIVER_LINE_MEMBER(f1_state, ctc_z2_w),   // ZC/TO2 callback
-};
-
-
 //-------------------------------------------------
-//  wd17xx_interface fdc_intf
+//  floppy
 //-------------------------------------------------
 
-static LEGACY_FLOPPY_OPTIONS_START( act )
-	LEGACY_FLOPPY_OPTION( img2hd, "dsk", "2HD disk image", basicdsk_identify_default, basicdsk_construct_default, NULL,
-		HEADS([2])
-		TRACKS([80])
-		SECTORS([16])
-		SECTOR_LENGTH([256])
-		FIRST_SECTOR_ID([1]))
-LEGACY_FLOPPY_OPTIONS_END
+FLOPPY_FORMATS_MEMBER( f1_state::floppy_formats )
+	FLOPPY_APRIDISK_FORMAT
+FLOPPY_FORMATS_END
 
-static const floppy_interface act_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_3_5_DSDD, // Sony OA-D32W
-	LEGACY_FLOPPY_OPTIONS_NAME(act),
-	"floppy_3_5",
-	NULL
-};
-
-static const wd17xx_interface fdc_intf =
-{
-	DEVCB_NULL,
-	DEVCB_CPU_INPUT_LINE(I8086_TAG, INPUT_LINE_NMI),
-	DEVCB_CPU_INPUT_LINE(I8086_TAG, INPUT_LINE_TEST), // TODO inverted?
-	{ FLOPPY_0, NULL, NULL, NULL }
-};
-
-
-//-------------------------------------------------
-//  centronics_interface centronics_intf
-//-------------------------------------------------
-
-static const centronics_interface centronics_intf =
-{
-	DEVCB_NULL,
-	DEVCB_DEVICE_LINE_MEMBER(Z80SIO2_TAG, z80dart_device, ctsa_w),
-	DEVCB_NULL
-};
+static SLOT_INTERFACE_START( apricotf_floppies )
+	SLOT_INTERFACE( "d31v", SONY_OA_D31V )
+	SLOT_INTERFACE( "d32w", SONY_OA_D32W )
+SLOT_INTERFACE_END
 
 
 
@@ -348,16 +362,34 @@ static MACHINE_CONFIG_START( act_f1, f1_state )
 	MCFG_SCREEN_UPDATE_DRIVER(f1_state, screen_update)
 	MCFG_SCREEN_SIZE(640, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 256-1)
-	MCFG_PALETTE_LENGTH(16)
-	MCFG_GFXDECODE(act_f1)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_PALETTE_ADD("palette", 16)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", act_f1)
 
 	/* Devices */
-	MCFG_APRICOT_KEYBOARD_ADD(kb_intf)
-	MCFG_Z80SIO2_ADD(Z80SIO2_TAG, 2500000, sio_intf)
-	MCFG_Z80CTC_ADD(Z80CTC_TAG, 2500000, ctc_intf)
-	MCFG_WD2797_ADD(WD2797_TAG, fdc_intf)
-	MCFG_LEGACY_FLOPPY_2_DRIVES_ADD(act_floppy_interface)
-	MCFG_CENTRONICS_PRINTER_ADD(CENTRONICS_TAG, centronics_intf)
+	MCFG_DEVICE_ADD(APRICOT_KEYBOARD_TAG, APRICOT_KEYBOARD, 0)
+
+	MCFG_Z80SIO2_ADD(Z80SIO2_TAG, 2500000, 0, 0, 0, 0)
+	MCFG_Z80DART_OUT_INT_CB(WRITELINE(f1_state, sio_int_w))
+
+	MCFG_DEVICE_ADD(Z80CTC_TAG, Z80CTC, 2500000)
+	MCFG_Z80CTC_INTR_CB(WRITELINE(f1_state, ctc_int_w))
+	MCFG_Z80CTC_ZC1_CB(WRITELINE(f1_state, ctc_z1_w))
+	MCFG_Z80CTC_ZC2_CB(WRITELINE(f1_state, ctc_z2_w))
+
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_CENTRONICS_BUSY_HANDLER(DEVWRITELINE(Z80SIO2_TAG, z80dart_device, ctsa_w))
+
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", CENTRONICS_TAG)
+
+	// floppy
+	MCFG_WD2797_ADD(WD2797_TAG, XTAL_4MHz / 2 /* ? */)
+	MCFG_WD_FDC_INTRQ_CALLBACK(INPUTLINE(I8086_TAG, INPUT_LINE_NMI))
+	MCFG_WD_FDC_DRQ_CALLBACK(INPUTLINE(I8086_TAG, INPUT_LINE_TEST))
+
+	MCFG_FLOPPY_DRIVE_ADD(WD2797_TAG ":0", apricotf_floppies, "d32w", f1_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD(WD2797_TAG ":1", apricotf_floppies, "d32w", f1_state::floppy_formats)
 MACHINE_CONFIG_END
 
 

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         4004 Nixie Clock
@@ -20,7 +22,7 @@ public:
 		m_dac(*this, "dac")
 		{ }
 
-	required_device<cpu_device> m_maincpu;
+	required_device<i4004_cpu_device> m_maincpu;
 	required_device<dac_device> m_dac;
 	DECLARE_READ8_MEMBER( data_r );
 	DECLARE_WRITE8_MEMBER( nixie_w );
@@ -130,7 +132,7 @@ INPUT_PORTS_END
 
 TIMER_DEVICE_CALLBACK_MEMBER(nixieclock_state::timer_callback)
 {
-	i4004_set_test(m_maincpu,m_timer);
+	m_maincpu->set_test(m_timer);
 	m_timer^=1;
 }
 

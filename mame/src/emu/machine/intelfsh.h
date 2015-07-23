@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*
     Intel Flash ROM emulation
 */
@@ -28,17 +30,32 @@
 #define MCFG_AMD_29F080_ADD(_tag) \
 	MCFG_DEVICE_ADD(_tag, AMD_29F080, 0)
 
+#define MCFG_AMD_29F400T_ADD(_tag) \
+	MCFG_DEVICE_ADD(_tag, AMD_29F400T, 0)
+
+#define MCFG_AMD_29F800T_ADD(_tag) \
+	MCFG_DEVICE_ADD(_tag, AMD_29F800T, 0)
+
+#define MCFG_AMD_29LV200T_ADD(_tag) \
+	MCFG_DEVICE_ADD(_tag, AMD_29LV200T, 0)
+
+#define MCFG_FUJITSU_29F160T_ADD(_tag) \
+	MCFG_DEVICE_ADD(_tag, FUJITSU_29F160T, 0)
+
 #define MCFG_FUJITSU_29F016A_ADD(_tag) \
 	MCFG_DEVICE_ADD(_tag, FUJITSU_29F016A, 0)
 
 #define MCFG_FUJITSU_29DL16X_ADD(_tag) \
 	MCFG_DEVICE_ADD(_tag, FUJITSU_29DL16X, 0)
 
-#define MCFG_INTEL_E28F400_ADD(_tag) \
-	MCFG_DEVICE_ADD(_tag, INTEL_E28F400, 0)
+#define MCFG_INTEL_E28F400B_ADD(_tag) \
+	MCFG_DEVICE_ADD(_tag, INTEL_E28F400B, 0)
 
 #define MCFG_MACRONIX_29L001MC_ADD(_tag) \
 	MCFG_DEVICE_ADD(_tag, MACRONIX_29L001MC, 0)
+
+#define MCFG_MACRONIX_29LV160TMC_ADD(_tag) \
+	MCFG_DEVICE_ADD(_tag, MACRONIX_29LV160TMC, 0)
 
 #define MCFG_PANASONIC_MN63F805MNP_ADD(_tag) \
 	MCFG_DEVICE_ADD(_tag, PANASONIC_MN63F805MNP, 0)
@@ -67,6 +84,9 @@
 #define MCFG_INTEL_28F320J3D_ADD(_tag) \
 	MCFG_DEVICE_ADD(_tag, INTEL_28F320J3D, 0)
 
+#define MCFG_INTEL_28F320J5_ADD(_tag) \
+	MCFG_DEVICE_ADD(_tag, INTEL_28F320J5, 0)
+
 #define MCFG_SST_39VF400A_ADD(_tag) \
 	MCFG_DEVICE_ADD(_tag, SST_39VF400A, 0)
 
@@ -88,15 +108,20 @@ public:
 	{
 		// 8-bit variants
 		FLASH_INTEL_28F016S5 = 0x0800,
+		FLASH_FUJITSU_29F160T,
 		FLASH_FUJITSU_29F016A,
 		FLASH_FUJITSU_29DL16X,
 		FLASH_ATMEL_29C010,
 		FLASH_AMD_29F010,
 		FLASH_AMD_29F040,
 		FLASH_AMD_29F080,
+		FLASH_AMD_29F400T,
+		FLASH_AMD_29F800T,
+		FLASH_AMD_29LV200T,
 		FLASH_SHARP_LH28F016S,
 		FLASH_INTEL_E28F008SA,
 		FLASH_MACRONIX_29L001MC,
+		FLASH_MACRONIX_29LV160TMC,
 		FLASH_PANASONIC_MN63F805MNP,
 		FLASH_SANYO_LE26FV10N1TS,
 		FLASH_SST_28SF040,
@@ -104,16 +129,17 @@ public:
 
 		// 16-bit variants
 		FLASH_SHARP_LH28F400 = 0x1000,
-		FLASH_INTEL_E28F400,
+		FLASH_INTEL_E28F400B,
 		FLASH_INTEL_TE28F160,
 		FLASH_SHARP_UNK128MBIT,
 		FLASH_INTEL_28F320J3D,
+		FLASH_INTEL_28F320J5,
 		FLASH_SST_39VF400A
 	};
 
 protected:
 	// construction/destruction
-	intelfsh_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant);
+	intelfsh_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant, const char *shortname, const char *source);
 
 protected:
 	// device-level overrides
@@ -137,9 +163,11 @@ protected:
 	UINT32                  m_type;
 	INT32                   m_size;
 	UINT8                   m_bits;
-	UINT8                   m_device_id;
+	UINT16                  m_device_id;
 	UINT8                   m_maker_id;
 	bool                    m_sector_is_4k;
+	bool                    m_sector_is_16k;
+	bool                    m_top_boot_sector;
 	UINT8                   m_page_size;
 
 	// internal state
@@ -159,7 +187,7 @@ class intelfsh8_device : public intelfsh_device
 {
 protected:
 	// construction/destruction
-	intelfsh8_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant);
+	intelfsh8_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant, const char *shortname, const char *source);
 
 public:
 	// public interface
@@ -179,7 +207,7 @@ class intelfsh16_device : public intelfsh_device
 {
 protected:
 	// construction/destruction
-	intelfsh16_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant);
+	intelfsh16_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, UINT32 variant, const char *shortname, const char *source);
 
 public:
 	// public interface
@@ -200,6 +228,12 @@ class intel_28f016s5_device : public intelfsh8_device
 {
 public:
 	intel_28f016s5_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+};
+
+class fujitsu_29f160t_device : public intelfsh8_device
+{
+public:
+	fujitsu_29f160t_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 };
 
 class fujitsu_29f016a_device : public intelfsh8_device
@@ -238,6 +272,24 @@ public:
 	amd_29f080_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 };
 
+class amd_29f400t_device : public intelfsh8_device
+{
+public:
+	amd_29f400t_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+};
+
+class amd_29f800t_device : public intelfsh8_device
+{
+public:
+	amd_29f800t_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+};
+
+class amd_29lv200t_device : public intelfsh8_device
+{
+public:
+	amd_29lv200t_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+};
+
 class sharp_lh28f016s_device : public intelfsh8_device
 {
 public:
@@ -254,6 +306,12 @@ class macronix_29l001mc_device : public intelfsh8_device
 {
 public:
 	macronix_29l001mc_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+};
+
+class macronix_29lv160tmc_device : public intelfsh8_device
+{
+public:
+	macronix_29lv160tmc_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 };
 
 class panasonic_mn63f805mnp_device : public intelfsh8_device
@@ -293,10 +351,10 @@ public:
 	intel_te28f160_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 };
 
-class intel_e28f400_device : public intelfsh16_device
+class intel_e28f400b_device : public intelfsh16_device
 {
 public:
-	intel_e28f400_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+	intel_e28f400b_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 };
 
 class sharp_unk128mbit_device : public intelfsh16_device
@@ -309,6 +367,12 @@ class intel_28f320j3d_device : public intelfsh16_device
 {
 public:
 	intel_28f320j3d_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+};
+
+class intel_28f320j5_device : public intelfsh16_device
+{
+public:
+	intel_28f320j5_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 };
 
 class sst_39vf400a_device : public intelfsh16_device
@@ -325,10 +389,16 @@ extern const device_type ATMEL_29C010;
 extern const device_type AMD_29F010;
 extern const device_type AMD_29F040;
 extern const device_type AMD_29F080;
+extern const device_type AMD_29F400T;
+extern const device_type AMD_29F800T;
+extern const device_type AMD_29LV200T;
+extern const device_type FUJITSU_29F160T;
 extern const device_type FUJITSU_29F016A;
 extern const device_type FUJITSU_29DL16X;
-extern const device_type INTEL_E28F400;
+extern const device_type INTEL_E28F400B;
 extern const device_type MACRONIX_29L001MC;
+extern const device_type MACRONIX_29LV160TMC;
+
 extern const device_type PANASONIC_MN63F805MNP;
 extern const device_type SANYO_LE26FV10N1TS;
 extern const device_type SST_28SF040;
@@ -339,6 +409,7 @@ extern const device_type INTEL_E28F008SA;
 extern const device_type INTEL_TE28F160;
 extern const device_type SHARP_UNK128MBIT;
 extern const device_type INTEL_28F320J3D;
+extern const device_type INTEL_28F320J5;
 extern const device_type SST_39VF400A;
 
 #endif

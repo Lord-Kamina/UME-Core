@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, David Haywood
 #include "emu.h"
 #include "includes/dynduke.h"
 
@@ -5,31 +7,28 @@
 
 /******************************************************************************/
 
-WRITE16_MEMBER(dynduke_state::dynduke_paletteram_w)
+WRITE16_MEMBER(dynduke_state::paletteram_w)
 {
-	int color;
-
 	COMBINE_DATA(&m_generic_paletteram_16[offset]);
-	color=m_generic_paletteram_16[offset];
-	palette_set_color_rgb(machine(),offset,pal4bit(color >> 0),pal4bit(color >> 4),pal4bit(color >> 8));
+	int color=m_generic_paletteram_16[offset];
+	m_palette->set_pen_color(offset,pal4bit(color >> 0),pal4bit(color >> 4),pal4bit(color >> 8));
 }
 
-WRITE16_MEMBER(dynduke_state::dynduke_background_w)
+WRITE16_MEMBER(dynduke_state::background_w)
 {
 	COMBINE_DATA(&m_back_data[offset]);
 	m_bg_layer->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(dynduke_state::dynduke_foreground_w)
+WRITE16_MEMBER(dynduke_state::foreground_w)
 {
 	COMBINE_DATA(&m_fore_data[offset]);
 	m_fg_layer->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(dynduke_state::dynduke_text_w)
+WRITE16_MEMBER(dynduke_state::text_w)
 {
-	UINT16 *videoram = m_videoram;
-	COMBINE_DATA(&videoram[offset]);
+	COMBINE_DATA(&m_videoram[offset]);
 	m_tx_layer->mark_tile_dirty(offset);
 }
 
@@ -40,8 +39,7 @@ TILE_GET_INFO_MEMBER(dynduke_state::get_bg_tile_info)
 
 	tile=tile&0xfff;
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			tile+m_back_bankbase,
 			color,
 			0);
@@ -54,8 +52,7 @@ TILE_GET_INFO_MEMBER(dynduke_state::get_fg_tile_info)
 
 	tile=tile&0xfff;
 
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			tile+m_fore_bankbase,
 			color,
 			0);
@@ -63,14 +60,12 @@ TILE_GET_INFO_MEMBER(dynduke_state::get_fg_tile_info)
 
 TILE_GET_INFO_MEMBER(dynduke_state::get_tx_tile_info)
 {
-	UINT16 *videoram = m_videoram;
-	int tile=videoram[tile_index];
+	int tile=m_videoram[tile_index];
 	int color=(tile >> 8) & 0x0f;
 
 	tile = (tile & 0xff) | ((tile & 0xc000) >> 6);
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile,
 			color,
 			0);
@@ -78,15 +73,24 @@ TILE_GET_INFO_MEMBER(dynduke_state::get_tx_tile_info)
 
 void dynduke_state::video_start()
 {
-	m_bg_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(dynduke_state::get_bg_tile_info),this),TILEMAP_SCAN_COLS,      16,16,32,32);
-	m_fg_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(dynduke_state::get_fg_tile_info),this),TILEMAP_SCAN_COLS,16,16,32,32);
-	m_tx_layer = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(dynduke_state::get_tx_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8,32,32);
+	m_bg_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(dynduke_state::get_bg_tile_info),this),TILEMAP_SCAN_COLS,      16,16,32,32);
+	m_fg_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(dynduke_state::get_fg_tile_info),this),TILEMAP_SCAN_COLS,16,16,32,32);
+	m_tx_layer = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(dynduke_state::get_tx_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8,32,32);
 
 	m_fg_layer->set_transparent_pen(15);
 	m_tx_layer->set_transparent_pen(15);
+
+	save_item(NAME(m_back_bankbase));
+	save_item(NAME(m_fore_bankbase));
+	save_item(NAME(m_back_enable));
+	save_item(NAME(m_fore_enable));
+	save_item(NAME(m_sprite_enable));
+	save_item(NAME(m_txt_enable));
+	save_item(NAME(m_old_back));
+	save_item(NAME(m_old_fore));
 }
 
-WRITE16_MEMBER(dynduke_state::dynduke_gfxbank_w)
+WRITE16_MEMBER(dynduke_state::gfxbank_w)
 {
 	if (ACCESSING_BITS_0_7)
 	{
@@ -104,7 +108,7 @@ WRITE16_MEMBER(dynduke_state::dynduke_gfxbank_w)
 }
 
 
-WRITE16_MEMBER(dynduke_state::dynduke_control_w)
+WRITE16_MEMBER(dynduke_state::control_w)
 {
 	if (ACCESSING_BITS_0_7)
 	{
@@ -157,7 +161,7 @@ void dynduke_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect,
 			if (fy) fy=0; else fy=1;
 		}
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[3],
+		m_gfxdecode->gfx(3)->transpen(bitmap,cliprect,
 				sprite,
 				color,fx,fy,x,y,15);
 	}
@@ -173,7 +177,7 @@ void dynduke_state::draw_background(bitmap_ind16 &bitmap, const rectangle &clipr
 	/* if we're disabled, don't draw */
 	if (!m_back_enable)
 	{
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 		return;
 	}
 
@@ -215,7 +219,7 @@ void dynduke_state::draw_background(bitmap_ind16 &bitmap, const rectangle &clipr
 	}
 }
 
-UINT32 dynduke_state::screen_update_dynduke(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 dynduke_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	/* Setup the tilemaps */
 	m_fg_layer->set_scrolly(0, ((m_scroll_ram[0x11]&0x30)<<4)+((m_scroll_ram[0x12]&0x7f)<<1)+((m_scroll_ram[0x12]&0x80)>>7) );
@@ -230,9 +234,9 @@ UINT32 dynduke_state::screen_update_dynduke(screen_device &screen, bitmap_ind16 
 	draw_background(bitmap, cliprect,0x20);
 
 	draw_sprites(bitmap,cliprect,2);
-	m_fg_layer->draw(bitmap, cliprect, 0,0);
+	m_fg_layer->draw(screen, bitmap, cliprect, 0,0);
 	draw_sprites(bitmap,cliprect,3);
-	m_tx_layer->draw(bitmap, cliprect, 0,0);
+	m_tx_layer->draw(screen, bitmap, cliprect, 0,0);
 
 	return 0;
 }

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /***************************************************************************
 
         UT88 video driver by Miodrag Milanovic
@@ -35,7 +37,7 @@ UINT32 ut88_state::screen_update_ut88(screen_device &screen, bitmap_ind16 &bitma
 		{
 			int code = m_p_videoram[ x + y*64 ] & 0x7f;
 			int attr = m_p_videoram[ x+1 + y*64 ] & 0x80;
-			drawgfx_opaque(bitmap, cliprect, machine().gfx[0], code | attr, 0, 0,0, x*8,y*8);
+			m_gfxdecode->gfx(0)->opaque(bitmap,cliprect, code | attr, 0, 0,0, x*8,y*8);
 		}
 	}
 	return 0;

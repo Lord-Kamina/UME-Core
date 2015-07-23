@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, hap
 /***************************************************************************
 
     Zaccaria Galaxia HW
@@ -11,6 +13,7 @@ class galaxia_state : public cvs_state
 public:
 	galaxia_state(const machine_config &mconfig, device_type type, const char *tag)
 		: cvs_state(mconfig, type, tag) { }
+
 
 	tilemap_t *m_bg_tilemap;
 	bitmap_ind16 m_temp_bitmap;

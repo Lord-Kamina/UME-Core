@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 #ifndef __M5__
 #define __M5__
 
@@ -25,6 +27,7 @@ public:
 			m_ppi(*this, I8255A_TAG),
 			m_fdc(*this, UPD765_TAG),
 			m_cassette(*this, "cassette"),
+			m_cart(*this, "cartslot"),
 			m_centronics(*this, CENTRONICS_TAG),
 			m_ram(*this, RAM_TAG),
 			m_floppy0(*this, UPD765_TAG ":0:525dd"),
@@ -37,6 +40,7 @@ public:
 	required_device<i8255_device> m_ppi;
 	required_device<upd765a_device> m_fdc;
 	required_device<cassette_image_device> m_cassette;
+	required_device<generic_slot_device> m_cart;
 	required_device<centronics_device> m_centronics;
 	required_device<ram_device> m_ram;
 	required_device<floppy_image_device> m_floppy0;
@@ -64,6 +68,9 @@ public:
 	// video state
 //  const TMS9928a_interface *m_vdp_intf;
 
+	int m_centronics_busy;
+	DECLARE_WRITE_LINE_MEMBER(write_centronics_busy);
+
 	// floppy state
 	UINT8 m_fd5_data;
 	UINT8 m_fd5_com;
@@ -74,7 +81,6 @@ public:
 	DECLARE_DRIVER_INIT(ntsc);
 	DECLARE_WRITE_LINE_MEMBER(sordm5_video_interrupt_callback);
 
-	void fdc_irq(bool state);
 	DECLARE_FLOPPY_FORMATS( floppy_formats );
 };
 

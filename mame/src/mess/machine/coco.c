@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
     coco.c
@@ -57,7 +59,6 @@ DAC and bitbanger values written should be reflected in the read.
 
 #include "includes/coco.h"
 #include "cpu/m6809/m6809.h"
-#include "formats/coco_cas.h"
 #include "debug/debugcpu.h"
 
 
@@ -88,9 +89,11 @@ coco_state::coco_state(const machine_config &mconfig, device_type type, const ch
 	m_cococart(*this, CARTRIDGE_TAG),
 	m_ram(*this, RAM_TAG),
 	m_cassette(*this, "cassette"),
-	m_bitbanger(*this, BITBANGER_TAG),
+	m_rs232(*this, RS232_TAG),
 	m_vhd_0(*this, VHD0_TAG),
-	m_vhd_1(*this, VHD1_TAG)
+	m_vhd_1(*this, VHD1_TAG),
+	m_beckerport(*this, DWSOCK_TAG),
+	m_beckerportconfig(*this, BECKERPORT_TAG)
 {
 }
 
@@ -120,10 +123,10 @@ void coco_state::device_start()
 	driver_device::device_start();
 
 	/* look up keyboard ports */
-	for (int i = 0; i < sizeof(m_keyboard) / sizeof(m_keyboard[0]); i++)
+	for (int i = 0; i < ARRAY_LENGTH(m_keyboard); i++)
 	{
 		char name[32];
-		snprintf(name, sizeof(name) / sizeof(name[0]), "row%d", i);
+		snprintf(name, ARRAY_LENGTH(name), "row%d", i);
 		m_keyboard[i] =  ioport(name);
 	}
 
@@ -401,28 +404,6 @@ WRITE_LINE_MEMBER( coco_state::pia0_irq_b )
 
 
 
-//-------------------------------------------------
-//  pia0_config
-//-------------------------------------------------
-
-const pia6821_interface coco_state::pia0_config =
-{
-	DEVCB_NULL,                                                 /* port A input */
-	DEVCB_NULL,                                                 /* port B input */
-	DEVCB_NULL,                                                 /* CA1 input */
-	DEVCB_NULL,                                                 /* CB1 input */
-	DEVCB_NULL,                                                 /* CA2 input */
-	DEVCB_NULL,                                                 /* CB2 input */
-	DEVCB_DRIVER_MEMBER(coco_state, pia0_pa_w),                 /* port A output */
-	DEVCB_DRIVER_MEMBER(coco_state, pia0_pb_w),                 /* port B output */
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, pia0_ca2_w),           /* CA2 output */
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, pia0_cb2_w),           /* CB2 output */
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, pia0_irq_a),           /* IRQA output */
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, pia0_irq_b)            /* IRQB output */
-};
-
-
-
 /***************************************************************************
   PIA1 ($FF20-$FF3F) (Chip U4)
 
@@ -501,7 +482,7 @@ READ8_MEMBER( coco_state::pia1_pb_r )
 		|| (ram_size >= 0x8000 && (m_pia_0->b_output() & 0x80));
 
 	// serial in (PB0)
-	bool serial_in = (m_bitbanger != NULL) && (m_bitbanger->input() ? true : false);
+	bool serial_in = (m_rs232 != NULL) && (m_rs232->rxd_r() ? true : false);
 
 	// composite the results
 	return (memory_sense ? 0x04 : 0x00)
@@ -579,28 +560,6 @@ WRITE_LINE_MEMBER( coco_state::pia1_firq_b )
 {
 	recalculate_firq();
 }
-
-
-
-//-------------------------------------------------
-//  pia1_config
-//-------------------------------------------------
-
-const pia6821_interface coco_state::pia1_config =
-{
-	DEVCB_DRIVER_MEMBER(coco_state, pia1_pa_r),                 /* port A input */
-	DEVCB_DRIVER_MEMBER(coco_state, pia1_pb_r),                 /* port B input */
-	DEVCB_NULL,                                                 /* CA1 input */
-	DEVCB_NULL,                                                 /* CB1 input */
-	DEVCB_NULL,                                                 /* CA2 input */
-	DEVCB_NULL,                                                 /* CB2 input */
-	DEVCB_DRIVER_MEMBER(coco_state, pia1_pa_w),                 /* port A output */
-	DEVCB_DRIVER_MEMBER(coco_state, pia1_pb_w),                 /* port B output */
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, pia1_ca2_w),           /* CA2 output */
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, pia1_cb2_w),           /* CB2 output */
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, pia1_firq_a),          /* IRQA output */
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, pia1_firq_b)           /* IRQB output */
-};
 
 
 
@@ -724,21 +683,23 @@ void coco_state::update_sound(void)
 	/* determine the sound mux status */
 	soundmux_status_t status = soundmux_status();
 
+	/* the SC77526 DAC chip internally biases the AC-coupled sound inputs for Cassette and Cartridge at the midpoint of the 3.9v output range */
+	bool bCassSoundEnable = (status == (SOUNDMUX_ENABLE | SOUNDMUX_SEL1));
+	bool bCartSoundEnable = (status == (SOUNDMUX_ENABLE | SOUNDMUX_SEL2));
+	UINT8 cassette_sound = (bCassSoundEnable ? 0x40 : 0);
+	UINT8 cart_sound = (bCartSoundEnable ? 0x40 : 0);
+
 	/* determine the value to send to the DAC */
 	m_dac_output = (m_pia_1->a_output() & 0xFC) >> 2;
-	UINT8 sound_output = single_bit_sound + (status == SOUNDMUX_ENABLE ? m_dac_output << 1 : 0);
-	m_dac->write_unsigned8(sound_output);
+	UINT8 dac_sound =  (status == SOUNDMUX_ENABLE ? m_dac_output << 1 : 0);
+	m_dac->write_unsigned8(single_bit_sound + dac_sound + cassette_sound + cart_sound);
 
 	/* determine the cassette sound status */
-	cassette_state cas_sound = (status == (SOUNDMUX_ENABLE | SOUNDMUX_SEL1))
-		? CASSETTE_SPEAKER_ENABLED
-		: CASSETTE_SPEAKER_MUTED;
+	cassette_state cas_sound = bCassSoundEnable ? CASSETTE_SPEAKER_ENABLED : CASSETTE_SPEAKER_MUTED;
 	m_cassette->change_state(cas_sound, CASSETTE_MASK_SPEAKER);
 
 	/* determine the cartridge sound status */
-	m_cococart->cart_set_line(
-		COCOCART_LINE_SOUND_ENABLE,
-		(status == (SOUNDMUX_ENABLE | SOUNDMUX_SEL2)) ? COCOCART_LINE_VALUE_ASSERT : COCOCART_LINE_VALUE_CLEAR);
+	m_cococart->cart_set_line(COCOCART_LINE_SOUND_ENABLE, bCartSoundEnable ? COCOCART_LINE_VALUE_ASSERT : COCOCART_LINE_VALUE_CLEAR);
 }
 
 
@@ -852,7 +813,7 @@ void coco_state::poll_joystick(bool *joyin, UINT8 *buttons)
 			/* get the vertical position of the lightgun */
 			dclg_vpos = analog->input(joystick, 1);
 
-			if (machine().primary_screen->vpos() == dclg_vpos)
+			if (machine().first_screen()->vpos() == dclg_vpos)
 			{
 				/* if gun is pointing at the current scan line, set hit bit and cache horizontal timer value */
 				m_dclg_output_h |= 0x02;
@@ -864,7 +825,7 @@ void coco_state::poll_joystick(bool *joyin, UINT8 *buttons)
 			if (m_dclg_state == 7)
 			{
 				/* while in state 7, prepare to check next video frame for a hit */
-				attotime dclg_time = machine().primary_screen->time_until_pos(dclg_vpos, 0);
+				attotime dclg_time = machine().first_screen()->time_until_pos(dclg_vpos, 0);
 				m_diecom_lightgun_timer->adjust(dclg_time);
 			}
 			break;
@@ -894,7 +855,7 @@ void coco_state::poll_keyboard(void)
 	UINT8 pia0_pa_z = 0x7F;
 
 	/* poll the keyboard, and update PA6-PA0 accordingly*/
-	for (int i = 0; i < sizeof(m_keyboard) / sizeof(m_keyboard[0]); i++)
+	for (int i = 0; i < ARRAY_LENGTH(m_keyboard); i++)
 	{
 		int value = m_keyboard[i]->read();
 		if ((value | pia0_pb) != 0xFF)
@@ -1007,9 +968,9 @@ void coco_state::update_prinout(bool prinout)
 	else
 	{
 		/* output bitbanger if present (only on CoCos) */
-		if (m_bitbanger != NULL)
+		if (m_rs232 != NULL)
 		{
-			m_bitbanger->output(prinout ? 1 : 0);
+			m_rs232->write_txd(prinout ? 1 : 0);
 		}
 	}
 }
@@ -1060,44 +1021,6 @@ INPUT_CHANGED_MEMBER(coco_state::joystick_mode_changed)
 {
 	poll_keyboard();
 }
-
-
-
-//-------------------------------------------------
-//  bitbanger_changed
-//-------------------------------------------------
-
-void coco_state::bitbanger_changed(bool newvalue)
-{
-	// do nothing
-}
-
-
-
-//-------------------------------------------------
-//  bitbanger_callback
-//-------------------------------------------------
-
-WRITE_LINE_MEMBER( coco_state::bitbanger_callback )
-{
-	bitbanger_changed(state ? true : false);
-}
-
-
-
-//-------------------------------------------------
-//  bitbanger_config
-//-------------------------------------------------
-
-const bitbanger_config coco_state::coco_bitbanger_config =
-{
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, bitbanger_callback),   /* callback */
-	BITBANGER_PRINTER,                                          /* default mode */
-	BITBANGER_600,                                              /* default output baud */
-	BITBANGER_0PERCENT                                          /* default fine tune adjustment */
-};
-
-
 
 //-------------------------------------------------
 //  poll_hires_joystick
@@ -1240,6 +1163,11 @@ WRITE8_MEMBER( coco_state::ff60_write )
 
 READ8_MEMBER( coco_state::ff40_read )
 {
+	if (offset >= 1 && offset <= 2 && m_beckerportconfig->read_safe(0) == 1)
+	{
+		return m_beckerport->read(space, offset-1, mem_mask);
+	}
+
 	return m_cococart->read(space, offset, mem_mask);
 }
 
@@ -1251,6 +1179,11 @@ READ8_MEMBER( coco_state::ff40_read )
 
 WRITE8_MEMBER( coco_state::ff40_write )
 {
+	if (offset >= 1 && offset <= 2 && m_beckerportconfig->read_safe(0) == 1)
+	{
+		return m_beckerport->write(space, offset-1, data, mem_mask);
+	}
+
 	m_cococart->write(space, offset, data, mem_mask);
 }
 
@@ -1264,35 +1197,6 @@ void coco_state::cart_w(bool state)
 {
 	m_pia_1->cb1_w(state);
 }
-
-
-
-//-------------------------------------------------
-//  cartridge_config
-//-------------------------------------------------
-
-const cococart_interface coco_state::cartridge_config =
-{
-	DEVCB_DRIVER_LINE_MEMBER(coco_state, cart_w),       // coco_cart_w,
-	DEVCB_CPU_INPUT_LINE(MAINCPU_TAG, INPUT_LINE_NMI),  // coco_nmi_w,
-	DEVCB_CPU_INPUT_LINE(MAINCPU_TAG, INPUT_LINE_HALT)  // coco_halt_w
-};
-
-
-//-------------------------------------------------
-//  coco_cassette_interface
-//-------------------------------------------------
-
-const cassette_interface coco_state::coco_cassette_interface =
-{
-	coco_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_PLAY | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_MUTED),
-	NULL,
-	NULL
-};
-
-
 
 /***************************************************************************
   DISASSEMBLY OVERRIDE (OS9 syscalls)

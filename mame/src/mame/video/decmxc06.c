@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, David Haywood
 /*
  Deco MXC06 sprite generator:
 
@@ -48,19 +50,33 @@ void deco_mxc06_device::set_gfx_region(device_t &device, int region)
 const device_type DECO_MXC06 = &device_creator<deco_mxc06_device>;
 
 deco_mxc06_device::deco_mxc06_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, DECO_MXC06, "decmxc06_device", tag, owner, clock),
-		m_gfxregion(0)
+	: device_t(mconfig, DECO_MXC06, "DECO MXC06 Sprite", tag, owner, clock, "deco_mxc06", __FILE__),
+		device_video_interface(mconfig, *this),
+		m_gfxregion(0),
+		m_ramsize(0x800),
+		m_gfxdecode(*this),
+		m_palette(*this)
 {
+}
+
+//-------------------------------------------------
+//  static_set_gfxdecode_tag: Set the tag of the
+//  gfx decoder
+//-------------------------------------------------
+
+void deco_mxc06_device::static_set_gfxdecode_tag(device_t &device, const char *tag)
+{
+	downcast<deco_mxc06_device &>(device).m_gfxdecode.set_tag(tag);
 }
 
 
 /* this implementation was originally from Mad Motor */
-void deco_mxc06_device::draw_sprites( running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect, UINT16* spriteram, int pri_mask, int pri_val, int col_mask )
+void deco_mxc06_device::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, UINT16* spriteram, int pri_mask, int pri_val, int col_mask )
 {
 	int offs;
 
 	offs = 0;
-	while (offs < 0x800 / 2)
+	while (offs < m_ramsize / 2)
 	{
 		int sx, sy, code, color, w, h, flipx, flipy, incy, flash, mult, x, y;
 
@@ -85,8 +101,7 @@ void deco_mxc06_device::draw_sprites( running_machine &machine, bitmap_ind16 &bi
 		sx = 240 - sx;
 		sy = 240 - sy;
 
-
-		if (machine.driver_data()->flip_screen())
+		if (machine().driver_data()->flip_screen())
 		{
 			sy = 240 - sy;
 			sx = 240 - sx;
@@ -97,36 +112,44 @@ void deco_mxc06_device::draw_sprites( running_machine &machine, bitmap_ind16 &bi
 		else
 			mult = -16;
 
+
+		// thedeep strongly suggests that this check goes here, otherwise the radar breaks
+		if (!(spriteram[offs] & 0x8000))
+		{
+			offs += 4;
+			continue;
+		}
+
+
 		for (x = 0; x < w; x++)
 		{
 			// maybe, birdie try appears to specify the base code for each part..
 			code = spriteram[offs + 1] & 0x1fff;
 
-			code &= ~(h-1);
+			code &= ~(h - 1);
 
 			if (flipy)
 				incy = -1;
 			else
 			{
-				code += h-1;
+				code += h - 1;
 				incy = 1;
 			}
 
 			for (y = 0; y < h; y++)
 			{
-				if (spriteram[offs] & 0x8000)
 				{
 					int draw = 0;
-					if (!flash || (machine.primary_screen->frame_number() & 1))
+					if (!flash || (m_screen->frame_number() & 1))
 					{
-						if (m_priority_type==0) // most cases
+						if (m_priority_type == 0) // most cases
 						{
 							if ((color & pri_mask) == pri_val)
 							{
 								draw = 1;
 							}
 						}
-						else if (m_priority_type==1) // vaportra
+						else if (m_priority_type == 1) // vaportra
 						{
 							if (pri_mask && (color >= pri_val))
 								continue;
@@ -140,30 +163,32 @@ void deco_mxc06_device::draw_sprites( running_machine &machine, bitmap_ind16 &bi
 
 					if (draw)
 					{
-						drawgfx_transpen(bitmap,cliprect,machine.gfx[m_gfxregion],
+						m_gfxdecode->gfx(m_gfxregion)->transpen(bitmap, cliprect,
 							code - y * incy,
 							color & col_mask,
-							flipx,flipy,
-							sx + (mult * x),sy + (mult * y),0);
+							flipx, flipy,
+							sx + (mult * x), sy + (mult * y), 0);
 					}
 				}
 			}
 
 			offs += 4;
-			if (offs >= 0x800 / 2)
-					return;
+			if (offs >= m_ramsize / 2)
+				return;
+
+
 		}
 	}
 }
 
 /* this is used by the automat bootleg, it seems to have greatly simplified sprites compared to the real chip */
 /* spriteram is twice the size tho! */
-void deco_mxc06_device::draw_sprites_bootleg( running_machine &machine, bitmap_ind16 &bitmap, const rectangle &cliprect, UINT16* spriteram, int pri_mask, int pri_val, int col_mask )
+void deco_mxc06_device::draw_sprites_bootleg( bitmap_ind16 &bitmap, const rectangle &cliprect, UINT16* spriteram, int pri_mask, int pri_val, int col_mask )
 {
 	int offs;
 
 	offs = 0;
-	while (offs < 0x800 / 2)
+	while (offs < m_ramsize / 2)
 	{
 		int sx, sy, code, color, flipx, flipy;
 
@@ -180,7 +205,7 @@ void deco_mxc06_device::draw_sprites_bootleg( running_machine &machine, bitmap_i
 
 		sx -= 0x100;
 
-		drawgfx_transpen(bitmap,cliprect,machine.gfx[m_gfxregion],
+		m_gfxdecode->gfx(m_gfxregion)->transpen(bitmap,cliprect,
 			code,
 			color & col_mask,
 			flipx,flipy,
@@ -197,4 +222,14 @@ void deco_mxc06_device::device_start()
 
 void deco_mxc06_device::device_reset()
 {
+}
+
+//-------------------------------------------------
+//  static_set_palette_tag: Set the tag of the
+//  palette device
+//-------------------------------------------------
+
+void deco_mxc06_device::static_set_palette_tag(device_t &device, const char *tag)
+{
+	downcast<deco_mxc06_device &>(device).m_palette.set_tag(tag);
 }

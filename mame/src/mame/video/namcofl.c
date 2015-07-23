@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, ElSemi
 /* video/namcofl.c */
 
 #include "emu.h"
@@ -45,34 +47,6 @@ nth_byte32( const UINT32 *pSource, int which )
 } /* nth_byte32 */
 #endif
 
-static void namcofl_install_palette(running_machine &machine)
-{
-	namcofl_state *state = machine.driver_data<namcofl_state>();
-	int pen, page, dword_offset, byte_offset;
-	UINT32 r,g,b;
-	UINT32 *pSource;
-
-	/* this is unnecessarily expensive.  Better would be to mark palette entries dirty as
-	 * they are modified, and only process those that have changed.
-	 */
-	pen = 0;
-	for( page=0; page<4; page++ )
-	{
-		pSource = &state->m_generic_paletteram_32[page*0x2000/4];
-		for( dword_offset=0; dword_offset<0x800/4; dword_offset++ )
-		{
-			r = pSource[dword_offset+0x0000/4];
-			g = pSource[dword_offset+0x0800/4];
-			b = pSource[dword_offset+0x1000/4];
-
-			for( byte_offset=0; byte_offset<4; byte_offset++ )
-			{
-				palette_set_color_rgb( machine, pen++, r&0xff, g&0xff, b&0xff);
-				r>>=8; g>>=8; b>>=8;
-			}
-		}
-	}
-}
 static void TilemapCB(running_machine &machine, UINT16 code, int *tile, int *mask )
 {
 	*tile = code;
@@ -84,16 +58,14 @@ UINT32 namcofl_state::screen_update_namcofl(screen_device &screen, bitmap_ind16 
 {
 	int pri;
 
-	namcofl_install_palette(machine());
-
-	bitmap.fill(get_black_pen(machine()), cliprect );
+	bitmap.fill(m_palette->black_pen(), cliprect );
 
 	for( pri=0; pri<16; pri++ )
 	{
-		c169_roz_draw(bitmap, cliprect, pri);
+		c169_roz_draw(screen, bitmap, cliprect, pri);
 		if((pri&1)==0)
-			namco_tilemap_draw( bitmap, cliprect, pri>>1 );
-		c355_obj_draw(bitmap, cliprect, pri );
+			namco_tilemap_draw( screen, bitmap, cliprect, pri>>1 );
+		c355_obj_draw(screen, bitmap, cliprect, pri );
 	}
 
 	return 0;

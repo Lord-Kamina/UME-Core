@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Stefan Jokisch
 /***************************************************************************
 
     video/liberatr.c
@@ -187,7 +189,7 @@ void liberatr_state::init_planet(planet &liberatr_planet, UINT8 *planet_rom)
 
 			/* calculate the bitmap's x coordinate for the western horizon
 			   center of bitmap - (the number of planet pixels) / 4 */
-			*buffer++ = (machine().primary_screen->width() / 2) - ((line->max_x + 2) / 4);
+			*buffer++ = (m_screen->width() / 2) - ((line->max_x + 2) / 4);
 
 			for (i = 0; i < segment_count; i++)
 			{
@@ -238,7 +240,7 @@ void liberatr_state::get_pens(pen_t *pens)
 		g = ((~data >> 0) & 0x07) * 0x24 + 3;  if (g == 3)  g = 0;
 		b = ((~data >> 5) & 0x06) * 0x24 + 3;  if (b == 3)  b = 0;
 
-		pens[penmap[i]] = MAKE_RGB(r, g, b);
+		pens[penmap[i]] = rgb_t(r, g, b);
 	}
 }
 
@@ -301,7 +303,7 @@ UINT32 liberatr_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 	pen_t pens[NUM_PENS];
 	get_pens(pens);
 
-	bitmap.fill(RGB_BLACK, cliprect);
+	bitmap.fill(rgb_t::black, cliprect);
 	draw_planet(bitmap, pens);
 	draw_bitmap(bitmap, pens);
 

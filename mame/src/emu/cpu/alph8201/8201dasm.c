@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Tatsuyuki Satoh
 /****************************************************************************
                          Alpha 8201/8301 Disassembler
 
@@ -257,7 +259,7 @@ static const char *const Formats[] = {
 	NULL
 };
 
-#define MAX_OPS (((sizeof(Formats) / sizeof(Formats[0])) - 1) / PTRS_PER_FORMAT)
+#define MAX_OPS ((ARRAY_LENGTH(Formats) - 1) / PTRS_PER_FORMAT)
 
 struct AD8201Opcode {
 	byte mask;

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 /*********************************************************************
 
     formats/dsk_dsk.c
@@ -7,6 +9,7 @@
 *********************************************************************/
 
 #include <string.h>
+#include <assert.h>
 
 #include "imageutl.h"
 #include "flopimg.h"
@@ -263,7 +266,6 @@ FLOPPY_CONSTRUCT( dsk_dsk_construct )
 	return FLOPPY_ERROR_SUCCESS;
 }
 
-#include "emu.h"
 #include "dsk_dsk.h"
 
 #define DSK_FORMAT_HEADER   "MV - CPC"
@@ -343,7 +345,7 @@ bool dsk_format::load(io_generic *io, UINT32 form_factor, floppy_image *image)
 	UINT8 header[0x100];
 	bool extendformat = FALSE;
 
-	int image_size = io_generic_size(io);
+	UINT64 image_size = io_generic_size(io);
 
 	io_generic_read(io, &header, 0, sizeof(header));
 	if ( memcmp( header, EXT_FORMAT_HEADER, 16 ) ==0) {

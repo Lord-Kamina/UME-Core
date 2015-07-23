@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /***************************************************************************
 
     Sharp MZ-6500
@@ -16,11 +18,11 @@ class mz6500_state : public driver_device
 public:
 	mz6500_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-	m_hgdc(*this, "upd7220"),
-	m_fdc(*this, "upd765")
-	,
+		m_hgdc(*this, "upd7220"),
+		m_fdc(*this, "upd765"),
 		m_video_ram(*this, "video_ram"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_palette(*this, "palette") { }
 
 	required_device<upd7220_device> m_hgdc;
 	required_device<upd765a_device> m_fdc;
@@ -28,24 +30,25 @@ public:
 	DECLARE_WRITE8_MEMBER(mz6500_vram_w);
 	void fdc_irq(bool state);
 	void fdc_drq(bool state);
-	required_shared_ptr<UINT8> m_video_ram;
+	required_shared_ptr<UINT16> m_video_ram;
 	virtual void machine_reset();
 	virtual void video_start();
 	required_device<cpu_device> m_maincpu;
+	required_device<palette_device> m_palette;
+	UPD7220_DISPLAY_PIXELS_MEMBER( hgdc_display_pixels );
 };
 
-static UPD7220_DISPLAY_PIXELS( hgdc_display_pixels )
+UPD7220_DISPLAY_PIXELS_MEMBER( mz6500_state::hgdc_display_pixels )
 {
-	mz6500_state *state = device->machine().driver_data<mz6500_state>();
-	const rgb_t *palette = palette_entry_list_raw(bitmap.palette());
+	const rgb_t *palette = m_palette->palette()->entry_list_raw();
 	int gfx[3];
 	UINT8 i,pen;
 
-	gfx[0] = state->m_video_ram[address + 0x00000];
-	gfx[1] = state->m_video_ram[address + 0x10000];
-	gfx[2] = state->m_video_ram[address + 0x20000];
+	gfx[0] = m_video_ram[(address + 0x00000) >> 1];
+	gfx[1] = m_video_ram[(address + 0x10000) >> 1];
+	gfx[2] = m_video_ram[(address + 0x20000) >> 1];
 
-	for(i=0; i<8; i++)
+	for(i=0; i<16; i++)
 	{
 		pen = (BIT(gfx[0], i)) | (BIT(gfx[1], i) << 1) | (BIT(gfx[2], i) << 2);
 
@@ -61,12 +64,15 @@ void mz6500_state::video_start()
 
 READ8_MEMBER( mz6500_state::mz6500_vram_r )
 {
-	return m_video_ram[offset];
+	return m_video_ram[offset >> 1] >> ((offset & 1) ? 8 : 0);
 }
 
 WRITE8_MEMBER( mz6500_state::mz6500_vram_w )
 {
-	m_video_ram[offset] = data;
+	int mask = (offset & 1) ? 8 : 0;
+	offset >>= 1;
+	m_video_ram[offset] &= 0xff00 >> mask;
+	m_video_ram[offset] |= data << mask;
 }
 
 static ADDRESS_MAP_START(mz6500_map, AS_PROGRAM, 16, mz6500_state)
@@ -125,17 +131,7 @@ static SLOT_INTERFACE_START( mz6500_floppies )
 	SLOT_INTERFACE( "525hd", FLOPPY_525_HD )
 SLOT_INTERFACE_END
 
-static UPD7220_INTERFACE( hgdc_intf )
-{
-	"screen",
-	hgdc_display_pixels,
-	NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static ADDRESS_MAP_START( upd7220_map, AS_0, 8, mz6500_state )
+static ADDRESS_MAP_START( upd7220_map, AS_0, 16, mz6500_state )
 	AM_RANGE(0x00000, 0x3ffff) AM_RAM AM_SHARE("video_ram")
 ADDRESS_MAP_END
 
@@ -154,10 +150,13 @@ static MACHINE_CONFIG_START( mz6500, mz6500_state )
 	MCFG_SCREEN_UPDATE_DEVICE("upd7220", upd7220_device, screen_update)
 	MCFG_SCREEN_SIZE(640, 480)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 480-1)
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_PALETTE_ADD("palette", 8)
 
 	/* Devices */
-	MCFG_UPD7220_ADD("upd7220", 8000000/6, hgdc_intf, upd7220_map) // unk clock
+	MCFG_DEVICE_ADD("upd7220", UPD7220, 8000000/6) // unk clock
+	MCFG_DEVICE_ADDRESS_MAP(AS_0, upd7220_map)
+	MCFG_UPD7220_DISPLAY_PIXELS_CALLBACK_OWNER(mz6500_state, hgdc_display_pixels)
+
 	MCFG_UPD765A_ADD("upd765", true, true)
 	MCFG_FLOPPY_DRIVE_ADD("upd765:0", mz6500_floppies, "525hd", floppy_image_device::default_floppy_formats)
 	MCFG_FLOPPY_DRIVE_ADD("upd765:1", mz6500_floppies, "525hd", floppy_image_device::default_floppy_formats)

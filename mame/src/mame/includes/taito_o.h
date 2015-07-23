@@ -1,8 +1,12 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 /*************************************************************************
 
     Taito O system
 
 *************************************************************************/
+
+#include "video/tc0080vco.h"
 
 class taitoo_state : public driver_device
 {
@@ -10,7 +14,9 @@ public:
 	taitoo_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
-		m_tc0080vco(*this, "tc0080vco") { }
+		m_tc0080vco(*this, "tc0080vco"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 //  UINT16 *    paletteram;    // currently this uses generic palette handling
@@ -18,6 +24,9 @@ public:
 	/* devices */
 	required_device<cpu_device> m_maincpu;
 	required_device<tc0080vco_device> m_tc0080vco;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	DECLARE_WRITE16_MEMBER(io_w);
 	DECLARE_READ16_MEMBER(io_r);
 	virtual void machine_start();

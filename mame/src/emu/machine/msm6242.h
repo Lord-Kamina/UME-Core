@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /***************************************************************************
 
     MSM6242 Real Time Clock
-
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 ***************************************************************************/
 
@@ -13,31 +12,23 @@
 #define __MSM6242DEV_H__
 
 #include "emu.h"
-#include "dirtc.h"
 
 
-#define MCFG_MSM6242_ADD(_tag, _config) \
-	MCFG_DEVICE_ADD(_tag, msm6242, XTAL_32_768kHz) \
-	MCFG_DEVICE_CONFIG(_config)
-
-#define MSM6242_INTERFACE(name) \
-	const msm6242_interface (name) =
-
-// ======================> msm6242_interface
-
-struct msm6242_interface
-{
-	devcb_write_line    m_out_int_func;
-};
+#define MCFG_MSM6242_OUT_INT_HANDLER(_devcb) \
+	devcb = &msm6242_device::set_out_int_handler(*device, DEVCB_##_devcb);
 
 
 // ======================> msm6242_device
 
-class msm6242_device :  public device_t, public device_rtc_interface
+class msm6242_device :  public device_t,
+								public device_rtc_interface
 {
 public:
 	// construction/destruction
 	msm6242_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
+
+
+	template<class _Object> static devcb_base &set_out_int_handler(device_t &device, _Object object) { return downcast<msm6242_device &>(device).m_out_int_handler.set_callback(object); }
 
 	// I/O operations
 	DECLARE_WRITE8_MEMBER( write );
@@ -69,7 +60,7 @@ private:
 	UINT16                      m_tick;
 
 	// incidentals
-	devcb_resolved_write_line   m_res_out_int_func;
+	devcb_write_line m_out_int_handler;
 	emu_timer *                 m_timer;
 	UINT64                      m_last_update_time; // last update time, in clock cycles
 
@@ -86,7 +77,7 @@ private:
 
 
 // device type definition
-extern const device_type msm6242;
+extern const device_type MSM6242;
 
 
 #endif /* __MSM6242DEV_H__ */

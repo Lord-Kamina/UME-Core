@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic
 /*****************************************************************************
  *
  * includes/pk8020.h
@@ -11,6 +13,7 @@
 #include "machine/pit8253.h"
 #include "machine/pic8259.h"
 #include "machine/i8251.h"
+#include "machine/wd_fdc.h"
 #include "imagedev/cassette.h"
 #include "sound/speaker.h"
 #include "sound/wave.h"
@@ -30,11 +33,18 @@ public:
 		m_lan(*this, "lan"),
 		m_ram(*this, RAM_TAG),
 		m_wd1793(*this, "wd1793"),
+		m_floppy0(*this, "wd1793:0"),
+		m_floppy1(*this, "wd1793:1"),
+		m_floppy2(*this, "wd1793:2"),
+		m_floppy3(*this, "wd1793:3"),
 		m_pit8253(*this, "pit8253"),
 		m_pic8259(*this, "pic8259"),
 		m_speaker(*this, "speaker"),
 		m_region_maincpu(*this, "maincpu"),
-		m_region_gfx1(*this, "gfx1") { }
+		m_region_gfx1(*this, "gfx1"),
+		m_palette(*this, "palette")  { }
+
+	DECLARE_FLOPPY_FORMATS(floppy_formats);
 
 	UINT8 m_color;
 	UINT8 m_video_page;
@@ -59,7 +69,7 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(pk8020);
 	UINT32 screen_update_pk8020(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(pk8020_interrupt);
 	DECLARE_READ8_MEMBER(pk8020_porta_r);
@@ -80,22 +90,19 @@ protected:
 	required_device<i8251_device> m_rs232;
 	required_device<i8251_device> m_lan;
 	required_device<ram_device> m_ram;
-	required_device<device_t> m_wd1793;
+	required_device<fd1793_t> m_wd1793;
+	required_device<floppy_connector> m_floppy0;
+	required_device<floppy_connector> m_floppy1;
+	required_device<floppy_connector> m_floppy2;
+	required_device<floppy_connector> m_floppy3;
 	required_device<pit8253_device> m_pit8253;
 	required_device<pic8259_device> m_pic8259;
 	required_device<speaker_sound_device> m_speaker;
 	required_memory_region m_region_maincpu;
 	required_memory_region m_region_gfx1;
 	ioport_port *m_io_port[16];
-
+	required_device<palette_device> m_palette;
 	void pk8020_set_bank(UINT8 data);
 };
-
-
-/*----------- defined in machine/pk8020.c -----------*/
-extern const i8255_interface pk8020_ppi8255_interface_1;
-extern const i8255_interface pk8020_ppi8255_interface_2;
-extern const i8255_interface pk8020_ppi8255_interface_3;
-extern const struct pit8253_interface pk8020_pit8253_intf;
 
 #endif /* pk8020_H_ */

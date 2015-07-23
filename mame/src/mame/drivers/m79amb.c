@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Al Kossow
 /*          Ramtek M79 Ambush
 
 
@@ -77,7 +79,7 @@ UINT32 m79amb_state::screen_update_ramtek(screen_device &screen, bitmap_rgb32 &b
 
 		for (i = 0; i < 8; i++)
 		{
-			pen_t pen = (data & 0x80) ? RGB_WHITE : RGB_BLACK;
+			pen_t pen = (data & 0x80) ? rgb_t::white : rgb_t::black;
 			bitmap.pix32(y, x) = pen;
 
 			x++;
@@ -202,7 +204,7 @@ static MACHINE_CONFIG_START( m79amb, m79amb_state )
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(m79amb)
+	MCFG_DISCRETE_INTF(m79amb)
 
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Roberto Fresca
 /************************************************************************************************
 
   AVT - ADVANCED VIDEO TECHNOLOGY
@@ -424,12 +426,16 @@ public:
 		m_maincpu(*this,"maincpu"),
 		m_crtc(*this, "crtc"),
 		m_videoram(*this, "videoram"),
-		m_colorram(*this, "colorram"){ }
+		m_colorram(*this, "colorram"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<mc6845_device> m_crtc;
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_colorram;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 
 	DECLARE_WRITE8_MEMBER(avt_6845_address_w);
 	DECLARE_WRITE8_MEMBER(avt_6845_data_w);
@@ -443,27 +449,27 @@ public:
 	DECLARE_WRITE8_MEMBER(debug_w);
 	TILE_GET_INFO_MEMBER(get_bg_tile_info);
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(avt);
 	UINT32 screen_update_avt(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(avt_vblank_irq);
 };
 
-#define mc6845_h_char_total     (state->m_crtc_vreg[0])
+#define mc6845_h_char_total     (m_crtc_vreg[0])
 #define mc6845_h_display        (m_crtc_vreg[1])
-#define mc6845_h_sync_pos       (state->m_crtc_vreg[2])
-#define mc6845_sync_width       (state->m_crtc_vreg[3])
-#define mc6845_v_char_total     (state->m_crtc_vreg[4])
-#define mc6845_v_total_adj      (state->m_crtc_vreg[5])
+#define mc6845_h_sync_pos       (m_crtc_vreg[2])
+#define mc6845_sync_width       (m_crtc_vreg[3])
+#define mc6845_v_char_total     (m_crtc_vreg[4])
+#define mc6845_v_total_adj      (m_crtc_vreg[5])
 #define mc6845_v_display        (m_crtc_vreg[6])
-#define mc6845_v_sync_pos       (state->m_crtc_vreg[7])
-#define mc6845_mode_ctrl        (state->m_crtc_vreg[8])
-#define mc6845_tile_height      (state->m_crtc_vreg[9]+1)
-#define mc6845_cursor_y_start   (state->m_crtc_vreg[0x0a])
-#define mc6845_cursor_y_end     (state->m_crtc_vreg[0x0b])
-#define mc6845_start_addr       (((state->m_crtc_vreg[0x0c]<<8) & 0x3f00) | (state->m_crtc_vreg[0x0d] & 0xff))
-#define mc6845_cursor_addr      (((state->m_crtc_vreg[0x0e]<<8) & 0x3f00) | (state->m_crtc_vreg[0x0f] & 0xff))
-#define mc6845_light_pen_addr   (((state->m_crtc_vreg[0x10]<<8) & 0x3f00) | (state->m_crtc_vreg[0x11] & 0xff))
-#define mc6845_update_addr      (((state->m_crtc_vreg[0x12]<<8) & 0x3f00) | (state->m_crtc_vreg[0x13] & 0xff))
+#define mc6845_v_sync_pos       (m_crtc_vreg[7])
+#define mc6845_mode_ctrl        (m_crtc_vreg[8])
+#define mc6845_tile_height      (m_crtc_vreg[9]+1)
+#define mc6845_cursor_y_start   (m_crtc_vreg[0x0a])
+#define mc6845_cursor_y_end     (m_crtc_vreg[0x0b])
+#define mc6845_start_addr       (((m_crtc_vreg[0x0c]<<8) & 0x3f00) | (m_crtc_vreg[0x0d] & 0xff))
+#define mc6845_cursor_addr      (((m_crtc_vreg[0x0e]<<8) & 0x3f00) | (m_crtc_vreg[0x0f] & 0xff))
+#define mc6845_light_pen_addr   (((m_crtc_vreg[0x10]<<8) & 0x3f00) | (m_crtc_vreg[0x11] & 0xff))
+#define mc6845_update_addr      (((m_crtc_vreg[0x12]<<8) & 0x3f00) | (m_crtc_vreg[0x13] & 0xff))
 
 
 /*********************************************
@@ -496,13 +502,13 @@ TILE_GET_INFO_MEMBER(avt_state::get_bg_tile_info)
 	int code = m_videoram[tile_index] | ((attr & 1) << 8);
 	int color = (attr & 0xf0)>>4;
 
-	SET_TILE_INFO_MEMBER( 0, code, color, 0);
+	SET_TILE_INFO_MEMBER(0, code, color, 0);
 }
 
 
 void avt_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(avt_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 28, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(avt_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 28, 32);
 }
 
 
@@ -510,7 +516,7 @@ UINT32 avt_state::screen_update_avt(screen_device &screen, bitmap_ind16 &bitmap,
 {
 	int x,y;
 	int count;
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 
 	count = 0;
 
@@ -521,17 +527,17 @@ UINT32 avt_state::screen_update_avt(screen_device &screen, bitmap_ind16 &bitmap,
 			UINT16 tile = m_videoram[count] | ((m_colorram[count] & 1) << 8);
 			UINT8 color = (m_colorram[count] & 0xf0) >> 4;
 
-			drawgfx_opaque(bitmap,cliprect,gfx,tile,color,0,0,x*8,(y*8));
+			gfx->opaque(bitmap,cliprect,tile,color,0,0,x*8,(y*8));
 
 			count++;
 		}
 	}
-	//m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	//m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 
 
-void avt_state::palette_init()
+PALETTE_INIT_MEMBER(avt_state, avt)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 /*  prom bits
@@ -547,7 +553,7 @@ void avt_state::palette_init()
 	/* 0000BGRI */
 	if (color_prom == 0) return;
 
-	for (j = 0; j < machine().total_colors(); j++)
+	for (j = 0; j < palette.entries(); j++)
 	{
 		int bit1, bit2, bit3, r, g, b, inten, intenmin, intenmax, i;
 
@@ -576,9 +582,9 @@ void avt_state::palette_init()
 
 		/* hack to switch cyan->magenta for highlighted background */
 		if (j == 0x40)
-			palette_set_color(machine(), j, MAKE_RGB(g, r, b)); // Why this one has R-G swapped?...
+			palette.set_pen_color(j, rgb_t(g, r, b)); // Why this one has R-G swapped?...
 		else
-			palette_set_color(machine(), j, MAKE_RGB(r, g, b));
+			palette.set_pen_color(j, rgb_t(r, g, b));
 	}
 }
 
@@ -842,42 +848,6 @@ static GFXDECODE_START( avt )
 	GFXDECODE_ENTRY( "gfx1", 0, tilelayout, 0, 16 )
 GFXDECODE_END
 
-
-/*******************************************
-*              CRTC Interface              *
-*******************************************/
-
-static MC6845_INTERFACE( mc6845_intf )
-{
-	"screen",   /* screen we are acting on */
-	false,      /* show border area */
-	8,          /* number of pixels per video memory address */
-	NULL,       /* before pixel update callback */
-	NULL,       /* row update callback */
-	NULL,       /* after pixel update callback */
-	DEVCB_NULL, /* callback for display state changes */
-	DEVCB_NULL, /* callback for cursor state changes */
-	DEVCB_NULL, /* HSYNC callback */
-	DEVCB_NULL, /* VSYNC callback */
-	NULL        /* update address callback */
-};
-
-
-/********************************************
-*             Sound Interfaces              *
-********************************************/
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-
 /*********************************************
 *              Machine Drivers               *
 *********************************************/
@@ -903,18 +873,20 @@ static MACHINE_CONFIG_START( avt, avt_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 0*8, 32*8-1)  /* 240x224 (through CRTC) */
 	MCFG_SCREEN_UPDATE_DRIVER(avt_state, screen_update_avt)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(avt)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", avt)
 
-	MCFG_PALETTE_LENGTH(8*16)
+	MCFG_PALETTE_ADD("palette", 8*16)
+	MCFG_PALETTE_INIT_OWNER(avt_state, avt)
 
-
-	MCFG_MC6845_ADD("crtc", MC6845, CRTC_CLOCK, mc6845_intf)    /* guess */
+	MCFG_MC6845_ADD("crtc", MC6845, "screen", CRTC_CLOCK)    /* guess */
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("aysnd", AY8910, CPU_CLOCK/2)    /* 1.25 MHz.?? */
-	MCFG_SOUND_CONFIG(ay8910_config)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.00)
 MACHINE_CONFIG_END
 

@@ -1,3 +1,5 @@
+// license:LGPL-2.1+
+// copyright-holders:Tomasz Slanina
 #include "emu.h"
 #include "includes/ksayakyu.h"
 
@@ -30,7 +32,7 @@ WRITE8_MEMBER(ksayakyu_state::ksayakyu_videoctrl_w)
 		m_tilemap->set_flip((data & 2) ? TILEMAP_FLIPX : 0);
 }
 
-void ksayakyu_state::palette_init()
+PALETTE_INIT_MEMBER(ksayakyu_state, ksayakyu)
 {
 	const UINT8 *prom = memregion("proms")->base();
 	int r, g, b, i;
@@ -41,7 +43,7 @@ void ksayakyu_state::palette_init()
 		g = (prom[i] & 0x38) >> 3;
 		b = (prom[i] & 0xc0) >> 6;
 
-		palette_set_color_rgb(machine(), i, pal3bit(r), pal3bit(g), pal2bit(b));
+		palette.set_pen_color(i, pal3bit(r), pal3bit(g), pal2bit(b));
 	}
 }
 
@@ -92,7 +94,7 @@ void ksayakyu_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 		int flipx = (tile & 0x80) ? 1 : 0;
 		int flipy = 0;
 
-		gfx_element *gfx = machine().gfx[2];
+		gfx_element *gfx = m_gfxdecode->gfx(2);
 
 		if (m_flipscreen)
 		{
@@ -102,7 +104,7 @@ void ksayakyu_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			flipy ^= 1;
 		}
 
-			drawgfx_transpen(bitmap,cliprect,gfx,
+			gfx->transpen(bitmap,cliprect,
 				tile & 0x7f,
 				(attributes & 0x78) >> 3,
 				flipx,flipy,
@@ -114,8 +116,8 @@ void ksayakyu_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 
 void ksayakyu_state::video_start()
 {
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ksayakyu_state::get_ksayakyu_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32 * 8);
-	m_textmap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ksayakyu_state::get_text_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ksayakyu_state::get_ksayakyu_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32 * 8);
+	m_textmap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ksayakyu_state::get_text_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 	m_textmap->set_transparent_pen(0);
 }
 
@@ -124,9 +126,9 @@ UINT32 ksayakyu_state::screen_update_ksayakyu(screen_device &screen, bitmap_ind1
 	bitmap.fill(0, cliprect);
 
 	if (m_video_ctrl & 1)
-		m_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
-	m_textmap->draw(bitmap, cliprect, 0, 0);
+	m_textmap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }

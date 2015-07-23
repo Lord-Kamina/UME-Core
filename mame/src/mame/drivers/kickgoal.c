@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Driver Info
 
 
@@ -37,7 +39,7 @@ lev 7 : 0x7c : 0000 0000 - x
 #include "emu.h"
 #include "cpu/m68000/m68000.h"
 #include "cpu/pic16c5x/pic16c5x.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "sound/okim6295.h"
 #include "includes/kickgoal.h"
 
@@ -445,7 +447,7 @@ READ16_MEMBER(kickgoal_state::kickgoal_eeprom_r)
 {
 	if (ACCESSING_BITS_0_7)
 	{
-		return m_eeprom->read_bit();
+		return m_eeprom->do_read();
 	}
 	return 0;
 }
@@ -458,13 +460,13 @@ WRITE16_MEMBER(kickgoal_state::kickgoal_eeprom_w)
 		switch (offset)
 		{
 			case 0:
-				m_eeprom->set_cs_line((data & 0x0001) ? CLEAR_LINE : ASSERT_LINE);
+				m_eeprom->cs_write((data & 0x0001) ? ASSERT_LINE : CLEAR_LINE);
 				break;
 			case 1:
-				m_eeprom->set_clock_line((data & 0x0001) ? ASSERT_LINE : CLEAR_LINE);
+				m_eeprom->clk_write((data & 0x0001) ? ASSERT_LINE : CLEAR_LINE);
 				break;
 			case 2:
-				m_eeprom->write_bit(data & 0x0001);
+				m_eeprom->di_write(data & 0x0001);
 				break;
 		}
 	}
@@ -488,21 +490,8 @@ static ADDRESS_MAP_START( kickgoal_program_map, AS_PROGRAM, 16, kickgoal_state )
 	AM_RANGE(0xa0c000, 0xa0ffff) AM_RAM // more tilemap?
 	AM_RANGE(0xa10000, 0xa1000f) AM_WRITEONLY AM_SHARE("scrram") /* Scroll Registers */
 	AM_RANGE(0xb00000, 0xb007ff) AM_WRITEONLY AM_SHARE("spriteram") /* Sprites */
-	AM_RANGE(0xc00000, 0xc007ff) AM_RAM_WRITE(paletteram_xxxxBBBBGGGGRRRR_word_w) AM_SHARE("paletteram") /* Palette */ // actionhw reads this
+	AM_RANGE(0xc00000, 0xc007ff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette") /* Palette */ // actionhw reads this
 	AM_RANGE(0xff0000, 0xffffff) AM_RAM
-ADDRESS_MAP_END
-
-/***************************** PIC16C57 Memory Map **************************/
-
-	/* $000 - 7FF  PIC16C57 Internal Program ROM. Note: code is 12bits wide */
-	/* $000 - 07F  PIC16C57 Internal Data RAM */
-
-static ADDRESS_MAP_START( kickgoal_sound_io_map, AS_IO, 8, kickgoal_state )
-	/* Unknown without the PIC dump */
-ADDRESS_MAP_END
-
-static ADDRESS_MAP_START( actionhw_io_map, AS_IO, 8, kickgoal_state )
-	/* Unknown without the PIC dump */
 ADDRESS_MAP_END
 
 
@@ -646,11 +635,9 @@ static MACHINE_CONFIG_START( kickgoal, kickgoal_state )
 	MCFG_CPU_ADD("audiocpu", PIC16C57, 12000000/4)  /* 3MHz ? */
 	MCFG_DEVICE_DISABLE()   /* Disables since the internal rom isn't dumped */
 	/* Program and Data Maps are internal to the MCU */
-	MCFG_CPU_IO_MAP(kickgoal_sound_io_map)
 
-
-	MCFG_EEPROM_93C46_ADD("eeprom")
-	MCFG_EEPROM_DATA(kickgoal_default_eeprom_type1, 128)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_DATA(kickgoal_default_eeprom_type1, 128)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -659,9 +646,11 @@ static MACHINE_CONFIG_START( kickgoal, kickgoal_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(9*8, 55*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(kickgoal_state, screen_update_kickgoal)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(kickgoal)
-	MCFG_PALETTE_LENGTH(1024)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", kickgoal)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_FORMAT(xxxxBBBBGGGGRRRR)
 
 	MCFG_VIDEO_START_OVERRIDE(kickgoal_state,kickgoal)
 
@@ -681,11 +670,9 @@ static MACHINE_CONFIG_START( actionhw, kickgoal_state )
 	MCFG_CPU_ADD("audiocpu", PIC16C57, XTAL_12MHz/3)    /* verified on pcb */
 	MCFG_DEVICE_DISABLE() /* Disables since the internal rom isn't dumped */
 	/* Program and Data Maps are internal to the MCU */
-	MCFG_CPU_IO_MAP(actionhw_io_map)
 
-
-	MCFG_EEPROM_93C46_ADD("eeprom")
-	MCFG_EEPROM_DATA(kickgoal_default_eeprom_type1, 128)
+	MCFG_EEPROM_SERIAL_93C46_ADD("eeprom")
+	MCFG_EEPROM_SERIAL_DATA(kickgoal_default_eeprom_type1, 128)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -694,9 +681,11 @@ static MACHINE_CONFIG_START( actionhw, kickgoal_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(10*8+2, 54*8-1+2, 0*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(kickgoal_state, screen_update_kickgoal)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(actionhw)
-	MCFG_PALETTE_LENGTH(1024)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", actionhw)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_FORMAT(xxxxBBBBGGGGRRRR)
 
 	MCFG_VIDEO_START_OVERRIDE(kickgoal_state,actionhw)
 

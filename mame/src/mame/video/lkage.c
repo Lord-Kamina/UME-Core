@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
 /***************************************************************************
 
     video/lkage.c
@@ -67,26 +69,26 @@ WRITE8_MEMBER(lkage_state::lkage_videoram_w)
 TILE_GET_INFO_MEMBER(lkage_state::get_bg_tile_info)
 {
 	int code = m_videoram[tile_index + 0x800] + 256 * (m_bg_tile_bank ? 5 : 1);
-	SET_TILE_INFO_MEMBER( 0/*gfx*/, code, 0/*color*/, 0/*flags*/ );
+	SET_TILE_INFO_MEMBER(0/*gfx*/, code, 0/*color*/, 0/*flags*/ );
 }
 
 TILE_GET_INFO_MEMBER(lkage_state::get_fg_tile_info)
 {
 	int code = m_videoram[tile_index + 0x400] + 256 * (m_fg_tile_bank ? 1 : 0);
-	SET_TILE_INFO_MEMBER( 0/*gfx*/, code, 0/*color*/, 0/*flags*/);
+	SET_TILE_INFO_MEMBER(0/*gfx*/, code, 0/*color*/, 0/*flags*/);
 }
 
 TILE_GET_INFO_MEMBER(lkage_state::get_tx_tile_info)
 {
 	int code = m_videoram[tile_index] + 256 * (m_tx_tile_bank ? 4 : 0);
-	SET_TILE_INFO_MEMBER( 0/*gfx*/, code, 0/*color*/, 0/*flags*/);
+	SET_TILE_INFO_MEMBER(0/*gfx*/, code, 0/*color*/, 0/*flags*/);
 }
 
 void lkage_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lkage_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lkage_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(lkage_state::get_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lkage_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lkage_state::get_fg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(lkage_state::get_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 	m_tx_tilemap->set_transparent_pen(0);
@@ -97,7 +99,7 @@ void lkage_state::video_start()
 }
 
 
-void lkage_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
+void lkage_state::draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
 	const UINT8 *source = m_spriteram;
 	const UINT8 *finish = source + 0x60;
@@ -148,16 +150,15 @@ void lkage_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect 
 
 		for (y = 0; y < height; y++)
 		{
-			pdrawgfx_transpen(
+			m_gfxdecode->gfx(1)->prio_transpen(
 				bitmap,
 				cliprect,
-				machine().gfx[1],
 				sprite_number ^ y,
 				color,
 				flipx,flipy,
 				sx&0xff,
 				sy + 16*y,
-				machine().priority_bitmap,
+				screen.priority(),
 				priority_mask,0 );
 		}
 		source += 4;
@@ -206,17 +207,17 @@ UINT32 lkage_state::screen_update_lkage(screen_device &screen, bitmap_ind16 &bit
 	m_bg_tilemap->set_scrollx(0, m_scroll[4]);
 	m_bg_tilemap->set_scrolly(0, m_scroll[5]);
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 	if ((m_vreg[2] & 0xf0) == 0xf0)
 	{
-		m_bg_tilemap->draw(bitmap, cliprect, 0, 1);
-		m_fg_tilemap->draw(bitmap, cliprect, 0, (m_vreg[1] & 2) ? 2 : 4);
-		m_tx_tilemap->draw(bitmap, cliprect, 0, 4);
-		draw_sprites(bitmap, cliprect);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 1);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0, (m_vreg[1] & 2) ? 2 : 4);
+		m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 4);
+		draw_sprites(screen, bitmap, cliprect);
 	}
 	else
 	{
-		m_tx_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		m_tx_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
 	}
 
 	return 0;

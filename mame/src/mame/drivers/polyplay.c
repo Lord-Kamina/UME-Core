@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Martin Buchholz
 /***************************************************************************
 
       Poly-Play
@@ -90,18 +92,6 @@ emulated now. ;)
 /* timer handling */
 
 
-
-
-
-/* Polyplay Sound Interface */
-static const samples_interface polyplay_samples_interface =
-{
-	2,
-	NULL,
-	polyplay_sh_start
-};
-
-
 void polyplay_state::machine_reset()
 {
 	m_channel1_active = 0;
@@ -109,10 +99,10 @@ void polyplay_state::machine_reset()
 	m_channel2_active = 0;
 	m_channel2_const = 0;
 
-	polyplay_set_channel1(machine(), 0);
-	polyplay_play_channel1(machine(), 0);
-	polyplay_set_channel2(machine(), 0);
-	polyplay_play_channel2(machine(), 0);
+	set_channel1(0);
+	play_channel1(0);
+	set_channel2(0);
+	play_channel2(0);
 
 	m_timer = machine().device<timer_device>("timer");
 }
@@ -178,42 +168,42 @@ WRITE8_MEMBER(polyplay_state::polyplay_sound_channel)
 	case 0x00:
 		if (m_channel1_const) {
 			if (data <= 1) {
-				polyplay_set_channel1(machine(), 0);
+				set_channel1(0);
 			}
 			m_channel1_const = 0;
-			polyplay_play_channel1(machine(), data*m_prescale1);
+			play_channel1(data*m_prescale1);
 
 		}
 		else {
 			m_prescale1 = (data & 0x20) ? 16 : 1;
 			if (data & 0x04) {
-				polyplay_set_channel1(machine(), 1);
+				set_channel1(1);
 				m_channel1_const = 1;
 			}
 			if ((data == 0x41) || (data == 0x65) || (data == 0x45)) {
-				polyplay_set_channel1(machine(), 0);
-				polyplay_play_channel1(machine(), 0);
+				set_channel1(0);
+				play_channel1(0);
 			}
 		}
 		break;
 	case 0x01:
 		if (m_channel2_const) {
 			if (data <= 1) {
-				polyplay_set_channel2(machine(), 0);
+				set_channel2(0);
 			}
 			m_channel2_const = 0;
-			polyplay_play_channel2(machine(), data*m_prescale2);
+			play_channel2(data*m_prescale2);
 
 		}
 		else {
 			m_prescale2 = (data & 0x20) ? 16 : 1;
 			if (data & 0x04) {
-				polyplay_set_channel2(machine(), 1);
+				set_channel2(1);
 				m_channel2_const = 1;
 			}
 			if ((data == 0x41) || (data == 0x65) || (data == 0x45)) {
-				polyplay_set_channel2(machine(), 0);
-				polyplay_play_channel2(machine(), 0);
+				set_channel2(0);
+				play_channel2(0);
 			}
 		}
 		break;
@@ -284,15 +274,18 @@ static MACHINE_CONFIG_START( polyplay, polyplay_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 64*8-1, 0*8, 32*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(polyplay_state, screen_update_polyplay)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(polyplay)
-	MCFG_PALETTE_LENGTH(10)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", polyplay)
+	MCFG_PALETTE_ADD("palette", 10)
+	MCFG_PALETTE_INIT_OWNER(polyplay_state, polyplay)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
-	MCFG_SAMPLES_ADD("samples", polyplay_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(2)
+	MCFG_SAMPLES_START_CB(polyplay_state, sh_start)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 MACHINE_CONFIG_END
 

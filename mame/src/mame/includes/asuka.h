@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Graves, Brian Troha
 /*************************************************************************
 
     Asuka & Asuka  (+ Taito/Visco games on similar hardware)
@@ -5,8 +7,10 @@
 *************************************************************************/
 
 #include "machine/taitoio.h"
-#include "video/taitoic.h"
 #include "sound/msm5205.h"
+#include "video/pc090oj.h"
+#include "video/tc0100scn.h"
+#include "video/tc0110pcr.h"
 
 class asuka_state : public driver_device
 {
@@ -24,6 +28,7 @@ public:
 		m_msm(*this, "msm"),
 		m_pc090oj(*this, "pc090oj"),
 		m_tc0100scn(*this, "tc0100scn"),
+		m_tc0110pcr(*this, "tc0110pcr"),
 		m_tc0220ioc(*this, "tc0220ioc") { }
 
 	/* memory pointers */
@@ -53,6 +58,7 @@ public:
 	optional_device<msm5205_device> m_msm;
 	required_device<pc090oj_device> m_pc090oj;
 	required_device<tc0100scn_device> m_tc0100scn;
+	required_device<tc0110pcr_device> m_tc0110pcr;
 	optional_device<tc0220ioc_device> m_tc0220ioc;
 	DECLARE_WRITE8_MEMBER(sound_bankswitch_w);
 	DECLARE_WRITE8_MEMBER(asuka_msm5205_address_w);

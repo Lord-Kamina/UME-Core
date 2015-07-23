@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Ricoh RP5C01(A) Real Time Clock With Internal RAM emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************
                             _____   _____
@@ -32,47 +31,38 @@
 //  INTERFACE CONFIGURATION MACROS
 //**************************************************************************
 
-#define MCFG_RP5C01_ADD(_tag, _clock, _config) \
-	MCFG_DEVICE_ADD((_tag), RP5C01, _clock) \
-	MCFG_DEVICE_CONFIG(_config)
+#define MCFG_RP5C01_OUT_ALARM_CB(_devcb) \
+	devcb = &rp5c01_device::set_out_alarm_callback(*device, DEVCB_##_devcb);
 
-
-#define RP5C01_INTERFACE(name) \
-	const rp5c01_interface (name) =
-
+// include this macro if the chip is not battery backed
+#define MCFG_RP5C01_REMOVE_BATTERY() \
+	rp5c01_device::remove_battery(*device);
 
 
 //**************************************************************************
 //  TYPE DEFINITIONS
 //**************************************************************************
 
-// ======================> rp5c01_interface
-
-struct rp5c01_interface
-{
-	devcb_write_line        m_out_alarm_cb;
-};
-
-
-
 // ======================> rp5c01_device
 
 class rp5c01_device :   public device_t,
 						public device_rtc_interface,
-						public device_nvram_interface,
-						public rp5c01_interface
+						public device_nvram_interface
 {
 public:
 	// construction/destruction
 	rp5c01_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 
+	template<class _Object> static devcb_base &set_out_alarm_callback(device_t &device, _Object object) { return downcast<rp5c01_device &>(device).m_out_alarm_cb.set_callback(object); }
+	static void remove_battery(device_t &device) { downcast<rp5c01_device &>(device).m_battery_backed = false; }
+
 	DECLARE_READ8_MEMBER( read );
 	DECLARE_WRITE8_MEMBER( write );
-	DECLARE_WRITE_LINE_MEMBER( adj_w );
+	DECLARE_READ_LINE_MEMBER( alarm_r ) { return m_alarm; }
+	DECLARE_WRITE_LINE_MEMBER( adj_w ) { if (state) adjust_seconds(); }
 
 protected:
 	// device-level overrides
-	virtual void device_config_complete();
 	virtual void device_start();
 	virtual void device_reset();
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
@@ -95,7 +85,8 @@ private:
 	static const device_timer_id TIMER_CLOCK = 0;
 	static const device_timer_id TIMER_16HZ = 1;
 
-	devcb_resolved_write_line   m_out_alarm_func;
+	devcb_write_line m_out_alarm_cb;
+	bool m_battery_backed;
 
 	UINT8 m_reg[2][13];         // clock registers
 	UINT8 m_ram[13];            // RAM

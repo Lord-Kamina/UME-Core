@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /*****************************************************************************
 
     Irem M92 video hardware, Bryan McPhail, mish@tendril.co.uk
@@ -133,27 +135,26 @@ WRITE16_MEMBER(m92_state::m92_videocontrol_w)
 
 READ16_MEMBER(m92_state::m92_paletteram_r)
 {
-	return m_generic_paletteram_16[offset + 0x400 * m_palette_bank];
+	return m_paletteram[offset + 0x400 * m_palette_bank];
 }
 
 WRITE16_MEMBER(m92_state::m92_paletteram_w)
 {
-	paletteram_xBBBBBGGGGGRRRRR_word_w(space, offset + 0x400 * m_palette_bank, data, mem_mask);
+	m_palette->write(space, offset + 0x400 * m_palette_bank, data, mem_mask);
 }
 
 /*****************************************************************************/
 
 TILE_GET_INFO_MEMBER(m92_state::get_pf_tile_info)
 {
-	pf_layer_info *layer = (pf_layer_info *)param;
+	M92_pf_layer_info *layer = (M92_pf_layer_info *)tilemap.user_data();
 	int tile, attrib;
 	tile_index = 2 * tile_index + layer->vram_base;
 
 	attrib = m_vram_data[tile_index + 1];
 	tile = m_vram_data[tile_index] + ((attrib & 0x8000) << 1);
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile,
 			attrib & 0x7f,
 			TILE_FLIPYX(attrib >> 9));
@@ -202,7 +203,7 @@ WRITE16_MEMBER(m92_state::m92_pf3_control_w)
 WRITE16_MEMBER(m92_state::m92_master_control_w)
 {
 	UINT16 old = m_pf_master_control[offset];
-	pf_layer_info *layer;
+	M92_pf_layer_info *layer;
 
 	COMBINE_DATA(&m_pf_master_control[offset]);
 
@@ -251,11 +252,11 @@ VIDEO_START_MEMBER(m92_state,m92)
 	memset(&m_pf_layer, 0, sizeof(m_pf_layer));
 	for (laynum = 0; laynum < 3; laynum++)
 	{
-		pf_layer_info *layer = &m_pf_layer[laynum];
+		M92_pf_layer_info *layer = &m_pf_layer[laynum];
 
 		/* allocate two tilemaps per layer, one normal, one wide */
-		layer->tmap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m92_state::get_pf_tile_info),this), TILEMAP_SCAN_ROWS,  8,8, 64,64);
-		layer->wide_tmap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(m92_state::get_pf_tile_info),this), TILEMAP_SCAN_ROWS,  8,8, 128,64);
+		layer->tmap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m92_state::get_pf_tile_info),this), TILEMAP_SCAN_ROWS,  8,8, 64,64);
+		layer->wide_tmap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(m92_state::get_pf_tile_info),this), TILEMAP_SCAN_ROWS,  8,8, 128,64);
 
 		/* set the user data for each one to point to the layer */
 		layer->tmap->set_user_data(&m_pf_layer[laynum]);
@@ -279,11 +280,12 @@ VIDEO_START_MEMBER(m92_state,m92)
 		layer->tmap->set_transmask(2, 0x0001, (laynum == 2) ? 0xfffe : 0xffff);
 		layer->wide_tmap->set_transmask(2, 0x0001, (laynum == 2) ? 0xfffe : 0xffff);
 
-		state_save_register_item(machine(), "layer", NULL, laynum, layer->vram_base);
-		state_save_register_item_array(machine(), "layer", NULL, laynum, layer->control);
+		save_item(NAME(layer->vram_base), laynum);
+		save_item(NAME(layer->control), laynum);
 	}
 
-	m_generic_paletteram_16.allocate(0x1000/2);
+	m_paletteram.resize(m_palette->entries());
+	m_palette->basemem().set(m_paletteram, ENDIANNESS_LITTLE, 2);
 
 	memset(m_spriteram->live(),0,0x800);
 	memset(m_spriteram->buffer(),0,0x800);
@@ -294,6 +296,7 @@ VIDEO_START_MEMBER(m92_state,m92)
 	save_item(NAME(m_raster_irq_position));
 	save_item(NAME(m_sprite_buffer_busy));
 	save_item(NAME(m_palette_bank));
+	save_item(NAME(m_paletteram));
 }
 
 VIDEO_START_MEMBER(m92_state,ppan)
@@ -304,7 +307,7 @@ VIDEO_START_MEMBER(m92_state,ppan)
 
 	for (laynum = 0; laynum < 3; laynum++)
 	{
-		pf_layer_info *layer = &m_pf_layer[laynum];
+		M92_pf_layer_info *layer = &m_pf_layer[laynum];
 
 		/* set scroll offsets */
 		layer->tmap->set_scrolldx(2 * laynum + 11, -2 * laynum + 11);
@@ -316,7 +319,7 @@ VIDEO_START_MEMBER(m92_state,ppan)
 
 /*****************************************************************************/
 
-void m92_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
+void m92_state::draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	UINT16 *source = m_spriteram->buffer();
 	int offs, layer;
@@ -354,29 +357,29 @@ void m92_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 				{
 					if (flip_screen())
 					{
-						pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+						m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 								code + s_ptr, color, !flipx, !flipy,
 								464 - x, 240 - (y - row * 16),
-								machine().priority_bitmap, pri, 0);
+								screen.priority(), pri, 0);
 
 						// wrap around x
-						pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+						m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 								code + s_ptr, color, !flipx, !flipy,
 								464 - x + 512, 240 - (y - row * 16),
-								machine().priority_bitmap, pri, 0);
+								screen.priority(), pri, 0);
 					}
 					else
 					{
-						pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+						m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 								code + s_ptr, color, flipx, flipy,
 								x, y - row * 16,
-								machine().priority_bitmap, pri, 0);
+								screen.priority(), pri, 0);
 
 						// wrap around x
-						pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+						m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 								code + s_ptr, color, flipx, flipy,
 								x - 512, y - row * 16,
-								machine().priority_bitmap, pri, 0);
+								screen.priority(), pri, 0);
 					}
 					if (flipy) s_ptr++;
 					else s_ptr--;
@@ -389,7 +392,7 @@ void m92_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 }
 
 // This needs a lot of work...
-void m92_state::ppan_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
+void m92_state::ppan_draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	UINT16 *source = m_spriteram->live(); // sprite buffer control is never triggered
 	int offs, layer;
@@ -428,29 +431,29 @@ void m92_state::ppan_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 				{
 					if (flip_screen())
 					{
-						pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+						m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 								code + s_ptr, color, !flipx, !flipy,
 								464 - x, 240 - (y - row * 16),
-								machine().priority_bitmap, pri, 0);
+								screen.priority(), pri, 0);
 
 						// wrap around x
-						pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+						m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 								code + s_ptr, color, !flipx, !flipy,
 								464 - x + 512, 240 - (y - row * 16),
-								machine().priority_bitmap, pri, 0);
+								screen.priority(), pri, 0);
 					}
 					else
 					{
-						pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+						m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 								code + s_ptr, color, flipx, flipy,
 								x, y - row * 16,
-								machine().priority_bitmap, pri, 0);
+								screen.priority(), pri, 0);
 
 						// wrap around x
-						pdrawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+						m_gfxdecode->gfx(1)->prio_transpen(bitmap,cliprect,
 								code + s_ptr, color, flipx, flipy,
 								x - 512, y - row * 16,
-								machine().priority_bitmap, pri, 0);
+								screen.priority(), pri, 0);
 					}
 					if (flipy) s_ptr++;
 					else s_ptr--;
@@ -482,7 +485,7 @@ void m92_state::m92_update_scroll_positions()
 
 	for (laynum = 0; laynum < 3; laynum++)
 	{
-		pf_layer_info *layer = &m_pf_layer[laynum];
+		M92_pf_layer_info *layer = &m_pf_layer[laynum];
 
 		if (m_pf_master_control[laynum] & 0x40)
 		{
@@ -511,36 +514,36 @@ void m92_state::m92_update_scroll_positions()
 
 /*****************************************************************************/
 
-void m92_state::m92_draw_tiles(bitmap_ind16 &bitmap,const rectangle &cliprect)
+void m92_state::m92_draw_tiles(screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect)
 {
 	if ((~m_pf_master_control[2] >> 4) & 1)
 	{
-		m_pf_layer[2].wide_tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
-		m_pf_layer[2].tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
-		m_pf_layer[2].wide_tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
-		m_pf_layer[2].tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
+		m_pf_layer[2].wide_tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+		m_pf_layer[2].tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+		m_pf_layer[2].wide_tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
+		m_pf_layer[2].tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
 	}
 
-	m_pf_layer[1].wide_tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
-	m_pf_layer[1].tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
-	m_pf_layer[1].wide_tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
-	m_pf_layer[1].tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
+	m_pf_layer[1].wide_tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+	m_pf_layer[1].tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+	m_pf_layer[1].wide_tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
+	m_pf_layer[1].tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
 
-	m_pf_layer[0].wide_tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
-	m_pf_layer[0].tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
-	m_pf_layer[0].wide_tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
-	m_pf_layer[0].tmap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
+	m_pf_layer[0].wide_tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+	m_pf_layer[0].tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+	m_pf_layer[0].wide_tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
+	m_pf_layer[0].tmap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 1);
 }
 
 
 UINT32 m92_state::screen_update_m92(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 	bitmap.fill(0, cliprect);
 	m92_update_scroll_positions();
-	m92_draw_tiles(bitmap, cliprect);
+	m92_draw_tiles(screen, bitmap, cliprect);
 
-	draw_sprites(bitmap, cliprect);
+	draw_sprites(screen, bitmap, cliprect);
 
 	/* Flipscreen appears hardwired to the dipswitch - strange */
 	if (ioport("DSW")->read() & 0x100)
@@ -552,12 +555,12 @@ UINT32 m92_state::screen_update_m92(screen_device &screen, bitmap_ind16 &bitmap,
 
 UINT32 m92_state::screen_update_ppan(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 	bitmap.fill(0, cliprect);
 	m92_update_scroll_positions();
-	m92_draw_tiles(bitmap, cliprect);
+	m92_draw_tiles(screen, bitmap, cliprect);
 
-	ppan_draw_sprites(bitmap, cliprect);
+	ppan_draw_sprites(screen, bitmap, cliprect);
 
 	/* Flipscreen appears hardwired to the dipswitch - strange */
 	if (ioport("DSW")->read() & 0x100)

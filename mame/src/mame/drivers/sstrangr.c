@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Zsolt Vasvari
 /*******************************************************/
 /*                                                     */
 /* Yachiyo "Space Stranger/Space Stranger 2"           */
@@ -18,16 +20,21 @@ class sstrangr_state : public driver_device
 public:
 	sstrangr_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-		m_ram(*this, "ram"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_ram(*this, "ram") { }
+
+	required_device<cpu_device> m_maincpu;
 
 	required_shared_ptr<UINT8> m_ram;
+
 	UINT8 m_flip_screen;
-	UINT8 *m_proms;
+
 	DECLARE_WRITE8_MEMBER(port_w);
+
+	virtual void video_start();
+
 	UINT32 screen_update_sstrangr(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_sstrngr2(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
-	required_device<cpu_device> m_maincpu;
 };
 
 
@@ -37,6 +44,11 @@ public:
  *  Video system
  *
  *************************************/
+
+void sstrangr_state::video_start()
+{
+	save_item(NAME(m_flip_screen));
+}
 
 UINT32 sstrangr_state::screen_update_sstrangr(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
@@ -56,12 +68,12 @@ UINT32 sstrangr_state::screen_update_sstrangr(screen_device &screen, bitmap_rgb3
 
 			if (m_flip_screen)
 			{
-				pen = (data & 0x80) ? RGB_WHITE : RGB_BLACK;
+				pen = (data & 0x80) ? rgb_t::white : rgb_t::black;
 				data = data << 1;
 			}
 			else
 			{
-				pen = (data & 0x01) ? RGB_WHITE : RGB_BLACK;
+				pen = (data & 0x01) ? rgb_t::white : rgb_t::black;
 				data = data >> 1;
 			}
 
@@ -81,7 +93,7 @@ static void get_pens(pen_t *pens)
 
 	for (i = 0; i < NUM_PENS; i++)
 	{
-		pens[i] = MAKE_RGB(pal1bit(i >> 0), pal1bit(i >> 2), pal1bit(i >> 1));
+		pens[i] = rgb_t(pal1bit(i >> 0), pal1bit(i >> 2), pal1bit(i >> 1));
 	}
 }
 
@@ -296,5 +308,5 @@ ROM_START( sstrangr2 )
 ROM_END
 
 
-GAMEL( 1978, sstrangr, 0,        sstrangr, sstrangr, driver_device, 0, ROT270, "Yachiyo Electronics, Ltd.", "Space Stranger", GAME_NO_SOUND, layout_sstrangr )
-GAME( 1979, sstrangr2,sstrangr, sstrngr2, sstrngr2, driver_device, 0, ROT270, "Yachiyo Electronics, Ltd.", "Space Stranger 2", GAME_NO_SOUND )
+GAMEL( 1978, sstrangr, 0,        sstrangr, sstrangr, driver_device, 0, ROT270, "Yachiyo Electronics, Ltd.", "Space Stranger", GAME_NO_SOUND | GAME_SUPPORTS_SAVE, layout_sstrangr )
+GAME( 1979, sstrangr2,sstrangr, sstrngr2, sstrngr2, driver_device, 0, ROT270, "Yachiyo Electronics, Ltd.", "Space Stranger 2", GAME_NO_SOUND | GAME_SUPPORTS_SAVE )

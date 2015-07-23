@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Philip Bennett
 /***************************************************************************
 
     tlc34076.c
@@ -40,7 +42,7 @@ const device_type TLC34076 = &device_creator<tlc34076_device>;
 //  tlc34076_device - constructor
 //-------------------------------------------------
 tlc34076_device::tlc34076_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	:   device_t(mconfig, TLC34076, "TLC34076", tag, owner, clock),
+	:   device_t(mconfig, TLC34076, "TLC34076 VIP", tag, owner, clock, "tlc34076", __FILE__),
 		m_dacbits(6)
 {
 }
@@ -95,7 +97,7 @@ void tlc34076_device::device_reset()
 //  get_pens - retrieve current palette
 //-------------------------------------------------
 
-const pen_t *tlc34076_device::get_pens()
+const rgb_t *tlc34076_device::get_pens()
 {
 	offs_t i;
 
@@ -123,7 +125,7 @@ const pen_t *tlc34076_device::get_pens()
 			b = 0;
 		}
 
-		m_pens[i] = MAKE_RGB(r, g, b);
+		m_pens[i] = rgb_t(r, g, b);
 	}
 
 	return m_pens;

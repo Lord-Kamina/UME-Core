@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Chris Hardy
 /**************************************************************************
 
 Based on drivers from Juno First emulator by Chris Hardy (chris@junofirst.freeserve.co.uk)
@@ -210,20 +212,6 @@ static GFXDECODE_START( megazone )
 	GFXDECODE_ENTRY( "gfx2", 0, charlayout,   16*16, 16 )
 GFXDECODE_END
 
-
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(megazone_state,megazone_port_a_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(megazone_state,megazone_port_b_w)
-};
-
-
-
 void megazone_state::machine_start()
 {
 	save_item(NAME(m_flipscreen));
@@ -246,7 +234,7 @@ INTERRUPT_GEN_MEMBER(megazone_state::vblank_irq)
 static MACHINE_CONFIG_START( megazone, megazone_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", M6809, 18432000/9)        /* 2 MHz */
+	MCFG_CPU_ADD("maincpu", KONAMI1, 18432000/9)        /* 2 MHz */
 	MCFG_CPU_PROGRAM_MAP(megazone_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", megazone_state,  vblank_irq)
 
@@ -268,16 +256,19 @@ static MACHINE_CONFIG_START( megazone, megazone_state )
 	MCFG_SCREEN_SIZE(36*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 36*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(megazone_state, screen_update_megazone)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(megazone)
-	MCFG_PALETTE_LENGTH(16*16+16*16)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", megazone)
+	MCFG_PALETTE_ADD("palette", 16*16+16*16)
+	MCFG_PALETTE_INDIRECT_ENTRIES(32)
+	MCFG_PALETTE_INIT_OWNER(megazone_state, megazone)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, 14318000/8)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(megazone_state, megazone_port_a_r))
+	MCFG_AY8910_PORT_B_WRITE_CB(WRITE8(megazone_state, megazone_port_b_w))
 	MCFG_SOUND_ROUTE(0, "filter.0.0", 0.30)
 	MCFG_SOUND_ROUTE(1, "filter.0.1", 0.30)
 	MCFG_SOUND_ROUTE(2, "filter.0.2", 0.30)
@@ -515,7 +506,6 @@ ROM_END
 
 DRIVER_INIT_MEMBER(megazone_state,megazone)
 {
-	konami1_decode(machine(), "maincpu");
 }
 
 GAME( 1983, megazone, 0,         megazone, megazone, megazone_state, megazone, ROT90, "Konami", "Mega Zone (Konami set 1)", GAME_SUPPORTS_SAVE )

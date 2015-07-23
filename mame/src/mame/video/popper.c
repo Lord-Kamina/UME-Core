@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:David Haywood,insideoutboy, Pierpaolo Prazzoli
 /***************************************************************************
 
     Popper
@@ -38,21 +40,14 @@ static const res_net_info popper_net_info =
 	}
 };
 
-/***************************************************************************
- *
- * PALETTE_INIT
- *
- ***************************************************************************/
-
-void popper_state::palette_init()
+PALETTE_INIT_MEMBER(popper_state, popper)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
-	rgb_t   *rgb;
+	std::vector<rgb_t> rgb;
 
-	rgb = compute_res_net_all(machine(), color_prom, &popper_decode_info, &popper_net_info);
-	palette_set_colors(machine(), 0, rgb, 64);
-	palette_normalize_range(machine().palette, 0, 63, 0, 255);
-	auto_free(machine(), rgb);
+	compute_res_net_all(rgb, color_prom, popper_decode_info, popper_net_info);
+	palette.set_pen_colors(0, rgb);
+	palette.palette()->normalize_range(0, 63);
 }
 
 WRITE8_MEMBER(popper_state::popper_ol_videoram_w)
@@ -114,8 +109,7 @@ TILE_GET_INFO_MEMBER(popper_state::get_popper_p123_tile_info)
 	UINT8 attr = m_attribram[tile_index];
 	tile_number += m_gfx_bank << 8;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			(attr & 0xf),
 			0);
@@ -131,8 +125,7 @@ TILE_GET_INFO_MEMBER(popper_state::get_popper_p0_tile_info)
 	//pen 0 only in front if colour set as well
 	tileinfo.group = (attr & 0x70) ? ((attr & 0x80) >> 7) : 0;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			((attr & 0x70) >> 4) + 8,
 			0);
@@ -144,8 +137,7 @@ TILE_GET_INFO_MEMBER(popper_state::get_popper_ol_p123_tile_info)
 	UINT8 attr  = m_ol_attribram[tile_index];
 	tile_number += m_gfx_bank << 8;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			(attr & 0xf),
 			0);
@@ -161,8 +153,7 @@ TILE_GET_INFO_MEMBER(popper_state::get_popper_ol_p0_tile_info)
 	//pen 0 only in front if colour set as well
 	tileinfo.group = (attr & 0x70) ? ((attr & 0x80) >> 7) : 0;
 
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			tile_number,
 			((attr & 0x70) >> 4) + 8,
 			0);
@@ -170,10 +161,10 @@ TILE_GET_INFO_MEMBER(popper_state::get_popper_ol_p0_tile_info)
 
 void popper_state::video_start()
 {
-	m_p123_tilemap    = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(popper_state::get_popper_p123_tile_info),this),    TILEMAP_SCAN_COLS, 8, 8, 33, 32 );
-	m_p0_tilemap      = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(popper_state::get_popper_p0_tile_info),this),      TILEMAP_SCAN_COLS, 8, 8, 33, 32);
-	m_ol_p123_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(popper_state::get_popper_ol_p123_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 2, 32);
-	m_ol_p0_tilemap   = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(popper_state::get_popper_ol_p0_tile_info),this),   TILEMAP_SCAN_COLS, 8, 8, 2, 32);
+	m_p123_tilemap    = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(popper_state::get_popper_p123_tile_info),this),    TILEMAP_SCAN_COLS, 8, 8, 33, 32 );
+	m_p0_tilemap      = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(popper_state::get_popper_p0_tile_info),this),      TILEMAP_SCAN_COLS, 8, 8, 33, 32);
+	m_ol_p123_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(popper_state::get_popper_ol_p123_tile_info),this), TILEMAP_SCAN_COLS, 8, 8, 2, 32);
+	m_ol_p0_tilemap   = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(popper_state::get_popper_ol_p0_tile_info),this),   TILEMAP_SCAN_COLS, 8, 8, 2, 32);
 
 	m_p123_tilemap->set_transmask(0, 0x0f, 0x01);
 	m_p123_tilemap->set_transmask(1, 0x01, 0x0f);
@@ -184,7 +175,7 @@ void popper_state::video_start()
 	m_ol_p0_tilemap->set_transmask(0, 0x0f, 0x0e);
 	m_ol_p0_tilemap->set_transmask(1, 0x0e, 0x0f);
 
-	m_tilemap_clip = machine().primary_screen->visible_area();
+	m_tilemap_clip = m_screen->visible_area();
 }
 
 void popper_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect )
@@ -219,7 +210,7 @@ void popper_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect 
 				flipy = !flipy;
 			}
 
-			drawgfx_transpen(bitmap, cliprect, machine().gfx[1],
+			m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 					m_spriteram[offs + 1],
 					(m_spriteram[offs + 2] & 0x0f),
 					flipx,flipy,
@@ -239,16 +230,16 @@ UINT32 popper_state::screen_update_popper(screen_device &screen, bitmap_ind16 &b
 	//-xxx---- colour for pen 0 (from second prom?)
 	//----xxxx colour for pens 1,2,3
 
-	m_p123_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
-	m_p0_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
-	m_ol_p123_tilemap->draw(bitmap, finalclip, TILEMAP_DRAW_LAYER1, 0);
-	m_ol_p0_tilemap->draw(bitmap, finalclip, TILEMAP_DRAW_LAYER1, 0);
+	m_p123_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+	m_p0_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER1, 0);
+	m_ol_p123_tilemap->draw(screen, bitmap, finalclip, TILEMAP_DRAW_LAYER1, 0);
+	m_ol_p0_tilemap->draw(screen, bitmap, finalclip, TILEMAP_DRAW_LAYER1, 0);
 
 	draw_sprites(bitmap, cliprect);
 
-	m_p123_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
-	m_p0_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
-	m_ol_p123_tilemap->draw(bitmap, finalclip, TILEMAP_DRAW_LAYER0, 0);
-	m_ol_p0_tilemap->draw(bitmap, finalclip, TILEMAP_DRAW_LAYER0, 0);
+	m_p123_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
+	m_p0_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_LAYER0, 0);
+	m_ol_p123_tilemap->draw(screen, bitmap, finalclip, TILEMAP_DRAW_LAYER0, 0);
+	m_ol_p0_tilemap->draw(screen, bitmap, finalclip, TILEMAP_DRAW_LAYER0, 0);
 	return 0;
 }

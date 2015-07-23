@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Intelligent Designs DAVE emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -61,7 +60,8 @@ dave_device::dave_device(const machine_config &mconfig, const char *tag, device_
 		m_io_space_config("i/o", ENDIANNESS_LITTLE, 8, 16, 0, *ADDRESS_MAP_NAME(io_map)),
 		m_write_irq(*this),
 		m_write_lh(*this),
-		m_write_rh(*this)
+		m_write_rh(*this),
+		m_irq_status(0)
 {
 }
 
@@ -95,18 +95,29 @@ void dave_device::device_start()
 	save_item(NAME(m_level_and));
 	save_item(NAME(m_mame_volumes));
 
-	for (int i = 0; i < 3; i++)
-	{
+	for (int i = 0; i < ARRAY_LENGTH(m_period); i++)
 		m_period[i] = (STEP * machine().sample_rate()) / 125000;
+
+	for (int i = 0; i < ARRAY_LENGTH(m_count); i++)
 		m_count[i] = (STEP * machine().sample_rate()) / 125000;
+
+	for (int i = 0; i < ARRAY_LENGTH(m_level); i++)
 		m_level[i] = 0;
-	}
+
+	for (int i = 0; i < ARRAY_LENGTH(m_level_or); i++)
+		m_level_or[i] = 0;
+
+	for (int i = 0; i < ARRAY_LENGTH(m_level_and); i++)
+		m_level_and[i] = 0;
+
+	for (int i = 0; i < ARRAY_LENGTH(m_mame_volumes); i++)
+		m_mame_volumes[i] = 0;
 
 	/* dave has 3 tone channels and 1 noise channel.
 	 the volumes are mixed internally and output as left and right volume */
 
 	/* 3 tone channels + 1 noise channel */
-	m_sound_stream_var = machine().sound().stream_alloc(*this, 0, 2, machine().sample_rate(), this);
+	m_sound_stream_var = machine().sound().stream_alloc(*this, 0, 2, machine().sample_rate());
 }
 
 

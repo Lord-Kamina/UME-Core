@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:smf
 /*
  * PlayStation Geometry Transformation Engine emulator
  *
@@ -9,7 +11,7 @@
 #include "gte.h"
 
 #if 0
-void ATTR_PRINTF(2,3) GTELOG( UINT32 pc, const char *a,...)
+void ATTR_PRINTF(2,3) GTELOG( UINT32 pc, const char *a, ...)
 {
 	va_list va;
 	char s_text[ 1024 ];
@@ -492,7 +494,7 @@ int gte::docop2( UINT32 pc, int gteop )
 
 	switch( GTE_FUNCT( gteop ) )
 	{
-	case 0x00:
+	case 0x00: // drop through to RTPS
 	case 0x01:
 		GTELOG( pc, "%08x RTPS", gteop );
 
@@ -792,6 +794,7 @@ int gte::docop2( UINT32 pc, int gteop )
 		IR3 = Lm_B3( MAC3, lm );
 		return 1;
 
+	case 0x1a: // end of NCDT
 	case 0x29:
 		GTELOG( pc, "%08x DPCL", gteop );
 

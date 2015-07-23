@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /*
     Apple "Egret" ADB/system controller MCU
     Emulation by R. Belmont
@@ -38,7 +40,6 @@
 #include "emu.h"
 #include "egret.h"
 #include "cpu/m6805/m6805.h"
-#include "machine/6522via.h"
 #include "sound/asc.h"
 #include "includes/mac.h"
 
@@ -131,7 +132,7 @@ void egret_device::send_port(address_space &space, UINT8 offset, UINT8 data)
 				adb_in = (data & 0x80) ? true : false;
 
 				m_adb_dtime = (int)(machine().time().as_ticks(1000000) - last_adb_time);
-				m_out_adb_func(((data & 0x80) >> 7) ^ 1);
+				write_linechange(((data & 0x80) >> 7) ^ 1);
 
 				last_adb = data & 0x80;
 				last_adb_time = machine().time().as_ticks(1000000);
@@ -153,6 +154,7 @@ void egret_device::send_port(address_space &space, UINT8 offset, UINT8 data)
 					printf("EG-> VIA_DATA: %d (PC=%x)\n", (data>>5)&1, m_maincpu->pc());
 					#endif
 					via_data = (data>>5) & 1;
+					write_via_data(via_data);
 				}
 				if (via_clock != ((data>>4)&1))
 				{
@@ -160,8 +162,7 @@ void egret_device::send_port(address_space &space, UINT8 offset, UINT8 data)
 					printf("EG-> VIA_CLOCK: %d (PC=%x)\n", ((data>>4)&1)^1, m_maincpu->pc());
 					#endif
 					via_clock = (data>>4) & 1;
-					via6522_device *via1 = machine().device<via6522_device>("via6522_0");
-					via1->write_cb1(via_clock^1);
+					write_via_clock(via_clock^1);
 				}
 			}
 			break;
@@ -185,7 +186,7 @@ void egret_device::send_port(address_space &space, UINT8 offset, UINT8 data)
 					}
 				}
 
-				m_out_reset_func((reset_line & 8) ? ASSERT_LINE : CLEAR_LINE);
+				write_reset((reset_line & 8) ? ASSERT_LINE : CLEAR_LINE);
 			}
 			break;
 	}
@@ -335,6 +336,10 @@ WRITE8_MEMBER( egret_device::pram_w )
 egret_device::egret_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
 	: device_t(mconfig, EGRET, "Apple Egret", tag, owner, clock, "egret", __FILE__),
 	device_nvram_interface(mconfig, *this),
+	write_reset(*this),
+	write_linechange(*this),
+	write_via_clock(*this),
+	write_via_data(*this),
 	m_maincpu(*this, EGRET_CPU_TAG)
 {
 }
@@ -350,30 +355,16 @@ void egret_device::static_set_type(device_t &device, int type)
 	egret.rom_offset = type;
 }
 
-void egret_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const egret_interface *intf = reinterpret_cast<const egret_interface *>(static_config());
-	if (intf != NULL)
-	{
-		*static_cast<egret_interface *>(this) = *intf;
-	}
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_out_reset_cb, 0, sizeof(m_out_reset_cb));
-		memset(&m_out_adb_cb, 0, sizeof(m_out_adb_cb));
-	}
-}
-
 //-------------------------------------------------
 //  device_start - device-specific startup
 //-------------------------------------------------
 
 void egret_device::device_start()
 {
-	m_out_reset_func.resolve(m_out_reset_cb, *this);
-	m_out_adb_func.resolve(m_out_adb_cb, *this);
+	write_reset.resolve_safe();
+	write_linechange.resolve_safe();
+	write_via_clock.resolve_safe();
+	write_via_data.resolve_safe();
 
 	m_timer = timer_alloc(0, NULL);
 	save_item(NAME(ddrs[0]));
@@ -398,8 +389,7 @@ void egret_device::device_start()
 	save_item(NAME(pram));
 	save_item(NAME(disk_pram));
 
-	astring tempstring;
-	UINT8 *rom = device().machine().root_device().memregion(device().subtag(tempstring, EGRET_CPU_TAG))->base();
+	UINT8 *rom = device().machine().root_device().memregion(device().subtag(EGRET_CPU_TAG).c_str())->base();
 
 	if (rom)
 	{

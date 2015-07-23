@@ -1,37 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Sega 16-bit sprite hardware
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -65,8 +36,8 @@ const device_type SEGA_YBOARD_SPRITES = &device_creator<sega_yboard_sprite_devic
 //  sega_16bit_sprite_device -- core constructor
 //-------------------------------------------------
 
-sega_16bit_sprite_device::sega_16bit_sprite_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner)
-	: sprite16_device_ind16(mconfig, type, name, tag, owner),
+sega_16bit_sprite_device::sega_16bit_sprite_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, const char *shortname, const char *source)
+	: sprite16_device_ind16(mconfig, type, name, tag, owner, shortname, source),
 		m_flip(false)
 {
 	// default to 1:1 bank mapping
@@ -124,7 +95,7 @@ WRITE16_MEMBER( sega_16bit_sprite_device::draw_write )
 //-------------------------------------------------
 
 sega_hangon_sprite_device::sega_hangon_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: sega_16bit_sprite_device(mconfig, SEGA_HANGON_SPRITES, "Sega Hang On Sprites", tag, owner)
+	: sega_16bit_sprite_device(mconfig, SEGA_HANGON_SPRITES, "Sega Custom Sprites (Hang On)", tag, owner, "sega_hangon_sprite", __FILE__)
 {
 	set_origin(189, -1);
 }
@@ -300,7 +271,7 @@ void sega_hangon_sprite_device::draw(bitmap_ind16 &bitmap, const rectangle &clip
 //-------------------------------------------------
 
 sega_sharrier_sprite_device::sega_sharrier_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: sega_16bit_sprite_device(mconfig, SEGA_SHARRIER_SPRITES, "Sega Space Harrier Sprites", tag, owner)
+	: sega_16bit_sprite_device(mconfig, SEGA_SHARRIER_SPRITES, "Sega Custom Sprites (Space Harrier)", tag, owner, "sega_sharrier_sprite", __FILE__)
 {
 	set_origin(189, -1);
 }
@@ -487,7 +458,7 @@ void sega_sharrier_sprite_device::draw(bitmap_ind16 &bitmap, const rectangle &cl
 //-------------------------------------------------
 
 sega_sys16a_sprite_device::sega_sys16a_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: sega_16bit_sprite_device(mconfig, SEGA_SYS16A_SPRITES, "Sega System 16A Sprites", tag, owner)
+	: sega_16bit_sprite_device(mconfig, SEGA_SYS16A_SPRITES, "Sega System 16A Sprites", tag, owner, "sega_sys16a_sprite", __FILE__)
 {
 	set_origin(189, -1);
 }
@@ -661,7 +632,7 @@ void sega_sys16a_sprite_device::draw(bitmap_ind16 &bitmap, const rectangle &clip
 //-------------------------------------------------
 
 bootleg_sys16a_sprite_device::bootleg_sys16a_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: sega_16bit_sprite_device(mconfig, BOOTLEG_SYS16A_SPRITES, "Bootleg System 16A Sprites", tag, owner)
+	: sega_16bit_sprite_device(mconfig, BOOTLEG_SYS16A_SPRITES, "Sega System 16A Sprites (Bootleg)", tag, owner, "bootleg_sys16a_sprite", __FILE__)
 {
 	m_addrmap[0] = 0;
 	m_addrmap[1] = 1;
@@ -844,7 +815,7 @@ void bootleg_sys16a_sprite_device::draw(bitmap_ind16 &bitmap, const rectangle &c
 //-------------------------------------------------
 
 sega_sys16b_sprite_device::sega_sys16b_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: sega_16bit_sprite_device(mconfig, SEGA_SYS16B_SPRITES, "Sega System 16B Sprites", tag, owner)
+	: sega_16bit_sprite_device(mconfig, SEGA_SYS16B_SPRITES, "Sega System 16B Sprites", tag, owner, "sega_16bit_sprite", __FILE__)
 {
 	set_origin(184, 0x00);
 }
@@ -1034,14 +1005,14 @@ void sega_sys16b_sprite_device::draw(bitmap_ind16 &bitmap, const rectangle &clip
 //-------------------------------------------------
 
 sega_outrun_sprite_device::sega_outrun_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: sega_16bit_sprite_device(mconfig, SEGA_OUTRUN_SPRITES, "Sega Out Run Sprites", tag, owner),
+	: sega_16bit_sprite_device(mconfig, SEGA_OUTRUN_SPRITES, "Sega Custom Sprites (Out Run)", tag, owner, "sega_outrun_sprite", __FILE__),
 		m_is_xboard(false)
 {
 	set_origin(189, 0x00);
 }
 
-sega_outrun_sprite_device::sega_outrun_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock, bool xboard_variant)
-	: sega_16bit_sprite_device(mconfig, SEGA_XBOARD_SPRITES, "Sega X-Board Sprites", tag, owner),
+sega_outrun_sprite_device::sega_outrun_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock, bool xboard_variant, const char *shortname, const char *source)
+	: sega_16bit_sprite_device(mconfig, SEGA_XBOARD_SPRITES, "Sega X-Board Sprites", tag, owner, shortname, source),
 		m_is_xboard(true)
 {
 	set_origin(190, 0x00);
@@ -1053,7 +1024,7 @@ sega_outrun_sprite_device::sega_outrun_sprite_device(const machine_config &mconf
 //-------------------------------------------------
 
 sega_xboard_sprite_device::sega_xboard_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: sega_outrun_sprite_device(mconfig, tag, owner, clock, true)
+	: sega_outrun_sprite_device(mconfig, tag, owner, clock, true, "sega_xboard_sprite", __FILE__)
 {
 }
 
@@ -1245,7 +1216,7 @@ void sega_outrun_sprite_device::draw(bitmap_ind16 &bitmap, const rectangle &clip
 //-------------------------------------------------
 
 sega_yboard_sprite_device::sega_yboard_sprite_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: sega_16bit_sprite_device(mconfig, SEGA_YBOARD_SPRITES, "Sega Y-Board Sprites", tag, owner)
+	: sega_16bit_sprite_device(mconfig, SEGA_YBOARD_SPRITES, "Sega Y-Board Sprites", tag, owner, "sega_yboard_sprite", __FILE__)
 {
 	set_origin(0x600, 0x600);
 }
@@ -1291,7 +1262,7 @@ void sega_yboard_sprite_device::draw(bitmap_ind16 &bitmap, const rectangle &clip
 	//
 
 	// clear out any scanlines we might be using
-	const UINT16 *rotatebase = segaic16_rotate[0].buffer ? segaic16_rotate[0].buffer : segaic16_rotate[0].rotateram;
+	const UINT16 *rotatebase = m_segaic16_rotate[0].buffer ? m_segaic16_rotate[0].buffer : m_segaic16_rotate[0].rotateram;
 	rotatebase -= yorigin();
 	for (int y = cliprect.min_y; y <= cliprect.max_y; y++)
 		if (!(rotatebase[y & ~1] & 0xc000))

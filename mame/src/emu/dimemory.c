@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     dimemory.c
 
     Device memory interfaces.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -53,7 +24,7 @@
 //  CONSTANTS
 //**************************************************************************
 
-const int TRIGGER_SUSPENDTIME = -4000;
+//const int TRIGGER_SUSPENDTIME = -4000;
 
 
 
@@ -78,6 +49,15 @@ address_space_config::address_space_config()
 {
 }
 
+/*!
+ @param name
+ @param endian CPU endianness
+ @param datawidth CPU parallelism bits
+ @param addrwidth address bits
+ @param addrshift
+ @param internal
+ @param defmap
+ */
 address_space_config::address_space_config(const char *name, endianness_t endian, UINT8 datawidth, UINT8 addrwidth, INT8 addrshift, address_map_constructor internal, address_map_constructor defmap)
 	: m_name(name),
 		m_endianness(endian),
@@ -104,6 +84,35 @@ address_space_config::address_space_config(const char *name, endianness_t endian
 {
 }
 
+address_space_config::address_space_config(const char *name, endianness_t endian, UINT8 datawidth, UINT8 addrwidth, INT8 addrshift, address_map_delegate internal, address_map_delegate defmap)
+	: m_name(name),
+		m_endianness(endian),
+		m_databus_width(datawidth),
+		m_addrbus_width(addrwidth),
+		m_addrbus_shift(addrshift),
+		m_logaddr_width(addrwidth),
+		m_page_shift(0),
+		m_internal_map(NULL),
+		m_default_map(NULL),
+		m_internal_map_delegate(internal),
+		m_default_map_delegate(defmap)
+{
+}
+
+address_space_config::address_space_config(const char *name, endianness_t endian, UINT8 datawidth, UINT8 addrwidth, INT8 addrshift, UINT8 logwidth, UINT8 pageshift, address_map_delegate internal, address_map_delegate defmap)
+	: m_name(name),
+		m_endianness(endian),
+		m_databus_width(datawidth),
+		m_addrbus_width(addrwidth),
+		m_addrbus_shift(addrshift),
+		m_logaddr_width(logwidth),
+		m_page_shift(pageshift),
+		m_internal_map(NULL),
+		m_default_map(NULL),
+		m_internal_map_delegate(internal),
+		m_default_map_delegate(defmap)
+{
+}
 
 
 //**************************************************************************
@@ -115,7 +124,7 @@ address_space_config::address_space_config(const char *name, endianness_t endian
 //-------------------------------------------------
 
 device_memory_interface::device_memory_interface(const machine_config &mconfig, device_t &device)
-	: device_interface(device)
+	: device_interface(device, "memory")
 {
 	memset(m_address_map, 0, sizeof(m_address_map));
 	memset(m_addrspace, 0, sizeof(m_addrspace));
@@ -135,8 +144,8 @@ device_memory_interface::~device_memory_interface()
 
 
 //-------------------------------------------------
-//  static_set_vblank_int - configuration helper
-//  to set up VBLANK interrupts on the device
+//  static_set_addrmap - configuration helper
+//  to connect an address map to a device
 //-------------------------------------------------
 
 void device_memory_interface::static_set_addrmap(device_t &device, address_spacenum spacenum, address_map_constructor map)
@@ -145,7 +154,7 @@ void device_memory_interface::static_set_addrmap(device_t &device, address_space
 	if (!device.interface(memory))
 		throw emu_fatalerror("MCFG_DEVICE_ADDRESS_MAP called on device '%s' with no memory interface", device.tag());
 	if (spacenum >= ARRAY_LENGTH(memory->m_address_map))
-		throw emu_fatalerror("MCFG_DEVICE_ADDRESS_MAP called with out-of-range space number %d", device.tag(), spacenum);
+		throw emu_fatalerror("MCFG_DEVICE_ADDRESS_MAP called on device '%s' with out-of-range space number %d", device.tag(), spacenum);
 	memory->m_address_map[spacenum] = map;
 }
 
@@ -252,9 +261,9 @@ void device_memory_interface::interface_validity_check(validity_checker &valid) 
 
 			// validate the global map parameters
 			if (map->m_spacenum != spacenum)
-				mame_printf_error("Space %d has address space %d handlers!\n", spacenum, map->m_spacenum);
+				osd_printf_error("Space %d has address space %d handlers!\n", spacenum, map->m_spacenum);
 			if (map->m_databits != datawidth)
-				mame_printf_error("Wrong memory handlers provided for %s space! (width = %d, memory = %08x)\n", spaceconfig->m_name, datawidth, map->m_databits);
+				osd_printf_error("Wrong memory handlers provided for %s space! (width = %d, memory = %08x)\n", spaceconfig->m_name, datawidth, map->m_databits);
 
 			// loop over entries and look for errors
 			for (address_map_entry *entry = map->m_entrylist.first(); entry != NULL; entry = entry->next())
@@ -271,7 +280,7 @@ void device_memory_interface::interface_validity_check(validity_checker &valid) 
 							((entry->m_read.m_type != AMH_NONE && scan->m_read.m_type != AMH_NONE) ||
 								(entry->m_write.m_type != AMH_NONE && scan->m_write.m_type != AMH_NONE)))
 						{
-							mame_printf_warning("%s space has overlapping memory (%X-%X,%d,%d) vs (%X-%X,%d,%d)\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend, entry->m_read.m_type, entry->m_write.m_type, scan->m_addrstart, scan->m_addrend, scan->m_read.m_type, scan->m_write.m_type);
+							osd_printf_warning("%s space has overlapping memory (%X-%X,%d,%d) vs (%X-%X,%d,%d)\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend, entry->m_read.m_type, entry->m_write.m_type, scan->m_addrstart, scan->m_addrend, scan->m_read.m_type, scan->m_write.m_type);
 							detected_overlap = true;
 							break;
 						}
@@ -279,11 +288,11 @@ void device_memory_interface::interface_validity_check(validity_checker &valid) 
 
 				// look for inverted start/end pairs
 				if (byteend < bytestart)
-					mame_printf_error("Wrong %s memory read handler start = %08x > end = %08x\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend);
+					osd_printf_error("Wrong %s memory read handler start = %08x > end = %08x\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend);
 
 				// look for misaligned entries
 				if ((bytestart & (alignunit - 1)) != 0 || (byteend & (alignunit - 1)) != (alignunit - 1))
-					mame_printf_error("Wrong %s memory read handler start = %08x, end = %08x ALIGN = %d\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend, alignunit);
+					osd_printf_error("Wrong %s memory read handler start = %08x, end = %08x ALIGN = %d\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend, alignunit);
 
 				// if this is a program space, auto-assign implicit ROM entries
 				if (entry->m_read.m_type == AMH_ROM && entry->m_region == NULL)
@@ -297,49 +306,47 @@ void device_memory_interface::interface_validity_check(validity_checker &valid) 
 				{
 					// make sure we can resolve the full path to the region
 					bool found = false;
-					astring entry_region;
-					device().siblingtag(entry_region, entry->m_region);
+					std::string entry_region = entry->m_devbase.subtag(entry->m_region);
 
 					// look for the region
 					device_iterator deviter(device().mconfig().root_device());
 					for (device_t *device = deviter.first(); device != NULL; device = deviter.next())
 						for (const rom_entry *romp = rom_first_region(*device); romp != NULL && !found; romp = rom_next_region(romp))
 						{
-							astring fulltag;
-							rom_region_name(fulltag, *device, romp);
-							if (fulltag == entry_region)
+							if (rom_region_name(*device, romp) == entry_region)
 							{
 								// verify the address range is within the region's bounds
 								offs_t length = ROMREGION_GETLENGTH(romp);
 								if (entry->m_rgnoffs + (byteend - bytestart + 1) > length)
-									mame_printf_error("%s space memory map entry %X-%X extends beyond region '%s' size (%X)\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend, entry->m_region, length);
+									osd_printf_error("%s space memory map entry %X-%X extends beyond region '%s' size (%X)\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend, entry->m_region, length);
 								found = true;
 							}
 						}
 
 					// error if not found
 					if (!found)
-						mame_printf_error("%s space memory map entry %X-%X references non-existant region '%s'\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend, entry->m_region);
+						osd_printf_error("%s space memory map entry %X-%X references non-existant region '%s'\n", spaceconfig->m_name, entry->m_addrstart, entry->m_addrend, entry->m_region);
 				}
 
 				// make sure all devices exist
+				// FIXME: This doesn't work! AMH_DEVICE_DELEGATE entries don't even set m_tag, the device tag is inside the proto-delegate
 				if (entry->m_read.m_type == AMH_DEVICE_DELEGATE && entry->m_read.m_tag != NULL)
 				{
-					astring temp(entry->m_read.m_tag);
-					if (device().siblingdevice(temp) == NULL)
-						mame_printf_error("%s space memory map entry references nonexistant device '%s'\n", spaceconfig->m_name, entry->m_read.m_tag);
+					std::string temp(entry->m_read.m_tag);
+					if (device().siblingdevice(temp.c_str()) == NULL)
+						osd_printf_error("%s space memory map entry references nonexistant device '%s'\n", spaceconfig->m_name, entry->m_read.m_tag);
 				}
 				if (entry->m_write.m_type == AMH_DEVICE_DELEGATE && entry->m_write.m_tag != NULL)
 				{
-					astring temp(entry->m_write.m_tag);
-					if (device().siblingdevice(temp) == NULL)
-						mame_printf_error("%s space memory map entry references nonexistant device '%s'\n", spaceconfig->m_name, entry->m_write.m_tag);
+					std::string temp(entry->m_write.m_tag);
+					if (device().siblingdevice(temp.c_str()) == NULL)
+						osd_printf_error("%s space memory map entry references nonexistant device '%s'\n", spaceconfig->m_name, entry->m_write.m_tag);
 				}
 
 				// make sure ports exist
 //              if ((entry->m_read.m_type == AMH_PORT && entry->m_read.m_tag != NULL && portlist.find(entry->m_read.m_tag) == NULL) ||
 //                  (entry->m_write.m_type == AMH_PORT && entry->m_write.m_tag != NULL && portlist.find(entry->m_write.m_tag) == NULL))
-//                  mame_printf_error("%s space memory map entry references nonexistant port tag '%s'\n", spaceconfig->m_name, entry->m_read.m_tag);
+//                  osd_printf_error("%s space memory map entry references nonexistant port tag '%s'\n", spaceconfig->m_name, entry->m_read.m_tag);
 
 				// validate bank and share tags
 				if (entry->m_read.m_type == AMH_BANK)

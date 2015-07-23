@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Frank Palazzolo, Aaron Giles, Jonathan Gevaryahu, Raphael Nabet, Couriersud, Michael Zapf
 /*
     spchroms.c - This is an emulator for "typical" speech ROMs from TI, as used by TI99/4(a).
 
@@ -11,7 +13,7 @@
     Interfacing it with the tms5110 would make sense, too.
 
     TODO:
-        Create seperate devices for TMS6100 & TMS6125
+        Create separate devices for TMS6100 & TMS6125
         Implement the serial protocol
 */
 
@@ -24,19 +26,28 @@
 const device_type SPEECHROM = &device_creator<speechrom_device>;
 
 speechrom_device::speechrom_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, SPEECHROM, "SPEECHROM", tag, owner, clock),
+	: device_t(mconfig, SPEECHROM, "SPEECHROM", tag, owner, clock, "speechrom", __FILE__),
 	m_speechROMaddr(0),
 	m_load_pointer(0),
-	m_ROM_bits_count(0)
+	m_ROM_bits_count(0),
+	m_reverse(false)
 {
 }
 
 /*
     Read 'count' bits serially from speech ROM
+
+    Actually, the ROM is expected to have reversed bit order, but there are
+    many dumps with normal bit order.
+
+    compatibility mode:   01234567 01234567 01234567 ...
+    correct mode:         76543210 76543210 76543210 ...
 */
 int speechrom_device::read(int count)
 {
 	int val;
+	int spchbyte;
+	int pos;
 
 	if (m_load_pointer)
 	{   /* first read after load address is ignored */
@@ -45,26 +56,35 @@ int speechrom_device::read(int count)
 	}
 
 	if (m_speechROMaddr < m_speechROMlen)
-		if (count < m_ROM_bits_count)
-		{
-			m_ROM_bits_count -= count;
-			val = (m_speechrom_data[m_speechROMaddr] >> m_ROM_bits_count) & (0xFF >> (8 - count));
-		}
-		else
-		{
-			val = ((int) m_speechrom_data[m_speechROMaddr]) << 8;
-
-			m_speechROMaddr = (m_speechROMaddr + 1) & TMS5220_ADDRESS_MASK;
-
-			if (m_speechROMaddr < m_speechROMlen)
-				val |= m_speechrom_data[m_speechROMaddr];
-
-			m_ROM_bits_count += 8 - count;
-
-			val = (val >> m_ROM_bits_count) & (0xFF >> (8 - count));
-		}
-	else
+	{
 		val = 0;
+		pos = 8 - m_ROM_bits_count;
+
+		spchbyte = (m_reverse? (m_speechrom_data[m_speechROMaddr] >> pos) : (m_speechrom_data[m_speechROMaddr] << pos)) & 0xff;
+
+		while (count > 0)
+		{
+			val = val << 1;
+			if ((spchbyte & (m_reverse? 0x01:0x80))!=0) val |= 1;
+			spchbyte = m_reverse? (spchbyte >> 1) : (spchbyte << 1);
+			count--;
+			if (pos == 7)
+			{
+				pos = 0;
+				m_speechROMaddr = (m_speechROMaddr + 1) & TMS5220_ADDRESS_MASK;
+				if (m_speechROMaddr >= m_speechROMlen)
+					count = 0;
+				else
+					spchbyte = m_speechrom_data[m_speechROMaddr];
+			}
+			else pos++;
+		}
+		m_ROM_bits_count = 8 - pos;
+	}
+	else
+	{
+		val = 0;
+	}
 
 	return val;
 }

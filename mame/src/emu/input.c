@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     input.c
 
     Handle input from the user.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ****************************************************************************
 
@@ -72,54 +43,6 @@ const input_seq input_seq::empty_seq;
 //**************************************************************************
 //  TYPE DEFINITIONS
 //**************************************************************************
-
-// ======================> input_device_item
-
-// a single item on an input device
-class input_device_item
-{
-protected:
-	// construction/destruction
-	input_device_item(input_device &device, const char *name, void *internal, input_item_id itemid, item_get_state_func getstate, input_item_class itemclass);
-	virtual ~input_device_item() { }
-
-public:
-	// getters
-	input_device &device() const { return m_device; }
-	input_manager &manager() const { return m_device.manager(); }
-	running_machine &machine() const { return m_device.machine(); }
-	const char *name() const { return m_name; }
-	void *internal() const { return m_internal; }
-	input_item_id itemid() const { return m_itemid; }
-	input_item_class itemclass() const { return m_itemclass; }
-	const char *token() const { return m_token; }
-	INT32 current() const { return m_current; }
-	INT32 memory() const { return m_memory; }
-
-	// helpers
-	INT32 update_value() { return m_current = (*m_getstate)(m_device.internal(), m_internal); }
-	void set_memory(INT32 value) { m_memory = value; }
-
-	// readers
-	virtual INT32 read_as_switch(input_item_modifier modifier) = 0;
-	virtual INT32 read_as_relative(input_item_modifier modifier) = 0;
-	virtual INT32 read_as_absolute(input_item_modifier modifier) = 0;
-
-protected:
-	// internal state
-	input_device &          m_device;               // reference to our owning device
-	astring                 m_name;                 // string name of item
-	void *                  m_internal;             // internal callback pointer
-	input_item_id           m_itemid;               // originally specified item id
-	input_item_class        m_itemclass;            // class of the item
-	item_get_state_func     m_getstate;             // get state callback
-	astring                 m_token;                // tokenized name for non-standard items
-
-	// live state
-	INT32                   m_current;              // current raw value
-	INT32                   m_memory;               // "memory" value, to remember where we started during polling
-};
-
 
 // ======================> input_device_switch_item
 
@@ -216,7 +139,7 @@ static const code_string_table devclass_token_table[] =
 	{ DEVICE_CLASS_MOUSE,    "MOUSECODE" },
 	{ DEVICE_CLASS_LIGHTGUN, "GUNCODE" },
 	{ DEVICE_CLASS_JOYSTICK, "JOYCODE" },
-	{ ~0,                    "UNKCODE" }
+	{ ~0U,                   "UNKCODE" }
 };
 
 // friendly strings for device classes
@@ -226,7 +149,7 @@ static const code_string_table devclass_string_table[] =
 	{ DEVICE_CLASS_MOUSE,    "Mouse" },
 	{ DEVICE_CLASS_LIGHTGUN, "Gun" },
 	{ DEVICE_CLASS_JOYSTICK, "Joy" },
-	{ ~0,                    "Unk" }
+	{ ~0U,                   "Unk" }
 };
 
 // token strings for item modifiers
@@ -238,7 +161,7 @@ static const code_string_table modifier_token_table[] =
 	{ ITEM_MODIFIER_RIGHT,   "RIGHT" },
 	{ ITEM_MODIFIER_UP,      "UP" },
 	{ ITEM_MODIFIER_DOWN,    "DOWN" },
-	{ ~0,                    "" }
+	{ ~0U,                   "" }
 };
 
 // friendly strings for item modifiers
@@ -250,7 +173,7 @@ static const code_string_table modifier_string_table[] =
 	{ ITEM_MODIFIER_RIGHT,   "Right" },
 	{ ITEM_MODIFIER_UP,      "Up" },
 	{ ITEM_MODIFIER_DOWN,    "Down" },
-	{ ~0,                    "" }
+	{ ~0U,                   "" }
 };
 
 // token strings for item classes
@@ -259,7 +182,7 @@ static const code_string_table itemclass_token_table[] =
 	{ ITEM_CLASS_SWITCH,     "SWITCH" },
 	{ ITEM_CLASS_ABSOLUTE,   "ABSOLUTE" },
 	{ ITEM_CLASS_RELATIVE,   "RELATIVE" },
-	{ ~0,                    "" }
+	{ ~0U,                   "" }
 };
 
 // token strings for standard item ids
@@ -488,7 +411,7 @@ static const code_string_table itemid_token_table[] =
 	{ ITEM_ID_ADD_RELATIVE15,"ADDREL15" },
 	{ ITEM_ID_ADD_RELATIVE16,"ADDREL16" },
 
-	{ ~0,                    NULL }
+	{ ~0U,                   NULL }
 };
 
 
@@ -499,9 +422,8 @@ static const code_string_table itemid_token_table[] =
 
 // standard joystick mappings
 const char          joystick_map_8way[] = "7778...4445";
-const char          joystick_map_4way_sticky[] = "s8.4s8.44s8.4445";
 const char          joystick_map_4way_diagonal[] = "4444s8888..444458888.444555888.ss5.222555666.222256666.2222s6666.2222s6666";
-
+// const char          joystick_map_4way_sticky[] = "s8.4s8.44s8.4445";
 
 
 //**************************************************************************
@@ -607,31 +529,31 @@ bool joystick_map::parse(const char *mapstring)
 //  friendly display
 //-------------------------------------------------
 
-const char *joystick_map::to_string(astring &string) const
+const char *joystick_map::to_string(std::string &str) const
 {
-	string.printf("%s\n", m_origstring.cstr());
+	strprintf(str, "%s\n", m_origstring.c_str());
 	for (int rownum = 0; rownum < 9; rownum++)
 	{
-		string.catprintf("  ");
+		str.append("  ");
 		for (int colnum = 0; colnum < 9; colnum++)
 			switch (m_map[rownum][colnum])
 			{
-				case JOYSTICK_MAP_UP | JOYSTICK_MAP_LEFT:   string.catprintf("7");  break;
-				case JOYSTICK_MAP_UP:                       string.catprintf("8");  break;
-				case JOYSTICK_MAP_UP | JOYSTICK_MAP_RIGHT:  string.catprintf("9");  break;
-				case JOYSTICK_MAP_LEFT:                     string.catprintf("4");  break;
-				case JOYSTICK_MAP_NEUTRAL:                  string.catprintf("5");  break;
-				case JOYSTICK_MAP_RIGHT:                    string.catprintf("6");  break;
-				case JOYSTICK_MAP_DOWN | JOYSTICK_MAP_LEFT: string.catprintf("1");  break;
-				case JOYSTICK_MAP_DOWN:                     string.catprintf("2");  break;
-				case JOYSTICK_MAP_DOWN | JOYSTICK_MAP_RIGHT:string.catprintf("3");  break;
-				case JOYSTICK_MAP_STICKY:                   string.catprintf("s");  break;
-				default:                                    string.catprintf("?");  break;
+				case JOYSTICK_MAP_UP | JOYSTICK_MAP_LEFT:   str.append("7");  break;
+				case JOYSTICK_MAP_UP:                       str.append("8");  break;
+				case JOYSTICK_MAP_UP | JOYSTICK_MAP_RIGHT:  str.append("9");  break;
+				case JOYSTICK_MAP_LEFT:                     str.append("4");  break;
+				case JOYSTICK_MAP_NEUTRAL:                  str.append("5");  break;
+				case JOYSTICK_MAP_RIGHT:                    str.append("6");  break;
+				case JOYSTICK_MAP_DOWN | JOYSTICK_MAP_LEFT: str.append("1");  break;
+				case JOYSTICK_MAP_DOWN:                     str.append("2");  break;
+				case JOYSTICK_MAP_DOWN | JOYSTICK_MAP_RIGHT:str.append("3");  break;
+				case JOYSTICK_MAP_STICKY:                   str.append("s");  break;
+				default:                                    str.append("?");  break;
 			}
 
-		string.catprintf("\n");
+		str.append("\n");
 	}
-	return string;
+	return str.c_str();
 }
 
 
@@ -877,9 +799,6 @@ input_device::input_device(input_class &_class, int devindex, const char *name, 
 		m_steadykey_enabled(_class.manager().machine().options().steadykey()),
 		m_lightgun_reload_button(_class.manager().machine().options().offscreen_reload())
 {
-	// reset the items
-	memset(m_item, 0, sizeof(m_item));
-
 	// additional work for joysticks
 	if (devclass() == DEVICE_CLASS_JOYSTICK)
 	{
@@ -889,14 +808,14 @@ input_device::input_device(input_class &_class, int devindex, const char *name, 
 			mapstring = joystick_map_8way;
 
 		// parse it
-		astring tempstr;
+		std::string tempstr;
 		if (!m_joymap.parse(mapstring))
 		{
-			mame_printf_error("Invalid joystick map: %s\n", mapstring);
+			osd_printf_error("Invalid joystick map: %s\n", mapstring);
 			m_joymap.parse(joystick_map_8way);
 		}
 		else if (mapstring != joystick_map_8way)
-			mame_printf_verbose("Input: Default joystick map = %s", m_joymap.to_string(tempstr));
+			osd_printf_verbose("Input: Default joystick map = %s\n", m_joymap.to_string(tempstr));
 	}
 }
 
@@ -928,15 +847,15 @@ input_item_id input_device::add_item(const char *name, input_item_id itemid, ite
 	switch (m_class.standard_item_class(originalid))
 	{
 		case ITEM_CLASS_SWITCH:
-			item = auto_alloc(machine(), input_device_switch_item(*this, name, internal, itemid, getstate));
+			item = global_alloc(input_device_switch_item(*this, name, internal, itemid, getstate));
 			break;
 
 		case ITEM_CLASS_RELATIVE:
-			item = auto_alloc(machine(), input_device_relative_item(*this, name, internal, itemid, getstate));
+			item = global_alloc(input_device_relative_item(*this, name, internal, itemid, getstate));
 			break;
 
 		case ITEM_CLASS_ABSOLUTE:
-			item = auto_alloc(machine(), input_device_absolute_item(*this, name, internal, itemid, getstate));
+			item = global_alloc(input_device_absolute_item(*this, name, internal, itemid, getstate));
 			break;
 
 		default:
@@ -944,7 +863,7 @@ input_item_id input_device::add_item(const char *name, input_item_id itemid, ite
 	}
 
 	// assign the new slot and update the maximum
-	m_item[itemid] = item;
+	m_item[itemid].reset(item);
 	m_maxitem = MAX(m_maxitem, itemid);
 	return itemid;
 }
@@ -1035,8 +954,6 @@ input_class::input_class(input_manager &manager, input_device_class devclass, bo
 		m_enabled(enabled),
 		m_multi(multi)
 {
-	memset(m_device, 0, sizeof(m_device));
-
 	// request a per-frame callback for the keyboard class
 	if (devclass == DEVICE_CLASS_KEYBOARD)
 		machine().add_notifier(MACHINE_NOTIFY_FRAME, machine_notify_delegate(FUNC(input_class::frame_callback), this));
@@ -1067,13 +984,13 @@ input_device *input_class::add_device(int devindex, const char *name, void *inte
 	assert(m_device[devindex] == NULL);
 
 	// allocate a new device
-	input_device *device = m_device[devindex] = auto_alloc(machine(), input_device(*this, devindex, name, internal));
+	m_device[devindex].reset(global_alloc(input_device(*this, devindex, name, internal)));
 
 	// update the maximum index found
 	m_maxindex = MAX(m_maxindex, devindex);
 
-	mame_printf_verbose("Input: Adding %s #%d: %s\n", (*devclass_string_table)[m_devclass], devindex, name);
-	return device;
+	osd_printf_verbose("Input: Adding %s #%d: %s\n", (*devclass_string_table)[m_devclass], devindex, name);
+	return m_device[devindex];
 }
 
 
@@ -1544,32 +1461,32 @@ input_code input_manager::code_from_itemid(input_item_id itemid) const
 //  friendly name
 //-------------------------------------------------
 
-const char *input_manager::code_name(astring &string, input_code code) const
+const char *input_manager::code_name(std::string &str, input_code code) const
 {
-	string.reset();
+	str.clear();
 
 	// if nothing there, return an empty string
 	input_device_item *item = item_from_code(code);
 	if (item == NULL)
-		return string;
+		return str.c_str();
 
 	// determine the devclass part
 	const char *devclass = (*devclass_string_table)[code.device_class()];
 
 	// determine the devindex part
-	astring devindex;
-	devindex.printf("%d", code.device_index() + 1);
+	std::string devindex;
+	strprintf(devindex, "%d", code.device_index() + 1);
 
 	// if we're unifying all devices, don't display a number
 	if (!m_class[code.device_class()]->multi())
-		devindex.reset();
+		devindex.clear();
 
 	// keyboard 0 doesn't show a class or index if it is the only one
 	input_device_class device_class = item->device().devclass();
 	if (device_class == DEVICE_CLASS_KEYBOARD && m_keyboard_class.maxindex() == 0)
 	{
 		devclass = "";
-		devindex.reset();
+		devindex.clear();
 	}
 
 	// devcode part comes from the item name
@@ -1584,16 +1501,17 @@ const char *input_manager::code_name(astring &string, input_code code) const
 			devcode = "";
 
 	// concatenate the strings
-	string.cpy(devclass);
-	if (devindex)
-		string.cat(" ").cat(devindex);
+	str.assign(devclass);
+	if (!devindex.empty())
+		str.append(" ").append(devindex);
 	if (devcode[0] != 0)
-		string.cat(" ").cat(devcode);
+		str.append(" ").append(devcode);
 	if (modifier != NULL)
-		string.cat(" ").cat(modifier);
+		str.append(" ").append(modifier);
 
 	// delete any leading spaces
-	return string.trimspace();
+	strtrimspace(str);
+	return str.c_str();
 }
 
 
@@ -1601,16 +1519,16 @@ const char *input_manager::code_name(astring &string, input_code code) const
 //  code_to_token - create a token for a given code
 //-------------------------------------------------
 
-const char *input_manager::code_to_token(astring &string, input_code code) const
+const char *input_manager::code_to_token(std::string &str, input_code code) const
 {
 	// determine the devclass part
 	const char *devclass = (*devclass_token_table)[code.device_class()];
 
 	// determine the devindex part; keyboard 0 doesn't show an index
-	astring devindex;
-	devindex.printf("%d", code.device_index() + 1);
+	std::string devindex;
+	strprintf(devindex, "%d", code.device_index() + 1);
 	if (code.device_class() == DEVICE_CLASS_KEYBOARD && code.device_index() == 0)
-		devindex.reset();
+		devindex.clear();
 
 	// determine the itemid part; look up in the table if we don't have a token
 	input_device_item *item = item_from_code(code);
@@ -1625,16 +1543,16 @@ const char *input_manager::code_to_token(astring &string, input_code code) const
 		itemclass = (*itemclass_token_table)[code.item_class()];
 
 	// concatenate the strings
-	string.cpy(devclass);
-	if (devindex)
-		string.cat("_").cat(devindex);
+	str.assign(devclass);
+	if (!devindex.empty())
+		str.append("_").append(devindex);
 	if (devcode[0] != 0)
-		string.cat("_").cat(devcode);
+		str.append("_").append(devcode);
 	if (modifier != NULL)
-		string.cat("_").cat(modifier);
+		str.append("_").append(modifier);
 	if (itemclass[0] != 0)
-		string.cat("_").cat(itemclass);
-	return string;
+		str.append("_").append(itemclass);
+	return str.c_str();
 }
 
 
@@ -1646,13 +1564,13 @@ const char *input_manager::code_to_token(astring &string, input_code code) const
 input_code input_manager::code_from_token(const char *_token)
 {
 	// copy the token and break it into pieces
-	astring token[6];
+	std::string token[6];
 	int numtokens;
 	for (numtokens = 0; numtokens < ARRAY_LENGTH(token); )
 	{
 		// make a token up to the next underscore
 		char *score = (char *)strchr(_token, '_');
-		token[numtokens++].cpy(_token, (score == NULL) ? strlen(_token) : (score - _token));
+		token[numtokens++].assign(_token, (score == NULL) ? strlen(_token) : (score - _token));
 
 		// if we hit the end, we're done, else advance our pointer
 		if (score == NULL)
@@ -1662,13 +1580,13 @@ input_code input_manager::code_from_token(const char *_token)
 
 	// first token should be the devclass
 	int curtok = 0;
-	input_device_class devclass = input_device_class((*devclass_token_table)[token[curtok++].cstr()]);
+	input_device_class devclass = input_device_class((*devclass_token_table)[token[curtok++].c_str()]);
 	if (devclass == ~0)
 		return INPUT_CODE_INVALID;
 
 	// second token might be index; look for number
 	int devindex = 0;
-	if (numtokens > 2 && sscanf(token[curtok], "%d", &devindex) == 1)
+	if (numtokens > 2 && sscanf(token[curtok].c_str(), "%d", &devindex) == 1)
 	{
 		curtok++;
 		devindex--;
@@ -1677,7 +1595,7 @@ input_code input_manager::code_from_token(const char *_token)
 		return INPUT_CODE_INVALID;
 
 	// next token is the item ID
-	input_item_id itemid = input_item_id((*itemid_token_table)[token[curtok].cstr()]);
+	input_item_id itemid = input_item_id((*itemid_token_table)[token[curtok].c_str()]);
 	bool standard = (itemid != ~0);
 
 	// if we're a standard code, default the itemclass based on it
@@ -1697,7 +1615,7 @@ input_code input_manager::code_from_token(const char *_token)
 		for (itemid = ITEM_ID_FIRST_VALID; itemid <= device->maxitem(); itemid++)
 		{
 			input_device_item *item = device->item(itemid);
-			if (item != NULL && token[curtok].cmp(item->token()) == 0)
+			if (item != NULL && token[curtok].compare(item->token()) == 0)
 			{
 				// take the itemclass from the item
 				itemclass = item->itemclass();
@@ -1715,7 +1633,7 @@ input_code input_manager::code_from_token(const char *_token)
 	input_item_modifier modifier = ITEM_MODIFIER_NONE;
 	if (curtok < numtokens)
 	{
-		modifier = input_item_modifier((*modifier_token_table)[token[curtok].cstr()]);
+		modifier = input_item_modifier((*modifier_token_table)[token[curtok].c_str()]);
 		if (modifier != ~0)
 			curtok++;
 		else
@@ -1725,7 +1643,7 @@ input_code input_manager::code_from_token(const char *_token)
 	// if we have another token, it is the item class
 	if (curtok < numtokens)
 	{
-		UINT32 temp = (*itemclass_token_table)[token[curtok].cstr()];
+		UINT32 temp = (*itemclass_token_table)[token[curtok].c_str()];
 		if (temp != ~0)
 		{
 			curtok++;
@@ -2008,12 +1926,12 @@ bool input_manager::seq_poll()
 //  sequence
 //-------------------------------------------------
 
-const char *input_manager::seq_name(astring &string, const input_seq &seq) const
+const char *input_manager::seq_name(std::string &str, const input_seq &seq) const
 {
 	// make a copy of our sequence, removing any invalid bits
 	input_code clean_codes[sizeof(seq) / sizeof(input_code)];
 	int clean_index = 0;
-	astring codestr;
+	std::string codestr;
 	for (int codenum = 0; seq[codenum] != input_seq::end_code; codenum++)
 	{
 		// if this is a code item which is not valid, don't copy it and remove any preceding ORs/NOTs
@@ -2029,30 +1947,30 @@ const char *input_manager::seq_name(astring &string, const input_seq &seq) const
 
 	// special case: empty
 	if (clean_index == 0)
-		return string.cpy((seq.length() == 0) ? "None" : "n/a");
+		return str.assign((seq.length() == 0) ? "None" : "n/a").c_str();
 
 	// start with an empty buffer
-	string.reset();
+	str.clear();
 
 	// loop until we hit the end
 	for (int codenum = 0; codenum < clean_index; codenum++)
 	{
 		// append a space if not the first code
 		if (codenum != 0)
-			string.cat(" ");
+			str.append(" ");
 
 		// handle OR/NOT codes here
 		input_code code = clean_codes[codenum];
 		if (code == input_seq::or_code)
-			string.cat("or");
+			str.append("or");
 		else if (code == input_seq::not_code)
-			string.cat("not");
+			str.append("not");
 
 		// otherwise, assume it is an input code and ask the input system to generate it
 		else
-			string.cat(code_name(codestr, code));
+			str.append(code_name(codestr, code));
 	}
-	return string;
+	return str.c_str();
 }
 
 
@@ -2061,33 +1979,33 @@ const char *input_manager::seq_name(astring &string, const input_seq &seq) const
 //  a sequence
 //-------------------------------------------------
 
-const char *input_manager::seq_to_tokens(astring &string, const input_seq &seq) const
+const char *input_manager::seq_to_tokens(std::string &str, const input_seq &seq) const
 {
 	// start with an empty buffer
-	string.reset();
+	str.clear();
 
 	// loop until we hit the end
-	astring codestr;
+	std::string codestr;
 	for (int codenum = 0; seq[codenum] != input_seq::end_code; codenum++)
 	{
 		// append a space if not the first code
 		if (codenum != 0)
-			string.cat(" ");
+			str.append(" ");
 
 		// handle OR/NOT codes here
 		input_code code = seq[codenum];
 		if (code == input_seq::or_code)
-			string.cat("OR");
+			str.append("OR");
 		else if (code == input_seq::not_code)
-			string.cat("NOT");
+			str.append("NOT");
 		else if (code == input_seq::default_code)
-			string.cat("DEFAULT");
+			str.append("DEFAULT");
 
 		// otherwise, assume it is an input code and ask the input system to generate it
 		else
-			string.cat(code_to_token(codestr, code));
+			str.append(code_to_token(codestr, code));
 	}
-	return string;
+	return str.c_str();
 }
 
 
@@ -2102,8 +2020,8 @@ void input_manager::seq_from_tokens(input_seq &seq, const char *string)
 	seq.reset();
 
 	// loop until we're done
-	astring strcopy = string;
-	char *str = const_cast<char *>(strcopy.cstr());
+	std::string strcopy = string;
+	char *str = const_cast<char *>(strcopy.c_str());
 	while (1)
 	{
 		// trim any leading spaces
@@ -2155,8 +2073,8 @@ bool input_manager::set_global_joystick_map(const char *mapstring)
 	if (!map.parse(mapstring))
 		return false;
 
-	astring tempstr;
-	mame_printf_verbose("Input: Changing default joystick map = %s", map.to_string(tempstr));
+	std::string tempstr;
+	osd_printf_verbose("Input: Changing default joystick map = %s\n", map.to_string(tempstr));
 
 	// iterate over joysticks and set the map
 	for (int joynum = 0; joynum <= m_joystick_class.maxindex(); joynum++)
@@ -2190,11 +2108,24 @@ input_device_item::input_device_item(input_device &device, const char *name, voi
 {
 	// use a standard token name for know item IDs
 	if (itemid <= ITEM_ID_MAXIMUM && (*itemid_token_table)[itemid] != NULL)
-		m_token.cpy((*itemid_token_table)[itemid]);
+		m_token.assign((*itemid_token_table)[itemid]);
 
 	// otherwise, create a tokenized name
-	else
-		m_token.cpy(name).makeupper().delchr(' ').delchr('_');
+	else {
+		m_token.assign(name);
+		strmakeupper(m_token);
+		strdelchr(m_token, ' ');
+		strdelchr(m_token, '_');
+	}
+}
+
+
+//-------------------------------------------------
+//  input_device_item - destructor
+//-------------------------------------------------
+
+input_device_item::~input_device_item()
+{
 }
 
 

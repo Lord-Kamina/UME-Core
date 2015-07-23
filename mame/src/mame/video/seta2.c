@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                           -= Newer Seta Hardware =-
@@ -108,7 +110,7 @@
 
 ***************************************************************************/
 
-WRITE16_MEMBER(seta2_state::seta2_vregs_w)
+WRITE16_MEMBER(seta2_state::vregs_w)
 {
 	/* 02/04 = horizontal display start/end
 	           mj4simai = 0065/01E5 (0180 visible area)
@@ -249,37 +251,37 @@ void seta2_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 			default:
 				popmessage("unknown gfxset %x",(num & 0x0700)>>8);
 				shadow_depth = 0;
-				gfx = machine().gfx[machine().rand()&3];
+				gfx = m_gfxdecode->gfx(machine().rand()&3);
 				break;
 			case 0x0700:            // 8bpp tiles (76543210)
 				shadow_depth = 8;   // ?
-				gfx = machine().gfx[3];
+				gfx = m_gfxdecode->gfx(3);
 				break;
 			case 0x0600:            // 6bpp tiles (--543210) (myangel sliding blocks test)
 				shadow_depth = 6;   // ?
-				gfx = machine().gfx[2];
+				gfx = m_gfxdecode->gfx(2);
 				break;
 			case 0x0500:            // 4bpp tiles (3210----)
 				shadow_depth = 4;   // ?
-				gfx = machine().gfx[1];
+				gfx = m_gfxdecode->gfx(1);
 				break;
 			case 0x0400:            // 4bpp tiles (----3210)
 				shadow_depth = 3;   // reelquak
-				gfx = machine().gfx[0];
+				gfx = m_gfxdecode->gfx(0);
 				break;
 //          case 0x0300:
 //              unknown
 			case 0x0200:            // 3bpp tiles?  (-----210) (myangel "Graduate Tests")
 				shadow_depth = 3;   // ?
-				gfx = machine().gfx[4];
+				gfx = m_gfxdecode->gfx(4);
 				break;
 			case 0x0100:            // 2bpp tiles??? (--10----) (myangel2 question bubble, myangel endgame)
 				shadow_depth = 2;   // myangel2
-				gfx = machine().gfx[5];
+				gfx = m_gfxdecode->gfx(5);
 				break;
 			case 0x0000:            // no idea!
 				shadow_depth = 4;   // ?
-				gfx = machine().gfx[0];
+				gfx = m_gfxdecode->gfx(0);
 				break;
 		}
 		if (!use_shadow)
@@ -441,40 +443,37 @@ void seta2_state::draw_sprites(bitmap_ind16 &bitmap,const rectangle &cliprect)
 
 ***************************************************************************/
 
-VIDEO_START_MEMBER(seta2_state,seta2)
+void seta2_state::video_start()
 {
-	machine().gfx[2]->set_granularity(16);
-	machine().gfx[3]->set_granularity(16);
-	machine().gfx[4]->set_granularity(16);
-	machine().gfx[5]->set_granularity(16);
+	m_gfxdecode->gfx(2)->set_granularity(16);
+	m_gfxdecode->gfx(3)->set_granularity(16);
+	m_gfxdecode->gfx(4)->set_granularity(16);
+	m_gfxdecode->gfx(5)->set_granularity(16);
 
 	m_buffered_spriteram = auto_alloc_array(machine(), UINT16, m_spriteram.bytes()/2);
 
 	m_xoffset = 0;
 	m_yoffset = 0;
-
-	//TODO:FIX
-	//save_pointer(NAME(m_vregs), 0x40);
 }
 
-VIDEO_START_MEMBER(seta2_state,seta2_xoffset)
+VIDEO_START_MEMBER(seta2_state,xoffset)
 {
-	VIDEO_START_CALL_MEMBER(seta2);
+	video_start();
 
 	m_xoffset = 0x200;
 }
 
-VIDEO_START_MEMBER(seta2_state,seta2_yoffset)
+VIDEO_START_MEMBER(seta2_state,yoffset)
 {
-	VIDEO_START_CALL_MEMBER(seta2);
+	video_start();
 
 	m_yoffset = 0x10;
 }
 
-UINT32 seta2_state::screen_update_seta2(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 seta2_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	// Black or pen 0?
-	bitmap.fill(machine().pens[0], cliprect);
+	bitmap.fill(m_palette->pen(0), cliprect);
 
 	if ( (m_vregs[0x30/2] & 1) == 0 )   // 1 = BLANK SCREEN
 		draw_sprites(bitmap, cliprect);
@@ -482,7 +481,7 @@ UINT32 seta2_state::screen_update_seta2(screen_device &screen, bitmap_ind16 &bit
 	return 0;
 }
 
-void seta2_state::screen_eof_seta2(screen_device &screen, bool state)
+void seta2_state::screen_eof(screen_device &screen, bool state)
 {
 	// rising edge
 	if (state)

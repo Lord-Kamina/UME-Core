@@ -1,25 +1,25 @@
+// license:BSD-3-Clause
+// copyright-holders:Ernesto Corvi, Nicola Salmoria
 #include "emu.h"
 #include "includes/buggychl.h"
 
 
-void buggychl_state::palette_init()
+PALETTE_INIT_MEMBER(buggychl_state, buggychl)
 {
-	int i;
-
 	/* arbitrary blue shading for the sky, estimation */
-	for (i = 0; i < 128; i++)
-		palette_set_color(machine(), i + 128, MAKE_RGB(0, 240-i, 255));
+	for (int i = 0; i < 128; i++)
+		palette.set_pen_color(i + 128, rgb_t(0, 240-i, 255));
 }
 
 void buggychl_state::video_start()
 {
-	machine().primary_screen->register_screen_bitmap(m_tmp_bitmap1);
-	machine().primary_screen->register_screen_bitmap(m_tmp_bitmap2);
+	m_screen->register_screen_bitmap(m_tmp_bitmap1);
+	m_screen->register_screen_bitmap(m_tmp_bitmap2);
 
 	save_item(NAME(m_tmp_bitmap1));
 	save_item(NAME(m_tmp_bitmap2));
 
-	machine().gfx[0]->set_source(m_charram);
+	m_gfxdecode->gfx(0)->set_source(m_charram);
 }
 
 
@@ -29,7 +29,7 @@ WRITE8_MEMBER(buggychl_state::buggychl_chargen_w)
 	if (m_charram[offset] != data)
 	{
 		m_charram[offset] = data;
-		machine().gfx[0]->mark_dirty((offset / 8) & 0xff);
+		m_gfxdecode->gfx(0)->mark_dirty((offset / 8) & 0xff);
 	}
 }
 
@@ -75,10 +75,8 @@ WRITE8_MEMBER(buggychl_state::buggychl_bg_scrollx_w)
 
 void buggychl_state::draw_sky( bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	int x, y;
-
-	for (y = 0; y < 256; y++)
-		for (x = 0; x < 256; x++)
+	for (int y = 0; y < 256; y++)
+		for (int x = 0; x < 256; x++)
 			bitmap.pix16(y, x) = 128 + x / 2;
 }
 
@@ -105,7 +103,7 @@ void buggychl_state::draw_bg( bitmap_ind16 &bitmap, const rectangle &cliprect )
 		if (flip_screen_y())
 			sy = 31 - sy;
 
-		drawgfx_opaque(m_tmp_bitmap1, m_tmp_bitmap1.cliprect(), machine().gfx[0],
+		m_gfxdecode->gfx(0)->opaque(m_tmp_bitmap1,m_tmp_bitmap1.cliprect(),
 				code,
 				2,
 				flip_screen_x(),flip_screen_y(),
@@ -144,7 +142,7 @@ void buggychl_state::draw_fg( bitmap_ind16 &bitmap, const rectangle &cliprect )
 		if (flipy)
 			sy = 31 - sy;
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				code,
 				0,
 				flipx,flipy,
@@ -156,7 +154,6 @@ void buggychl_state::draw_fg( bitmap_ind16 &bitmap, const rectangle &cliprect )
 
 void buggychl_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	UINT8 *spriteram = m_spriteram;
 	int offs;
 	const UINT8 *gfx;
 
@@ -169,14 +166,14 @@ void buggychl_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 		const UINT8 *lookup;
 		const UINT8 *zoomx_rom, *zoomy_rom;
 
-		sx = spriteram[offs + 3] - ((spriteram[offs + 2] & 0x80) << 1);
-		sy = 256 - 64 - spriteram[offs] + ((spriteram[offs + 1] & 0x80) << 1);
-		flipy = spriteram[offs + 1] & 0x40;
-		zoom = spriteram[offs + 1] & 0x3f;
+		sx = m_spriteram[offs + 3] - ((m_spriteram[offs + 2] & 0x80) << 1);
+		sy = 256 - 64 - m_spriteram[offs] + ((m_spriteram[offs + 1] & 0x80) << 1);
+		flipy = m_spriteram[offs + 1] & 0x40;
+		zoom = m_spriteram[offs + 1] & 0x3f;
 		zoomy_rom = gfx + (zoom << 6);
 		zoomx_rom = gfx + 0x2000 + (zoom << 3);
 
-		lookup = m_sprite_lookup + ((spriteram[offs + 2] & 0x7f) << 6);
+		lookup = m_sprite_lookup + ((m_spriteram[offs + 2] & 0x7f) << 6);
 
 		for (y = 0; y < 64; y++)
 		{
@@ -201,7 +198,7 @@ void buggychl_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 					code = 8 * (lookup[pos] | ((lookup[pos + 1] & 0x07) << 8));
 					realflipy = (lookup[pos + 1] & 0x80) ? !flipy : flipy;
 					code += (realflipy ? (charline ^ 7) : charline);
-					pendata = machine().gfx[1]->get_data(code);
+					pendata = m_gfxdecode->gfx(1)->get_data(code);
 
 					for (x = 0; x < 16; x++)
 					{

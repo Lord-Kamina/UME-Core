@@ -1,37 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Sega Hang On hardware
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ****************************************************************************
 
@@ -43,8 +14,6 @@
         * verify protection
 
 ***************************************************************************/
-
-#define MODERN_DRIVER_INIT
 
 #include "emu.h"
 #include "includes/segahang.h"
@@ -65,34 +34,6 @@
 const UINT32 MASTER_CLOCK_25MHz = 25174800;
 const UINT32 MASTER_CLOCK_10MHz = 10000000;
 const UINT32 MASTER_CLOCK_8MHz = 8000000;
-
-
-
-//**************************************************************************
-//  PPI INTERFACES
-//**************************************************************************
-
-static I8255_INTERFACE(hangon_ppi_intf_0)
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(driver_device, soundlatch_byte_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(segahang_state, video_lamps_w),
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(segahang_state, tilemap_sound_w)
-};
-
-static I8255_INTERFACE(hangon_ppi_intf_1)
-{
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(segahang_state, sub_control_adc_w),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_MEMBER(segahang_state, adc_status_r),
-	DEVCB_NULL
-};
-
-
 
 //**************************************************************************
 //  PPI READ/WRITE CALLBACKS
@@ -118,14 +59,14 @@ WRITE8_MEMBER( segahang_state::video_lamps_w )
 	//
 
 	// bit 7: screen flip
-	segaic16_tilemap_set_flip(machine(), 0, data & 0x80);
+	m_segaic16vid->tilemap_set_flip(0, data & 0x80);
 	m_sprites->set_flip(data & 0x80);
 
 	// bit 6: shadow/highlight control
 	m_shadow = ~data & 0x40;
 
 	// bit 4: enable display
-	segaic16_set_display_enable(machine(), data & 0x10);
+	m_segaic16vid->set_display_enable(data & 0x10);
 
 	// bits 2 & 3: control the lamps
 	set_led_status(machine(), 1, data & 0x08);
@@ -161,8 +102,8 @@ WRITE8_MEMBER( segahang_state::tilemap_sound_w )
 	m_soundcpu->set_input_line(INPUT_LINE_NMI, (data & 0x80) ? CLEAR_LINE : ASSERT_LINE);
 
 	// bits 1 & 2: tilemap origin
-	segaic16_tilemap_set_colscroll(machine(), 0, ~data & 0x04);
-	segaic16_tilemap_set_rowscroll(machine(), 0, ~data & 0x02);
+	m_segaic16vid->tilemap_set_colscroll(0, ~data & 0x04);
+	m_segaic16vid->tilemap_set_rowscroll(0, ~data & 0x02);
 
 	// bit 0: sound mute
 	machine().sound().system_enable(data & 0x01);
@@ -243,7 +184,7 @@ READ16_MEMBER( segahang_state::hangon_io_r )
 		}
 	}
 
-	logerror("%06X:hangon_io_r - unknown read access to address %04X\n", m_maincpu->pc(), offset * 2);
+	//logerror("%06X:hangon_io_r - unknown read access to address %04X\n", m_maincpu->pc(), offset * 2);
 	return open_bus_r(space, 0, mem_mask);
 }
 
@@ -271,7 +212,7 @@ WRITE16_MEMBER( segahang_state::hangon_io_w )
 				return;
 		}
 
-	logerror("%06X:hangon_io_w - unknown write access to address %04X = %04X & %04X\n", m_maincpu->pc(), offset * 2, data, mem_mask);
+	//logerror("%06X:hangon_io_w - unknown write access to address %04X = %04X & %04X\n", m_maincpu->pc(), offset * 2, data, mem_mask);
 }
 
 
@@ -304,7 +245,7 @@ READ16_MEMBER( segahang_state::sharrier_io_r )
 		}
 	}
 
-	logerror("%06X:sharrier_io_r - unknown read access to address %04X\n", m_maincpu->pc(), offset * 2);
+	//logerror("%06X:sharrier_io_r - unknown read access to address %04X\n", m_maincpu->pc(), offset * 2);
 	return open_bus_r(space, 0, mem_mask);
 }
 
@@ -333,7 +274,7 @@ WRITE16_MEMBER( segahang_state::sharrier_io_w )
 				return;
 		}
 
-	logerror("%06X:sharrier_io_w - unknown write access to address %04X = %04X & %04X\n", m_maincpu->pc(), offset * 2, data, mem_mask);
+	//logerror("%06X:sharrier_io_w - unknown write access to address %04X = %04X & %04X\n", m_maincpu->pc(), offset * 2, data, mem_mask);
 }
 
 
@@ -409,7 +350,7 @@ INTERRUPT_GEN_MEMBER( segahang_state::i8751_main_cpu_vblank )
 void segahang_state::machine_reset()
 {
 	// reset misc components
-	segaic16_tilemap_reset(machine(), 0);
+	m_segaic16vid->tilemap_reset(*m_screen);
 
 	// queue up a timer to either boost interleave or disable the MCU
 	synchronize(TID_INIT_I8751);
@@ -458,6 +399,9 @@ void segahang_state::sharrier_i8751_sim()
 	// signal a VBLANK to the main CPU
 	m_maincpu->set_input_line(4, HOLD_LINE);
 
+	// clear add lifes protection flag
+	m_workram[0x0f0/2] = 0;
+
 	// read I/O ports
 	m_workram[0x492/2] = (ioport("ADC0")->read() << 8) | ioport("ADC1")->read();
 }
@@ -472,8 +416,8 @@ static ADDRESS_MAP_START( hangon_map, AS_PROGRAM, 16, segahang_state )
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x000000, 0x03ffff) AM_ROM
 	AM_RANGE(0x20c000, 0x20ffff) AM_RAM AM_SHARE("workram")
-	AM_RANGE(0x400000, 0x403fff) AM_RAM_WRITE_LEGACY(segaic16_tileram_0_w) AM_SHARE("tileram")
-	AM_RANGE(0x410000, 0x410fff) AM_RAM_WRITE_LEGACY(segaic16_textram_0_w) AM_SHARE("textram")
+	AM_RANGE(0x400000, 0x403fff) AM_DEVREADWRITE("segaic16vid", segaic16_video_device, tileram_r, tileram_w) AM_SHARE("tileram")
+	AM_RANGE(0x410000, 0x410fff) AM_DEVREADWRITE("segaic16vid", segaic16_video_device, textram_r, textram_w) AM_SHARE("textram")
 	AM_RANGE(0x600000, 0x6007ff) AM_RAM AM_SHARE("sprites")
 	AM_RANGE(0xa00000, 0xa00fff) AM_RAM_WRITE(paletteram_w) AM_SHARE("paletteram")
 	AM_RANGE(0xc00000, 0xc3ffff) AM_ROM AM_REGION("subcpu", 0)
@@ -482,12 +426,17 @@ static ADDRESS_MAP_START( hangon_map, AS_PROGRAM, 16, segahang_state )
 	AM_RANGE(0xe00000, 0xffffff) AM_READWRITE(hangon_io_r, hangon_io_w)
 ADDRESS_MAP_END
 
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 16, segahang_state )
+	ADDRESS_MAP_UNMAP_HIGH
+	AM_RANGE(0x000000, 0x03ffff) AM_ROM AM_SHARE("decrypted_opcodes")
+ADDRESS_MAP_END
+
 static ADDRESS_MAP_START( sharrier_map, AS_PROGRAM, 16, segahang_state )
 	ADDRESS_MAP_UNMAP_HIGH
 	AM_RANGE(0x000000, 0x03ffff) AM_ROM
 	AM_RANGE(0x040000, 0x043fff) AM_RAM AM_SHARE("workram")
-	AM_RANGE(0x100000, 0x107fff) AM_RAM_WRITE_LEGACY(segaic16_tileram_0_w) AM_SHARE("tileram")
-	AM_RANGE(0x108000, 0x108fff) AM_RAM_WRITE_LEGACY(segaic16_textram_0_w) AM_SHARE("textram")
+	AM_RANGE(0x100000, 0x107fff) AM_DEVREADWRITE("segaic16vid", segaic16_video_device, tileram_r, tileram_w) AM_SHARE("tileram")
+	AM_RANGE(0x108000, 0x108fff) AM_DEVREADWRITE("segaic16vid", segaic16_video_device, textram_r, textram_w) AM_SHARE("textram")
 	AM_RANGE(0x110000, 0x110fff) AM_RAM_WRITE(paletteram_w) AM_SHARE("paletteram")
 	AM_RANGE(0x124000, 0x127fff) AM_RAM AM_SHARE("subram")
 	AM_RANGE(0x130000, 0x130fff) AM_RAM AM_SHARE("sprites")
@@ -749,7 +698,7 @@ static INPUT_PORTS_START( sharrier )
 	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_X ) PORT_MINMAX(0x20,0xe0) PORT_SENSITIVITY(100) PORT_KEYDELTA(4) PORT_REVERSE
 
 	PORT_START("ADC1")  // Y axis
-	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0x60,0xa0) PORT_SENSITIVITY(100) PORT_KEYDELTA(4) PORT_REVERSE
+	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0x20,0xe0) PORT_SENSITIVITY(100) PORT_KEYDELTA(4) PORT_REVERSE
 INPUT_PORTS_END
 
 
@@ -797,25 +746,6 @@ static INPUT_PORTS_START( enduror )
 INPUT_PORTS_END
 
 
-
-//**************************************************************************
-//  SOUND CONFIGURATIONS
-//**************************************************************************
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL
-};
-
-static const sega_pcm_interface segapcm_interface =
-{
-	BANK_512
-};
-
-
-
 //**************************************************************************
 //  GRAPHICS DECODING
 //**************************************************************************
@@ -842,16 +772,27 @@ static MACHINE_CONFIG_START( shared_base, segahang_state )
 
 	MCFG_QUANTUM_TIME(attotime::from_hz(6000))
 
-	MCFG_I8255_ADD( "i8255_1", hangon_ppi_intf_0 )
-	MCFG_I8255_ADD( "i8255_2", hangon_ppi_intf_1 )
+	MCFG_DEVICE_ADD("i8255_1", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(driver_device, soundlatch_byte_w))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(segahang_state, video_lamps_w))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(segahang_state, tilemap_sound_w))
+
+	MCFG_DEVICE_ADD("i8255_2", I8255, 0)
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(segahang_state, sub_control_adc_w))
+	MCFG_I8255_IN_PORTC_CB(READ8(segahang_state, adc_status_r))
+
+	MCFG_SEGAIC16VID_ADD("segaic16vid")
+	MCFG_SEGAIC16VID_GFXDECODE("gfxdecode")
+	MCFG_SEGAIC16_ROAD_ADD("segaic16road")
 
 	// video hardware
-	MCFG_GFXDECODE(segahang)
-	MCFG_PALETTE_LENGTH(2048*3)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", segahang)
+	MCFG_PALETTE_ADD("palette", 2048*3)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(MASTER_CLOCK_25MHz/4, 400, 0, 320, 262, 0, 224)
 	MCFG_SCREEN_UPDATE_DRIVER(segahang_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 MACHINE_CONFIG_END
 
 
@@ -897,7 +838,6 @@ static MACHINE_CONFIG_FRAGMENT( sound_board_2203 )
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, MASTER_CLOCK_8MHz/2)
 	MCFG_YM2203_IRQ_HANDLER(WRITELINE(segahang_state, sound_irq))
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(0, "lspeaker",  0.13)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 0.13)
 	MCFG_SOUND_ROUTE(1, "lspeaker",  0.13)
@@ -908,7 +848,7 @@ static MACHINE_CONFIG_FRAGMENT( sound_board_2203 )
 	MCFG_SOUND_ROUTE(3, "rspeaker", 0.37)
 
 	MCFG_SEGAPCM_ADD("pcm", MASTER_CLOCK_8MHz)
-	MCFG_SOUND_CONFIG(segapcm_interface)
+	MCFG_SEGAPCM_BANK(BANK_512)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -926,7 +866,6 @@ static MACHINE_CONFIG_FRAGMENT( sound_board_2203x2 )
 
 	MCFG_SOUND_ADD("ym1", YM2203, MASTER_CLOCK_8MHz/2)
 	MCFG_YM2203_IRQ_HANDLER(WRITELINE(segahang_state, sound_irq))
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(0, "lspeaker",  0.13)
 	MCFG_SOUND_ROUTE(0, "rspeaker", 0.13)
 	MCFG_SOUND_ROUTE(1, "lspeaker",  0.13)
@@ -947,7 +886,7 @@ static MACHINE_CONFIG_FRAGMENT( sound_board_2203x2 )
 	MCFG_SOUND_ROUTE(3, "rspeaker", 0.37)
 
 	MCFG_SEGAPCM_ADD("pcm", MASTER_CLOCK_8MHz/2)
-	MCFG_SOUND_CONFIG(segapcm_interface)
+	MCFG_SEGAPCM_BANK(BANK_512)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -969,7 +908,7 @@ static MACHINE_CONFIG_FRAGMENT( sound_board_2151 )
 	MCFG_SOUND_ROUTE(1, "rspeaker", 0.43)
 
 	MCFG_SEGAPCM_ADD("pcm", MASTER_CLOCK_8MHz/2)
-	MCFG_SOUND_CONFIG(segapcm_interface)
+	MCFG_SEGAPCM_BANK(BANK_512)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 1.0)
 MACHINE_CONFIG_END
@@ -1025,11 +964,17 @@ MACHINE_CONFIG_END
 
 
 static MACHINE_CONFIG_DERIVED( endurobl, sharrier_base )
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
+
 	MCFG_FRAGMENT_ADD(sound_board_2203)
 MACHINE_CONFIG_END
 
 
 static MACHINE_CONFIG_DERIVED( endurob2, sharrier_base )
+	MCFG_CPU_MODIFY("maincpu")
+	MCFG_CPU_DECRYPTED_OPCODES_MAP(decrypted_opcodes_map)
+
 	MCFG_FRAGMENT_ADD(sound_board_2203x2)
 MACHINE_CONFIG_END
 
@@ -1815,9 +1760,7 @@ ROM_END
 DRIVER_INIT_MEMBER(segahang_state,generic)
 {
 	// point globals to allocated memory regions
-	segaic16_tileram_0 = reinterpret_cast<UINT16 *>(memshare("tileram")->ptr());
-	segaic16_textram_0 = reinterpret_cast<UINT16 *>(memshare("textram")->ptr());
-	segaic16_roadram_0 = reinterpret_cast<UINT16 *>(memshare("roadram")->ptr());
+	m_segaic16road->segaic16_roadram_0 = reinterpret_cast<UINT16 *>(memshare("roadram")->ptr());
 
 	// save states
 	save_item(NAME(m_adc_select));
@@ -1845,13 +1788,10 @@ DRIVER_INIT_MEMBER(segahang_state,enduror)
 DRIVER_INIT_MEMBER(segahang_state,endurobl)
 {
 	DRIVER_INIT_CALL(enduror);
-
 	// assemble decrypted half of ROM and register it
 	UINT16 *rom = reinterpret_cast<UINT16 *>(memregion("maincpu")->base());
-	UINT16 *decrypt = auto_alloc_array(machine(), UINT16, 0x40000/2);
-	memcpy(decrypt + 0x00000/2, rom + 0x30000/2, 0x10000);
-	memcpy(decrypt + 0x10000/2, rom + 0x10000/2, 0x20000);
-	m_maincpu->space(AS_PROGRAM).set_decrypted_region(0x000000, 0x03ffff, decrypt);
+	memcpy(m_decrypted_opcodes + 0x00000/2, rom + 0x30000/2, 0x10000);
+	memcpy(m_decrypted_opcodes + 0x10000/2, rom + 0x10000/2, 0x20000);
 }
 
 DRIVER_INIT_MEMBER(segahang_state,endurob2)
@@ -1860,9 +1800,7 @@ DRIVER_INIT_MEMBER(segahang_state,endurob2)
 
 	// assemble decrypted half of ROM and register it
 	UINT16 *rom = reinterpret_cast<UINT16 *>(memregion("maincpu")->base());
-	UINT16 *decrypt = auto_alloc_array(machine(), UINT16, 0x40000/2);
-	memcpy(decrypt, rom, 0x30000);
-	m_maincpu->space(AS_PROGRAM).set_decrypted_region(0x000000, 0x03ffff, decrypt);
+	memcpy(m_decrypted_opcodes, rom, 0x30000);
 }
 
 

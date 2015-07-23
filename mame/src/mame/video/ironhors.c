@@ -1,6 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Mirko Buffoni
 /***************************************************************************
 
-  video.c
+  ironhors.c
 
   Functions to emulate the video hardware of the machine.
 
@@ -16,7 +18,7 @@
 
 ***************************************************************************/
 
-void ironhors_state::palette_init()
+PALETTE_INIT_MEMBER(ironhors_state, ironhors)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	static const int resistances[4] = { 2000, 1000, 470, 220 };
@@ -28,9 +30,6 @@ void ironhors_state::palette_init()
 			4, resistances, rweights, 1000, 0,
 			4, resistances, gweights, 1000, 0,
 			4, resistances, bweights, 1000, 0);
-
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x100);
 
 	/* create a lookup table for the palette */
 	for (i = 0; i < 0x100; i++)
@@ -59,7 +58,7 @@ void ironhors_state::palette_init()
 		bit3 = (color_prom[i + 0x200] >> 3) & 0x01;
 		b = combine_4_weights(bweights, bit0, bit1, bit2, bit3);
 
-		colortable_palette_set_color(machine().colortable, i, MAKE_RGB(r, g, b));
+		palette.set_indirect_color(i, rgb_t(r, g, b));
 	}
 
 	/* color_prom now points to the beginning of the lookup table,*/
@@ -74,24 +73,24 @@ void ironhors_state::palette_init()
 		for (j = 0; j < 8; j++)
 		{
 			UINT8 ctabentry = (j << 5) | ((~i & 0x100) >> 4) | (color_prom[i] & 0x0f);
-			colortable_entry_set_value(machine().colortable, ((i & 0x100) << 3) | (j << 8) | (i & 0xff), ctabentry);
+			palette.set_pen_indirect(((i & 0x100) << 3) | (j << 8) | (i & 0xff), ctabentry);
 		}
 	}
 }
 
-WRITE8_MEMBER(ironhors_state::ironhors_videoram_w)
+WRITE8_MEMBER(ironhors_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(ironhors_state::ironhors_colorram_w)
+WRITE8_MEMBER(ironhors_state::colorram_w)
 {
 	m_colorram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(ironhors_state::ironhors_charbank_w)
+WRITE8_MEMBER(ironhors_state::charbank_w)
 {
 	if (m_charbank != (data & 0x03))
 	{
@@ -104,7 +103,7 @@ WRITE8_MEMBER(ironhors_state::ironhors_charbank_w)
 	/* other bits unknown */
 }
 
-WRITE8_MEMBER(ironhors_state::ironhors_palettebank_w)
+WRITE8_MEMBER(ironhors_state::palettebank_w)
 {
 	if (m_palettebank != (data & 0x07))
 	{
@@ -118,10 +117,10 @@ WRITE8_MEMBER(ironhors_state::ironhors_palettebank_w)
 	/* bit 6 unknown - set after game over */
 
 	if (data & 0x88)
-		popmessage("ironhors_palettebank_w %02x",data);
+		popmessage("palettebank_w %02x",data);
 }
 
-WRITE8_MEMBER(ironhors_state::ironhors_flipscreen_w)
+WRITE8_MEMBER(ironhors_state::flipscreen_w)
 {
 	if (flip_screen() != (~data & 0x08))
 	{
@@ -145,7 +144,7 @@ TILE_GET_INFO_MEMBER(ironhors_state::get_bg_tile_info)
 
 void ironhors_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ironhors_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ironhors_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_bg_tilemap->set_scroll_rows(32);
 }
@@ -181,7 +180,7 @@ void ironhors_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 		switch (sr[offs + 4] & 0x0c)
 		{
 			case 0x00:  /* 16x16 */
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 						code/4,
 						color,
 						flipx,flipy,
@@ -192,12 +191,12 @@ void ironhors_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 				{
 					if (flip_screen()) sy += 8; // this fixes the train wheels' position
 
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code & ~1,
 							color,
 							flipx,flipy,
 							flipx?sx+8:sx,sy,0);
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code | 1,
 							color,
 							flipx,flipy,
@@ -207,12 +206,12 @@ void ironhors_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 
 			case 0x08:  /* 8x16 */
 				{
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code & ~2,
 							color,
 							flipx,flipy,
 							sx,flipy?sy+8:sy,0);
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code | 2,
 							color,
 							flipx,flipy,
@@ -222,7 +221,7 @@ void ironhors_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 
 			case 0x0c:  /* 8x8 */
 				{
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code,
 							color,
 							flipx,flipy,
@@ -233,14 +232,14 @@ void ironhors_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 	}
 }
 
-UINT32 ironhors_state::screen_update_ironhors(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 ironhors_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	int row;
 
 	for (row = 0; row < 32; row++)
 		m_bg_tilemap->set_scrollx(row, m_scroll[row]);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }
@@ -257,7 +256,7 @@ TILE_GET_INFO_MEMBER(ironhors_state::farwest_get_bg_tile_info)
 
 VIDEO_START_MEMBER(ironhors_state,farwest)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ironhors_state::farwest_get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ironhors_state::farwest_get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_bg_tilemap->set_scroll_rows(32);
 }
@@ -290,7 +289,7 @@ void ironhors_state::farwest_draw_sprites( bitmap_ind16 &bitmap, const rectangle
 		switch (sr[offs + 3] & 0x0c)
 		{
 			case 0x00:  /* 16x16 */
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[1],
+				m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 						code/4,
 						color,
 						flipx,flipy,
@@ -301,12 +300,12 @@ void ironhors_state::farwest_draw_sprites( bitmap_ind16 &bitmap, const rectangle
 				{
 					if (flip_screen()) sy += 8; // this fixes the train wheels' position
 
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code & ~1,
 							color,
 							flipx,flipy,
 							flipx?sx+8:sx,sy,0);
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code | 1,
 							color,
 							flipx,flipy,
@@ -316,12 +315,12 @@ void ironhors_state::farwest_draw_sprites( bitmap_ind16 &bitmap, const rectangle
 
 			case 0x08:  /* 8x16 */
 				{
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code & ~2,
 							color,
 							flipx,flipy,
 							sx,flipy?sy+8:sy,0);
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code | 2,
 							color,
 							flipx,flipy,
@@ -331,7 +330,7 @@ void ironhors_state::farwest_draw_sprites( bitmap_ind16 &bitmap, const rectangle
 
 			case 0x0c:  /* 8x8 */
 				{
-					drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+					m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 							code,
 							color,
 							flipx,flipy,
@@ -349,7 +348,7 @@ UINT32 ironhors_state::screen_update_farwest(screen_device &screen, bitmap_ind16
 	for (row = 0; row < 32; row++)
 		m_bg_tilemap->set_scrollx(row, m_scroll[row]);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	farwest_draw_sprites(bitmap, cliprect);
 	return 0;
 }

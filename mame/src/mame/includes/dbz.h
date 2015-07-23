@@ -1,9 +1,17 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, R. Belmont, Pierpaolo Prazzoli
 /*************************************************************************
 
     Dragonball Z
 
 *************************************************************************/
-#include "video/konicdev.h"
+
+#include "machine/k053252.h"
+#include "video/k054156_k054157_k056832.h"
+#include "video/k053246_k053247_k055673.h"
+#include "video/k053936.h"
+#include "video/k053251.h"
+#include "video/konami_helper.h"
 
 class dbz_state : public driver_device
 {
@@ -16,9 +24,11 @@ public:
 		m_audiocpu(*this, "audiocpu"),
 		m_k053246(*this, "k053246"),
 		m_k053251(*this, "k053251"),
+		m_k053252(*this, "k053252"),
 		m_k056832(*this, "k056832"),
 		m_k053936_1(*this, "k053936_1"),
-		m_k053936_2(*this, "k053936_2") { }
+		m_k053936_2(*this, "k053936_2"),
+		m_gfxdecode(*this, "gfxdecode") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_bg1_videoram;
@@ -40,9 +50,12 @@ public:
 	required_device<cpu_device> m_audiocpu;
 	required_device<k053247_device> m_k053246;
 	required_device<k053251_device> m_k053251;
+	required_device<k053252_device> m_k053252;
 	required_device<k056832_device> m_k056832;
 	required_device<k053936_device> m_k053936_1;
 	required_device<k053936_device> m_k053936_2;
+	required_device<gfxdecode_device> m_gfxdecode;
+
 	DECLARE_READ16_MEMBER(dbzcontrol_r);
 	DECLARE_WRITE16_MEMBER(dbzcontrol_w);
 	DECLARE_WRITE16_MEMBER(dbz_sound_command_w);
@@ -60,8 +73,6 @@ public:
 	virtual void video_start();
 	UINT32 screen_update_dbz(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	TIMER_DEVICE_CALLBACK_MEMBER(dbz_scanline);
+	K056832_CB_MEMBER(tile_callback);
+	K053246_CB_MEMBER(sprite_callback);
 };
-
-/*----------- defined in video/dbz.c -----------*/
-extern void dbz_sprite_callback(running_machine &machine, int *code, int *color, int *priority_mask);
-extern void dbz_tile_callback(running_machine &machine, int layer, int *code, int *color, int *flags);

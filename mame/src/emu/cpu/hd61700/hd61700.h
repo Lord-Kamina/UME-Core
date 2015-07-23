@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /**********************************************************************
 
     Hitachi HD61700
@@ -13,43 +15,38 @@
 //  INTERFACE CONFIGURATION MACROS
 //**************************************************************************
 
-#define MCFG_HD61700_CONFIG(_config) \
-	hd61700_cpu_device::static_set_config(*device, _config);
+#define MCFG_HD61700_LCD_CTRL_CB(_devcb) \
+	devcb = &hd61700_cpu_device::set_lcd_ctrl_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_HD61700_LCD_WRITE_CB(_devcb) \
+	devcb = &hd61700_cpu_device::set_lcd_write_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_HD61700_LCD_READ_CB(_devcb) \
+	devcb = &hd61700_cpu_device::set_lcd_read_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_HD61700_KB_WRITE_CB(_devcb) \
+	devcb = &hd61700_cpu_device::set_kb_write_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_HD61700_KB_READ_CB(_devcb) \
+	devcb = &hd61700_cpu_device::set_kb_read_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_HD61700_PORT_WRITE_CB(_devcb) \
+	devcb = &hd61700_cpu_device::set_port_write_callback(*device, DEVCB_##_devcb);
+
+#define MCFG_HD61700_PORT_READ_CB(_devcb) \
+	devcb = &hd61700_cpu_device::set_port_read_callback(*device, DEVCB_##_devcb);
+
+
 //**************************************************************************
 //  DEFINITIONS
 //**************************************************************************
-
-// class definition
-class hd61700_cpu_device;
-
-// cpu port callbacks types
-typedef void   (*hd61700_lcd_control_func)(hd61700_cpu_device &device, UINT8 data);
-typedef UINT8  (*hd61700_lcd_data_r_func)(hd61700_cpu_device &device);
-typedef void   (*hd61700_lcd_data_w_func)(hd61700_cpu_device &device, UINT8 data);
-typedef UINT16 (*hd61700_kb_r_func)(hd61700_cpu_device &device);
-typedef void   (*hd61700_kb_w_func)(hd61700_cpu_device &device, UINT8 matrix);
-typedef UINT8  (*hd61700_port_r_func)(hd61700_cpu_device &device);
-typedef void   (*hd61700_port_w_func)(hd61700_cpu_device &device, UINT8 data);
-
-// device config
-struct hd61700_config
-{
-	hd61700_lcd_control_func    m_lcd_control;      //lcd control
-	hd61700_lcd_data_r_func     m_lcd_data_r;       //lcd data read
-	hd61700_lcd_data_w_func     m_lcd_data_w;       //lcd data write
-	hd61700_kb_r_func           m_kb_r;             //keyboard matrix read
-	hd61700_kb_w_func           m_kb_w;             //keyboard matrix write
-	hd61700_port_r_func         m_port_r;           //8 bit port read
-	hd61700_port_w_func         m_port_w;           //8 bit port write
-};
-
 
 // registers
 enum
 {
 	HD61700_PC=1, HD61700_F, HD61700_SX, HD61700_SY, HD61700_SZ, HD61700_PE, HD61700_PD,
 	HD61700_IB,  HD61700_UA, HD61700_IA, HD61700_IE, HD61700_TM, HD61700_IX,
-	HD61700_IY,  HD61700_IZ, HD61700_US, HD61700_SS, HD61700_KY, HD61700_MAINREG,
+	HD61700_IY,  HD61700_IZ, HD61700_US, HD61700_SS, HD61700_KY, HD61700_MAINREG
 };
 
 // input lines
@@ -66,14 +63,19 @@ enum
 
 // ======================> hd61700_cpu_device
 
-class hd61700_cpu_device : public cpu_device,
-							public hd61700_config
+class hd61700_cpu_device : public cpu_device
 {
 public:
 	// construction/destruction
 	hd61700_cpu_device(const machine_config &mconfig, const char *_tag, device_t *_owner, UINT32 _clock);
 
-	static void static_set_config(device_t &device, const hd61700_config &config);
+	template<class _Object> static devcb_base &set_lcd_ctrl_callback(device_t &device, _Object object) { return downcast<hd61700_cpu_device &>(device).m_lcd_ctrl_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_lcd_write_callback(device_t &device, _Object object) { return downcast<hd61700_cpu_device &>(device).m_lcd_write_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_lcd_read_callback(device_t &device, _Object object) { return downcast<hd61700_cpu_device &>(device).m_lcd_read_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_kb_write_callback(device_t &device, _Object object) { return downcast<hd61700_cpu_device &>(device).m_kb_write_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_kb_read_callback(device_t &device, _Object object) { return downcast<hd61700_cpu_device &>(device).m_kb_read_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_port_write_callback(device_t &device, _Object object) { return downcast<hd61700_cpu_device &>(device).m_port_write_cb.set_callback(object); }
+	template<class _Object> static devcb_base &set_port_read_callback(device_t &device, _Object object) { return downcast<hd61700_cpu_device &>(device).m_port_read_cb.set_callback(object); }
 
 protected:
 	// device-level overrides
@@ -90,7 +92,7 @@ protected:
 
 	// device_state_interface overrides
 	virtual void state_import(const device_state_entry &entry);
-	void state_string_export(const device_state_entry &entry, astring &string);
+	void state_string_export(const device_state_entry &entry, std::string &str);
 
 	// device_memory_interface overrides
 	virtual const address_space_config *memory_space_config(address_spacenum spacenum = AS_0) const { return (spacenum == AS_PROGRAM) ? &m_program_config : NULL; }
@@ -145,6 +147,14 @@ protected:
 	int            m_icount;
 
 	address_space *m_program;
+
+	devcb_write8    m_lcd_ctrl_cb;      //lcd control
+	devcb_read8     m_lcd_read_cb;      //lcd data read
+	devcb_write8    m_lcd_write_cb;     //lcd data write
+	devcb_read16    m_kb_read_cb;       //keyboard matrix read
+	devcb_write8    m_kb_write_cb;      //keyboard matrix write
+	devcb_read8     m_port_read_cb;     //8 bit port read
+	devcb_write8    m_port_write_cb;    //8 bit port write
 
 	// flag definitions
 	static const int FLAG_Z     = 0x80;

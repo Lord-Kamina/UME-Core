@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese, Pierpaolo Prazzoli, Bryan McPhail
 /****************************************************************************************
 
  Competition Golf Final Round
@@ -9,12 +11,12 @@
 #include "includes/compgolf.h"
 
 
-void compgolf_state::palette_init()
+PALETTE_INIT_MEMBER(compgolf_state, compgolf)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	int i;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int bit0,bit1,bit2,r,g,b;
 		bit0 = (color_prom[i] >> 0) & 0x01;
@@ -30,7 +32,7 @@ void compgolf_state::palette_init()
 		bit2 = (color_prom[i] >> 7) & 0x01;
 		b = 0x21 * bit0 + 0x47 * bit1 + 0x97 * bit2;
 
-		palette_set_color(machine(), i, MAKE_RGB(r,g,b));
+		palette.set_pen_color(i, rgb_t(r,g,b));
 	}
 }
 
@@ -69,8 +71,8 @@ TILE_GET_INFO_MEMBER(compgolf_state::get_back_info)
 
 void compgolf_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(compgolf_state::get_back_info),this), tilemap_mapper_delegate(FUNC(compgolf_state::back_scan),this), 16, 16, 32, 32);
-	m_text_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(compgolf_state::get_text_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(compgolf_state::get_back_info),this), tilemap_mapper_delegate(FUNC(compgolf_state::back_scan),this), 16, 16, 32, 32);
+	m_text_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(compgolf_state::get_text_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 
 	m_text_tilemap->set_transparent_pen(0);
 }
@@ -99,14 +101,14 @@ void compgolf_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 		fx = m_spriteram[offs] & 4;
 		fy = 0; /* ? */
 
-		drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				sprite,
 				color,fx,fy,x,y,0);
 
 		/* Double Height */
 		if(m_spriteram[offs] & 0x10)
 		{
-			drawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+			m_gfxdecode->gfx(0)->transpen(bitmap,cliprect,
 				sprite + 1,
 				color, fx, fy, x, y + 16, 0);
 		}
@@ -121,8 +123,8 @@ UINT32 compgolf_state::screen_update_compgolf(screen_device &screen, bitmap_ind1
 	m_bg_tilemap->set_scrollx(0, scrollx);
 	m_bg_tilemap->set_scrolly(0, scrolly);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
-	m_text_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+	m_text_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }

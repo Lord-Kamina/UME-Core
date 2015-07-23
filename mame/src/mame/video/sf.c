@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #include "emu.h"
 #include "includes/sf.h"
 
@@ -13,8 +15,7 @@ TILE_GET_INFO_MEMBER(sf_state::get_bg_tile_info)
 	int attr = base[0x10000];
 	int color = base[0];
 	int code = (base[0x10000 + 1] << 8) | base[1];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			code,
 			color,
 			TILE_FLIPYX(attr & 3));
@@ -26,8 +27,7 @@ TILE_GET_INFO_MEMBER(sf_state::get_fg_tile_info)
 	int attr = base[0x10000];
 	int color = base[0];
 	int code = (base[0x10000 + 1] << 8) | base[1];
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code,
 			color,
 			TILE_FLIPYX(attr & 3));
@@ -36,8 +36,7 @@ TILE_GET_INFO_MEMBER(sf_state::get_fg_tile_info)
 TILE_GET_INFO_MEMBER(sf_state::get_tx_tile_info)
 {
 	int code = m_videoram[tile_index];
-	SET_TILE_INFO_MEMBER(
-			3,
+	SET_TILE_INFO_MEMBER(3,
 			code & 0x3ff,
 			code>>12,
 			TILE_FLIPYX((code & 0xc00)>>10));
@@ -53,9 +52,9 @@ TILE_GET_INFO_MEMBER(sf_state::get_tx_tile_info)
 
 void sf_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(sf_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 2048, 16);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(sf_state::get_fg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 2048, 16);
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(sf_state::get_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(sf_state::get_bg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 2048, 16);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(sf_state::get_fg_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 2048, 16);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(sf_state::get_tx_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 64, 32);
 
 	m_fg_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_transparent_pen(3);
@@ -69,25 +68,25 @@ void sf_state::video_start()
 
 ***************************************************************************/
 
-WRITE16_MEMBER(sf_state::sf_videoram_w)
+WRITE16_MEMBER(sf_state::videoram_w)
 {
 	COMBINE_DATA(&m_videoram[offset]);
 	m_tx_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(sf_state::sf_bg_scroll_w)
+WRITE16_MEMBER(sf_state::bg_scroll_w)
 {
 	COMBINE_DATA(&m_bgscroll);
 	m_bg_tilemap->set_scrollx(0, m_bgscroll);
 }
 
-WRITE16_MEMBER(sf_state::sf_fg_scroll_w)
+WRITE16_MEMBER(sf_state::fg_scroll_w)
 {
 	COMBINE_DATA(&m_fgscroll);
 	m_fg_tilemap->set_scrollx(0, m_fgscroll);
 }
 
-WRITE16_MEMBER(sf_state::sf_gfxctrl_w)
+WRITE16_MEMBER(sf_state::gfxctrl_w)
 {
 	/* b0 = reset, or maybe "set anyway" */
 	/* b1 = pulsed when control6.b6==0 until it's 1 */
@@ -100,7 +99,7 @@ WRITE16_MEMBER(sf_state::sf_gfxctrl_w)
 
 	if (ACCESSING_BITS_0_7)
 	{
-		m_sf_active = data & 0xff;
+		m_active = data & 0xff;
 		flip_screen_set(data & 0x04);
 		m_tx_tilemap->enable(data & 0x08);
 		m_bg_tilemap->enable(data & 0x20);
@@ -116,7 +115,7 @@ WRITE16_MEMBER(sf_state::sf_gfxctrl_w)
 
 ***************************************************************************/
 
-inline int sf_state::sf_invert( int nb )
+inline int sf_state::invert( int nb )
 {
 	static const int delta[4] = {0x00, 0x18, 0x18, 0x00};
 	return nb ^ delta[(nb >> 3) & 3];
@@ -164,27 +163,27 @@ void sf_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect )
 				t = c2; c2 = c4; c4 = t;
 			}
 
-			drawgfx_transpen(bitmap,
-					cliprect, machine().gfx[2],
-					sf_invert(c1),
+			m_gfxdecode->gfx(2)->transpen(bitmap,
+					cliprect,
+					invert(c1),
 					color,
 					flipx,flipy,
 					sx,sy, 15);
-			drawgfx_transpen(bitmap,
-					cliprect, machine().gfx[2],
-					sf_invert(c2),
+			m_gfxdecode->gfx(2)->transpen(bitmap,
+					cliprect,
+					invert(c2),
 					color,
 					flipx,flipy,
 					sx+16,sy, 15);
-			drawgfx_transpen(bitmap,
-					cliprect, machine().gfx[2],
-					sf_invert(c3),
+			m_gfxdecode->gfx(2)->transpen(bitmap,
+					cliprect,
+					invert(c3),
 					color,
 					flipx,flipy,
 					sx,sy+16, 15);
-			drawgfx_transpen(bitmap,
-					cliprect, machine().gfx[2],
-					sf_invert(c4),
+			m_gfxdecode->gfx(2)->transpen(bitmap,
+					cliprect,
+					invert(c4),
 					color,
 					flipx,flipy,
 					sx+16,sy+16, 15);
@@ -199,9 +198,9 @@ void sf_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect )
 				flipy = !flipy;
 			}
 
-			drawgfx_transpen(bitmap,
-					cliprect, machine().gfx[2],
-					sf_invert(c),
+			m_gfxdecode->gfx(2)->transpen(bitmap,
+					cliprect,
+					invert(c),
 					color,
 					flipx,flipy,
 					sx,sy, 15);
@@ -210,18 +209,18 @@ void sf_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect )
 }
 
 
-UINT32 sf_state::screen_update_sf(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 sf_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	if (m_sf_active & 0x20)
-		m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	if (m_active & 0x20)
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	else
 		bitmap.fill(0, cliprect);
 
-	m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
-	if (m_sf_active & 0x80)
+	if (m_active & 0x80)
 		draw_sprites(bitmap, cliprect);
 
-	m_tx_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }

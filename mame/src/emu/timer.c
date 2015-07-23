@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     timer.c
 
     Timer devices.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
@@ -62,7 +33,7 @@ const device_type TIMER = &device_creator<timer_device>;
 //-------------------------------------------------
 
 timer_device::timer_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, TIMER, "Timer", tag, owner, clock),
+	: device_t(mconfig, TIMER, "Timer", tag, owner, clock, "timer", __FILE__),
 		m_type(TIMER_TYPE_GENERIC),
 		m_callback(timer_device_expired_delegate()),
 		m_ptr(NULL),
@@ -97,7 +68,7 @@ void timer_device::static_configure_generic(device_t &device, timer_device_expir
 //  helper to set up a periodic timer
 //-------------------------------------------------
 
-void timer_device::static_configure_periodic(device_t &device, timer_device_expired_delegate callback, attotime period)
+void timer_device::static_configure_periodic(device_t &device, timer_device_expired_delegate callback, const attotime &period)
 {
 	timer_device &timer = downcast<timer_device &>(device);
 	timer.m_type = TIMER_TYPE_PERIODIC;
@@ -139,7 +110,7 @@ void timer_device::static_set_callback(device_t &device, timer_device_expired_de
 //  to set the starting delay
 //-------------------------------------------------
 
-void timer_device::static_set_start_delay(device_t &device, attotime delay)
+void timer_device::static_set_start_delay(device_t &device, const attotime &delay)
 {
 	timer_device &timer = downcast<timer_device &>(device);
 	timer.m_start_delay = delay;
@@ -182,31 +153,31 @@ void timer_device::device_validity_check(validity_checker &valid) const
 	{
 		case TIMER_TYPE_GENERIC:
 			if (m_screen_tag != NULL || m_first_vpos != 0 || m_start_delay != attotime::zero)
-				mame_printf_warning("Generic timer specified parameters for a scanline timer\n");
+				osd_printf_warning("Generic timer specified parameters for a scanline timer\n");
 			if (m_period != attotime::zero || m_start_delay != attotime::zero)
-				mame_printf_warning("Generic timer specified parameters for a periodic timer\n");
+				osd_printf_warning("Generic timer specified parameters for a periodic timer\n");
 			break;
 
 		case TIMER_TYPE_PERIODIC:
 			if (m_screen_tag != NULL || m_first_vpos != 0)
-				mame_printf_warning("Periodic timer specified parameters for a scanline timer\n");
+				osd_printf_warning("Periodic timer specified parameters for a scanline timer\n");
 			if (m_period <= attotime::zero)
-				mame_printf_error("Periodic timer specified invalid period\n");
+				osd_printf_error("Periodic timer specified invalid period\n");
 			break;
 
 		case TIMER_TYPE_SCANLINE:
 			if (m_period != attotime::zero || m_start_delay != attotime::zero)
-				mame_printf_warning("Scanline timer specified parameters for a periodic timer\n");
+				osd_printf_warning("Scanline timer specified parameters for a periodic timer\n");
 			if (m_param != 0)
-				mame_printf_warning("Scanline timer specified parameter which is ignored\n");
+				osd_printf_warning("Scanline timer specified parameter which is ignored\n");
 //          if (m_first_vpos < 0)
-//              mame_printf_error("Scanline timer specified invalid initial position\n");
+//              osd_printf_error("Scanline timer specified invalid initial position\n");
 //          if (m_increment < 0)
-//              mame_printf_error("Scanline timer specified invalid increment\n");
+//              osd_printf_error("Scanline timer specified invalid increment\n");
 			break;
 
 		default:
-			mame_printf_error("Invalid type specified\n");
+			osd_printf_error("Invalid type specified\n");
 			break;
 	}
 }
@@ -266,7 +237,7 @@ void timer_device::device_reset()
 			if (m_screen == NULL)
 				fatalerror("timer '%s': unable to find screen '%s'\n", tag(), m_screen_tag);
 
-			// set the timer to to fire immediately
+			// set the timer to fire immediately
 			m_first_time = true;
 			m_timer->adjust(attotime::zero, m_param);
 			break;

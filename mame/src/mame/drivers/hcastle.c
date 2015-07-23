@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /***************************************************************************
 
     Haunted Castle
@@ -10,9 +12,7 @@
 #include "cpu/m6809/konami.h"
 #include "cpu/z80/z80.h"
 #include "sound/3812intf.h"
-#include "sound/k007232.h"
 #include "sound/k051649.h"
-#include "video/konicdev.h"
 #include "includes/konamipt.h"
 #include "includes/hcastle.h"
 
@@ -51,7 +51,7 @@ static ADDRESS_MAP_START( hcastle_map, AS_PROGRAM, 8, hcastle_state )
 	AM_RANGE(0x0414, 0x0414) AM_READ_PORT("DSW1")
 	AM_RANGE(0x0415, 0x0415) AM_READ_PORT("DSW2")
 	AM_RANGE(0x0418, 0x0418) AM_READWRITE(hcastle_gfxbank_r, hcastle_gfxbank_w)
-	AM_RANGE(0x0600, 0x06ff) AM_RAM AM_SHARE("paletteram")
+	AM_RANGE(0x0600, 0x06ff) AM_RAM_DEVWRITE("palette", palette_device, write_indirect) AM_SHARE("palette")
 	AM_RANGE(0x0700, 0x1fff) AM_RAM
 	AM_RANGE(0x2000, 0x2fff) AM_RAM_WRITE(hcastle_pf1_video_w) AM_SHARE("pf1_videoram")
 	AM_RANGE(0x3000, 0x3fff) AM_RAM AM_SHARE("spriteram")
@@ -67,7 +67,7 @@ WRITE8_MEMBER(hcastle_state::sound_bank_w)
 {
 	int bank_A=(data&0x3);
 	int bank_B=((data>>2)&0x3);
-	k007232_set_bank(m_k007232, bank_A, bank_B );
+	m_k007232->set_bank(bank_A, bank_B );
 }
 
 static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, hcastle_state )
@@ -79,7 +79,7 @@ static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, hcastle_state )
 	AM_RANGE(0x988f, 0x988f) AM_DEVWRITE("k051649", k051649_device, k051649_keyonoff_w)
 	AM_RANGE(0x98e0, 0x98ff) AM_DEVREADWRITE("k051649", k051649_device, k051649_test_r, k051649_test_w)
 	AM_RANGE(0xa000, 0xa001) AM_DEVREADWRITE("ymsnd", ym3812_device, read, write)
-	AM_RANGE(0xb000, 0xb00d) AM_DEVREADWRITE_LEGACY("k007232", k007232_r, k007232_w)
+	AM_RANGE(0xb000, 0xb00d) AM_DEVREADWRITE("k007232", k007232_device, read, write)
 	AM_RANGE(0xc000, 0xc000) AM_WRITE(sound_bank_w) /* 7232 bankswitch */
 	AM_RANGE(0xd000, 0xd000) AM_READ(soundlatch_byte_r)
 ADDRESS_MAP_END
@@ -154,22 +154,11 @@ GFXDECODE_END
 
 /*****************************************************************************/
 
-WRITE_LINE_MEMBER(hcastle_state::irqhandler)
-{
-//  hcastle_state *state = device->machine().driver_data<hcastle_state>();
-//  state->m_audiocpu->set_input_line(linestate);
-}
-
 WRITE8_MEMBER(hcastle_state::volume_callback)
 {
-	k007232_set_volume(m_k007232, 0, (data >> 4) * 0x11, 0);
-	k007232_set_volume(m_k007232, 1, 0, (data & 0x0f) * 0x11);
+	m_k007232->set_volume(0, (data >> 4) * 0x11, 0);
+	m_k007232->set_volume(1, 0, (data & 0x0f) * 0x11);
 }
-
-static const k007232_interface k007232_config =
-{
-	DEVCB_DRIVER_MEMBER(hcastle_state,volume_callback) /* external port callback */
-};
 
 void hcastle_state::machine_start()
 {
@@ -214,24 +203,30 @@ static MACHINE_CONFIG_START( hcastle, hcastle_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(hcastle_state, screen_update_hcastle)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(hcastle)
-	MCFG_PALETTE_LENGTH(2*8*16*16)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", hcastle)
+	MCFG_PALETTE_ADD("palette", 2*8*16*16)
+	MCFG_PALETTE_INDIRECT_ENTRIES(128)
+	MCFG_PALETTE_FORMAT(xBBBBBGGGGGRRRRR)
+	MCFG_PALETTE_INIT_OWNER(hcastle_state, hcastle)
 
 
 	MCFG_K007121_ADD("k007121_1")
+	MCFG_K007121_PALETTE("palette")
 	MCFG_K007121_ADD("k007121_2")
+	MCFG_K007121_PALETTE("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("k007232", K007232, 3579545)
-	MCFG_SOUND_CONFIG(k007232_config)
+	MCFG_K007232_PORT_WRITE_HANDLER(WRITE8(hcastle_state, volume_callback))
 	MCFG_SOUND_ROUTE(0, "mono", 0.44)
 	MCFG_SOUND_ROUTE(1, "mono", 0.50)
 
 	MCFG_SOUND_ADD("ymsnd", YM3812, 3579545)
-	MCFG_YM3812_IRQ_HANDLER(WRITELINE(hcastle_state, irqhandler))
+	MCFG_YM3812_IRQ_HANDLER(INPUTLINE("audiocpu", INPUT_LINE_NMI)) /* from schematic; NMI handler is just a retn */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.70)
 
 	MCFG_K051649_ADD("k051649", 3579545/2)

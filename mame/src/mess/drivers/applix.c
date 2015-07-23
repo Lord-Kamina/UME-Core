@@ -1,10 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Robbbert
 /***************************************************************************
 
-    Skeleton driver for Applix 1616 computer
+    Applix 1616 computer
 
     See for docs: http;//www.microbee-mspp.org.au
-    You need to sign up and make an introductory thread.
-    Then you will be granted permission to visit the repository.
 
     First revealed to the world in December 1986 issue of Electronics Today
     International (ETI) an Australian electronics magazine which is now defunct.
@@ -30,6 +30,7 @@
     - Audio: it could be better
     - DAC output is used to compare against analog inputs; core doesn't permit
       audio outputs to be used for non-speaker purposes.
+    - Bios 5 crashes mess after scrolling about half a screen
 
 ****************************************************************************/
 
@@ -44,7 +45,7 @@
 #include "machine/wd_fdc.h"
 #include "formats/applix_dsk.h"
 #include "imagedev/cassette.h"
-#include "machine/ctronics.h"
+#include "bus/centronics/ctronics.h"
 
 
 
@@ -53,13 +54,15 @@ class applix_state : public driver_device
 public:
 	applix_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
+		m_base(*this, "base"),
 		m_maincpu(*this, "maincpu"),
 		m_crtc(*this, "crtc"),
 		m_via(*this, "via6522"),
 		m_centronics(*this, "centronics"),
-		m_fdc(*this, "wd1772"),
-		m_floppy0(*this, "wd1772:0"),
-		m_floppy1(*this, "wd1772:1"),
+		m_cent_data_out(*this, "cent_data_out"),
+		m_fdc(*this, "fdc"),
+		m_floppy0(*this, "fdc:0"),
+		m_floppy1(*this, "fdc:1"),
 		m_dacl(*this, "dacl"),
 		m_dacr(*this, "dacr"),
 		m_cass(*this, "cassette"),
@@ -87,17 +90,14 @@ public:
 		m_io_k3a0(*this, "K3a_0"),
 		m_io_k3b0(*this, "K3b_0"),
 		m_io_k0b(*this, "K0b"),
-		m_base(*this, "base"),
-		m_expansion(*this, "expansion"){ }
+		m_expansion(*this, "expansion"),
+		m_palette(*this, "palette"){ }
 
 	DECLARE_READ16_MEMBER(applix_inputs_r);
-	DECLARE_WRITE16_MEMBER(applix_index_w);
-	DECLARE_WRITE16_MEMBER(applix_register_w);
 	DECLARE_WRITE16_MEMBER(palette_w);
 	DECLARE_WRITE16_MEMBER(analog_latch_w);
 	DECLARE_WRITE16_MEMBER(dac_latch_w);
 	DECLARE_WRITE16_MEMBER(video_latch_w);
-	DECLARE_READ8_MEMBER(applix_pa_r);
 	DECLARE_READ8_MEMBER(applix_pb_r);
 	DECLARE_WRITE8_MEMBER(applix_pa_w);
 	DECLARE_WRITE8_MEMBER(applix_pb_w);
@@ -130,16 +130,39 @@ public:
 	DECLARE_WRITE8_MEMBER( p3_write );
 	TIMER_DEVICE_CALLBACK_MEMBER(cass_timer);
 	DECLARE_DRIVER_INIT(applix);
+	MC6845_UPDATE_ROW(crtc_update_row);
 	UINT8 m_video_latch;
 	UINT8 m_pa;
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(applix);
 	UINT8 m_palette_latch[4];
+	required_shared_ptr<UINT16> m_base;
+private:
+	UINT8 m_pb;
+	UINT8 m_analog_latch;
+	UINT8 m_dac_latch;
+	UINT8 m_port08;
+	UINT8 m_data_to_fdc;
+	UINT8 m_data_from_fdc;
+	bool m_data;
+	bool m_data_or_cmd;
+	bool m_buffer_empty;
+	bool m_fdc_cmd;
+	UINT8 m_clock_count;
+	bool m_cp;
+	UINT8   m_p1;
+	UINT8   m_p1_data;
+	UINT8   m_p2;
+	UINT8   m_p3;
+	UINT16  m_last_write_addr;
+	UINT8 m_cass_data[4];
+	int m_centronics_busy;
 	required_device<cpu_device> m_maincpu;
 	required_device<mc6845_device> m_crtc;
 	required_device<via6522_device> m_via;
 	required_device<centronics_device> m_centronics;
+	required_device<output_latch_device> m_cent_data_out;
 	required_device<wd1772_t> m_fdc;
 	required_device<floppy_connector> m_floppy0;
 	required_device<floppy_connector> m_floppy1;
@@ -170,29 +193,9 @@ public:
 	required_ioport m_io_k3a0;
 	required_ioport m_io_k3b0;
 	required_ioport m_io_k0b;
-	required_shared_ptr<UINT16> m_base;
 	required_shared_ptr<UINT16> m_expansion;
-private:
-	void fdc_intrq_w(bool state);
-	void fdc_drq_w(bool state);
-	UINT8 m_pb;
-	UINT8 m_analog_latch;
-	UINT8 m_dac_latch;
-	UINT8 m_port08;
-	UINT8 m_data_to_fdc;
-	UINT8 m_data_from_fdc;
-	bool m_data;
-	bool m_data_or_cmd;
-	bool m_buffer_empty;
-	bool m_fdc_cmd;
-	UINT8 m_clock_count;
-	bool m_cp;
-	UINT8   m_p1;
-	UINT8   m_p1_data;
-	UINT8   m_p2;
-	UINT8   m_p3;
-	UINT16  m_last_write_addr;
-	UINT8 m_cass_data[4];
+public:
+	required_device<palette_device> m_palette;
 };
 
 /*
@@ -230,7 +233,9 @@ WRITE16_MEMBER( applix_state::palette_w )
 {
 	offset >>= 4;
 	if (ACCESSING_BITS_0_7)
-		m_centronics->write(space, 0, data);
+	{
+		m_cent_data_out->write(space, 0, data);
+	}
 	else
 		m_palette_latch[offset] = (data >> 8) & 15;
 }
@@ -239,18 +244,6 @@ WRITE16_MEMBER( applix_state::video_latch_w )
 {
 	if (ACCESSING_BITS_0_7)
 		m_video_latch = data;
-}
-
-WRITE16_MEMBER( applix_state::applix_index_w )
-{
-	data >>= 8;
-	m_crtc->address_w( space, offset, data );
-}
-
-WRITE16_MEMBER( applix_state::applix_register_w )
-{
-	data >>= 8;
-	m_crtc->register_w( space, offset, data );
 }
 
 /*
@@ -262,11 +255,6 @@ d4-7 = SW2 dipswitch block
 READ16_MEMBER( applix_state::applix_inputs_r )
 {
 	return m_io_dsw->read() | m_cass_data[2];
-}
-
-READ8_MEMBER( applix_state::applix_pa_r )
-{
-	return (m_pa & 0xfe) | m_centronics->busy_r();
 }
 
 READ8_MEMBER( applix_state::applix_pb_r )
@@ -306,7 +294,7 @@ WRITE8_MEMBER( applix_state::applix_pa_w )
 	if (!BIT(m_pa, 2) && BIT(data, 2))
 		m_maincpu->set_input_line(M68K_IRQ_4, CLEAR_LINE);
 
-	m_centronics->strobe_w(BIT(data, 1));
+	m_centronics->write_strobe(BIT(data, 1));
 
 	m_pa = data;
 }
@@ -459,8 +447,8 @@ static ADDRESS_MAP_START(applix_mem, AS_PROGRAM, 16, applix_state)
 	//AM_RANGE(0x700000, 0x700007) z80-scc (ch b control, ch b data, ch a control, ch a data) on even addresses
 	AM_RANGE(0x700080, 0x7000ff) AM_READ(applix_inputs_r)
 	AM_RANGE(0x700100, 0x70011f) AM_MIRROR(0x60) AM_DEVREADWRITE8("via6522", via6522_device, read, write, 0xff00)
-	AM_RANGE(0x700180, 0x700181) AM_MIRROR(0x7c) AM_WRITE(applix_index_w)
-	AM_RANGE(0x700182, 0x700183) AM_MIRROR(0x7c) AM_WRITE(applix_register_w)
+	AM_RANGE(0x700180, 0x700181) AM_MIRROR(0x7c) AM_DEVREADWRITE8("crtc", mc6845_device, status_r, address_w, 0xff00)
+	AM_RANGE(0x700182, 0x700183) AM_MIRROR(0x7c) AM_DEVREADWRITE8("crtc", mc6845_device, register_r, register_w, 0xff00)
 	AM_RANGE(0xffffc0, 0xffffc1) AM_READWRITE(fdc_data_r,fdc_data_w)
 	//AM_RANGE(0xffffc2, 0xffffc3) AM_READWRITE(fdc_int_r,fdc_int_w) // optional
 	AM_RANGE(0xffffc8, 0xffffcd) AM_READ(fdc_stat_r)
@@ -484,7 +472,7 @@ static ADDRESS_MAP_START( subcpu_io, AS_IO, 8, applix_state )
 	AM_RANGE(0x10, 0x17) AM_READWRITE(port10_r,port10_w) //IRQ
 	AM_RANGE(0x18, 0x1f) AM_READWRITE(port18_r,port18_w) //data&command
 	AM_RANGE(0x20, 0x27) AM_MIRROR(0x18) AM_READWRITE(port20_r,port20_w) //SCSI NCR5380
-	AM_RANGE(0x40, 0x43) AM_MIRROR(0x1c) AM_DEVREADWRITE("wd1772", wd1772_t, read, write) //FDC
+	AM_RANGE(0x40, 0x43) AM_MIRROR(0x1c) AM_DEVREADWRITE("fdc", wd1772_t, read, write) //FDC
 	AM_RANGE(0x60, 0x63) AM_MIRROR(0x1c) AM_READWRITE(port60_r,port60_w) //anotherZ80SCC
 ADDRESS_MAP_END
 
@@ -717,7 +705,7 @@ static INPUT_PORTS_START( applix )
 	PORT_DIPNAME( 0x40, 0x00, "Switch 2") PORT_DIPLOCATION("SW2:3")
 	PORT_DIPSETTING(    0x40, DEF_STR(Off))
 	PORT_DIPSETTING(    0x00, DEF_STR(On))
-	PORT_DIPNAME( 0x80, 0x00, "Switch 3") PORT_DIPLOCATION("SW2:4")
+	PORT_DIPNAME( 0x80, 0x80, "Switch 3") PORT_DIPLOCATION("SW2:4")
 	PORT_DIPSETTING(    0x80, DEF_STR(Off))
 	PORT_DIPSETTING(    0x00, DEF_STR(On))
 
@@ -748,7 +736,7 @@ static SLOT_INTERFACE_START( applix_floppies )
 SLOT_INTERFACE_END
 
 
-void applix_state::palette_init()
+PALETTE_INIT_MEMBER(applix_state, applix)
 { // shades need to be verified - the names on the right are from the manual
 	const UINT8 colors[16*3] = {
 	0x00, 0x00, 0x00,   //  0 Black
@@ -773,7 +761,7 @@ void applix_state::palette_init()
 	for (i = 0; i < 48; color_count++)
 	{
 		r = colors[i++]; g = colors[i++]; b = colors[i++];
-		palette_set_color(machine(), color_count, MAKE_RGB(r, g, b));
+		palette.set_pen_color(color_count, rgb_t(r, g, b));
 	}
 }
 
@@ -782,35 +770,33 @@ void applix_state::video_start()
 {
 }
 
-static MC6845_UPDATE_ROW( applix_update_row )
+MC6845_UPDATE_ROW( applix_state::crtc_update_row )
 {
 // The display is bitmapped. 2 modes are supported here, 320x200x16 and 640x200x4.
 // Need to display a border colour.
 // There is a monochrome mode, but no info found as yet.
-	applix_state *state = device->machine().driver_data<applix_state>();
-	const rgb_t *palette = palette_entry_list_raw(bitmap.palette());
+	const rgb_t *palette = m_palette->palette()->entry_list_raw();
 	UINT8 i;
 	UINT16 chr,x;
-	UINT32 mem, vidbase = (state->m_video_latch & 15) << 14, *p = &bitmap.pix32(y);
+	UINT32 mem, vidbase = (m_video_latch & 15) << 14, *p = &bitmap.pix32(y);
 
 	for (x = 0; x < x_count; x++)
 	{
-		if (BIT(state->m_pa, 3))
+		mem = vidbase + ma + x + (ra<<12);
+		chr = m_base[mem];
+
+		if (BIT(m_pa, 3))
 		// 640 x 200 x 4of16 mode
 		{
-			mem = vidbase + ma + x + (ra<<12);
-			chr = state->m_base[mem];
 			for (i = 0; i < 8; i++)
 			{
-				*p++ = palette[state->m_palette_latch[chr>>14]];
+				*p++ = palette[m_palette_latch[chr>>14]];
 				chr <<= 2;
 			}
 		}
 		else
 		// 320 x 200 x 16 mode
 		{
-			mem = vidbase + ma + x + (ra<<12);
-			chr = state->m_base[mem];
 			for (i = 0; i < 4; i++)
 			{
 				*p++ = palette[chr>>12];
@@ -821,42 +807,10 @@ static MC6845_UPDATE_ROW( applix_update_row )
 	}
 }
 
-static MC6845_INTERFACE( applix_crtc )
-{
-	"screen",           /* name of screen */
-	false, // should show a border
-	8,          /* number of dots per character */
-	NULL,
-	applix_update_row,      /* handler to display a scanline */
-	NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_DRIVER_LINE_MEMBER(applix_state, vsync_w),
-	NULL
-};
-
 WRITE_LINE_MEMBER( applix_state::vsync_w )
 {
 	m_via->write_ca2(state);
 }
-
-static const via6522_interface applix_via =
-{
-	DEVCB_DRIVER_MEMBER(applix_state, applix_pa_r), // in port A
-	DEVCB_DRIVER_MEMBER(applix_state, applix_pb_r), // in port B
-	DEVCB_NULL, // in CA1 cent ack
-	DEVCB_NULL, // in CB1 kbd clk
-	DEVCB_NULL, // in CA2 vsync
-	DEVCB_NULL, // in CB2 kdb data
-	DEVCB_DRIVER_MEMBER(applix_state, applix_pa_w),// out Port A
-	DEVCB_DRIVER_MEMBER(applix_state, applix_pb_w), // out port B
-	DEVCB_NULL, // out CA1
-	DEVCB_NULL, // out CB1
-	DEVCB_NULL, // out CA2
-	DEVCB_NULL, // out CB2
-	DEVCB_CPU_INPUT_LINE("maincpu", M68K_IRQ_2) //IRQ
-};
 
 TIMER_DEVICE_CALLBACK_MEMBER(applix_state::cass_timer)
 {
@@ -874,22 +828,6 @@ TIMER_DEVICE_CALLBACK_MEMBER(applix_state::cass_timer)
 			m_maincpu->set_input_line(M68K_IRQ_4, ASSERT_LINE);
 	}
 }
-
-static const cassette_interface applix_cassette_interface =
-{
-	cassette_default_formats,
-	NULL,
-	(cassette_state)(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_MUTED),
-	NULL,
-	NULL
-};
-
-static const centronics_interface applix_centronics_config =
-{
-	DEVCB_DEVICE_LINE_MEMBER("via6522", via6522_device, write_ca1), // ack
-	DEVCB_NULL,
-	DEVCB_NULL
-};
 
 static MACHINE_CONFIG_START( applix, applix_state )
 	/* basic machine hardware */
@@ -909,7 +847,8 @@ static MACHINE_CONFIG_START( applix, applix_state )
 	MCFG_SCREEN_SIZE(640, 200)
 	MCFG_SCREEN_VISIBLE_AREA(0, 640-1, 0, 200-1)
 	MCFG_SCREEN_UPDATE_DEVICE("crtc", mc6845_device, screen_update)
-	MCFG_PALETTE_LENGTH(16)
+	MCFG_PALETTE_ADD("palette", 16)
+	MCFG_PALETTE_INIT_OWNER(applix_state, applix)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -921,50 +860,72 @@ static MACHINE_CONFIG_START( applix, applix_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.50)
 
 	/* Devices */
-	MCFG_MC6845_ADD("crtc", MC6845, 1875000, applix_crtc) // 6545
-	MCFG_VIA6522_ADD("via6522", 0, applix_via)
-	MCFG_CENTRONICS_PRINTER_ADD("centronics", applix_centronics_config)
-	MCFG_CASSETTE_ADD("cassette", applix_cassette_interface)
-	MCFG_WD1772x_ADD("wd1772", XTAL_16MHz / 2) //connected to Z80H clock pin
-	MCFG_FLOPPY_DRIVE_ADD("wd1772:0", applix_floppies, "35dd", applix_state::floppy_formats)
-	MCFG_FLOPPY_DRIVE_ADD("wd1772:1", applix_floppies, "35dd", applix_state::floppy_formats)
+	MCFG_MC6845_ADD("crtc", MC6845, "screen", 1875000) // 6545
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
+	MCFG_MC6845_UPDATE_ROW_CB(applix_state, crtc_update_row)
+	MCFG_MC6845_OUT_VSYNC_CB(WRITELINE(applix_state, vsync_w))
+
+	MCFG_DEVICE_ADD("via6522", VIA6522, 0)
+	MCFG_VIA6522_READPB_HANDLER(READ8(applix_state, applix_pb_r))
+	// in CB1 kbd clk
+	// in CA2 vsync
+	// in CB2 kdb data
+	MCFG_VIA6522_WRITEPA_HANDLER(WRITE8(applix_state, applix_pa_w))
+	MCFG_VIA6522_WRITEPB_HANDLER(WRITE8(applix_state, applix_pb_w))
+	MCFG_VIA6522_IRQ_HANDLER(DEVWRITELINE("maincpu", m68000_device, write_irq2))
+
+	MCFG_CENTRONICS_ADD("centronics", centronics_devices, "printer")
+	MCFG_CENTRONICS_ACK_HANDLER(DEVWRITELINE("via6522", via6522_device, write_ca1))
+	MCFG_CENTRONICS_BUSY_HANDLER(DEVWRITELINE("via6522", via6522_device, write_pa0))
+
+	MCFG_CENTRONICS_OUTPUT_LATCH_ADD("cent_data_out", "centronics")
+
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_STOPPED | CASSETTE_MOTOR_ENABLED | CASSETTE_SPEAKER_MUTED)
+
+	MCFG_WD1772_ADD("fdc", XTAL_16MHz / 2) //connected to Z80H clock pin
+	MCFG_FLOPPY_DRIVE_ADD("fdc:0", applix_floppies, "35dd", applix_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD("fdc:1", applix_floppies, "35dd", applix_state::floppy_formats)
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("applix_c", applix_state, cass_timer, attotime::from_hz(100000))
 MACHINE_CONFIG_END
 
 /* ROM definition */
 ROM_START( applix )
-	ROM_REGION(0x20000, "maincpu", 0)
+	ROM_REGION16_BE(0x20000, "maincpu", 0)
 	ROM_SYSTEM_BIOS(0, "v4.5a", "V4.5a")
-	ROMX_LOAD( "1616oshv.045", 0x00000, 0x10000, CRC(9dfb3224) SHA1(5223833a357f90b147f25826c01713269fc1945f), ROM_SKIP(1) | ROM_BIOS(1) )
-	ROMX_LOAD( "1616oslv.045", 0x00001, 0x10000, CRC(951bd441) SHA1(e0a38c8d0d38d84955c1de3f6a7d56ce06b063f6), ROM_SKIP(1) | ROM_BIOS(1) )
+	ROMX_LOAD( "1616osl.45a", 0x00000, 0x10000, CRC(9dfb3224) SHA1(5223833a357f90b147f25826c01713269fc1945f), ROM_SKIP(1) | ROM_BIOS(1) )
+	ROMX_LOAD( "1616osh.45a", 0x00001, 0x10000, CRC(951bd441) SHA1(e0a38c8d0d38d84955c1de3f6a7d56ce06b063f6), ROM_SKIP(1) | ROM_BIOS(1) )
 	ROM_SYSTEM_BIOS(1, "v4.4a", "V4.4a")
-	ROMX_LOAD( "1616oshv.044", 0x00000, 0x10000, CRC(4a1a90d3) SHA1(4df504bbf6fc5dad76c29e9657bfa556500420a6), ROM_SKIP(1) | ROM_BIOS(2) )
-	ROMX_LOAD( "1616oslv.044", 0x00001, 0x10000, CRC(ef619994) SHA1(ff16fe9e2c99a1ffc855baf89278a97a2a2e881a), ROM_SKIP(1) | ROM_BIOS(2) )
+	ROMX_LOAD( "1616osl.44a", 0x00000, 0x10000, CRC(4a1a90d3) SHA1(4df504bbf6fc5dad76c29e9657bfa556500420a6), ROM_SKIP(1) | ROM_BIOS(2) )
+	ROMX_LOAD( "1616osh.44a", 0x00001, 0x10000, CRC(ef619994) SHA1(ff16fe9e2c99a1ffc855baf89278a97a2a2e881a), ROM_SKIP(1) | ROM_BIOS(2) )
+	ROM_SYSTEM_BIOS(2, "v4.3a", "V4.3a")
+	ROMX_LOAD( "1616osl.43a", 0x00000, 0x10000, CRC(c09b9ff8) SHA1(c46f2a98470d2d09cf9f9eec0f4096ab762407b5), ROM_SKIP(1) | ROM_BIOS(3) )
+	ROMX_LOAD( "1616osh.43a", 0x00001, 0x10000, CRC(071a2505) SHA1(42c4cc6e3e78b6a5320f9d9c858fc9f4e6220857), ROM_SKIP(1) | ROM_BIOS(3) )
+	ROM_SYSTEM_BIOS(3, "v4.0c", "V4.0c")
+	ROMX_LOAD( "1616osl.40c", 0x00000, 0x10000, CRC(6a517b5d) SHA1(e0f4eba0cb8d273ba681b9d2c6d4b1beff9ef325), ROM_SKIP(1) | ROM_BIOS(4) )
+	ROMX_LOAD( "1616osh.40c", 0x00001, 0x10000, CRC(7851651f) SHA1(d7d329aa7fe9f4418de0cdf813b61e70243e0e77), ROM_SKIP(1) | ROM_BIOS(4) )
+	ROM_SYSTEM_BIOS(4, "v3.0b", "V3.0b")
+	ROMX_LOAD( "1616osl.30b", 0x00000, 0x10000, CRC(fb9198c3) SHA1(e0e7a1dd176c1cbed063df1c405821c261d48f3a), ROM_SKIP(1) | ROM_BIOS(5) )
+	ROMX_LOAD( "1616osh.30b", 0x00001, 0x10000, CRC(a279e1d7) SHA1(3451b2cae87a9ccee5f579fd1d49cf52d9f97b83), ROM_SKIP(1) | ROM_BIOS(5) )
+	ROM_SYSTEM_BIOS(5, "v2.4a", "V2.4a")
+	ROMX_LOAD( "1616osl.24a", 0x00000, 0x08000, CRC(b155830b) SHA1(b32db6a06c8a3c544210ba9faba7c49497c504fb), ROM_SKIP(1) | ROM_BIOS(6) )
+	ROMX_LOAD( "1616osh.24a", 0x00001, 0x08000, CRC(6d9fc0e0) SHA1(07111f46386494ed3f426c1e50308f0209587f06), ROM_SKIP(1) | ROM_BIOS(6) )
 
 	ROM_REGION(0x18000, "subcpu", 0)
 	ROM_LOAD( "1616ssdv.022", 0x0000, 0x8000, CRC(6d8e413a) SHA1(fc27d92c34f231345a387b06670f36f8c1705856) )
 
 	ROM_REGION(0x20000, "user1", 0)
-	ROM_LOAD( "1616osv.045",  0x00000, 0x20000, CRC(b9f75432) SHA1(278964e2a02b1fe26ff34f09dc040e03c1d81a6d) )
+	ROM_LOAD( "ssdcromv.22",  0x0000, 0x8000, CRC(c85c47fb) SHA1(6f0bb3753fc0d74ee5901d71d05a74ec6a4a1d05) )
+	ROM_LOAD( "ssddromv.14a", 0x8000, 0x8000, CRC(8fe2db78) SHA1(487484003aba4d8960101ced6a689dc81676235d) )
 
 	ROM_REGION(0x2000, "kbdcpu", 0)
-	ROM_LOAD("14166.bin", 0x0000, 0x2000, CRC(1aea1b53) SHA1(b75b6d4509036406052157bc34159f7039cdc72e))
+	ROM_LOAD( "14166.bin", 0x0000, 0x2000, CRC(1aea1b53) SHA1(b75b6d4509036406052157bc34159f7039cdc72e) )
 ROM_END
 
 
 DRIVER_INIT_MEMBER(applix_state, applix)
 {
-	floppy_connector *con = machine().device<floppy_connector>("wd1772:0");
-	floppy_image_device *floppy = con ? con->get_device() : 0;
-	if (floppy)
-	{
-		m_fdc->set_floppy(floppy);
-		//m_fdc->setup_intrq_cb(wd1772_t::line_cb(FUNC(applix_state::fdc_intrq_w), this));
-		//m_fdc->setup_drq_cb(wd1772_t::line_cb(FUNC(applix_state::fdc_drq_w), this));
-
-		floppy->ss_w(0);
-	}
-
 	UINT8 *RAM = memregion("subcpu")->base();
 	membank("bank1")->configure_entries(0, 2, &RAM[0x8000], 0x8000);
 }
@@ -973,7 +934,7 @@ DRIVER_INIT_MEMBER(applix_state, applix)
 /* Driver */
 
 /*    YEAR  NAME    PARENT  COMPAT  MACHINE INPUT   CLASS         INIT    COMPANY          FULLNAME       FLAGS */
-COMP( 1986, applix, 0,       0,     applix, applix, applix_state, applix, "Applix Pty Ltd", "Applix 1616", GAME_NOT_WORKING )
+COMP( 1986, applix, 0,       0,     applix, applix, applix_state, applix, "Applix Pty Ltd", "Applix 1616", 0 )
 
 
 

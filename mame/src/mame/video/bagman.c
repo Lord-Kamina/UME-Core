@@ -1,6 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
-  video.c
+  bagman.c
 
   Functions to emulate the video hardware of the machine.
 
@@ -11,13 +13,13 @@
 #include "includes/bagman.h"
 
 
-WRITE8_MEMBER(bagman_state::bagman_videoram_w)
+WRITE8_MEMBER(bagman_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(bagman_state::bagman_colorram_w)
+WRITE8_MEMBER(bagman_state::colorram_w)
 {
 	m_colorram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
@@ -57,7 +59,7 @@ PALETTE_INIT_MEMBER(bagman_state,bagman)
 			2,  resistances_b,  weights_b,  470,    0);
 
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		int bit0, bit1, bit2, r, g, b;
 
@@ -76,78 +78,66 @@ PALETTE_INIT_MEMBER(bagman_state,bagman)
 		bit1 = (color_prom[i] >> 7) & 0x01;
 		b = combine_2_weights(weights_b, bit0, bit1);
 
-		palette_set_color(machine(),i,MAKE_RGB(r,g,b));
+		palette.set_pen_color(i,rgb_t(r,g,b));
 	}
 }
 
-WRITE8_MEMBER(bagman_state::bagman_flipscreen_w)
+WRITE8_MEMBER(bagman_state::flipscreen_w)
 {
-	if ((flip_screen() ^ data) & 1)
-	{
-		flip_screen_set(data & 0x01);
-		m_bg_tilemap->mark_all_dirty();
-	}
+	flip_screen_set(data & 0x01);
 }
 
 TILE_GET_INFO_MEMBER(bagman_state::get_bg_tile_info)
 {
-	int gfxbank = (machine().gfx[2] && (m_colorram[tile_index] & 0x10)) ? 2 : 0;
+	int gfxbank = (m_gfxdecode->gfx(2) && (m_colorram[tile_index] & 0x10)) ? 2 : 0;
 	int code = m_videoram[tile_index] + 8 * (m_colorram[tile_index] & 0x20);
 	int color = m_colorram[tile_index] & 0x0f;
 
 	SET_TILE_INFO_MEMBER(gfxbank, code, color, 0);
 }
 
-VIDEO_START_MEMBER(bagman_state,bagman)
+void bagman_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(bagman_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(bagman_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS,
 			8, 8, 32, 32);
-
-	m_bg_tilemap->set_scrolldy(-1, -1);
 }
 
 
 void bagman_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	UINT8 *spriteram = m_spriteram;
-	int offs;
-
-	for (offs = m_spriteram.bytes() - 4;offs >= 0;offs -= 4)
+	for (int offs = m_spriteram.bytes() - 4;offs >= 0;offs -= 4)
 	{
 		int sx,sy,flipx,flipy;
 
-		sx = spriteram[offs + 3];
-		sy = 255 - spriteram[offs + 2] - 16;
-		flipx = spriteram[offs] & 0x40;
-		flipy = spriteram[offs] & 0x80;
-		if (flip_screen_x())
+		sx = m_spriteram[offs + 3];
+		sy = 256 - m_spriteram[offs + 2] - 16;
+		flipx = m_spriteram[offs] & 0x40;
+		flipy = m_spriteram[offs] & 0x80;
+		if (flip_screen())
 		{
-			sx = bitmap.width() - sx - 15;
+			sx = 256 - sx - 15;
+			sy = 255 - sy - 15;
 			flipx = !flipx;
-		}
-		if (flip_screen_y())
-		{
-			sy = bitmap.height() - sy - 15;
 			flipy = !flipy;
 		}
 
-		if (spriteram[offs + 2] && spriteram[offs + 3])
-			drawgfx_transpen(bitmap,
-					cliprect,machine().gfx[1],
-					(spriteram[offs] & 0x3f) + 2 * (spriteram[offs + 1] & 0x20),
-					spriteram[offs + 1] & 0x1f,
+		if (m_spriteram[offs + 2] && m_spriteram[offs + 3])
+			m_gfxdecode->gfx(1)->transpen(bitmap,
+					cliprect,
+					(m_spriteram[offs] & 0x3f) + 2 * (m_spriteram[offs + 1] & 0x20),
+					m_spriteram[offs + 1] & 0x1f,
 					flipx,flipy,
 					sx,sy,0);
 	}
 }
 
-UINT32 bagman_state::screen_update_bagman(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 bagman_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	bitmap.fill(0, cliprect);
 	if (*m_video_enable == 0)
 		return 0;
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprites(bitmap, cliprect);
 	return 0;
 }

@@ -1,8 +1,10 @@
+// license:LGPL-2.1+
+// copyright-holders:David Haywood, Angelo Salese, Olivier Galibert, Mariusz Wojcieszek, R. Belmont
 /**************************************************************************************
 
     Sega Saturn (c) 1994 Sega
 
-    List of things that needs to be implemented:
+    @todo List of things that needs to be implemented:
     - There's definitely an ack mechanism in SCU irqs. This is almost surely done via
       the ISM register (i.e. going 0->1 to the given bit acks it).
     - There might be a delay to exactly when SCU irqs happens. This is due to the basic
@@ -36,14 +38,15 @@
       H counter value 0x0ec (236) -> 0xe0
       H counter value 0x12c (300) -> 0x100
     - Timer 1 seems to count backwards compared to Timer 0 from setting 0x6b onward.
-
+    - Yabause claims that if VDP2 DISP bit isn't enabled then vblank irqs (hblank too?) 
+      doesn't happen.
 
 **************************************************************************************/
 
 #include "emu.h"
 #include "includes/stv.h"
-#include "machine/scudsp.h"
 #include "cpu/sh2/sh2.h"
+#include "cpu/scudsp/scudsp.h"
 
 /* TODO: do this in a verboselog style */
 #define LOG_CDB  0
@@ -237,11 +240,11 @@ READ32_MEMBER(saturn_state::saturn_scu_r)
 			res = m_scu.status;
 			break;
 		case 0x80/4:
-			res = dsp_prg_ctrl_r(space);
+			res = m_scudsp->program_control_r(space, 0, mem_mask);
 			break;
 		case 0x8c/4:
 			if(LOG_SCU && !space.debugger_access()) logerror( "DSP mem read at %08X\n", m_scu_regs[34]);
-			res = dsp_ram_addr_r();
+			res = m_scudsp->ram_address_r(space, 0, mem_mask);
 			break;
 		case 0xa0/4:
 			if(LOG_SCU && !space.debugger_access()) logerror("(PC=%08x) IRQ mask reg read %08x MASK=%08x\n",space.device().safe_pc(),mem_mask,m_scu_regs[0xa0/4]);
@@ -310,20 +313,19 @@ WRITE32_MEMBER(saturn_state::saturn_scu_w)
 		case 0x7c/4: if(LOG_SCU) logerror("Warning: DMA status WRITE! Offset %02x(%d)\n",offset*4,offset); break;
 		/*DSP section*/
 		case 0x80/4:
-			/* TODO: you can't overwrite some flags with this */
-			dsp_prg_ctrl_w(space, m_scu_regs[offset]);
+			m_scudsp->program_control_w(space, 0, m_scu_regs[offset], mem_mask);
 			if(LOG_SCU) logerror("SCU DSP: Program Control Port Access %08x\n",data);
 			break;
 		case 0x84/4:
-			dsp_prg_data(m_scu_regs[offset]);
+			m_scudsp->program_w(space, 0, m_scu_regs[offset], mem_mask);
 			if(LOG_SCU) logerror("SCU DSP: Program RAM Data Port Access %08x\n",data);
 			break;
 		case 0x88/4:
-			dsp_ram_addr_ctrl(m_scu_regs[offset]);
+			m_scudsp->ram_address_control_w(space, 0,m_scu_regs[offset], mem_mask);
 			if(LOG_SCU) logerror("SCU DSP: Data RAM Address Port Access %08x\n",data);
 			break;
 		case 0x8c/4:
-			dsp_ram_addr_w(m_scu_regs[offset]);
+			m_scudsp->ram_address_w(space, 0, m_scu_regs[offset], mem_mask);
 			if(LOG_SCU) logerror("SCU DSP: Data RAM Data Port Access %08x\n",data);
 			break;
 		case 0x90/4: /*if(LOG_SCU) logerror("timer 0 compare data = %03x\n",m_scu_regs[36]);*/ break;
@@ -411,7 +413,7 @@ void saturn_state::scu_dma_direct(address_space &space, UINT8 dma_ch)
 	if(LOG_SCU) printf("Start Add %04x Destination Add %04x\n",m_scu.src_add[dma_ch],m_scu.dst_add[dma_ch]);
 	}
 
-	/* TODO: Game Basic and World Cup 98 trips this, according to the docs the SCU can't transfer from BIOS area (can't communicate from/to that bus) */
+	/* Game Basic and World Cup 98 trips this, according to the docs the SCU can't transfer from BIOS area (can't communicate from/to that bus) */
 	if(BIOS_BUS(m_scu.src[dma_ch]))
 	{
 		popmessage("Warning: SCU transfer from BIOS area, contact MAMEdev");
@@ -589,7 +591,7 @@ WRITE32_MEMBER(saturn_state::minit_w)
 	machine().scheduler().boost_interleave(m_minit_boost_timeslice, attotime::from_usec(m_minit_boost));
 	machine().scheduler().trigger(1000);
 	machine().scheduler().synchronize(); // force resync
-	sh2_set_frt_input(m_slave, PULSE_LINE);
+	m_slave->sh2_set_frt_input(PULSE_LINE);
 }
 
 WRITE32_MEMBER(saturn_state::sinit_w)
@@ -597,7 +599,7 @@ WRITE32_MEMBER(saturn_state::sinit_w)
 	//logerror("cpu %s (PC=%08X) SINIT write = %08x\n", space.device().tag(), space.device().safe_pc(),data);
 	machine().scheduler().boost_interleave(m_sinit_boost_timeslice, attotime::from_usec(m_sinit_boost));
 	machine().scheduler().synchronize(); // force resync
-	sh2_set_frt_input(m_maincpu, PULSE_LINE);
+	m_maincpu->sh2_set_frt_input(PULSE_LINE);
 }
 
 /*
@@ -630,7 +632,7 @@ WRITE32_MEMBER(saturn_state::saturn_minit_w)
 		machine().scheduler().trigger(1000);
 	}
 
-	sh2_set_frt_input(m_slave, PULSE_LINE);
+	m_slave->sh2_set_frt_input(PULSE_LINE);
 }
 
 WRITE32_MEMBER(saturn_state::saturn_sinit_w)
@@ -641,7 +643,7 @@ WRITE32_MEMBER(saturn_state::saturn_sinit_w)
 	else
 		machine().scheduler().boost_interleave(m_sinit_boost_timeslice, attotime::from_usec(m_sinit_boost));
 
-	sh2_set_frt_input(m_maincpu, PULSE_LINE);
+	m_maincpu->sh2_set_frt_input(PULSE_LINE);
 }
 
 
@@ -743,15 +745,14 @@ TIMER_CALLBACK_MEMBER(saturn_state::stv_rtc_increment)
 /* Official documentation says that the "RESET/TAS opcodes aren't supported", but Out Run definitely contradicts with it.
    Since that m68k can't reset itself via the RESET opcode I suppose that the SMPC actually do it by reading an i/o
    connected to this opcode. */
-void saturn_state::m68k_reset_callback(device_t *device)
+WRITE_LINE_MEMBER(saturn_state::m68k_reset_callback)
 {
-	saturn_state *state = device->machine().driver_data<saturn_state>();
-	device->machine().scheduler().timer_set(attotime::from_usec(100), timer_expired_delegate(FUNC(saturn_state::smpc_audio_reset_line_pulse), state));
+	machine().scheduler().timer_set(attotime::from_usec(100), timer_expired_delegate(FUNC(saturn_state::smpc_audio_reset_line_pulse), this));
 
 	printf("m68k RESET opcode triggered\n");
 }
 
-WRITE_LINE_MEMBER(saturn_state::scsp_irq)
+WRITE8_MEMBER(saturn_state::scsp_irq)
 {
 	// don't bother the 68k if it's off
 	if (!m_en_68k)
@@ -759,18 +760,14 @@ WRITE_LINE_MEMBER(saturn_state::scsp_irq)
 		return;
 	}
 
-	if (state > 0)
+	if (offset != 0)
 	{
-		m_scsp_last_line = state;
-		m_audiocpu->set_input_line(state, ASSERT_LINE);
-	}
-	else if (state < 0)
-	{
-		m_audiocpu->set_input_line(-state, CLEAR_LINE);
+		if (data == ASSERT_LINE) m_scsp_last_line = offset;
+		m_audiocpu->set_input_line(offset, data);
 	}
 	else
 	{
-		m_audiocpu->set_input_line(m_scsp_last_line, CLEAR_LINE);
+		m_audiocpu->set_input_line(m_scsp_last_line, data);
 	}
 }
 
@@ -972,3 +969,35 @@ GFXDECODE_START( stv )
 	GFXDECODE_ENTRY( NULL, 0, tiles8x8x8_layout,   0x00, (0x08*(2+1))  )
 	GFXDECODE_ENTRY( NULL, 0, tiles16x16x8_layout, 0x00, (0x08*(2+1))  )
 GFXDECODE_END
+
+WRITE_LINE_MEMBER(saturn_state::scudsp_end_w)
+{
+	if(state)
+	{
+		if(!(m_scu.ism & IRQ_DSP_END))
+			m_maincpu->set_input_line_and_vector(0xa, HOLD_LINE, 0x45);
+		else
+			m_scu.ist |= (IRQ_DSP_END);
+	}
+}
+
+READ16_MEMBER(saturn_state::scudsp_dma_r)
+{
+	address_space &program = m_maincpu->space(AS_PROGRAM);
+	offs_t addr = offset;
+
+//  printf("%08x\n",addr);
+
+	return program.read_word(addr,mem_mask);
+}
+
+
+WRITE16_MEMBER(saturn_state::scudsp_dma_w)
+{
+	address_space &program = m_maincpu->space(AS_PROGRAM);
+	offs_t addr = offset;
+
+//  printf("%08x %02x\n",addr,data);
+
+	program.write_word(addr, data,mem_mask);
+}

@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Intel 8255(A) Programmable Peripheral Interface emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -45,7 +44,7 @@ enum
 enum
 {
 	MODE_OUTPUT = 0,
-	MODE_INPUT,
+	MODE_INPUT
 };
 
 
@@ -65,7 +64,6 @@ enum
 
 const device_type I8255 = &device_creator<i8255_device>;
 const device_type I8255A = &device_creator<i8255_device>;
-
 
 
 //**************************************************************************
@@ -260,38 +258,17 @@ inline int i8255_device::port_c_upper_mode()
 //-------------------------------------------------
 
 i8255_device::i8255_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, I8255, "I8255", tag, owner, clock)
+	: device_t(mconfig, I8255, "8255 PPI", tag, owner, clock, "i8255", __FILE__),
+		m_in_pa_cb(*this),
+		m_in_pb_cb(*this),
+		m_in_pc_cb(*this),
+		m_out_pa_cb(*this),
+		m_out_pb_cb(*this),
+		m_out_pc_cb(*this)
 {
 	m_intr[PORT_A] = m_intr[PORT_B] = 0;
 	m_control = 0;
 }
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void i8255_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const i8255_interface *intf = reinterpret_cast<const i8255_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<i8255_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_in_pa_cb, 0, sizeof(m_in_pa_cb));
-		memset(&m_out_pa_cb, 0, sizeof(m_out_pa_cb));
-		memset(&m_in_pb_cb, 0, sizeof(m_in_pb_cb));
-		memset(&m_out_pb_cb, 0, sizeof(m_out_pb_cb));
-		memset(&m_in_pc_cb, 0, sizeof(m_in_pc_cb));
-		memset(&m_out_pc_cb, 0, sizeof(m_out_pc_cb));
-	}
-}
-
 
 //-------------------------------------------------
 //  device_start - device-specific startup
@@ -300,12 +277,12 @@ void i8255_device::device_config_complete()
 void i8255_device::device_start()
 {
 	// resolve callbacks
-	m_in_port_func[PORT_A].resolve(m_in_pa_cb, *this);
-	m_out_port_func[PORT_A].resolve(m_out_pa_cb, *this);
-	m_in_port_func[PORT_B].resolve(m_in_pb_cb, *this);
-	m_out_port_func[PORT_B].resolve(m_out_pb_cb, *this);
-	m_in_port_func[PORT_C].resolve(m_in_pc_cb, *this);
-	m_out_port_func[PORT_C].resolve(m_out_pc_cb, *this);
+	m_in_pa_cb.resolve_safe(0);
+	m_in_pb_cb.resolve_safe(0);
+	m_in_pc_cb.resolve_safe(0);
+	m_out_pa_cb.resolve_safe();
+	m_out_pb_cb.resolve_safe();
+	m_out_pc_cb.resolve_safe();
 
 	// register for state saving
 	save_item(NAME(m_control));
@@ -346,7 +323,7 @@ UINT8 i8255_device::read_mode0(int port)
 	else
 	{
 		// read data from port
-		data = m_in_port_func[port](0);
+		data = (port == PORT_A) ? m_in_pa_cb(0) : ((port == PORT_B) ? m_in_pb_cb(0) : m_in_pc_cb(0));
 	}
 
 	return data;
@@ -495,7 +472,7 @@ UINT8 i8255_device::read_pc()
 	if (mask)
 	{
 		// read data from port
-		data |= m_in_port_func[PORT_C](0) & mask;
+		data |= m_in_pc_cb(0) & mask;
 	}
 
 	return data;
@@ -514,7 +491,12 @@ void i8255_device::write_mode0(int port, UINT8 data)
 		m_output[port] = data;
 
 		// write data to port
-		m_out_port_func[port](0, data);
+		if (port == PORT_A)
+			m_out_pa_cb((offs_t)0, m_output[port]);
+		else if (port == PORT_B)
+			m_out_pb_cb((offs_t)0, m_output[port]);
+		else
+			m_out_pc_cb((offs_t)0, m_output[port]);
 	}
 }
 
@@ -531,7 +513,12 @@ void i8255_device::write_mode1(int port, UINT8 data)
 		m_output[port] = data;
 
 		// write data to port
-		m_out_port_func[port](0, data);
+		if (port == PORT_A)
+			m_out_pa_cb((offs_t)0, m_output[port]);
+		else if (port == PORT_B)
+			m_out_pb_cb((offs_t)0, m_output[port]);
+		else
+			m_out_pc_cb((offs_t)0, m_output[port]);
 
 		// set output buffer full flag
 		set_obf(port, 0);
@@ -552,7 +539,7 @@ void i8255_device::write_mode2(UINT8 data)
 	m_output[PORT_A] = data;
 
 	// write data to port
-	m_out_port_func[PORT_A](0, data);
+	m_out_pa_cb((offs_t)0, data);
 
 	// set output buffer full flag
 	set_obf(PORT_A, 0);
@@ -640,7 +627,7 @@ void i8255_device::output_pc()
 
 	data |= m_output[PORT_C] & mask;
 
-	m_out_port_func[PORT_C](0, data);
+	m_out_pc_cb((offs_t)0, data);
 }
 
 
@@ -663,12 +650,12 @@ void i8255_device::set_mode(UINT8 data)
 
 	if (port_mode(PORT_A) == MODE_OUTPUT)
 	{
-		m_out_port_func[PORT_A](0, m_output[PORT_A]);
+		m_out_pa_cb((offs_t)0, m_output[PORT_A]);
 	}
 	else
 	{
 		// TTL inputs float high
-		m_out_port_func[PORT_A](0, 0xff);
+		m_out_pa_cb((offs_t)0, 0xff);
 	}
 
 	if (LOG)
@@ -690,12 +677,12 @@ void i8255_device::set_mode(UINT8 data)
 
 	if (port_mode(PORT_B) == MODE_OUTPUT)
 	{
-		m_out_port_func[PORT_B](0, m_output[PORT_B]);
+		m_out_pb_cb((offs_t)0, m_output[PORT_B]);
 	}
 	else
 	{
 		// TTL inputs float high
-		m_out_port_func[PORT_B](0, 0xff);
+		m_out_pb_cb((offs_t)0, 0xff);
 	}
 
 	m_output[PORT_C] = 0;
@@ -955,7 +942,7 @@ WRITE_LINE_MEMBER( i8255_device::pc2_w )
 				if (LOG) logerror("I8255 '%s' Port B Strobe\n", tag());
 
 				// read port into latch
-				m_input[PORT_B] = m_in_port_func[PORT_B](0);
+				m_input[PORT_B] = m_in_pb_cb(0);
 
 				// set input buffer flag
 				set_ibf(PORT_B, 1);
@@ -979,7 +966,7 @@ WRITE_LINE_MEMBER( i8255_device::pc4_w )
 			if (LOG) logerror("I8255 '%s' Port A Strobe\n", tag());
 
 			// read port into latch
-			m_input[PORT_A] = m_in_port_func[PORT_A](0);
+			m_input[PORT_A] = m_in_pa_cb(0);
 
 			// set input buffer flag
 			set_ibf(PORT_A, 1);

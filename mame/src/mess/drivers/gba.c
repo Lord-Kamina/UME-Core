@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont,Ryan Holtz
 /***************************************************************************
 
   gba.c
@@ -5,12 +7,6 @@
   Driver file to handle emulation of the Nintendo Game Boy Advance.
 
   By R. Belmont & Harmony
-
-  TODO:
-  - Raster timing issues.  Castlevania (HOD and AOS)'s raster effects
-    work if the VBlank is fired on scanline 0, else they're offset by
-    the height of the vblank region.  Is scanline 0 the start of the
-    visible area?
 
 ***************************************************************************/
 
@@ -20,12 +16,12 @@
 #include "sound/dac.h"
 #include "audio/gb.h"
 #include "includes/gba.h"
-#include "machine/gba_rom.h"
+#include "bus/gba/rom.h"
 #include "rendlay.h"
 
 #define VERBOSE_LEVEL   (0)
 
-INLINE void verboselog(running_machine &machine, int n_level, const char *s_fmt, ...)
+INLINE void ATTR_PRINTF(3,4) verboselog(running_machine &machine, int n_level, const char *s_fmt, ...)
 {
 	if( VERBOSE_LEVEL >= n_level )
 	{
@@ -43,7 +39,7 @@ INLINE void verboselog(running_machine &machine, int n_level, const char *s_fmt,
 static const UINT32 timer_clks[4] = { 16777216, 16777216/64, 16777216/256, 16777216/1024 };
 
 
-void gba_state::palette_init()
+PALETTE_INIT_MEMBER(gba_state, gba)
 {
 	UINT8 r, g, b;
 	for( b = 0; b < 32; b++ )
@@ -52,7 +48,7 @@ void gba_state::palette_init()
 		{
 			for( r = 0; r < 32; r++ )
 			{
-				palette_set_color_rgb( machine(), ( b << 10 ) | ( g << 5 ) | r, pal5bit(r), pal5bit(g), pal5bit(b) );
+				palette.set_pen_color( ( b << 10 ) | ( g << 5 ) | r, pal5bit(r), pal5bit(g), pal5bit(b) );
 			}
 		}
 	}
@@ -161,7 +157,7 @@ void gba_state::dma_exec(FPTR ch)
 	else
 	{
 //      if (dst >= 0x6000000 && dst <= 0x6017fff)
-//          printf("DMA exec: ch %d from %08x to %08x, mode %04x, count %04x (PC %x) (%s)\n", (int)ch, src, dst, ctrl, cnt, activecpu_get_pc(), ((ctrl>>10) & 1) ? "32" : "16");
+//      printf("DMA exec: ch %d from %08x to %08x, mode %04x, count %04x (%s)\n", (int)ch, src, dst, ctrl, cnt, ((ctrl>>10) & 1) ? "32" : "16");
 	}
 
 	for (int i = 0; i < cnt; i++)
@@ -493,7 +489,7 @@ READ32_MEMBER(gba_state::gba_io_r)
 			}
 			break;
 		case 0x0004/4:
-			retval = (m_DISPSTAT & 0xffff) | (machine().primary_screen->vpos()<<16);
+			retval = (m_DISPSTAT & 0xffff) | (machine().first_screen()->vpos()<<16);
 			break;
 		case 0x0008/4:
 			if( (mem_mask) & 0x0000ffff )
@@ -894,7 +890,7 @@ READ32_MEMBER(gba_state::gba_io_r)
 		case 0x0130/4:
 			if( (mem_mask) & 0x0000ffff )   // KEYINPUT
 			{
-				retval = m_io_in0->read();
+				retval = m_io_inputs->read();
 			}
 			else if( (mem_mask) & 0xffff0000 )
 			{
@@ -1559,7 +1555,7 @@ WRITE32_MEMBER(gba_state::gba_io_w)
 
 				ch = offset / 3;
 
-//              printf("%08x: DMA(%d): %x to reg %d (mask %08x)\n", activecpu_get_pc(), ch, data, offset%3, ~mem_mask);
+//              printf("%08x: DMA(%d): %x to reg %d (mask %08x)\n", space.device().safe_pc(), ch, data, offset%3, ~mem_mask);
 
 				if (((offset % 3) == 2) && ((~mem_mask & 0xffff0000) == 0))
 				{
@@ -1767,7 +1763,7 @@ WRITE32_MEMBER(gba_state::gba_io_w)
 		case 0x0200/4:
 			if( (mem_mask) & 0x0000ffff )
 			{
-//              printf("IE (%08x) = %04x raw %x (%08x) (scan %d PC %x)\n", 0x04000000 + ( offset << 2 ), data & mem_mask, data, ~mem_mask, machine.primary_screen->vpos(), space.device().safe_pc());
+//              printf("IE (%08x) = %04x raw %x (%08x) (scan %d PC %x)\n", 0x04000000 + ( offset << 2 ), data & mem_mask, data, ~mem_mask, machine.first_screen()->vpos(), space.device().safe_pc());
 				m_IE = ( m_IE & ~mem_mask ) | ( data & mem_mask );
 #if 0
 				if (m_IE & m_IF)
@@ -1885,12 +1881,19 @@ WRITE32_MEMBER(gba_state::gba_oam_w)
 
 READ32_MEMBER(gba_state::gba_bios_r)
 {
-	UINT32 *rom = (UINT32 *)(*m_region_maincpu);
-	if (m_bios_protected != 0)
+	UINT32 *rom = m_region_maincpu;
+	if (m_bios_hack->read())
 	{
-		offset = (m_bios_last_address + 8) / 4;
+		// partially patch out logo and checksum checks
+		// (useful to run some protos + to test homebrew)
+		if (ACCESSING_BITS_0_15 && (offset == 0x6fc/4))
+			return 0;
 	}
-	return rom[offset&0x3fff];
+
+	if (m_bios_protected != 0)
+		offset = (m_bios_last_address + 8) / 4;
+
+	return rom[offset & 0x3fff];
 }
 
 READ32_MEMBER(gba_state::gba_10000000_r)
@@ -1925,7 +1928,7 @@ static ADDRESS_MAP_START( gba_map, AS_PROGRAM, 32, gba_state )
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START( gbadv )
-	PORT_START("IN0")
+	PORT_START("INPUTS")
 	PORT_BIT( 0xfc00, IP_ACTIVE_HIGH, IPT_BUTTON5) PORT_UNUSED
 	PORT_BIT( 0x0200, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_NAME("P1 L") PORT_PLAYER(1) // L
 	PORT_BIT( 0x0100, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_NAME("P1 R") PORT_PLAYER(1) // R
@@ -1937,35 +1940,42 @@ static INPUT_PORTS_START( gbadv )
 	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_SELECT ) PORT_PLAYER(1)    // SELECT
 	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_NAME("B") PORT_PLAYER(1)    // B
 	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_NAME("A") PORT_PLAYER(1)    // A
+
+	PORT_START("SKIP_CHECK")
+	PORT_CONFNAME( 0x01, 0x00, "[HACK] Skip BIOS Logo check" )
+	PORT_CONFSETTING(    0x00, DEF_STR( Off ) )
+	PORT_CONFSETTING(    0x01, DEF_STR( On ) )
 INPUT_PORTS_END
 
 
 TIMER_CALLBACK_MEMBER(gba_state::perform_hbl)
 {
 	int ch, ctrl;
-	int scanline = machine().primary_screen->vpos();
+	int scanline = machine().first_screen()->vpos();
 
 	// draw only visible scanlines
 	if (scanline < 160)
 	{
 		draw_scanline(scanline);
+
+		for (ch = 0; ch < 4; ch++)
+		{
+			ctrl = m_dma_regs[(ch*3)+2]>>16;
+
+			// HBL-triggered DMA?
+			if ((ctrl & 0x8000) && ((ctrl & 0x3000) == 0x2000))
+			{
+				dma_exec(ch);
+			}
+		}
 	}
-	m_DISPSTAT |= DISPSTAT_HBL;
+
 	if ((m_DISPSTAT & DISPSTAT_HBL_IRQ_EN ) != 0)
 	{
 		request_irq(INT_HBL);
 	}
 
-	for (ch = 0; ch < 4; ch++)
-	{
-		ctrl = m_dma_regs[(ch*3)+2]>>16;
-
-		// HBL-triggered DMA?
-		if ((ctrl & 0x8000) && ((ctrl & 0x3000) == 0x2000))
-		{
-			dma_exec(ch);
-		}
-	}
+	m_DISPSTAT |= DISPSTAT_HBL;
 
 	m_hbl_timer->adjust(attotime::never);
 }
@@ -1977,12 +1987,34 @@ TIMER_CALLBACK_MEMBER(gba_state::perform_scan)
 	// clear hblank and raster IRQ flags
 	m_DISPSTAT &= ~(DISPSTAT_HBL|DISPSTAT_VCNT);
 
-	scanline = machine().primary_screen->vpos();
+	scanline = machine().first_screen()->vpos();
 
 	// VBL is set for scanlines 160 through 226 (but not 227, which is the last line)
 	if (scanline >= 160 && scanline < 227)
 	{
 		m_DISPSTAT |= DISPSTAT_VBL;
+
+		// VBL IRQ and DMA on line 160
+		if (scanline == 160)
+		{
+			int ch, ctrl;
+
+			if (m_DISPSTAT & DISPSTAT_VBL_IRQ_EN)
+			{
+				request_irq(INT_VBL);
+			}
+
+			for (ch = 0; ch < 4; ch++)
+			{
+				ctrl = m_dma_regs[(ch*3)+2]>>16;
+
+				// VBL-triggered DMA?
+				if ((ctrl & 0x8000) && ((ctrl & 0x3000) == 0x1000))
+				{
+					dma_exec(ch);
+				}
+			}
+		}
 	}
 	else
 	{
@@ -1999,52 +2031,8 @@ TIMER_CALLBACK_MEMBER(gba_state::perform_scan)
 		}
 	}
 
-	// exiting VBL, handle interrupts and DMA triggers
-	if (scanline == 224)
-	{
-		// FIXME: some games are very picky with this trigger!
-		// * Mario & Luigi SuperStar Saga loses pieces of gfx for 225-227.
-		// * Driver 2 does not work with values > 217.
-		// * Prince of Persia Sands of Time, Rayman Hoodlum's Revenge, Rayman 3 breaks for large
-		//   values (say > 200, but exact threshold varies).
-		// * Scooby-Doo Unmasked and Mystery Mayhem have problems with large values (missing dialogue
-		//   text).
-		// * Nicktoons Racign does not start with 227; and it resets before going to the race with
-		//   values > 206.
-		// * Phil of Future does not start for values > 221.
-		// * Sabrina Teenage Witch does not even reach the Ubi Soft logo if we use the VBL exit value
-		//   227; it does not display title screen graphics when using 225-226; the intro is broken
-		//   with anything between 207-224.
-		// * Anstoss Action and Ueki no Housoku have broken graphics for values > 223.
-		// However, taking smaller values breaks raster effects in a LOT of games (e.g. Castlevania
-		// series, Final Fantasy series, Tales of Phantasia, Banjo Pilot, NES 'collections' by Hudson,
-		// Jaleco and Technos, plus tons of racing games, which show garbage in the lower half of the
-		// screen with smaller values).
-		// Already choosing 224 instead of 227 makes some glitches to appear in the bottom scanlines.
-		// Other test cases are EA Sport games (like FIFA or Madden) which have various degrees of
-		// glitchness depending on the value used here.
-		// More work on IRQs is definitely necessary!
-		int ch, ctrl;
-
-		if (m_DISPSTAT & DISPSTAT_VBL_IRQ_EN)
-		{
-			request_irq(INT_VBL);
-		}
-
-		for (ch = 0; ch < 4; ch++)
-		{
-			ctrl = m_dma_regs[(ch*3)+2]>>16;
-
-			// VBL-triggered DMA?
-			if ((ctrl & 0x8000) && ((ctrl & 0x3000) == 0x1000))
-			{
-				dma_exec(ch);
-			}
-		}
-	}
-
-	m_hbl_timer->adjust(machine().primary_screen->time_until_pos(scanline, 240));
-	m_scan_timer->adjust(machine().primary_screen->time_until_pos(( scanline + 1 ) % 228, 0));
+	m_hbl_timer->adjust(machine().first_screen()->time_until_pos(scanline, 240));
+	m_scan_timer->adjust(machine().first_screen()->time_until_pos(( scanline + 1 ) % 228, 0));
 }
 
 void gba_state::machine_reset()
@@ -2070,7 +2058,7 @@ void gba_state::machine_reset()
 
 	m_bios_protected = 0;
 
-	m_scan_timer->adjust(machine().primary_screen->time_until_pos(0, 0));
+	m_scan_timer->adjust(machine().first_screen()->time_until_pos(0, 0));
 	m_hbl_timer->adjust(attotime::never);
 	m_dma_timer[0]->adjust(attotime::never);
 	m_dma_timer[1]->adjust(attotime::never, 1);
@@ -2092,7 +2080,7 @@ void gba_state::machine_start()
 	/* create a timer to fire scanline functions */
 	m_scan_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(gba_state::perform_scan),this));
 	m_hbl_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(gba_state::perform_hbl),this));
-	m_scan_timer->adjust(machine().primary_screen->time_until_pos(0, 0));
+	m_scan_timer->adjust(machine().first_screen()->time_until_pos(0, 0));
 
 	/* and one for each DMA channel */
 	m_dma_timer[0] = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(gba_state::dma_complete),this));
@@ -2118,31 +2106,47 @@ void gba_state::machine_start()
 	m_irq_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(gba_state::handle_irq),this));
 	m_irq_timer->adjust(attotime::never);
 
-	// install the cart ROM into the address map, if present
-	m_cartslot->install_rom();
+	// install the cart ROM & SRAM into the address map, if present
+	if (m_cart->exists())
+	{
+		m_maincpu->space(AS_PROGRAM).install_read_bank(0x08000000, 0x09ffffff, 0, 0, "rom1");
+		m_maincpu->space(AS_PROGRAM).install_read_bank(0x0a000000, 0x0bffffff, 0, 0, "rom2");
+		m_maincpu->space(AS_PROGRAM).install_read_bank(0x0c000000, 0x0cffffff, 0, 0, "rom3");
 
-	// install the cart NVRAM handlers if necessary
-	if (m_cartslot->get_type() == GBA_SRAM)
-	{
-		m_maincpu->space(AS_PROGRAM).install_read_handler(0xe000000, 0xe00ffff, read32_delegate(FUNC(gba_cart_slot_device::read_ram),(gba_cart_slot_device*)m_cartslot));
-		m_maincpu->space(AS_PROGRAM).install_write_handler(0xe000000, 0xe00ffff, write32_delegate(FUNC(gba_cart_slot_device::write_ram),(gba_cart_slot_device*)m_cartslot));
-	}
-	if (m_cartslot->get_type() == GBA_EEPROM || m_cartslot->get_type() == GBA_EEPROM4 || m_cartslot->get_type() == GBA_EEPROM64)
-	{
-		// for games larger than 16MB the actual range is smaller but read_ram/write_ram handles that!
-		m_maincpu->space(AS_PROGRAM).install_read_handler(0xd000000, 0xdffffff, read32_delegate(FUNC(gba_cart_slot_device::read_ram),(gba_cart_slot_device*)m_cartslot));
-		m_maincpu->space(AS_PROGRAM).install_write_handler(0xd000000, 0xdffffff, write32_delegate(FUNC(gba_cart_slot_device::write_ram),(gba_cart_slot_device*)m_cartslot));
-	}
-	// merge the two flash and mask accesses in read_ram?!?
-	if (m_cartslot->get_type() == GBA_FLASH || m_cartslot->get_type() == GBA_FLASH512)
-	{
-		m_maincpu->space(AS_PROGRAM).install_read_handler(0xe000000, 0xe00ffff, read32_delegate(FUNC(gba_cart_slot_device::read_ram),(gba_cart_slot_device*)m_cartslot));
-		m_maincpu->space(AS_PROGRAM).install_write_handler(0xe000000, 0xe00ffff, write32_delegate(FUNC(gba_cart_slot_device::write_ram),(gba_cart_slot_device*)m_cartslot));
-	}
-	if (m_cartslot->get_type() == GBA_FLASH1M)
-	{
-		m_maincpu->space(AS_PROGRAM).install_read_handler(0xe000000, 0xe01ffff, read32_delegate(FUNC(gba_cart_slot_device::read_ram),(gba_cart_slot_device*)m_cartslot));
-		m_maincpu->space(AS_PROGRAM).install_write_handler(0xe000000, 0xe01ffff, write32_delegate(FUNC(gba_cart_slot_device::write_ram),(gba_cart_slot_device*)m_cartslot));
+		std::string region_tag;
+		memory_region *cart_rom = memregion(region_tag.assign(m_cart->tag()).append(GBASLOT_ROM_REGION_TAG).c_str());
+
+		// install ROM accesses
+		membank("rom1")->set_base(cart_rom->base());
+		membank("rom2")->set_base(cart_rom->base());
+		membank("rom3")->set_base(cart_rom->base());
+
+		// add nvram to save state
+		m_cart->save_nvram();
+
+		// install the cart NVRAM handlers if necessary
+		if (m_cart->get_type() == GBA_SRAM)
+		{
+			m_maincpu->space(AS_PROGRAM).install_read_handler(0xe000000, 0xe00ffff, read32_delegate(FUNC(gba_cart_slot_device::read_ram),(gba_cart_slot_device*)m_cart));
+			m_maincpu->space(AS_PROGRAM).install_write_handler(0xe000000, 0xe00ffff, write32_delegate(FUNC(gba_cart_slot_device::write_ram),(gba_cart_slot_device*)m_cart));
+		}
+		if (m_cart->get_type() == GBA_EEPROM || m_cart->get_type() == GBA_EEPROM4 || m_cart->get_type() == GBA_EEPROM64)
+		{
+			// for games larger than 16MB the actual range is smaller but read_ram/write_ram handles that!
+			m_maincpu->space(AS_PROGRAM).install_read_handler(0xd000000, 0xdffffff, read32_delegate(FUNC(gba_cart_slot_device::read_ram),(gba_cart_slot_device*)m_cart));
+			m_maincpu->space(AS_PROGRAM).install_write_handler(0xd000000, 0xdffffff, write32_delegate(FUNC(gba_cart_slot_device::write_ram),(gba_cart_slot_device*)m_cart));
+		}
+		// merge the two flash and mask accesses in read_ram?!?
+		if (m_cart->get_type() == GBA_FLASH || m_cart->get_type() == GBA_FLASH512)
+		{
+			m_maincpu->space(AS_PROGRAM).install_read_handler(0xe000000, 0xe00ffff, read32_delegate(FUNC(gba_cart_slot_device::read_ram),(gba_cart_slot_device*)m_cart));
+			m_maincpu->space(AS_PROGRAM).install_write_handler(0xe000000, 0xe00ffff, write32_delegate(FUNC(gba_cart_slot_device::write_ram),(gba_cart_slot_device*)m_cart));
+		}
+		if (m_cart->get_type() == GBA_FLASH1M)
+		{
+			m_maincpu->space(AS_PROGRAM).install_read_handler(0xe000000, 0xe01ffff, read32_delegate(FUNC(gba_cart_slot_device::read_ram),(gba_cart_slot_device*)m_cart));
+			m_maincpu->space(AS_PROGRAM).install_write_handler(0xe000000, 0xe01ffff, write32_delegate(FUNC(gba_cart_slot_device::write_ram),(gba_cart_slot_device*)m_cart));
+		}
 	}
 
 	save_item(NAME(m_DISPSTAT));
@@ -2255,9 +2259,11 @@ static MACHINE_CONFIG_START( gbadv, gba_state )
 	MCFG_SCREEN_ADD("gbalcd", RASTER)   // htot hst vwid vtot vst vis
 	MCFG_SCREEN_RAW_PARAMS(16777216/4, 308, 0,  240, 228, 0,  160)
 	MCFG_SCREEN_UPDATE_DRIVER(gba_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
 	MCFG_DEFAULT_LAYOUT(layout_lcd)
-	MCFG_PALETTE_LENGTH(32768)
+	MCFG_PALETTE_ADD("palette", 32768)
+	MCFG_PALETTE_INIT_OWNER(gba_state, gba)
 
 	MCFG_SPEAKER_STANDARD_STEREO("spkleft", "spkright")
 	MCFG_SOUND_ADD("custom", GAMEBOY, 0)

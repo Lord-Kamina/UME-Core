@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 /***************************************************************************
 
                             -= Seta Hardware =-
@@ -136,16 +138,14 @@ Note:   if MAME_DEBUG is defined, pressing Z with:
 ***************************************************************************/
 
 #include "emu.h"
-#include "sound/x1_010.h"
 #include "includes/seta.h"
-#include "video/seta001.h"
 
 /* note that drgnunit, stg and qzkklogy run on the same board, yet they need different alignment */
 static const game_offset game_offsets[] =
 {
 	/* only sprites */
-	{ "tndrcade", { -1,  0 } },             // correct (wall at beginning of game)
-	{ "tndrcadej",{ -1,  0 } },             // "
+	{ "tndrcade", {  0,  0 } },             // correct (start grid, wall at beginning of game)
+	{ "tndrcadej",{  0,  0 } },             // "
 	{ "wits",     {  0,  0 } },             // unknown
 	{ "thunderl", {  0,  0 } },             // unknown
 	{ "wiggie",   {  0,  0 } },             // some problems but they seem y co-ordinate related?
@@ -185,21 +185,25 @@ static const game_offset game_offsets[] =
 	{ "blandia",  {  0,  8 }, { -2,  6 } }, // correct (test grid, startup bg)
 	{ "blandiap", {  0,  8 }, { -2,  6 } }, // "
 	{ "zingzip",  {  0,  0 }, { -1, -2 } }, // sprites unknown, tilemaps correct (test grid)
-	{ "eightfrc", {  3,  4 }, {  0,  0 } }, // unknown
-	{ "daioh",    {  1,  1 }, { -1, -1 } }, // correct? (launch window and test grid are right, but planet is wrong)
-	{ "daioha",   {  1,  1 }, { -1, -1 } }, // "
+	{ "eightfrc", {  3,  4 }, {  0,  0 } }, // correct (test mode)
+	{ "daioh",    {  0,  0 }, { -1, -1 } }, // correct (test grid, planet)
+	{ "daioha",   {  0,  0 }, { -1, -1 } }, // "
+	{ "daiohc",   {  0,  0 }, { -1, -1 } }, // "
+	{ "daiohp",   {  0,  0 }, { -1, -1 } }, // "
 	{ "msgundam", {  0,  0 }, { -2, -2 } }, // correct (test grid, banpresto logo)
 	{ "msgundam1",{  0,  0 }, { -2, -2 } }, // "
 	{ "oisipuzl", {  1,  1 }, { -1, -1 } }, // correct (test mode) flip screen not supported?
 	{ "triplfun", {  1,  1 }, { -1, -1 } }, // "
-	{ "wrofaero", {  0,  0 }, {  0,  0 } }, // unknown
+	{ "wrofaero", {  0,  0 }, {  0,  0 } }, // correct (test mode)
 	{ "jjsquawk", {  1,  1 }, { -1, -1 } }, // correct (test mode)
 	{ "jjsquawkb",{  1,  1 }, { -1, -1 } }, // "
 	{ "kamenrid", {  0,  0 }, { -2, -2 } }, // correct (map, banpresto logo)
 	{ "extdwnhl", {  0,  0 }, { -2, -2 } }, // correct (test grid, background images)
 	{ "sokonuke", {  0,  0 }, { -2, -2 } }, // correct (game selection, test grid)
-	{ "gundhara", {  0,  0 }, {  0,  0 } }, // unknown, flip screen not supported?
+	{ "gundhara", {  0,  0 }, {  0,  0 } }, // correct (test mode)
 	{ "zombraid", {  0,  0 }, { -2, -2 } }, // correct for normal, flip screen not working yet
+	{ "zombraidp", {  0,  0 }, { -2, -2 } }, // correct for normal, flip screen not working yet
+	{ "zombraidpj", {  0,  0 }, { -2, -2 } }, // correct for normal, flip screen not working yet
 	{ "madshark", {  0,  0 }, {  0,  0 } }, // unknown (wrong when flipped, but along y)
 	{ "utoukond", {  0,  0 }, { -2,  0 } }, // unknown (wrong when flipped, but along y)
 	{ "crazyfgt", {  0,  0 }, { -2,  0 } }, // wrong (empty background column in title screen, but aligned sprites in screen select)
@@ -217,7 +221,7 @@ static const game_offset game_offsets[] =
 void seta_state::seta_coin_lockout_w(int data)
 {
 	static const char *const seta_nolockout[] =
-	{ "blandia", "eightfrc", "extdwnhl", "gundhara", "kamenrid", "magspeed", "sokonuke", "zingzip", "zombraid"};
+	{ "blandia", "eightfrc", "extdwnhl", "gundhara", "kamenrid", "magspeed", "sokonuke", "zingzip", "zombraid", "zombraidp", "zombraidpj"};
 
 	/* Only compute seta_coin_lockout when confronted with a new gamedrv */
 	if (!m_coin_lockout_initialized)
@@ -265,10 +269,9 @@ WRITE16_MEMBER(seta_state::seta_vregs_w)
         ---- ---- ---- ---0     Coin #0 Counter     */
 			if (ACCESSING_BITS_0_7)
 			{
-				device_t *x1_010 = machine().device("x1snd");
 				seta_coin_lockout_w (data & 0x0f);
-				if (x1_010 != NULL)
-					seta_sound_enable_w (x1_010, data & 0x20);
+				if (m_x1 != NULL)
+					m_x1->enable_w (data & 0x20);
 				coin_counter_w(machine(), 0,data & 0x01);
 				coin_counter_w(machine(), 1,data & 0x02);
 			}
@@ -368,7 +371,7 @@ inline void seta_state::twineagl_tile_info( tile_data &tileinfo, int tile_index,
 	UINT16 attr =   vram[ tile_index + 0x800 ];
 	if ((code & 0x3e00) == 0x3e00)
 		code = (code & 0xc07f) | ((m_twineagl_tilebank[(code & 0x0180) >> 7] >> 1) << 7);
-	SET_TILE_INFO_MEMBER( 1, (code & 0x3fff), attr & 0x1f, TILE_FLIPXY((code & 0xc000) >> 14) );
+	SET_TILE_INFO_MEMBER(1, (code & 0x3fff), attr & 0x1f, TILE_FLIPXY((code & 0xc000) >> 14) );
 }
 
 TILE_GET_INFO_MEMBER(seta_state::twineagl_get_tile_info_0){ twineagl_tile_info(tileinfo, tile_index, 0x0000 ); }
@@ -383,7 +386,7 @@ inline void seta_state::get_tile_info( tile_data &tileinfo, int tile_index, int 
 	UINT16 code =   vram[ tile_index ];
 	UINT16 attr =   vram[ tile_index + 0x800 ];
 
-	if(machine().gfx[gfx + ((vctrl[ 4/2 ] & 0x10) >> m_color_mode_shift)] != NULL)
+	if(m_gfxdecode->gfx(gfx + ((vctrl[ 4/2 ] & 0x10) >> m_color_mode_shift)) != NULL)
 	{
 		gfx += (vctrl[ 4/2 ] & 0x10) >> m_color_mode_shift;
 	}
@@ -392,7 +395,7 @@ inline void seta_state::get_tile_info( tile_data &tileinfo, int tile_index, int 
 		popmessage("Missing Color Mode = 1 for Layer = %d. Contact MAMETesters.",layer);
 	}
 
-	SET_TILE_INFO_MEMBER( gfx, m_tiles_offset + (code & 0x3fff), attr & 0x1f, TILE_FLIPXY((code & 0xc000) >> 14) );
+	SET_TILE_INFO_MEMBER(gfx, m_tiles_offset + (code & 0x3fff), attr & 0x1f, TILE_FLIPXY((code & 0xc000) >> 14) );
 }
 
 TILE_GET_INFO_MEMBER(seta_state::get_tile_info_0){ get_tile_info(tileinfo, tile_index, 0, 0x0000 ); }
@@ -443,18 +446,18 @@ VIDEO_START_MEMBER(seta_state,seta_2_layers)
 	   at any given time */
 
 	/* layer 0 */
-	m_tilemap_0 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_0),this), TILEMAP_SCAN_ROWS,
+	m_tilemap_0 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_0),this), TILEMAP_SCAN_ROWS,
 									16,16, 64,32 );
 
-	m_tilemap_1 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_1),this), TILEMAP_SCAN_ROWS,
+	m_tilemap_1 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_1),this), TILEMAP_SCAN_ROWS,
 									16,16, 64,32 );
 
 
 	/* layer 1 */
-	m_tilemap_2 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_2),this), TILEMAP_SCAN_ROWS,
+	m_tilemap_2 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_2),this), TILEMAP_SCAN_ROWS,
 									16,16, 64,32 );
 
-	m_tilemap_3 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_3),this), TILEMAP_SCAN_ROWS,
+	m_tilemap_3 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_3),this), TILEMAP_SCAN_ROWS,
 									16,16, 64,32 );
 
 	m_tilemaps_flip = 0;
@@ -472,7 +475,7 @@ VIDEO_START_MEMBER(seta_state,oisipuzl_2_layers)
 	m_tilemaps_flip = 1;
 
 	// position kludges
-	machine().device<seta001_device>("spritegen")->set_fg_yoffsets( -0x12, 0x0e );
+	m_seta001->set_fg_yoffsets( -0x12, 0x0e );
 }
 
 
@@ -485,10 +488,10 @@ VIDEO_START_MEMBER(seta_state,seta_1_layer)
 	   at any given time */
 
 	/* layer 0 */
-	m_tilemap_0 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_0),this), TILEMAP_SCAN_ROWS,
+	m_tilemap_0 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_0),this), TILEMAP_SCAN_ROWS,
 									16,16, 64,32 );
 
-	m_tilemap_1 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_1),this), TILEMAP_SCAN_ROWS,
+	m_tilemap_1 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(seta_state::get_tile_info_1),this), TILEMAP_SCAN_ROWS,
 									16,16, 64,32 );
 
 	m_color_mode_shift = 4;
@@ -502,8 +505,8 @@ VIDEO_START_MEMBER(seta_state,setaroul_1_layer)
 	VIDEO_START_CALL_MEMBER(seta_1_layer);
 
 	// position kludges
-	machine().device<seta001_device>("spritegen")->set_fg_yoffsets( -0x12, 0x0e );
-	machine().device<seta001_device>("spritegen")->set_bg_yoffsets( 0x1, -0x1 );
+	m_seta001->set_fg_yoffsets( -0x12, 0x0e );
+	m_seta001->set_bg_yoffsets( 0x1, -0x1 );
 }
 
 VIDEO_START_MEMBER(seta_state,twineagl_1_layer)
@@ -514,17 +517,17 @@ VIDEO_START_MEMBER(seta_state,twineagl_1_layer)
 	   at any given time */
 
 	/* layer 0 */
-	m_tilemap_0 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(seta_state::twineagl_get_tile_info_0),this), TILEMAP_SCAN_ROWS,
+	m_tilemap_0 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(seta_state::twineagl_get_tile_info_0),this), TILEMAP_SCAN_ROWS,
 									16,16, 64,32 );
 
-	m_tilemap_1 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(seta_state::twineagl_get_tile_info_1),this), TILEMAP_SCAN_ROWS,
+	m_tilemap_1 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(seta_state::twineagl_get_tile_info_1),this), TILEMAP_SCAN_ROWS,
 									16,16, 64,32 );
 
 	m_tilemap_0->set_transparent_pen(0);
 	m_tilemap_1->set_transparent_pen(0);
 }
 
-int setac_gfxbank_callback( running_machine &machine, UINT16 code, UINT8 color )
+SETA001_SPRITE_GFXBANK_CB_MEMBER(seta_state::setac_gfxbank_callback)
 {
 	int bank    =   (color & 0x06) >> 1;
 	code = (code & 0x3fff) + (bank * 0x4000);
@@ -548,12 +551,9 @@ VIDEO_START_MEMBER(seta_state,seta_no_layers)
 	m_samples_bank = -1;    // set the samples bank to an out of range value at start-up
 
 	// position kludges
-	machine().device<seta001_device>("spritegen")->set_fg_xoffsets(m_global_offsets->sprite_offs[1], m_global_offsets->sprite_offs[0]);
-	machine().device<seta001_device>("spritegen")->set_fg_yoffsets( -0x0a, 0x0e );
-
-	// banking
-	machine().device<seta001_device>("spritegen")->set_gfxbank_callback( setac_gfxbank_callback );
-
+	m_seta001->set_fg_xoffsets(m_global_offsets->sprite_offs[1], m_global_offsets->sprite_offs[0]);
+	m_seta001->set_fg_yoffsets( -0x12, 0x0e );
+	m_seta001->set_bg_yoffsets( 0x1, -0x1 );
 }
 
 
@@ -576,20 +576,17 @@ PALETTE_INIT_MEMBER(seta_state,blandia)
 {
 	int color, pen;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x600*2);
-
 	for (color = 0; color < 0x20; color++)
 	{
 		for (pen = 0; pen < 0x40; pen++)
 		{
 			// layer 2-3
-			colortable_entry_set_value(machine().colortable, 0x0200 + ((color << 6) | pen), 0x200 + ((color << 4) | (pen & 0x0f)));
-			colortable_entry_set_value(machine().colortable, 0x1200 + ((color << 6) | pen), 0x200 + pen);
+			palette.set_pen_indirect(0x0200 + ((color << 6) | pen), 0x200 + ((color << 4) | (pen & 0x0f)));
+			palette.set_pen_indirect(0x1200 + ((color << 6) | pen), 0x200 + pen);
 
 			// layer 0-1
-			colortable_entry_set_value(machine().colortable, 0x0a00 + ((color << 6) | pen), 0x400 + ((color << 4) | (pen & 0x0f)));
-			colortable_entry_set_value(machine().colortable, 0x1a00 + ((color << 6) | pen), 0x400 + pen);
+			palette.set_pen_indirect(0x0a00 + ((color << 6) | pen), 0x400 + ((color << 4) | (pen & 0x0f)));
+			palette.set_pen_indirect(0x1a00 + ((color << 6) | pen), 0x400 + pen);
 		}
 	}
 
@@ -597,7 +594,7 @@ PALETTE_INIT_MEMBER(seta_state,blandia)
 	// what are used for palette from 0x800 to 0xBFF?
 	for(int i = 0; i < 0x2200; i++)
 	{
-		colortable_entry_set_value(machine().colortable, 0x2200 + i, 0x600 + (i & 0x1ff));
+		palette.set_pen_indirect(0x2200 + i, 0x600 + (i & 0x1ff));
 	}
 }
 
@@ -609,17 +606,14 @@ PALETTE_INIT_MEMBER(seta_state,gundhara)
 {
 	int color, pen;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x600);
-
 	for (color = 0; color < 0x20; color++)
 		for (pen = 0; pen < 0x40; pen++)
 		{
-			colortable_entry_set_value(machine().colortable, 0x0200 + ((color << 6) | pen), 0x400 + ((((color & ~3) << 4) + pen) & 0x1ff)); // used?
-			colortable_entry_set_value(machine().colortable, 0x1200 + ((color << 6) | pen), 0x400 + ((((color & ~3) << 4) + pen) & 0x1ff));
+			palette.set_pen_indirect(0x0200 + ((color << 6) | pen), 0x400 + ((((color & ~3) << 4) + pen) & 0x1ff)); // used?
+			palette.set_pen_indirect(0x1200 + ((color << 6) | pen), 0x400 + ((((color & ~3) << 4) + pen) & 0x1ff));
 
-			colortable_entry_set_value(machine().colortable, 0x0a00 + ((color << 6) | pen), 0x200 + ((((color & ~3) << 4) + pen) & 0x1ff)); // used?
-			colortable_entry_set_value(machine().colortable, 0x1a00 + ((color << 6) | pen), 0x200 + ((((color & ~3) << 4) + pen) & 0x1ff));
+			palette.set_pen_indirect(0x0a00 + ((color << 6) | pen), 0x200 + ((((color & ~3) << 4) + pen) & 0x1ff)); // used?
+			palette.set_pen_indirect(0x1a00 + ((color << 6) | pen), 0x200 + ((((color & ~3) << 4) + pen) & 0x1ff));
 		}
 }
 
@@ -630,17 +624,14 @@ PALETTE_INIT_MEMBER(seta_state,jjsquawk)
 {
 	int color, pen;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x600);
-
 	for (color = 0; color < 0x20; color++)
 		for (pen = 0; pen < 0x40; pen++)
 		{
-			colortable_entry_set_value(machine().colortable, 0x0200 + ((color << 6) | pen), 0x400 + (((color << 4) + pen) & 0x1ff)); // used by madshark
-			colortable_entry_set_value(machine().colortable, 0x1200 + ((color << 6) | pen), 0x400 + (((color << 4) + pen) & 0x1ff));
+			palette.set_pen_indirect(0x0200 + ((color << 6) | pen), 0x400 + (((color << 4) + pen) & 0x1ff)); // used by madshark
+			palette.set_pen_indirect(0x1200 + ((color << 6) | pen), 0x400 + (((color << 4) + pen) & 0x1ff));
 
-			colortable_entry_set_value(machine().colortable, 0x0a00 + ((color << 6) | pen), 0x200 + (((color << 4) + pen) & 0x1ff)); // used by madshark
-			colortable_entry_set_value(machine().colortable, 0x1a00 + ((color << 6) | pen), 0x200 + (((color << 4) + pen) & 0x1ff));
+			palette.set_pen_indirect(0x0a00 + ((color << 6) | pen), 0x200 + (((color << 4) + pen) & 0x1ff)); // used by madshark
+			palette.set_pen_indirect(0x1a00 + ((color << 6) | pen), 0x200 + (((color << 4) + pen) & 0x1ff));
 		}
 }
 
@@ -650,14 +641,11 @@ PALETTE_INIT_MEMBER(seta_state,zingzip)
 {
 	int color, pen;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x600);
-
 	for (color = 0; color < 0x20; color++)
 		for (pen = 0; pen < 0x40; pen++)
 		{
-			colortable_entry_set_value(machine().colortable, 0x400 + ((color << 6) | pen), 0x400 + ((((color & ~3) << 4) + pen) & 0x1ff)); // used?
-			colortable_entry_set_value(machine().colortable, 0xc00 + ((color << 6) | pen), 0x400 + ((((color & ~3) << 4) + pen) & 0x1ff));
+			palette.set_pen_indirect(0x400 + ((color << 6) | pen), 0x400 + ((((color & ~3) << 4) + pen) & 0x1ff)); // used?
+			palette.set_pen_indirect(0xc00 + ((color << 6) | pen), 0x400 + ((((color & ~3) << 4) + pen) & 0x1ff));
 		}
 }
 
@@ -669,16 +657,16 @@ PALETTE_INIT_MEMBER(seta_state,inttoote)
 	for (x = 0; x < 0x200 ; x++)
 	{
 		int data = (color_prom[x*2] <<8) | color_prom[x*2+1];
-		palette_set_color_rgb(machine(), x, pal5bit(data >> 10),pal5bit(data >> 5),pal5bit(data >> 0));
+		palette.set_pen_color(x, pal5bit(data >> 10),pal5bit(data >> 5),pal5bit(data >> 0));
 	}
 }
 
 PALETTE_INIT_MEMBER(seta_state,setaroul)
 {
-	machine().gfx[0]->set_granularity(16);
-	machine().gfx[1]->set_granularity(16);
+	m_gfxdecode->gfx(0)->set_granularity(16);
+	m_gfxdecode->gfx(1)->set_granularity(16);
 
-	PALETTE_INIT_CALL_MEMBER(inttoote);
+	PALETTE_INIT_NAME(inttoote)(palette);
 }
 
 PALETTE_INIT_MEMBER(seta_state,usclssic)
@@ -687,27 +675,24 @@ PALETTE_INIT_MEMBER(seta_state,usclssic)
 	int color, pen;
 	int x;
 
-	/* allocate the colortable */
-	machine().colortable = colortable_alloc(machine(), 0x400);
-
 	/* DECODE PROM */
 	for (x = 0; x < 0x200 ; x++)
 	{
 		UINT16 data = (color_prom[x*2] <<8) | color_prom[x*2+1];
 
-		rgb_t color = MAKE_RGB(pal5bit(data >> 10), pal5bit(data >> 5), pal5bit(data >> 0));
+		rgb_t color = rgb_t(pal5bit(data >> 10), pal5bit(data >> 5), pal5bit(data >> 0));
 
 		if (x >= 0x100)
-			colortable_palette_set_color(machine().colortable, x + 0x000, color);
+			palette.set_indirect_color(x + 0x000, color);
 		else
-			colortable_palette_set_color(machine().colortable, x + 0x300, color);
+			palette.set_indirect_color(x + 0x300, color);
 	}
 
 	for (color = 0; color < 0x20; color++)
 		for (pen = 0; pen < 0x40; pen++)
 		{
-			colortable_entry_set_value(machine().colortable, 0x200 + ((color << 6) | pen), 0x200 + ((((color & ~3) << 4) + pen) & 0x1ff)); // used?
-			colortable_entry_set_value(machine().colortable, 0xa00 + ((color << 6) | pen), 0x200 + ((((color & ~3) << 4) + pen) & 0x1ff));
+			palette.set_pen_indirect(0x200 + ((color << 6) | pen), 0x200 + ((((color & ~3) << 4) + pen) & 0x1ff)); // used?
+			palette.set_pen_indirect(0xa00 + ((color << 6) | pen), 0x200 + ((((color & ~3) << 4) + pen) & 0x1ff));
 		}
 }
 
@@ -720,12 +705,12 @@ void seta_state::set_pens()
 	{
 		UINT16 data = m_paletteram[i];
 
-		rgb_t color = MAKE_RGB(pal5bit(data >> 10), pal5bit(data >> 5), pal5bit(data >> 0));
+		rgb_t color = rgb_t(pal5bit(data >> 10), pal5bit(data >> 5), pal5bit(data >> 0));
 
-		if (machine().colortable != NULL)
-			colortable_palette_set_color(machine().colortable, i, color);
+		if (m_palette->indirect_entries() != 0)
+			m_palette->set_indirect_color(i, color);
 		else
-			palette_set_color(machine(), i, color);
+			m_palette->set_pen_color(i, color);
 	}
 
 	if(m_paletteram2 != NULL)
@@ -734,12 +719,12 @@ void seta_state::set_pens()
 		{
 			UINT16 data = m_paletteram2[i];
 
-			rgb_t color = MAKE_RGB(pal5bit(data >> 10), pal5bit(data >> 5), pal5bit(data >> 0));
+			rgb_t color = rgb_t(pal5bit(data >> 10), pal5bit(data >> 5), pal5bit(data >> 0));
 
-			if (machine().colortable != NULL)
-				colortable_palette_set_color(machine().colortable, i + m_paletteram.bytes() / 2, color);
+			if (m_palette->indirect_entries() != 0)
+				m_palette->set_indirect_color(i + m_paletteram.bytes() / 2, color);
 			else
-				palette_set_color(machine(), i + m_paletteram.bytes() / 2, color);
+				m_palette->set_pen_color(i + m_paletteram.bytes() / 2, color);
 		}
 	}
 }
@@ -753,12 +738,12 @@ void seta_state::usclssic_set_pens()
 	{
 		UINT16 data = m_paletteram[i];
 
-		rgb_t color = MAKE_RGB(pal5bit(data >> 10), pal5bit(data >> 5), pal5bit(data >> 0));
+		rgb_t color = rgb_t(pal5bit(data >> 10), pal5bit(data >> 5), pal5bit(data >> 0));
 
 		if (i >= 0x100)
-			colortable_palette_set_color(machine().colortable, i - 0x100, color);
+			m_palette->set_indirect_color(i - 0x100, color);
 		else
-			colortable_palette_set_color(machine().colortable, i + 0x200, color);
+			m_palette->set_indirect_color(i + 0x200, color);
 	}
 }
 
@@ -768,7 +753,7 @@ void seta_state::usclssic_set_pens()
 void seta_state::draw_tilemap_palette_effect(bitmap_ind16 &bitmap, const rectangle &cliprect, tilemap_t *tilemap, int scrollx, int scrolly, int gfxnum, int flipscreen)
 {
 	int y;
-	gfx_element *gfx_tilemap = machine().gfx[gfxnum];
+	gfx_element *gfx_tilemap = m_gfxdecode->gfx(gfxnum);
 	const bitmap_ind16 &src_bitmap = tilemap->pixmap();
 	int width_mask, height_mask;
 	int opaque_mask = gfx_tilemap->granularity() - 1;
@@ -800,11 +785,11 @@ void seta_state::draw_tilemap_palette_effect(bitmap_ind16 &bitmap, const rectang
 				// pixels with the last color are not drawn and the 2nd palette is added to the current bitmap color
 				if((p & pixel_effect_mask) == pixel_effect_mask)
 				{
-					dest[x] = machine().total_colors() / 2 + dest[x];
+					dest[x] = m_palette->entries() / 2 + dest[x];
 				}
 				else
 				{
-					dest[x] = machine().pens[p];
+					dest[x] = m_palette->pen(p);
 				}
 			}
 		}
@@ -828,7 +813,7 @@ UINT32 seta_state::screen_update_seta_no_layers(screen_device &screen, bitmap_in
 	set_pens();
 	bitmap.fill(0x1f0, cliprect);
 
-	machine().device<seta001_device>("spritegen")->seta001_draw_sprites(machine(),bitmap,cliprect,0x1000, 1);
+	m_seta001->draw_sprites(screen, bitmap,cliprect,0x1000, 1);
 	return 0;
 }
 
@@ -840,7 +825,7 @@ void seta_state::seta_layers_update(screen_device &screen, bitmap_ind16 &bitmap,
 	int enab_0, enab_1, x_0, x_1=0, y_0, y_1=0;
 
 	int order   =   0;
-	int flip    =   machine().device<seta001_device>("spritegen")->is_flipped();
+	int flip    =   m_seta001->is_flipped();
 
 	const rectangle &visarea = screen.visible_area();
 	int vis_dimy = visarea.max_y - visarea.min_y + 1;
@@ -866,7 +851,7 @@ void seta_state::seta_layers_update(screen_device &screen, bitmap_ind16 &bitmap,
 
 	flip ^= m_tilemaps_flip;
 
-	screen.machine().tilemap().set_flip_all(flip ? (TILEMAP_FLIPX|TILEMAP_FLIPY) : 0 );
+	machine().tilemap().set_flip_all(flip ? (TILEMAP_FLIPX|TILEMAP_FLIPY) : 0 );
 
 	x_0     =   m_vctrl_0[ 0/2 ];
 	y_0     =   m_vctrl_0[ 2/2 ];
@@ -944,21 +929,21 @@ if (screen.machine().input().code_pressed(KEYCODE_Z))
 	{
 		if (m_tilemap_2)
 		{
-			if (layers_ctrl & 2)    m_tilemap_2->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-			if (layers_ctrl & 2)    m_tilemap_3->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+			if (layers_ctrl & 2)    m_tilemap_2->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+			if (layers_ctrl & 2)    m_tilemap_3->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
 		}
 
 		if (order & 2)  // layer-sprite priority?
 		{
-			if (layers_ctrl & 8)        screen.machine().device<seta001_device>("spritegen")->seta001_draw_sprites(screen.machine(),bitmap,cliprect,sprite_bank_size, sprite_setac);
+			if (layers_ctrl & 8)        m_seta001->draw_sprites(screen, bitmap,cliprect,sprite_bank_size, sprite_setac);
 
 			if(order & 4)
 			{
 				popmessage("Missing palette effect. Contact MAMETesters.");
 			}
 
-			if (layers_ctrl & 1)    m_tilemap_0->draw(bitmap, cliprect, 0, 0);
-			if (layers_ctrl & 1)    m_tilemap_1->draw(bitmap, cliprect, 0, 0);
+			if (layers_ctrl & 1)    m_tilemap_0->draw(screen, bitmap, cliprect, 0, 0);
+			if (layers_ctrl & 1)    m_tilemap_1->draw(screen, bitmap, cliprect, 0, 0);
 		}
 		else
 		{
@@ -967,20 +952,20 @@ if (screen.machine().input().code_pressed(KEYCODE_Z))
 				popmessage("Missing palette effect. Contact MAMETesters.");
 			}
 
-			if (layers_ctrl & 1)    m_tilemap_0->draw(bitmap, cliprect, 0, 0);
-			if (layers_ctrl & 1)    m_tilemap_1->draw(bitmap, cliprect, 0, 0);
+			if (layers_ctrl & 1)    m_tilemap_0->draw(screen, bitmap, cliprect, 0, 0);
+			if (layers_ctrl & 1)    m_tilemap_1->draw(screen, bitmap, cliprect, 0, 0);
 
-			if (layers_ctrl & 8)        machine().device<seta001_device>("spritegen")->seta001_draw_sprites(screen.machine(),bitmap,cliprect,sprite_bank_size, sprite_setac);
+			if (layers_ctrl & 8)        m_seta001->draw_sprites(screen, bitmap,cliprect,sprite_bank_size, sprite_setac);
 		}
 	}
 	else
 	{
-		if (layers_ctrl & 1)    m_tilemap_0->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-		if (layers_ctrl & 1)    m_tilemap_1->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		if (layers_ctrl & 1)    m_tilemap_0->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		if (layers_ctrl & 1)    m_tilemap_1->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
 
 		if (order & 2)  // layer-sprite priority?
 		{
-			if (layers_ctrl & 8)        machine().device<seta001_device>("spritegen")->seta001_draw_sprites(screen.machine(),bitmap,cliprect,sprite_bank_size, sprite_setac);
+			if (layers_ctrl & 8)        m_seta001->draw_sprites(screen, bitmap,cliprect,sprite_bank_size, sprite_setac);
 
 			if((order & 4) && m_paletteram2 != NULL)
 			{
@@ -1002,8 +987,8 @@ if (screen.machine().input().code_pressed(KEYCODE_Z))
 
 				if (m_tilemap_2)
 				{
-					if (layers_ctrl & 2)    m_tilemap_2->draw(bitmap, cliprect, 0, 0);
-					if (layers_ctrl & 2)    m_tilemap_3->draw(bitmap, cliprect, 0, 0);
+					if (layers_ctrl & 2)    m_tilemap_2->draw(screen, bitmap, cliprect, 0, 0);
+					if (layers_ctrl & 2)    m_tilemap_3->draw(screen, bitmap, cliprect, 0, 0);
 				}
 			}
 		}
@@ -1029,12 +1014,12 @@ if (screen.machine().input().code_pressed(KEYCODE_Z))
 
 				if (m_tilemap_2)
 				{
-					if (layers_ctrl & 2)    m_tilemap_2->draw(bitmap, cliprect, 0, 0);
-					if (layers_ctrl & 2)    m_tilemap_3->draw(bitmap, cliprect, 0, 0);
+					if (layers_ctrl & 2)    m_tilemap_2->draw(screen, bitmap, cliprect, 0, 0);
+					if (layers_ctrl & 2)    m_tilemap_3->draw(screen, bitmap, cliprect, 0, 0);
 				}
 			}
 
-			if (layers_ctrl & 8) machine().device<seta001_device>("spritegen")->seta001_draw_sprites(screen.machine(),bitmap,cliprect,sprite_bank_size, sprite_setac);
+			if (layers_ctrl & 8) m_seta001->draw_sprites(screen,bitmap,cliprect,sprite_bank_size, sprite_setac);
 		}
 	}
 
@@ -1060,7 +1045,7 @@ void seta_state::screen_eof_setaroul(screen_device &screen, bool state)
 {
 	// rising edge
 	if (state)
-		machine().device<seta001_device>("spritegen")->tnzs_eof();
+		m_seta001->tnzs_eof();
 }
 
 

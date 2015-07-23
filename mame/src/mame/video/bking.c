@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:Ed Mueller, Mike Balfour, Zsolt Vasvari
 /***************************************************************************
 
   bking.c
@@ -28,7 +30,7 @@
 
 ***************************************************************************/
 
-void bking_state::palette_init()
+PALETTE_INIT_MEMBER(bking_state, bking)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	static const int resistances_rg[3] = { 220, 390, 820 };
@@ -42,7 +44,7 @@ void bking_state::palette_init()
 			3, &resistances_rg[0], gweights, 0, 0,
 			2, &resistances_b[0],  bweights, 0, 0);
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		UINT16 pen;
 		int bit0, bit1, bit2, r, g, b;
@@ -78,7 +80,7 @@ void bking_state::palette_init()
 		bit1 = (color_prom[pen] >> 7) & 0x01;
 		b = combine_2_weights(gweights, bit0, bit1);
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -124,9 +126,7 @@ WRITE8_MEMBER(bking_state::bking_cont1_w)
 
 	coin_lockout_global_w(machine(), ~data & 0x01);
 
-	flip_screen_set_no_update(data & 0x04);
-
-	machine().tilemap().set_flip_all(flip_screen() ? TILEMAP_FLIPX | TILEMAP_FLIPY : 0);
+	flip_screen_set(data & 0x04);
 
 	m_controller = data & 0x02;
 
@@ -156,10 +156,9 @@ WRITE8_MEMBER(bking_state::bking_cont3_w)
 
 	if (m_palette_bank != ((data >> 1) & 0x03))
 	{
+		m_palette_bank = (data >> 1) & 0x03;
 		m_bg_tilemap->mark_all_dirty();
 	}
-
-	m_palette_bank = (data >> 1) & 0x03;
 
 	machine().sound().system_mute(data & 0x08);
 }
@@ -221,38 +220,36 @@ TILE_GET_INFO_MEMBER(bking_state::get_tile_info)
 
 void bking_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(bking_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
-	machine().primary_screen->register_screen_bitmap(m_tmp_bitmap1);
-	machine().primary_screen->register_screen_bitmap(m_tmp_bitmap2);
-
-	save_item(NAME(m_tmp_bitmap1));
-	save_item(NAME(m_tmp_bitmap2));
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(bking_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_screen->register_screen_bitmap(m_colmap_bg);
+	m_screen->register_screen_bitmap(m_colmap_ball);
 }
 
 
 UINT32 bking_state::screen_update_bking(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	/* draw the balls */
-	drawgfx_transpen(bitmap, cliprect, machine().gfx[2],
+	m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 		m_ball1_pic,
 		m_palette_bank,
 		0, 0,
 		m_xld1, m_yld1, 0);
 
-	drawgfx_transpen(bitmap, cliprect, machine().gfx[3],
+	m_gfxdecode->gfx(3)->transpen(bitmap,cliprect,
 		m_ball2_pic,
 		m_palette_bank,
 		0, 0,
 		m_xld2, m_yld2, 0);
 
 	/* draw the crow */
-	drawgfx_transpen(bitmap, cliprect, machine().gfx[1],
+	m_gfxdecode->gfx(1)->transpen(bitmap,cliprect,
 		m_crow_pic,
 		m_palette_bank,
 		m_crow_flip, m_crow_flip,
 		m_crow_flip ? m_xld3 - 16 : 256 - m_xld3, m_crow_flip ? m_yld3 - 16 : 256 - m_yld3, 0);
+
 	return 0;
 }
 
@@ -274,66 +271,54 @@ void bking_state::screen_eof_bking(screen_device &screen, bool state)
 			xld = m_xld1;
 			yld = m_yld1;
 
-			drawgfx_opaque(m_tmp_bitmap2, rect, machine().gfx[2],
-				m_ball1_pic,
-				0,
-				0, 0,
-				0, 0);
+			m_gfxdecode->gfx(2)->opaque(m_colmap_ball,rect, m_ball1_pic, 0, 0, 0, 0, 0);
 
 			latch = 0x0c00;
 		}
-
-		if (m_pc3259_mask == 3) /* player 2 */
+		else if (m_pc3259_mask == 3) /* player 2 */
 		{
 			xld = m_xld2;
 			yld = m_yld2;
 
-			drawgfx_opaque(m_tmp_bitmap2, rect, machine().gfx[3],
-				m_ball2_pic,
-				0,
-				0, 0,
-				0, 0);
+			m_gfxdecode->gfx(3)->opaque(m_colmap_ball,rect, m_ball2_pic, 0, 0, 0, 0, 0);
 
 			latch = 0x0400;
 		}
+		else
+			return;
 
 		m_bg_tilemap->set_scrollx(0, flip_screen() ? -xld : xld);
 		m_bg_tilemap->set_scrolly(0, flip_screen() ? -yld : yld);
 
-		m_bg_tilemap->draw(m_tmp_bitmap1, rect, 0, 0);
+		m_bg_tilemap->draw(screen, m_colmap_bg, rect, 0, 0);
 
 		m_bg_tilemap->set_scrollx(0, 0);
 		m_bg_tilemap->set_scrolly(0, 0);
 
-		if (latch != 0)
+		// check for collision
+		const UINT8* colmask = memregion("user1")->base() + 8 * m_hit;
+
+		for (int y = rect.min_y; y <= rect.max_y; y++)
 		{
-			const UINT8* MASK = memregion("user1")->base() + 8 * m_hit;
+			const UINT16* p0 = &m_colmap_bg.pix16(y);
+			const UINT16* p1 = &m_colmap_ball.pix16(y);
 
-			int x;
-			int y;
-
-			for (y = rect.min_y; y <= rect.max_y; y++)
+			for (int x = rect.min_x; x <= rect.max_x; x++)
 			{
-				const UINT16* p0 = &m_tmp_bitmap1.pix16(y);
-				const UINT16* p1 = &m_tmp_bitmap2.pix16(y);
-
-				for (x = rect.min_x; x <= rect.max_x; x++)
+				if (colmask[p0[x] & 7] && p1[x] & 1)
 				{
-					if (MASK[p0[x] & 7] && p1[x])
-					{
-						int col = (xld + x) / 8 + 1;
-						int row = (yld + y) / 8 + 0;
+					int col = (xld + x) / 8 + 1;
+					int row = (yld + y) / 8 + 0;
 
-						latch |= (flip_screen() ? 31 - col : col) << 0;
-						latch |= (flip_screen() ? 31 - row : row) << 5;
+					latch |= (flip_screen() ? 31 - col : col) << 0;
+					latch |= (flip_screen() ? 31 - row : row) << 5;
 
-						m_pc3259_output[0] = (latch >> 0x0) & 0xf;
-						m_pc3259_output[1] = (latch >> 0x4) & 0xf;
-						m_pc3259_output[2] = (latch >> 0x8) & 0xf;
-						m_pc3259_output[3] = (latch >> 0xc) & 0xf;
+					m_pc3259_output[0] = (latch >> 0x0) & 0xf;
+					m_pc3259_output[1] = (latch >> 0x4) & 0xf;
+					m_pc3259_output[2] = (latch >> 0x8) & 0xf;
+					m_pc3259_output[3] = (latch >> 0xc) & 0xf;
 
-						return;
-					}
+					return;
 				}
 			}
 		}

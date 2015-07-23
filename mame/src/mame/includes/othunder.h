@@ -1,13 +1,18 @@
+// license:BSD-3-Clause
+// copyright-holders:David Graves
 /*************************************************************************
 
     Operation Thunderbolt
 
 *************************************************************************/
 
-#include "machine/eeprom.h"
-#include "sound/flt_vol.h"
 #include "audio/taitosnd.h"
+#include "machine/eepromser.h"
 #include "machine/taitoio.h"
+#include "sound/flt_vol.h"
+#include "video/tc0100scn.h"
+#include "video/tc0110pcr.h"
+
 
 struct othunder_tempsprite
 {
@@ -43,7 +48,9 @@ public:
 		m_2610_1l(*this, "2610.1l"),
 		m_2610_1r(*this, "2610.1r"),
 		m_2610_2l(*this, "2610.2l"),
-		m_2610_2r(*this, "2610.2r") { }
+		m_2610_2r(*this, "2610.2r"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT16> m_spriteram;
@@ -54,13 +61,12 @@ public:
 	/* misc */
 	int        m_vblank_irq;
 	int        m_ad_irq;
-	INT32      m_banknum;
 	int        m_pan[4];
 
 	/* devices */
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
-	optional_device<eeprom_device> m_eeprom;
+	optional_device<eeprom_serial_93cxx_device> m_eeprom;
 	required_device<tc0220ioc_device> m_tc0220ioc;
 	required_device<tc0100scn_device> m_tc0100scn;
 	required_device<tc0110pcr_device> m_tc0110pcr;
@@ -71,6 +77,9 @@ public:
 	required_device<filter_volume_device> m_2610_1r;
 	required_device<filter_volume_device> m_2610_2l;
 	required_device<filter_volume_device> m_2610_2r;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
+
 	DECLARE_WRITE16_MEMBER(irq_ack_w);
 	DECLARE_WRITE16_MEMBER(othunder_tc0220ioc_w);
 	DECLARE_READ16_MEMBER(othunder_tc0220ioc_r);
@@ -85,8 +94,7 @@ public:
 	virtual void video_start();
 	UINT32 screen_update_othunder(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(vblank_interrupt);
-	void reset_sound_region();
-	void draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, const int *primasks, int y_offs );
+	void draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, const int *primasks, int y_offs );
 	void update_irq(  );
 	DECLARE_WRITE_LINE_MEMBER(irqhandler);
 

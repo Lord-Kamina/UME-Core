@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 // remaining gfx glitches
 
 // layer priority register not fully understood
@@ -56,7 +58,7 @@ WRITE16_MEMBER(drgnmst_state::drgnmst_md_videoram_w)
 
 void drgnmst_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect )
 {
-	gfx_element *gfx = machine().gfx[0];
+	gfx_element *gfx = m_gfxdecode->gfx(0);
 	UINT16 *source = m_spriteram;
 	UINT16 *finish = source + 0x800 / 2;
 
@@ -93,7 +95,7 @@ void drgnmst_state::draw_sprites( bitmap_ind16 &bitmap,const rectangle &cliprect
 				realy = ypos + incy * y;
 				realnumber = number + x + y * 16;
 
-				drawgfx_transpen(bitmap, cliprect, gfx, realnumber, colr, flipx, flipy, realx, realy, 15);
+					gfx->transpen(bitmap,cliprect, realnumber, colr, flipx, flipy, realx, realy, 15);
 			}
 		}
 		source += 4;
@@ -118,13 +120,13 @@ TILEMAP_MAPPER_MEMBER(drgnmst_state::drgnmst_bg_tilemap_scan_cols)
 
 void drgnmst_state::video_start()
 {
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(drgnmst_state::get_drgnmst_fg_tile_info),this), tilemap_mapper_delegate(FUNC(drgnmst_state::drgnmst_fg_tilemap_scan_cols),this), 8, 8, 64,64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(drgnmst_state::get_drgnmst_fg_tile_info),this), tilemap_mapper_delegate(FUNC(drgnmst_state::drgnmst_fg_tilemap_scan_cols),this), 8, 8, 64,64);
 	m_fg_tilemap->set_transparent_pen(15);
 
-	m_md_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(drgnmst_state::get_drgnmst_md_tile_info),this), tilemap_mapper_delegate(FUNC(drgnmst_state::drgnmst_md_tilemap_scan_cols),this), 16, 16, 64,64);
+	m_md_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(drgnmst_state::get_drgnmst_md_tile_info),this), tilemap_mapper_delegate(FUNC(drgnmst_state::drgnmst_md_tilemap_scan_cols),this), 16, 16, 64,64);
 	m_md_tilemap->set_transparent_pen(15);
 
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(drgnmst_state::get_drgnmst_bg_tile_info),this), tilemap_mapper_delegate(FUNC(drgnmst_state::drgnmst_bg_tilemap_scan_cols),this), 32, 32, 64,64);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(drgnmst_state::get_drgnmst_bg_tile_info),this), tilemap_mapper_delegate(FUNC(drgnmst_state::drgnmst_bg_tilemap_scan_cols),this), 32, 32, 64,64);
 	m_bg_tilemap->set_transparent_pen(15);
 
 	// do the other tilemaps have rowscroll too? probably not ..
@@ -156,31 +158,31 @@ UINT32 drgnmst_state::screen_update_drgnmst(screen_device &screen, bitmap_ind16 
 		case 0x2d9a: // fg unsure
 		case 0x2440: // all ok
 		case 0x245a: // fg unsure, title screen
-			m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-			m_md_tilemap->draw(bitmap, cliprect, 0, 0);
-			m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+			m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+			m_md_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+			m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 			break;
 		case 0x23c0: // all ok
-			m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-			m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
-			m_md_tilemap->draw(bitmap, cliprect, 0, 0);
+			m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+			m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+			m_md_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 			break;
 		case 0x38da: // fg unsure
 		case 0x215a: // fg unsure
 		case 0x2140: // all ok
-			m_fg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-			m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
-			m_md_tilemap->draw(bitmap, cliprect, 0, 0);
+			m_fg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+			m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+			m_md_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 			break;
 		case 0x2d80: // all ok
-			m_md_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-			m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
-			m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
+			m_md_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+			m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+			m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 			break;
 		default:
-			m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
-			m_fg_tilemap->draw(bitmap, cliprect, 0, 0);
-			m_md_tilemap->draw(bitmap, cliprect, 0, 0);
+			m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+			m_fg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
+			m_md_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 			logerror ("unknown video priority regs %04x\n", m_vidregs2[0]);
 
 	}

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Takahiro Nogi, Uki
 /******************************************************************************
 
     Video Hardware for Video System Mahjong series.
@@ -23,7 +25,7 @@ PALETTE_INIT_MEMBER(ojankohs_state,ojankoy)
 	int i;
 	int bit0, bit1, bit2, bit3, bit4, r, g, b;
 
-	for (i = 0; i < machine().total_colors(); i++)
+	for (i = 0; i < palette.entries(); i++)
 	{
 		bit0 = BIT(color_prom[0], 2);
 		bit1 = BIT(color_prom[0], 3);
@@ -31,20 +33,20 @@ PALETTE_INIT_MEMBER(ojankohs_state,ojankoy)
 		bit3 = BIT(color_prom[0], 5);
 		bit4 = BIT(color_prom[0], 6);
 		r = 0x08 * bit0 + 0x11 * bit1 + 0x21 * bit2 + 0x43 * bit3 + 0x82 * bit4;
-		bit0 = BIT(color_prom[machine().total_colors()], 5);
-		bit1 = BIT(color_prom[machine().total_colors()], 6);
-		bit2 = BIT(color_prom[machine().total_colors()], 7);
+		bit0 = BIT(color_prom[palette.entries()], 5);
+		bit1 = BIT(color_prom[palette.entries()], 6);
+		bit2 = BIT(color_prom[palette.entries()], 7);
 		bit3 = BIT(color_prom[0], 0);
 		bit4 = BIT(color_prom[0], 1);
 		g = 0x08 * bit0 + 0x11 * bit1 + 0x21 * bit2 + 0x43 * bit3 + 0x82 * bit4;
-		bit0 = BIT(color_prom[machine().total_colors()], 0);
-		bit1 = BIT(color_prom[machine().total_colors()], 1);
-		bit2 = BIT(color_prom[machine().total_colors()], 2);
-		bit3 = BIT(color_prom[machine().total_colors()], 3);
-		bit4 = BIT(color_prom[machine().total_colors()], 4);
+		bit0 = BIT(color_prom[palette.entries()], 0);
+		bit1 = BIT(color_prom[palette.entries()], 1);
+		bit2 = BIT(color_prom[palette.entries()], 2);
+		bit3 = BIT(color_prom[palette.entries()], 3);
+		bit4 = BIT(color_prom[palette.entries()], 4);
 		b = 0x08 * bit0 + 0x11 * bit1 + 0x21 * bit2 + 0x43 * bit3 + 0x82 * bit4;
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 		color_prom++;
 	}
 }
@@ -61,7 +63,7 @@ WRITE8_MEMBER(ojankohs_state::ojankohs_palette_w)
 	g = ((m_paletteram[offset + 0] & 0x03) << 3) | ((m_paletteram[offset + 1] & 0xe0) >> 5);
 	b = (m_paletteram[offset + 1] & 0x1f) >> 0;
 
-	palette_set_color_rgb(machine(), offset >> 1, pal5bit(r), pal5bit(g), pal5bit(b));
+	m_palette->set_pen_color(offset >> 1, pal5bit(r), pal5bit(g), pal5bit(b));
 }
 
 WRITE8_MEMBER(ojankohs_state::ccasino_palette_w)
@@ -79,7 +81,7 @@ WRITE8_MEMBER(ojankohs_state::ccasino_palette_w)
 	g = ((m_paletteram[offset + 0] & 0x03) << 3) | ((m_paletteram[offset + 1] & 0xe0) >> 5);
 	b = (m_paletteram[offset + 1] & 0x1f) >> 0;
 
-	palette_set_color_rgb(machine(), offset >> 1, pal5bit(r), pal5bit(g), pal5bit(b));
+	m_palette->set_pen_color(offset >> 1, pal5bit(r), pal5bit(g), pal5bit(b));
 }
 
 WRITE8_MEMBER(ojankohs_state::ojankoc_palette_w)
@@ -98,7 +100,7 @@ WRITE8_MEMBER(ojankohs_state::ojankoc_palette_w)
 	g = (color >>  5) & 0x1f;
 	b = (color >>  0) & 0x1f;
 
-	palette_set_color_rgb(machine(), offset >> 1, pal5bit(r), pal5bit(g), pal5bit(b));
+	m_palette->set_pen_color(offset >> 1, pal5bit(r), pal5bit(g), pal5bit(b));
 }
 
 
@@ -255,7 +257,7 @@ WRITE8_MEMBER(ojankohs_state::ojankoc_videoram_w)
 
 VIDEO_START_MEMBER(ojankohs_state,ojankohs)
 {
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ojankohs_state::ojankohs_get_tile_info),this), TILEMAP_SCAN_ROWS,  8, 4, 64, 64);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ojankohs_state::ojankohs_get_tile_info),this), TILEMAP_SCAN_ROWS,  8, 4, 64, 64);
 //  m_videoram = auto_alloc_array(machine(), UINT8, 0x1000);
 //  m_colorram = auto_alloc_array(machine(), UINT8, 0x1000);
 //  m_paletteram = auto_alloc_array(machine(), UINT8, 0x800);
@@ -263,14 +265,14 @@ VIDEO_START_MEMBER(ojankohs_state,ojankohs)
 
 VIDEO_START_MEMBER(ojankohs_state,ojankoy)
 {
-	m_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(ojankohs_state::ojankoy_get_tile_info),this), TILEMAP_SCAN_ROWS,  8, 4, 64, 64);
+	m_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(ojankohs_state::ojankoy_get_tile_info),this), TILEMAP_SCAN_ROWS,  8, 4, 64, 64);
 //  m_videoram = auto_alloc_array(machine(), UINT8, 0x2000);
 //  m_colorram = auto_alloc_array(machine(), UINT8, 0x1000);
 }
 
 VIDEO_START_MEMBER(ojankohs_state,ojankoc)
 {
-	machine().primary_screen->register_screen_bitmap(m_tmpbitmap);
+	m_screen->register_screen_bitmap(m_tmpbitmap);
 	m_videoram.allocate(0x8000);
 	m_paletteram.allocate(0x20);
 
@@ -289,7 +291,7 @@ UINT32 ojankohs_state::screen_update_ojankohs(screen_device &screen, bitmap_ind1
 	m_tilemap->set_scrollx(0, m_scrollx);
 	m_tilemap->set_scrolly(0, m_scrolly);
 
-	m_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	return 0;
 }
 

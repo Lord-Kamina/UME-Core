@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont, Olivier Galibert
 /*********************************************************************
 
     formats/esq8_dsk.c
@@ -10,7 +12,8 @@
 
 *********************************************************************/
 
-#include "emu.h"
+#include <assert.h>
+
 #include "flopimg.h"
 #include "formats/esq8_dsk.h"
 
@@ -52,7 +55,7 @@ esq8img_format::esq8img_format()
 
 const char *esq8img_format::name() const
 {
-	return "img";
+	return "esq8";
 }
 
 const char *esq8img_format::description() const
@@ -72,7 +75,7 @@ bool esq8img_format::supports_save() const
 
 void esq8img_format::find_size(io_generic *io, int &track_count, int &head_count, int &sector_count)
 {
-	int size = io_generic_size(io);
+	UINT64 size = io_generic_size(io);
 	track_count = 80;
 	head_count = 1;
 	sector_count = 6;

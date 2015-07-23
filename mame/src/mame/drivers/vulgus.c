@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mirko Buffoni
 /***************************************************************************
 
 Vulgus memory map (preliminary)
@@ -32,10 +34,10 @@ SOUND CPU
 4000-47ff RAM
 
 write:
-8000      YM2203 #1 control
-8001      YM2203 #1 write
-c000      YM2203 #2 control
-c001      YM2203 #2 write
+8000      AY-3-8910 #1 control
+8001      AY-3-8910 #1 write
+c000      AY-3-8910 #2 control
+c001      AY-3-8910 #2 write
 
 All Clocks and Vsync verified by Corrado Tomaselli (August 2012)
 
@@ -47,7 +49,7 @@ All Clocks and Vsync verified by Corrado Tomaselli (August 2012)
 #include "includes/vulgus.h"
 
 
-INTERRUPT_GEN_MEMBER(vulgus_state::vulgus_vblank_irq)
+INTERRUPT_GEN_MEMBER(vulgus_state::vblank_irq)
 {
 	device.execute().set_input_line_and_vector(0, HOLD_LINE, 0xd7); /* RST 10h - vblank */
 }
@@ -60,20 +62,20 @@ static ADDRESS_MAP_START( main_map, AS_PROGRAM, 8, vulgus_state )
 	AM_RANGE(0xc003, 0xc003) AM_READ_PORT("DSW1")
 	AM_RANGE(0xc004, 0xc004) AM_READ_PORT("DSW2")
 	AM_RANGE(0xc800, 0xc800) AM_WRITE(soundlatch_byte_w)
+	AM_RANGE(0xc801, 0xc801) AM_WRITENOP // ?
 	AM_RANGE(0xc802, 0xc803) AM_RAM AM_SHARE("scroll_low")
-	AM_RANGE(0xc804, 0xc804) AM_WRITE(vulgus_c804_w)
-	AM_RANGE(0xc805, 0xc805) AM_WRITE(vulgus_palette_bank_w)
+	AM_RANGE(0xc804, 0xc804) AM_WRITE(c804_w)
+	AM_RANGE(0xc805, 0xc805) AM_WRITE(palette_bank_w)
 	AM_RANGE(0xc902, 0xc903) AM_RAM AM_SHARE("scroll_high")
 	AM_RANGE(0xcc00, 0xcc7f) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0xd000, 0xd7ff) AM_RAM_WRITE(vulgus_fgvideoram_w) AM_SHARE("fgvideoram")
-	AM_RANGE(0xd800, 0xdfff) AM_RAM_WRITE(vulgus_bgvideoram_w) AM_SHARE("bgvideoram")
+	AM_RANGE(0xd000, 0xd7ff) AM_RAM_WRITE(fgvideoram_w) AM_SHARE("fgvideoram")
+	AM_RANGE(0xd800, 0xdfff) AM_RAM_WRITE(bgvideoram_w) AM_SHARE("bgvideoram")
 	AM_RANGE(0xe000, 0xefff) AM_RAM
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( sound_map, AS_PROGRAM, 8, vulgus_state )
 	AM_RANGE(0x0000, 0x1fff) AM_ROM
 	AM_RANGE(0x4000, 0x47ff) AM_RAM
-	AM_RANGE(0x4000, 0x47ff) AM_WRITEONLY
 	AM_RANGE(0x6000, 0x6000) AM_READ(soundlatch_byte_r)
 	AM_RANGE(0x8000, 0x8001) AM_DEVWRITE("ay1", ay8910_device, address_data_w)
 	AM_RANGE(0xc000, 0xc001) AM_DEVWRITE("ay2", ay8910_device, address_data_w)
@@ -213,7 +215,7 @@ static MACHINE_CONFIG_START( vulgus, vulgus_state )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", Z80, XTAL_12MHz/4)  /* 3 MHz */
 	MCFG_CPU_PROGRAM_MAP(main_map)
-	MCFG_CPU_VBLANK_INT_DRIVER("screen", vulgus_state, vulgus_vblank_irq)
+	MCFG_CPU_VBLANK_INT_DRIVER("screen", vulgus_state, vblank_irq)
 
 	MCFG_CPU_ADD("audiocpu", Z80, XTAL_12MHz/4) /* 3 MHz */
 	MCFG_CPU_PROGRAM_MAP(sound_map)
@@ -225,11 +227,14 @@ static MACHINE_CONFIG_START( vulgus, vulgus_state )
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
-	MCFG_SCREEN_UPDATE_DRIVER(vulgus_state, screen_update_vulgus)
+	MCFG_SCREEN_UPDATE_DRIVER(vulgus_state, screen_update)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(vulgus)
-	MCFG_PALETTE_LENGTH(64*4+16*16+4*32*8)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", vulgus)
 
+	MCFG_PALETTE_ADD("palette", 64*4+16*16+4*32*8)
+	MCFG_PALETTE_INDIRECT_ENTRIES(256)
+	MCFG_PALETTE_INIT_OWNER(vulgus_state, vulgus)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -368,6 +373,6 @@ ROM_END
 
 
 
-GAME( 1984, vulgus,  0,      vulgus, vulgus, driver_device, 0, ROT270, "Capcom", "Vulgus (set 1)", 0 )
-GAME( 1984, vulgusa, vulgus, vulgus, vulgus, driver_device, 0, ROT90,  "Capcom", "Vulgus (set 2)", 0 )
-GAME( 1984, vulgusj, vulgus, vulgus, vulgus, driver_device, 0, ROT270, "Capcom", "Vulgus (Japan?)", 0 )
+GAME( 1984, vulgus,  0,      vulgus, vulgus, driver_device, 0, ROT270, "Capcom", "Vulgus (set 1)", GAME_SUPPORTS_SAVE )
+GAME( 1984, vulgusa, vulgus, vulgus, vulgus, driver_device, 0, ROT90,  "Capcom", "Vulgus (set 2)", GAME_SUPPORTS_SAVE )
+GAME( 1984, vulgusj, vulgus, vulgus, vulgus, driver_device, 0, ROT270, "Capcom", "Vulgus (Japan?)", GAME_SUPPORTS_SAVE )

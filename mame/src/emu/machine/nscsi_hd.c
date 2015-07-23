@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #include "machine/nscsi_hd.h"
 #include "imagedev/harddriv.h"
 
@@ -8,9 +10,19 @@ nscsi_harddisk_device::nscsi_harddisk_device(const machine_config &mconfig, cons
 {
 }
 
+nscsi_harddisk_device::nscsi_harddisk_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source) :
+	nscsi_full_device(mconfig, type, name, tag, owner, clock, shortname, source)
+{
+}
+
 void nscsi_harddisk_device::device_start()
 {
 	nscsi_full_device::device_start();
+	save_item(NAME(block));
+	save_item(NAME(lba));
+	save_item(NAME(cur_lba));
+	save_item(NAME(blocks));
+	save_item(NAME(bytes_per_sector));
 }
 
 void nscsi_harddisk_device::device_reset()
@@ -28,10 +40,9 @@ void nscsi_harddisk_device::device_reset()
 	cur_lba = -1;
 }
 
-harddisk_interface nscsi_harddisk_device::hd_intf = { NULL, NULL, "scsi_hdd", NULL };
-
 static MACHINE_CONFIG_FRAGMENT(scsi_harddisk)
-	MCFG_HARDDISK_CONFIG_ADD("image", nscsi_harddisk_device::hd_intf)
+	MCFG_HARDDISK_ADD("image")
+	MCFG_HARDDISK_INTERFACE("scsi_hdd")
 MACHINE_CONFIG_END
 
 machine_config_constructor nscsi_harddisk_device::device_mconfig_additions() const
@@ -90,7 +101,7 @@ void nscsi_harddisk_device::scsi_command()
 		scsi_status_complete(SS_GOOD);
 		break;
 
-	case SC_READ:
+	case SC_READ_6:
 		lba = ((scsi_cmdbuf[1] & 0x1f)<<16) | (scsi_cmdbuf[2]<<8) | scsi_cmdbuf[3];
 		blocks = scsi_cmdbuf[4];
 		if(!blocks)
@@ -103,7 +114,7 @@ void nscsi_harddisk_device::scsi_command()
 		scsi_status_complete(SS_GOOD);
 		break;
 
-	case SC_WRITE:
+	case SC_WRITE_6:
 		lba = ((scsi_cmdbuf[1] & 0x1f)<<16) | (scsi_cmdbuf[2]<<8) | scsi_cmdbuf[3];
 		blocks = scsi_cmdbuf[4];
 		if(!blocks)
@@ -328,7 +339,7 @@ void nscsi_harddisk_device::scsi_command()
 		break;
 	}
 
-	case SC_READ_EXTENDED:
+	case SC_READ_10:
 		lba = (scsi_cmdbuf[2]<<24) | (scsi_cmdbuf[3]<<16) | (scsi_cmdbuf[4]<<8) | scsi_cmdbuf[5];
 		blocks = (scsi_cmdbuf[7] << 8) | scsi_cmdbuf[8];
 
@@ -339,7 +350,7 @@ void nscsi_harddisk_device::scsi_command()
 		scsi_status_complete(SS_GOOD);
 		break;
 
-	case SC_WRITE_EXTENDED:
+	case SC_WRITE_10:
 		lba = (scsi_cmdbuf[2]<<24) | (scsi_cmdbuf[3]<<16) | (scsi_cmdbuf[4]<<8) | scsi_cmdbuf[5];
 		blocks = (scsi_cmdbuf[7] << 8) | scsi_cmdbuf[8];
 

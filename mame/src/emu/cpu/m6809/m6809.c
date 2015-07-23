@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nathan Woods
 /*** m6809: Portable 6809 emulator ******************************************
 
     Copyright John Butler
@@ -87,7 +89,8 @@ March 2013 NPW:
 #define LOG_INTERRUPTS  0
 
 // turn off 'unreferenced label' errors
-#ifdef __GNUC__
+// this pragma doesn't work on older GCCs, so cut off at 4.2
+#if defined(__GNUC__) && __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 2)
 #pragma GCC diagnostic ignored "-Wunused-label"
 #endif
 #ifdef _MSC_VER
@@ -106,11 +109,14 @@ const device_type M6809E = &device_creator<m6809e_device>;
 //  m6809_base_device - constructor
 //-------------------------------------------------
 
-m6809_base_device::m6809_base_device(const machine_config &mconfig, const char *name, const char *tag, device_t *owner, UINT32 clock, const device_type type, int divider)
-	: cpu_device(mconfig, type, name, tag, owner, clock),
+m6809_base_device::m6809_base_device(const machine_config &mconfig, const char *name, const char *tag, device_t *owner, UINT32 clock, const device_type type, int divider, const char *shortname, const char *source)
+	: cpu_device(mconfig, type, name, tag, owner, clock, shortname, source),
+	m_lic_func(*this),
 	m_program_config("program", ENDIANNESS_BIG, 8, 16),
+	m_sprogram_config("decrypted_opcodes", ENDIANNESS_BIG, 8, 16),
 	m_clock_divider(divider)
 {
+	m_mintf = NULL;
 }
 
 
@@ -120,11 +126,18 @@ m6809_base_device::m6809_base_device(const machine_config &mconfig, const char *
 
 void m6809_base_device::device_start()
 {
-	m_program = &space(AS_PROGRAM);
-	m_direct = &m_program->direct();
+	if (!m_mintf)
+		m_mintf = new mi_default;
+
+	m_mintf->m_program  = &space(AS_PROGRAM);
+	m_mintf->m_sprogram = has_space(AS_DECRYPTED_OPCODES) ? &space(AS_DECRYPTED_OPCODES) : m_mintf->m_program;
+
+	m_mintf->m_direct  = &m_mintf->m_program->direct();
+	m_mintf->m_sdirect = &m_mintf->m_sprogram->direct();
+
+	m_lic_func.resolve_safe();
 
 	// register our state for the debugger
-	astring tempstr;
 	state_add(STATE_GENPC,     "GENPC",     m_pc.w).noshow();
 	state_add(STATE_GENPCBASE, "GENPCBASE", m_ppc.w).noshow();
 	state_add(STATE_GENFLAGS,  "GENFLAGS",  m_cc).callimport().callexport().formatstr("%8s").noshow();
@@ -161,6 +174,8 @@ void m6809_base_device::device_start()
 	save_item(NAME(m_x.w));
 	save_item(NAME(m_y.w));
 	save_item(NAME(m_cc));
+	save_item(NAME(m_temp.w));
+	save_item(NAME(m_opcode));
 	save_item(NAME(m_nmi_asserted));
 	save_item(NAME(m_nmi_line));
 	save_item(NAME(m_firq_line));
@@ -196,8 +211,8 @@ void m6809_base_device::device_reset()
 	m_cc |= CC_I;       // IRQ disabled
 	m_cc |= CC_F;       // FIRQ disabled
 
-	m_pc.b.h = m_program->read_byte(VECTOR_RESET_FFFE + 0);
-	m_pc.b.l = m_program->read_byte(VECTOR_RESET_FFFE + 1);
+	m_pc.b.h = m_addrspace[AS_PROGRAM]->read_byte(VECTOR_RESET_FFFE + 0);
+	m_pc.b.l = m_addrspace[AS_PROGRAM]->read_byte(VECTOR_RESET_FFFE + 1);
 
 	// reset sub-instruction state
 	reset_state();
@@ -245,7 +260,7 @@ void m6809_base_device::device_post_load()
 			set_regop8(m_d.b.h);
 			break;
 		case M6809_B:
-			set_regop8(m_d.b.h);
+			set_regop8(m_d.b.l);
 			break;
 		case M6809_D:
 			set_regop16(m_d);
@@ -274,11 +289,12 @@ void m6809_base_device::device_post_load()
 
 const address_space_config *m6809_base_device::memory_space_config(address_spacenum spacenum) const
 {
-	if (spacenum == AS_PROGRAM)
+	switch(spacenum)
 	{
-		return &m_program_config;
+	case AS_PROGRAM:           return &m_program_config;
+	case AS_DECRYPTED_OPCODES: return has_configured_map(AS_DECRYPTED_OPCODES) ? &m_sprogram_config : NULL;
+	default:                   return NULL;
 	}
-	return NULL;
 }
 
 
@@ -287,12 +303,12 @@ const address_space_config *m6809_base_device::memory_space_config(address_space
 //  for the debugger
 //-------------------------------------------------
 
-void m6809_base_device::state_string_export(const device_state_entry &entry, astring &string)
+void m6809_base_device::state_string_export(const device_state_entry &entry, std::string &str)
 {
 	switch (entry.index())
 	{
 		case STATE_GENFLAGS:
-			string.printf("%c%c%c%c%c%c%c%c",
+			strprintf(str, "%c%c%c%c%c%c%c%c",
 				(m_cc & 0x80) ? 'E' : '.',
 				(m_cc & 0x40) ? 'F' : '.',
 				(m_cc & 0x20) ? 'H' : '.',
@@ -450,7 +466,7 @@ const char *m6809_base_device::inputnum_string(int inputnum)
 //  read_exgtfr_register
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE m6809_base_device::exgtfr_register m6809_base_device::read_exgtfr_register(UINT8 reg)
+m6809_base_device::exgtfr_register m6809_base_device::read_exgtfr_register(UINT8 reg)
 {
 	exgtfr_register result;
 	result.byte_value = 0xFF;
@@ -477,7 +493,7 @@ ATTR_FORCE_INLINE m6809_base_device::exgtfr_register m6809_base_device::read_exg
 //  write_exgtfr_register
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void m6809_base_device::write_exgtfr_register(UINT8 reg, m6809_base_device::exgtfr_register value)
+void m6809_base_device::write_exgtfr_register(UINT8 reg, m6809_base_device::exgtfr_register value)
 {
 	switch(reg & 0x0F)
 	{
@@ -510,7 +526,7 @@ void m6809_base_device::log_illegal()
 //  execute_one - try to execute a single instruction
 //-------------------------------------------------
 
-ATTR_FORCE_INLINE void m6809_base_device::execute_one()
+void m6809_base_device::execute_one()
 {
 	switch(pop_state())
 	{
@@ -533,13 +549,35 @@ void m6809_base_device::execute_run()
 }
 
 
+UINT8 m6809_base_device::mi_default::read(UINT16 adr)
+{
+	return m_program->read_byte(adr);
+}
+
+UINT8 m6809_base_device::mi_default::read_opcode(UINT16 adr)
+{
+	return m_sdirect->read_byte(adr);
+}
+
+UINT8 m6809_base_device::mi_default::read_opcode_arg(UINT16 adr)
+{
+	return m_direct->read_byte(adr);
+}
+
+
+void m6809_base_device::mi_default::write(UINT16 adr, UINT8 val)
+{
+	m_program->write_byte(adr, val);
+}
+
+
 
 //-------------------------------------------------
 //  m6809_device
 //-------------------------------------------------
 
 m6809_device::m6809_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: m6809_base_device(mconfig, "M6809", tag, owner, clock, M6809, 1)
+	: m6809_base_device(mconfig, "M6809", tag, owner, clock, M6809, 1, "m6809", __FILE__)
 {
 }
 
@@ -550,7 +588,7 @@ m6809_device::m6809_device(const machine_config &mconfig, const char *tag, devic
 //-------------------------------------------------
 
 m6809e_device::m6809e_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-		: m6809_base_device(mconfig, "M6809E", tag, owner, clock, M6809E, 4)
+		: m6809_base_device(mconfig, "M6809E", tag, owner, clock, M6809E, 4, "m6809e", __FILE__)
 {
 }
 
@@ -562,4 +600,9 @@ WRITE_LINE_MEMBER( m6809_base_device::irq_line )
 WRITE_LINE_MEMBER( m6809_base_device::firq_line )
 {
 	set_input_line( M6809_FIRQ_LINE, state );
+}
+
+WRITE_LINE_MEMBER( m6809_base_device::nmi_line )
+{
+	set_input_line( INPUT_LINE_NMI, state );
 }

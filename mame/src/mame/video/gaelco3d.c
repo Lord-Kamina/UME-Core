@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /*************************************************************************
 
     Driver for Gaelco 3D games
@@ -10,7 +12,6 @@
 #include "includes/gaelco3d.h"
 #include "cpu/tms32031/tms32031.h"
 #include "video/rgbutil.h"
-#include "video/poly.h"
 
 
 #define MAX_POLYGONS        4096
@@ -27,8 +28,8 @@
 gaelco3d_renderer::gaelco3d_renderer(gaelco3d_state &state)
 	: poly_manager<float, gaelco3d_object_data, 1, 2000>(state.machine()),
 		m_state(state),
-		m_screenbits(state.machine().primary_screen->width(), state.machine().primary_screen->height()),
-		m_zbuffer(state.machine().primary_screen->width(), state.machine().primary_screen->height()),
+		m_screenbits(state.m_screen->width(), state.m_screen->height()),
+		m_zbuffer(state.m_screen->width(), state.m_screen->height()),
 		m_polygons(0),
 		m_texture_size(state.memregion("gfx1")->bytes()),
 		m_texmask_size(state.memregion("gfx2")->bytes() * 8),
@@ -223,11 +224,11 @@ void gaelco3d_renderer::render_noz_noperspective(INT32 scanline, const extent_t 
 		int pixeloffs = (tex + (v >> 8) * 4096 + (u >> 8)) & endmask;
 		if (pixeloffs >= m_texmask_size || !m_texmask[pixeloffs])
 		{
-			rgb_t rgb00 = palsource[m_texture[pixeloffs]];
-			rgb_t rgb01 = palsource[m_texture[(pixeloffs + 1) & endmask]];
-			rgb_t rgb10 = palsource[m_texture[(pixeloffs + 4096) & endmask]];
-			rgb_t rgb11 = palsource[m_texture[(pixeloffs + 4097) & endmask]];
-			rgb_t filtered = rgb_bilinear_filter(rgb00, rgb01, rgb10, rgb11, u, v);
+			UINT32 rgb00 = palsource[m_texture[pixeloffs]];
+			UINT32 rgb01 = palsource[m_texture[(pixeloffs + 1) & endmask]];
+			UINT32 rgb10 = palsource[m_texture[(pixeloffs + 4096) & endmask]];
+			UINT32 rgb11 = palsource[m_texture[(pixeloffs + 4097) & endmask]];
+			const UINT32 filtered = rgbaint_t::bilinear_filter(rgb00, rgb01, rgb10, rgb11, u, v);
 			dest[x] = (filtered & 0x1f) | ((filtered & 0x1ff800) >> 6);
 			zbuf[x] = zbufval;
 		}
@@ -270,11 +271,11 @@ void gaelco3d_renderer::render_normal(INT32 scanline, const extent_t &extent, co
 				int pixeloffs = (tex + (v >> 8) * 4096 + (u >> 8)) & endmask;
 				if (pixeloffs >= m_texmask_size || !m_texmask[pixeloffs])
 				{
-					rgb_t rgb00 = palsource[m_texture[pixeloffs]];
-					rgb_t rgb01 = palsource[m_texture[(pixeloffs + 1) & endmask]];
-					rgb_t rgb10 = palsource[m_texture[(pixeloffs + 4096) & endmask]];
-					rgb_t rgb11 = palsource[m_texture[(pixeloffs + 4097) & endmask]];
-					rgb_t filtered = rgb_bilinear_filter(rgb00, rgb01, rgb10, rgb11, u, v);
+					UINT32 rgb00 = palsource[m_texture[pixeloffs]];
+					UINT32 rgb01 = palsource[m_texture[(pixeloffs + 1) & endmask]];
+					UINT32 rgb10 = palsource[m_texture[(pixeloffs + 4096) & endmask]];
+					UINT32 rgb11 = palsource[m_texture[(pixeloffs + 4097) & endmask]];
+					const UINT32 filtered = rgbaint_t::bilinear_filter(rgb00, rgb01, rgb10, rgb11, u, v);
 					dest[x] = (filtered & 0x1f) | ((filtered & 0x1ff800) >> 6);
 					zbuf[x] = (zbufval < 0) ? -zbufval : zbufval;
 				}
@@ -320,11 +321,11 @@ void gaelco3d_renderer::render_alphablend(INT32 scanline, const extent_t &extent
 				int pixeloffs = (tex + (v >> 8) * 4096 + (u >> 8)) & endmask;
 				if (pixeloffs >= m_texmask_size || !m_texmask[pixeloffs])
 				{
-					rgb_t rgb00 = palsource[m_texture[pixeloffs]];
-					rgb_t rgb01 = palsource[m_texture[(pixeloffs + 1) & endmask]];
-					rgb_t rgb10 = palsource[m_texture[(pixeloffs + 4096) & endmask]];
-					rgb_t rgb11 = palsource[m_texture[(pixeloffs + 4097) & endmask]];
-					rgb_t filtered = rgb_bilinear_filter(rgb00, rgb01, rgb10, rgb11, u, v) >> 1;
+					UINT32 rgb00 = palsource[m_texture[pixeloffs]];
+					UINT32 rgb01 = palsource[m_texture[(pixeloffs + 1) & endmask]];
+					UINT32 rgb10 = palsource[m_texture[(pixeloffs + 4096) & endmask]];
+					UINT32 rgb11 = palsource[m_texture[(pixeloffs + 4097) & endmask]];
+					const UINT32 filtered = rgbaint_t::bilinear_filter(rgb00, rgb01, rgb10, rgb11, u, v) >> 1;
 					dest[x] = ((filtered & 0x0f) | ((filtered & 0x0f7800) >> 6)) + ((dest[x] >> 1) & 0x3def);
 					zbuf[x] = (zbufval < 0) ? -zbufval : zbufval;
 				}
@@ -347,7 +348,6 @@ void gaelco3d_renderer::render_alphablend(INT32 scanline, const extent_t &extent
 
 void gaelco3d_state::gaelco3d_render(screen_device &screen)
 {
-	gaelco3d_state *state = screen.machine().driver_data<gaelco3d_state>();
 	/* wait for any queued stuff to complete */
 	m_poly->wait("Time to render");
 
@@ -358,8 +358,8 @@ void gaelco3d_state::gaelco3d_render(screen_device &screen)
 }
 #endif
 
-	state->m_polydata_count = 0;
-	state->m_lastscan = -1;
+	m_polydata_count = 0;
+	m_lastscan = -1;
 }
 
 
@@ -382,14 +382,14 @@ WRITE32_MEMBER(gaelco3d_state::gaelco3d_render_w)
 	{
 		if (m_polydata_count >= 18 && (m_polydata_count % 2) == 1 && IS_POLYEND(m_polydata_buffer[m_polydata_count - 2]))
 		{
-			m_poly->render_poly(*machine().primary_screen, &m_polydata_buffer[0]);
+			m_poly->render_poly(*m_screen, &m_polydata_buffer[0]);
 			m_polydata_count = 0;
 		}
 		m_video_changed = TRUE;
 	}
 
 #if DISPLAY_STATS
-	m_lastscan = machine().primary_screen->vpos();
+	m_lastscan = m_screen->vpos();
 #endif
 }
 
@@ -404,17 +404,17 @@ WRITE32_MEMBER(gaelco3d_state::gaelco3d_render_w)
 WRITE16_MEMBER(gaelco3d_state::gaelco3d_paletteram_w)
 {
 	m_poly->wait("Palette change");
-	COMBINE_DATA(&m_generic_paletteram_16[offset]);
-	m_palette[offset] = ((m_generic_paletteram_16[offset] & 0x7fe0) << 6) | (m_generic_paletteram_16[offset] & 0x1f);
+	COMBINE_DATA(&m_paletteram16[offset]);
+	m_palette[offset] = ((m_paletteram16[offset] & 0x7fe0) << 6) | (m_paletteram16[offset] & 0x1f);
 }
 
 
 WRITE32_MEMBER(gaelco3d_state::gaelco3d_paletteram_020_w)
 {
 	m_poly->wait("Palette change");
-	COMBINE_DATA(&m_generic_paletteram_32[offset]);
-	m_palette[offset*2+0] = ((m_generic_paletteram_32[offset] & 0x7fe00000) >> 10) | ((m_generic_paletteram_32[offset] & 0x1f0000) >> 16);
-	m_palette[offset*2+1] = ((m_generic_paletteram_32[offset] & 0x7fe0) << 6) | (m_generic_paletteram_32[offset] & 0x1f);
+	COMBINE_DATA(&m_paletteram32[offset]);
+	m_palette[offset*2+0] = ((m_paletteram32[offset] & 0x7fe00000) >> 10) | ((m_paletteram32[offset] & 0x1f0000) >> 16);
+	m_palette[offset*2+1] = ((m_paletteram32[offset] & 0x7fe0) << 6) | (m_paletteram32[offset] & 0x1f);
 }
 
 

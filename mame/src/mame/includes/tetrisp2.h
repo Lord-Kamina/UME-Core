@@ -1,10 +1,14 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia
 class tetrisp2_state : public driver_device
 {
 public:
 	tetrisp2_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
-			m_spriteram(*this, "spriteram"),
-			m_spriteram2(*this, "spriteram2") ,
+		m_maincpu(*this, "maincpu"),
+		m_subcpu(*this, "sub"),
+		m_spriteram(*this, "spriteram"),
+		m_spriteram2(*this, "spriteram2"),
 		m_vram_fg(*this, "vram_fg"),
 		m_vram_bg(*this, "vram_bg"),
 		m_vram_rot(*this, "vram_rot"),
@@ -19,8 +23,16 @@ public:
 		m_rocknms_sub_scroll_fg(*this, "sub_scroll_fg"),
 		m_rocknms_sub_scroll_bg(*this, "sub_scroll_bg"),
 		m_rocknms_sub_rotregs(*this, "sub_rotregs"),
-		m_maincpu(*this, "maincpu"),
-		m_subcpu(*this, "sub") { }
+		m_gfxdecode(*this, "gfxdecode"),
+		m_sub_gfxdecode(*this, "sub_gfxdecode"),
+		m_palette(*this, "palette"),
+		m_sub_palette(*this, "sub_palette"),
+		m_paletteram(*this, "paletteram"),
+		m_sub_paletteram(*this, "sub_paletteram")
+	{ }
+
+	required_device<cpu_device> m_maincpu;
+	optional_device<cpu_device> m_subcpu;
 
 	required_shared_ptr<UINT16> m_spriteram;
 	optional_shared_ptr<UINT16> m_spriteram2;
@@ -41,6 +53,12 @@ public:
 	optional_shared_ptr<UINT16> m_rocknms_sub_scroll_fg;
 	optional_shared_ptr<UINT16> m_rocknms_sub_scroll_bg;
 	optional_shared_ptr<UINT16> m_rocknms_sub_rotregs;
+	required_device<gfxdecode_device> m_gfxdecode;
+	optional_device<gfxdecode_device> m_sub_gfxdecode;
+	required_device<palette_device> m_palette;
+	optional_device<palette_device> m_sub_palette;
+	required_shared_ptr<UINT16> m_paletteram;
+	optional_shared_ptr<UINT16> m_sub_paletteram;
 
 	UINT16 m_rocknms_sub_systemregs[0x10];
 	UINT16 m_rockn_protectdata;
@@ -80,11 +98,9 @@ public:
 	DECLARE_WRITE16_MEMBER(tetrisp2_nvram_w);
 	DECLARE_WRITE16_MEMBER(tetrisp2_palette_w);
 	DECLARE_WRITE16_MEMBER(rocknms_sub_palette_w);
-	DECLARE_WRITE8_MEMBER(tetrisp2_priority_w);
-	DECLARE_WRITE8_MEMBER(rockn_priority_w);
+	DECLARE_WRITE16_MEMBER(tetrisp2_priority_w);
 	DECLARE_WRITE16_MEMBER(rocknms_sub_priority_w);
-	DECLARE_READ16_MEMBER(nndmseal_priority_r);
-	DECLARE_READ8_MEMBER(tetrisp2_priority_r);
+	DECLARE_READ16_MEMBER(tetrisp2_priority_r);
 	DECLARE_WRITE16_MEMBER(tetrisp2_vram_bg_w);
 	DECLARE_WRITE16_MEMBER(tetrisp2_vram_fg_w);
 	DECLARE_WRITE16_MEMBER(tetrisp2_vram_rot_w);
@@ -117,8 +133,6 @@ public:
 	TIMER_CALLBACK_MEMBER(rockn_timer_level1_callback);
 	TIMER_CALLBACK_MEMBER(rockn_timer_sub_level1_callback);
 	void init_rockn_timer();
-	required_device<cpu_device> m_maincpu;
-	optional_device<cpu_device> m_subcpu;
 };
 
 class stepstag_state : public tetrisp2_state

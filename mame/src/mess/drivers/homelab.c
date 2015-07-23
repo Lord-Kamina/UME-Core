@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic, Robbbert
 /***************************************************************************
 
     Homelab driver by Miodrag Milanovic
@@ -641,8 +643,6 @@ static GFXDECODE_START( homelab )
 	GFXDECODE_ENTRY( "chargen", 0x0000, homelab_charlayout, 0, 1 )
 GFXDECODE_END
 
-static const mea8000_interface brailab4_speech_intf = { "speech", DEVCB_NULL };
-
 QUICKLOAD_LOAD_MEMBER( homelab_state,homelab)
 {
 	address_space &space = m_maincpu->space(AS_PROGRAM);
@@ -651,27 +651,19 @@ QUICKLOAD_LOAD_MEMBER( homelab_state,homelab)
 	UINT16 quick_addr;
 	UINT16 quick_length;
 	UINT16 quick_end;
-	UINT8 *quick_data;
+	dynamic_buffer quick_data;
 	char pgmname[256];
 	UINT16 args[2];
 	int read_;
 
 	quick_length = image.length();
-	quick_data = (UINT8*)malloc(quick_length);
-	if (!quick_data)
-	{
-		image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Cannot open file");
-		image.message(" Cannot open file");
-		free(quick_data);
-		return IMAGE_INIT_FAIL;
-	}
+	quick_data.resize(quick_length);
 
-	read_ = image.fread( quick_data, quick_length);
+	read_ = image.fread( &quick_data[0], quick_length);
 	if (read_ != quick_length)
 	{
 		image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Cannot read the file");
 		image.message(" Cannot read the file");
-		free(quick_data);
 		return IMAGE_INIT_FAIL;
 	}
 
@@ -681,7 +673,6 @@ QUICKLOAD_LOAD_MEMBER( homelab_state,homelab)
 	{
 		image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Invalid header");
 		image.message(" Invalid header");
-		free(quick_data);
 		return IMAGE_INIT_FAIL;
 	}
 
@@ -691,7 +682,6 @@ QUICKLOAD_LOAD_MEMBER( homelab_state,homelab)
 		{
 			image.seterror(IMAGE_ERROR_INVALIDIMAGE, "File name too long");
 			image.message(" File name too long");
-			free(quick_data);
 			return IMAGE_INIT_FAIL;
 		}
 
@@ -705,7 +695,6 @@ QUICKLOAD_LOAD_MEMBER( homelab_state,homelab)
 	{
 		image.seterror(IMAGE_ERROR_INVALIDIMAGE, "Unexpected EOF while getting file size");
 		image.message(" Unexpected EOF while getting file size");
-		free(quick_data);
 		return IMAGE_INIT_FAIL;
 	}
 
@@ -717,7 +706,6 @@ QUICKLOAD_LOAD_MEMBER( homelab_state,homelab)
 	{
 		image.seterror(IMAGE_ERROR_INVALIDIMAGE, "File too large");
 		image.message(" File too large");
-		free(quick_data);
 		return IMAGE_INIT_FAIL;
 	}
 
@@ -733,13 +721,11 @@ QUICKLOAD_LOAD_MEMBER( homelab_state,homelab)
 			snprintf(message, ARRAY_LENGTH(message), "%s: Unexpected EOF while writing byte to %04X", pgmname, (unsigned) j);
 			image.seterror(IMAGE_ERROR_INVALIDIMAGE, message);
 			image.message("%s: Unexpected EOF while writing byte to %04X", pgmname, (unsigned) j);
-			free(quick_data);
 			return IMAGE_INIT_FAIL;
 		}
 		space.write_byte(j, ch);
 	}
 
-	free(quick_data);
 	return IMAGE_INIT_PASS;
 }
 
@@ -758,9 +744,10 @@ static MACHINE_CONFIG_START( homelab, homelab_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 40*8-1, 0, 25*8-1)
 	MCFG_VIDEO_START_OVERRIDE(homelab_state,homelab2)
 	MCFG_SCREEN_UPDATE_DRIVER(homelab_state, screen_update_homelab2)
-	MCFG_GFXDECODE(homelab)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(monochrome_green)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", homelab)
+	MCFG_PALETTE_ADD_MONOCHROME_GREEN("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -769,7 +756,7 @@ static MACHINE_CONFIG_START( homelab, homelab_state )
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_CASSETTE_ADD( "cassette", default_cassette_interface )
+	MCFG_CASSETTE_ADD( "cassette" )
 	MCFG_QUICKLOAD_ADD("quickload", homelab_state, homelab, "htp", 2)
 MACHINE_CONFIG_END
 
@@ -788,9 +775,10 @@ static MACHINE_CONFIG_START( homelab3, homelab_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 64*8-1, 0, 32*8-1)
 	MCFG_VIDEO_START_OVERRIDE(homelab_state,homelab3)
 	MCFG_SCREEN_UPDATE_DRIVER(homelab_state, screen_update_homelab3)
-	MCFG_GFXDECODE(homelab)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(monochrome_green)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", homelab)
+	MCFG_PALETTE_ADD_MONOCHROME_GREEN("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -799,7 +787,7 @@ static MACHINE_CONFIG_START( homelab3, homelab_state )
 	MCFG_SOUND_WAVE_ADD(WAVE_TAG, "cassette")
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
-	MCFG_CASSETTE_ADD( "cassette", default_cassette_interface )
+	MCFG_CASSETTE_ADD( "cassette" )
 	MCFG_QUICKLOAD_ADD("quickload", homelab_state, homelab, "htp", 2)
 MACHINE_CONFIG_END
 
@@ -818,9 +806,10 @@ static MACHINE_CONFIG_START( brailab4, homelab_state )
 	MCFG_SCREEN_VISIBLE_AREA(0, 64*8-1, 0, 32*8-1)
 	MCFG_VIDEO_START_OVERRIDE(homelab_state,brailab4)
 	MCFG_SCREEN_UPDATE_DRIVER(homelab_state, screen_update_homelab3)
-	MCFG_GFXDECODE(homelab)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(monochrome_green)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", homelab)
+	MCFG_PALETTE_ADD_MONOCHROME_GREEN("palette")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -830,9 +819,10 @@ static MACHINE_CONFIG_START( brailab4, homelab_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 	MCFG_SOUND_ADD ( "speech", DAC, 0 )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
+	MCFG_DEVICE_ADD("mea8000", MEA8000, 0)
+	MCFG_MEA8000_DAC("speech")
 
-	MCFG_CASSETTE_ADD( "cassette", default_cassette_interface )
-	MCFG_MEA8000_ADD("mea8000", brailab4_speech_intf)
+	MCFG_CASSETTE_ADD( "cassette" )
 	MCFG_QUICKLOAD_ADD("quickload", homelab_state, homelab, "htp", 18)
 MACHINE_CONFIG_END
 
@@ -846,40 +836,40 @@ DRIVER_INIT_MEMBER(homelab_state,brailab4)
 
 ROM_START( homelab2 )
 	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
-	ROM_LOAD( "hl2_1.rom", 0x0000, 0x0800, BAD_DUMP CRC(205365F7) SHA1(da93b65befd83513dc762663b234227ba804124d))
-	ROM_LOAD( "hl2_2.rom", 0x0800, 0x0800, CRC(696AF3C1) SHA1(b53bc6ae2b75975618fc90e7181fa5d21409fce1))
-	ROM_LOAD( "hl2_3.rom", 0x1000, 0x0800, CRC(69E57E8C) SHA1(e98510abb715dbf513e1b29fb6b09ab54e9483b7))
-	ROM_LOAD( "hl2_4.rom", 0x1800, 0x0800, CRC(97CBBE74) SHA1(34f0bad41302b059322018abc3d1c2336ecfbea8))
+	ROM_LOAD( "hl2_1.rom", 0x0000, 0x0800, BAD_DUMP CRC(205365f7) SHA1(da93b65befd83513dc762663b234227ba804124d))
+	ROM_LOAD( "hl2_2.rom", 0x0800, 0x0800, CRC(696af3c1) SHA1(b53bc6ae2b75975618fc90e7181fa5d21409fce1))
+	ROM_LOAD( "hl2_3.rom", 0x1000, 0x0800, CRC(69e57e8c) SHA1(e98510abb715dbf513e1b29fb6b09ab54e9483b7))
+	ROM_LOAD( "hl2_4.rom", 0x1800, 0x0800, CRC(97cbbe74) SHA1(34f0bad41302b059322018abc3d1c2336ecfbea8))
 	ROM_LOAD( "hl2_m.rom", 0x2000, 0x0800, CRC(10040235) SHA1(e121dfb97cc8ea99193a9396a9f7af08585e0ff0) )
 	ROM_FILL(0x46, 1, 0x18) // fix bad code
 	ROM_FILL(0x47, 1, 0x0E)
 
 	ROM_REGION(0x0800, "chargen",0)
-	ROM_LOAD( "hl2.chr", 0x0000, 0x0800, CRC(2E669D40) SHA1(639dd82ed29985dc69830aca3b904b6acc8fe54a))
+	ROM_LOAD( "hl2.chr", 0x0000, 0x0800, CRC(2e669d40) SHA1(639dd82ed29985dc69830aca3b904b6acc8fe54a))
 	// found on net, looks like bad dump
 	//ROM_LOAD_OPTIONAL( "hl2_ch.rom", 0x0800, 0x1000, CRC(6a5c915a) SHA1(7e4e966358556c6aabae992f4c2b292b6aab59bd) )
 ROM_END
 
 ROM_START( homelab3 )
 	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
-	ROM_LOAD( "hl3_1.rom", 0x0000, 0x1000, CRC(6B90A8EA) SHA1(8ac40ca889b8c26cdf74ca309fbafd70dcfdfbec))
-	ROM_LOAD( "hl3_2.rom", 0x1000, 0x1000, CRC(BCAC3C24) SHA1(aff371d17f61cb60c464998e092f04d5d85c4d52))
-	ROM_LOAD( "hl3_3.rom", 0x2000, 0x1000, CRC(AB1B4AB0) SHA1(ad74c7793f5dc22061a88ef31d3407267ad08719))
-	ROM_LOAD( "hl3_4.rom", 0x3000, 0x1000, CRC(BF67EFF9) SHA1(2ef5d46f359616e7d0e5a124df528de44f0e850b))
+	ROM_LOAD( "hl3_1.rom", 0x0000, 0x1000, CRC(6b90a8ea) SHA1(8ac40ca889b8c26cdf74ca309fbafd70dcfdfbec))
+	ROM_LOAD( "hl3_2.rom", 0x1000, 0x1000, CRC(bcac3c24) SHA1(aff371d17f61cb60c464998e092f04d5d85c4d52))
+	ROM_LOAD( "hl3_3.rom", 0x2000, 0x1000, CRC(ab1b4ab0) SHA1(ad74c7793f5dc22061a88ef31d3407267ad08719))
+	ROM_LOAD( "hl3_4.rom", 0x3000, 0x1000, CRC(bf67eff9) SHA1(2ef5d46f359616e7d0e5a124df528de44f0e850b))
 
 	ROM_REGION(0x0800, "chargen",0)
-	ROM_LOAD( "hl3.chr", 0x0000, 0x0800, CRC(F58EE39B) SHA1(49399c42d60a11b218a225856da86a9f3975a78a))
+	ROM_LOAD( "hl3.chr", 0x0000, 0x0800, CRC(f58ee39b) SHA1(49399c42d60a11b218a225856da86a9f3975a78a))
 ROM_END
 
 ROM_START( homelab4 )
 	ROM_REGION( 0x10000, "maincpu", ROMREGION_ERASEFF )
-	ROM_LOAD( "hl4_1.rom", 0x0000, 0x1000, CRC(A549B2D4) SHA1(90fc5595da8431616aee56eb5143b9f04281e798))
-	ROM_LOAD( "hl4_2.rom", 0x1000, 0x1000, CRC(151D33E8) SHA1(d32004bc1553f802b9d3266709552f7d5315fe44))
-	ROM_LOAD( "hl4_3.rom", 0x2000, 0x1000, CRC(39571AB1) SHA1(8470cff2e3442101e6a0bc655358b3a6fc1ef944))
-	ROM_LOAD( "hl4_4.rom", 0x3000, 0x1000, CRC(F4B77CA2) SHA1(ffbdb3c1819c7357e2a0fc6317c111a8a7ecfcd5))
+	ROM_LOAD( "hl4_1.rom", 0x0000, 0x1000, CRC(a549b2d4) SHA1(90fc5595da8431616aee56eb5143b9f04281e798))
+	ROM_LOAD( "hl4_2.rom", 0x1000, 0x1000, CRC(151d33e8) SHA1(d32004bc1553f802b9d3266709552f7d5315fe44))
+	ROM_LOAD( "hl4_3.rom", 0x2000, 0x1000, CRC(39571ab1) SHA1(8470cff2e3442101e6a0bc655358b3a6fc1ef944))
+	ROM_LOAD( "hl4_4.rom", 0x3000, 0x1000, CRC(f4b77ca2) SHA1(ffbdb3c1819c7357e2a0fc6317c111a8a7ecfcd5))
 
 	ROM_REGION(0x0800, "chargen",0)
-	ROM_LOAD( "hl4.chr", 0x0000, 0x0800, CRC(F58EE39B) SHA1(49399c42d60a11b218a225856da86a9f3975a78a))
+	ROM_LOAD( "hl4.chr", 0x0000, 0x0800, CRC(f58ee39b) SHA1(49399c42d60a11b218a225856da86a9f3975a78a))
 ROM_END
 
 ROM_START( brailab4 )
@@ -891,7 +881,7 @@ ROM_START( brailab4 )
 	ROM_LOAD( "brl5.rom", 0xd000, 0x1000, CRC(8a76be04) SHA1(4b683b9be23b47117901fe874072eb7aa481e4ff))
 
 	ROM_REGION(0x0800, "chargen",0)
-	ROM_LOAD( "hl4.chr", 0x0000, 0x0800, CRC(F58EE39B) SHA1(49399c42d60a11b218a225856da86a9f3975a78a))
+	ROM_LOAD( "hl4.chr", 0x0000, 0x0800, CRC(f58ee39b) SHA1(49399c42d60a11b218a225856da86a9f3975a78a))
 
 	// these roms were found on the net, to be investigated
 	ROM_REGION( 0x5020, "user1", 0 )
@@ -908,7 +898,7 @@ ROM_START( braiplus )
 	ROM_LOAD( "brailabplus.bin", 0x0000, 0x4000, CRC(521d6952) SHA1(f7405520d86fc7abd2dec51d1d016658472f6fe8) )
 
 	ROM_REGION(0x0800, "chargen",0) // no idea what chargen it uses
-	ROM_LOAD( "hl4.chr", 0x0000, 0x0800, CRC(F58EE39B) SHA1(49399c42d60a11b218a225856da86a9f3975a78a))
+	ROM_LOAD( "hl4.chr", 0x0000, 0x0800, CRC(f58ee39b) SHA1(49399c42d60a11b218a225856da86a9f3975a78a))
 ROM_END
 
 /* Driver */

@@ -1,8 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Olivier Galibert
 #ifndef __MIE_H__
 #define __MIE_H__
 
 #include "cpu/z80/z80.h"
-#include "machine/eeprom.h"
+#include "machine/eepromser.h"
 #include "machine/jvshost.h"
 #include "machine/mapledev.h"
 
@@ -61,6 +63,7 @@ public:
 	DECLARE_READ8_MEMBER(jvs_status_r);
 	DECLARE_WRITE8_MEMBER(jvs_control_w);
 	DECLARE_READ8_MEMBER(jvs_sense_r);
+	DECLARE_WRITE8_MEMBER(jvs_lcr_w);
 
 	DECLARE_READ8_MEMBER(read_ff);
 	DECLARE_READ8_MEMBER(read_00);
@@ -106,6 +109,7 @@ private:
 	UINT8 gpiodir, gpio_val[8];
 	UINT8 irq_enable, irq_pending, maple_irqlevel;
 	UINT8 jvs_control, jvs_dest;
+	UINT8 jvs_lcr;
 
 	void raise_irq(int level);
 	void recalc_irq();

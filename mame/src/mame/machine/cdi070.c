@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ryan Holtz
 /******************************************************************************
 
 
@@ -28,7 +30,7 @@ TODO:
 const device_type MACHINE_CDI68070 = &device_creator<cdi68070_device>;
 
 #if ENABLE_VERBOSE_LOG
-INLINE void verboselog(running_machine &machine, int n_level, const char *s_fmt, ...)
+INLINE void ATTR_PRINTF(1,2) verboselog(running_machine &machine, int n_level, const char *s_fmt, ...)
 {
 	if( VERBOSE_LEVEL >= n_level )
 	{
@@ -41,7 +43,7 @@ INLINE void verboselog(running_machine &machine, int n_level, const char *s_fmt,
 	}
 }
 #else
-#define verboselog(x,y,z,...)
+#define verboselog(x,y,z, ...)
 #endif
 
 //**************************************************************************
@@ -53,7 +55,7 @@ INLINE void verboselog(running_machine &machine, int n_level, const char *s_fmt,
 //-------------------------------------------------
 
 cdi68070_device::cdi68070_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MACHINE_CDI68070, "CDI68070", tag, owner, clock)
+	: device_t(mconfig, MACHINE_CDI68070, "CDI68070", tag, owner, clock, "cdi68070", __FILE__)
 {
 }
 
@@ -806,7 +808,6 @@ READ16_MEMBER( cdi68070_device::periphs_r )
 				verboselog(machine(), 2, "cdi68070_periphs_r: MMU Status: %02x & %04x\n", m_mmu.status, mem_mask);
 				return m_mmu.status;
 			}
-			break;
 		case 0x8040/2:
 		case 0x8048/2:
 		case 0x8050/2:
@@ -1171,7 +1172,7 @@ WRITE16_MEMBER( cdi68070_device::periphs_w )
 }
 
 #if ENABLE_UART_PRINTING
-READ16_HANDLER( uart_loopback_enable )
+READ16_MEMBER( cdi68070_device::uart_loopback_enable )
 {
 	return 0x1234;
 }

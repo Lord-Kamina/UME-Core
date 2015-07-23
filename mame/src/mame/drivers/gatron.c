@@ -1,227 +1,292 @@
-/******************************************************************************
+// license:BSD-3-Clause
+// copyright-holders:Roberto Fresca
+/****************************************************************************************
 
-    GAME-A-TRON gambling hardware
-    -----------------------------
+  GAME-A-TRON gambling hardware.
+  Driver by Roberto Fresca.
 
-    Driver by Roberto Fresca.
+  Games running on this hardware:
 
+  * Poker 4-1,  1983, Game-A-Tron.
+  * Pull Tabs,  1983, Game-A-Tron.
+  * Bingo,      1983, Game-A-Tron.
+
+
+*****************************************************************************************
+
+  Hardware Notes:
+  ---------------
+
+  * PCB1: PULL TABS.
+
+  Board silkscreend: "GAME-A-TRON CORP. (c)1983 PAT.PENDING"
+                     "9003"
+
+  ROMS: - U31 - 2732 (PT-1R-V)
+        - U32 - 2732 (PT-2G-V)
+        - U33 - 2732 (PT-3B-V)
+
+        - U00 - 2764 (PULL-TABS-1-90)
+
+  Most chips, except for the EPROMS, are covered with a hard black plastic coat
+  so their ID's could not be read.
 
-    Games running on this hardware:
+  U30 location was silkscreend VRAM,    24 pin.
+  U11 location was silkscreend SCP RAM, 24 pin.
+  U13 location was silkscreend CPU,     40 pin.
+  U12 location was silkscreend DECODE,  16 pin.
 
-    * Poker 4-1,  1983, Game-A-Tron.
-    * Pull Tabs,  1983, Game-A-Tron.
+  1x 16MHz Crystal
+  1x Duracell PX-2 I, 4.5V battery.
 
 
-*******************************************************************************
+  * PCB2: FOUR IN ONE POKER.
 
+  Board silkscreend: "GAME-A-TRON CORP. (c)1983 PAT.PENDING"
+                     "9003"
 
-    Hardware Notes:
-    ---------------
+  ROMS: - U31 - 2732 (POKER-R)
+        - U32 - 2732 (POKER-G)
+        - U33 - 2732 (BLACK)
 
+        - U00 - 2764 (2764-POKER)
+        - U08 - 2732 (2732-POKER-4-1)
 
-    * PCB1: PULL TABS.
+  Most chips, except for the EPROMS, are covered with a hard black plastic coat
+  so their ID's could not be read.
 
-    Board silkscreend:
+  U13    CPU (also coated with black plastic).
+  U05    I/O        M5L8255AP-5
+  U11    SCP RAM    TC5516APL  (2Kx8)
+  U30    VRAM       HM6116LP-3 (2Kx8)
 
-     GAME-A-TRON CORP.
-    (c)1983 PAT.PENDING
+  1x 16MHz Crystal
+  1x Duracell PX-2 I, 4.5V battery.
 
-    ROMS: - U31 - 2732 (PT-1R-V)
-          - U32 - 2732 (PT-2G-V)
-          - U33 - 2732 (PT-3B-V)
 
-          - U00 - 2764 (PULL-TABS-1-90)
+  Identified the unknown writes as a init sequence for 1x PSG sound device.
+  The type/class is unknown due to almost all devices are plastic covered.
 
-    Most chips, except for the EPROMS, were covered in a hard black plastic so that
-    their numbers could not be read.
 
-    U30 was silkscreend VRAM,    24 pin.
-    U11 was silkscreend scp RAM, 24 pin.
-    U13 was silkscreend CPU,     40 pin.
-    U12 was silkscreend DECODE,  16 pin.
+  * PCB 3: BINGO.
 
-    1x 16MHz Crystal
+  The PCB doesn't looks like an official Game-A-Tron board. Maybe it's a bootleg,
+  or prototype. Battery backed RAM was replaced by a Mostek MK48Z02B-20 zeropower RAM.
 
-    1x Duracell PX-2 I, 4.5V battery.
+   PCB Layout:
+  .-----------------------------------------------------------------------------------------------.
+  |                                                                                               |
+  |    U14        U11        U12        U13        U10        U9                                  |
+  |   .--------. .--------. .--------. .--------. .--------. .--------.          REV B            |
+  |   |74LS161 | |74LS161 | |74LS161 | |74LS161 | |74LS161 | |HD74LS04|  D R                      |
+  |   '--------' '--------' '--------' '--------' '--------' '--------'                           |
+  |   .--------. .--------. .--------.                           XTAL                             |
+  |   |74LS157 | |74LS157 | |74LS157 |                      R   .-----.  C C                      |
+  |   '--------' '--------' '--------'                      R   | 16  |                           |
+  |                                                         R   | MHz |                           |
+  |                                                             '-----'                           |
+  |                                                                               .--------.      |
+  |    .-------------.   U26                                .-------------.       | 74LS32 |U28   |
+  |    |U23          |  .--------.                          |   Mostek    |U3     '--------'      |
+  |    |    2732     |  |74LS166 |                          | MK48Z02B-20 |       .--------.      |
+  |    |          ROM|  '--------'                          |zeropower RAM|       | 74LS08 |U31   |
+  |    '-------------'                U20                   '-------------'       '--------'      |
+  |    .-------------.   U25         .-------------.      .---------------.       .--------.      |
+  |    |U22          |  .--------.   |             |      |U2             |       | 74LS00 |U30   |
+  |    |    2732     |  |74LS166 |   | NEC D4016C  |      |   2764 type   |       '--------'      |
+  |    |          ROM|  '--------'   |   (32Kx8)   |      |            ROM|       .--------.      |
+  |    '-------------'               '-------------'      '---------------'       | 74LS10 |U29   |
+  |    .-------------.   U24          U18                .---------------------.  '--------'      |
+  |    |U21          |  .--------.   .-----------.       |U1                   |  .--------.      |
+  |    |    2732     |  |74LS166 |   | 74LS245N  |       |    EMPTY SOCKET     |  | NO IC  |U5    |
+  |    |          ROM|  '--------'   '-----------'       |       (Z80)         |  '--------'      |
+  |    '-------------'                                   '---------------------'  .--------.      |
+  |                      U19            U6               .---------------------.  | 74LS74 |U8    |
+  |            .-----.  .--------.     .--------.        |U4                   |  '--------'      |
+  |            | POT |  |74LS367 |     |SN76489N|        |    EMPTY SOCKET     |                  |
+  |            '-----'  '--------'     '--------'        |     (8255 PPI)      |  .--------.      |
+  |             VOLUME               .-----------.       '---------------------'  | 74LS04 |U32   |
+  |                              U27 | 74LS374B1 |                                '--------'      |
+  |                                  '-----------'    CCCCCCCC      CCCCCCCC                      |
+  |                 U7                                                                            |
+  |                .--------.          RRRRRRRR       RRRRRRRR      RRRRRRRR       RRRRRRRR       |
+  |                | LM380N |                                                                     |
+  |                '--------'          CCCCCCCC       RRRRRRRR      RRRRRRRR       CCCCCCCC       |
+  |      C    C       C                                                              D  D         |
+  |                                                                                               |
+  '----------------------------.              25x2 EDGE CONNECTOR                .----------------'
+                               | | | | | | | | | | | | | | | | | | | | | | | | | |
+  R = Resistors.               | | | | | | | | | | | | | | | | | | | | | | | | | |
+  C = Capacitors.              '-------------------------------------------------'
+  D = Diodes.
 
 
+*****************************************************************************************
 
-    * PCB2: POKER 4-1.
+  *** Game Notes ***
 
-    Board silkscreend:
 
-     GAME-A-TRON CORP.
-    (c)1983 PAT.PENDING
+  All games:
 
-    ROMS: - U31 - 2732 (POKER-R)
-          - U32 - 2732 (POKER-G)
-          - U33 - 2732 (BLACK)
+  The first time the machine is turned on, will show the legend "DATA ERROR".
+  You must to RESET (F3) the machine to initialize the NVRAM properly.
 
-          - U00 - 2764 (2764-POKER)
-          - U08 - 2732 (2732-POKER-4-1)
+  NOTE: These games are intended to be for amusement only.
+  There is not such a payout system, so...Dont ask about it!
 
-    Most chips, except for the EPROMS, were covered in a hard black plastic so that
-    their numbers could not be read.
 
-    CPU at u13 still covered in black plastic.
-    U05               M5L8255AP-5
-    U11    SCP RAM    TC5516APL  (2Kx8)
-    U30    VRAM       HM6116LP-3 (2Kx8)
+  * Four in One Poker:
 
-    1x 16MHz Crystal
-    1x Duracell PX-2 I, 4.5V battery.
+  Pressing SERVICE 1 (key 9) you enter the Test/Settings Mode. You can test
+  inputs there, and change all the game settings. Press "DISCARD 1" (key Z)
+  to choose an option, and "DISCARD 5" (key B) to change the settings.
+  Press "SERVICE 2" (key 0) to exit.
 
+  The settings options are:
 
-    Identified the unknown writes as a init sequence for 1x PSG sound device.
-    The type/class is unknown due to almost all devices are plastic covered.
+      HIGHEST-ANTE-IS:   1-5-10-15-20-25-30-35-40-45-50.
+      JOKERS:            0-1-2.
+      BONUS DRAWS:       0-1.
+      DOUBLE-UPS:        0-1-2-3-4-5-6-7-8-9.
+      WIN-ON:            JACKS AND UP - PAIR OF ACES.
+      SKILL LEVEL:       50-55-60-65-70-75-80-85-90-95-100.
+      CREDITS-PER-COIN:  1-5-10-15-20-25-30-35-40-45-50-55-60-65-70-75-80-85-90-95-100.
 
+  The game allow to choose one of the following card games:
 
-*******************************************************************************
+  - DRAW POKER.
+  - STUD POKER.
+  - ACEY-DEUCY.
+  - BLACKJACK.
+  - HIGH-LOW.
 
+  Press "DISCARD 1" (key Z) to switch between games.
+  Press "BET/ANTE" (key N) to bet credits and then start the game.
 
-    *** Game Notes ***
+  The rest of buttons are self-explanatory.
 
 
-    All games:
+  * Pull Tabs:
 
-    The first time the machine is turned on, will show the legend "DATA ERROR".
-    You must to RESET (F3) the machine to initialize the NVRAM properly.
+  Pressing SERVICE 1 (key 9) you enter the Test/Settings Mode. You can test
+  inputs there, and change all the game settings. Press "SUPER STAR TICKET"
+  (key Z) to choose an option, and "BIG BAR TICKET" (key C) to change the
+  settings. Press "SERVICE 2" (key 0) to exit.
 
-    NOTE: These games are intended to be for amusement only.
-    There is not such a payout system, so...Dont ask about it!
+  The settings options are:
 
+      HIGHEST-ANTE-IS:   1-5-10-15-20-25.
+      SKILL LEVEL:       50-55-60-65-70-75-80-85-90-95-100.
+      CREDITS-PER-COIN:  1-5-10-15-20-25-30-35-40-45-50-55-60-65-70-75-80-85-90-95-100.
+      MUSIC:             PLAYS - OFF
 
-    * Poker 4-1:
+  You must bet through "ANTE" (key 1), and then choose a ticket to play.
 
-    Pressing SERVICE 1 (key 9) you enter the Test/Setting Mode. You can test
-    inputs there, and change all the game settings. Press "DISCARD 1" (key Z)
-    to choose an option, and "DISCARD 5" (key B) to change the settings.
-    Press "SERVICE 2" (key 0) to exit.
+  Press "SUPER STAR TICKET" (key Z) to play with Super Star (left) Ticket.
+  Press "LADY LUCK TICKET" (key X) to play with Lady Luck (center) Ticket.
+  Press "BIG BAR TICKET" (key C) to play with Big Bar (right) Ticket.
 
-    The setting options are:
 
-        HIGHEST-ANTE-IS:   1-5-10-15-20-25-30-35-40-45-50.
-        JOKERS:            0-1-2.
-        BONUS DRAWS:       0-1.
-        DOUBLE-UPS:        0-1-2-3-4-5-6-7-8-9.
-        WIN-ON:            JACKS AND UP - PAIR OF ACES.
-        SKILL LEVEL:       50-55-60-65-70-75-80-85-90-95-100.
-        CREDITS-PER-COIN:  1-5-10-15-20-25-30-35-40-45-50-55-60-65-70-75-80-85-90-95-100.
+  * Bingo:
 
-    The game allow to choose one of the following card games:
+  Pressing SERVICE 1 (key 9) you enter the Test/Settings Mode. You can test
+  inputs there, and change all the game settings. Press "CHANGE CARD" (key Z)
+  to choose an option, and "CHANGE GAME" (key C) to change the settings.
+  Press "SERVICE 3" (key 8) to test audio. Press "SERVICE 2" (key 0) to exit.
 
-    - DRAW POKER.
-    - STUD POKER.
-    - ACEY-DEUCY.
-    - BLACKJACK.
-    - HIGH-LOW.
+  The settings options are:
 
-    Press "DISCARD 1" (key Z) to switch between games.
-    Press "BET/ANTE" (key N) to bet credits and then start the game.
+      HIGHEST-ANTE-IS:             1-5-10-15-20-25-30-35-40-45-50.
+      X OR FEWER HITS WIN 1 to 1:  1-2-3-4-5-6.
+      X DOUBLE-UPS:                0-1-2-3-4-5-6-7-8-9.
+      BEEPS DURING PLAY:           YES-NO.
+      SKILL LEVEL:                 50-55-60-65-70-75-80-85-90-95-100.
+      CREDITS-PER-COIN:            1-5-10-15-20-25-30-35-40-45-50-55-60-65-70-75-80-85-90-95-100.
+      3 ON A LINE WINS:            YES-NO.
 
-    The rest of buttons are self-explanatory.
+  You must bet through "ANTE" (key 1), and then...
 
+  Press "CHANGE CARD" (key Z) to change for another card with a different set of numbers.
+  Press "START" (key X) to start the game.
+  Press "CHANGE GAME" (key C) to switch between games X-L-T-C-N-U.
 
-    * Pull Tabs:
+  Note that letters in games X-L-T-C-N-U are just references to the shape of the special
+  numbers group inside the card, which will play.
 
-    Pressing SERVICE 1 (key 9) you enter the Test/Setting Mode. You can test
-    inputs there, and change all the game settings. Press "SUPER STAR TICKET"
-    (key Z) to choose an option, and "BIG BAR TICKET" (key C) to change the
-    settings. Press "SERVICE 2" (key 0) to exit.
+  You must setup double-ups to something different of 0 (default), to play with these
+  features (High or Low ball)
 
-    The setting options are:
 
-        HIGHEST-ANTE-IS:   1-5-10-15-20-25.
-        SKILL LEVEL:       50-55-60-65-70-75-80-85-90-95-100.
-        CREDITS-PER-COIN:  1-5-10-15-20-25-30-35-40-45-50-55-60-65-70-75-80-85-90-95-100.
-        MUSIC:             PLAYS - OFF
+*****************************************************************************************
 
-    You must bet through "ANTE" (key 1), and then choose a ticket to play.
+  --------------------
+  ***  Memory Map  ***
+  --------------------
 
-    Press "SUPER STAR TICKET" (key Z) to play with Super Star (left) Ticket.
-    Press "LADY LUCK TICKET" (key X) to play with Lady Luck (center) Ticket.
-    Press "BIG BAR TICKET" (key C) to play with Big Bar (right) Ticket.
+  0x0000 - 0x5FFF    ; ROM space.
+  0x6000 - 0x67FF    ; Video RAM (only the first 0x300 bytes are used).
+  0x8000 - 0x87FF    ; Main RAM.
+  0xA000 - 0xA000    ; Sound (PSG).
+  0xE000 - 0xE000    ; Output Port 0 (lamps).
 
+  * Z80 I/O ports *
 
-*******************************************************************************
+    0x00 - 0x03      ; PPI 8255 (ports A & B as input, port C as output).
 
+  * 8255 I/O ports *
 
-    --------------------
-    ***  Memory Map  ***
-    --------------------
+    Port A (input)   ; Input Port 0 (player buttons).
+    Port B (input)   ; Input Port 1 (player & service buttons).
+    Port C (output)  ; Output Port 1 (lamps & counters).
 
-    0x0000 - 0x5FFF    ; ROM space.
-    0x6000 - 0x67FF    ; Video RAM (only the first 0x300 bytes are used).
-    0x8000 - 0x87FF    ; Main RAM.
-    0xA000 - 0xA000    ; Sound (PSG).
-    0xE000 - 0xE000    ; Output Port 0 (lamps).
 
+*****************************************************************************************
 
-    * Z80 I/O ports *
+  DRIVER UPDATES:
 
-      0x00 - 0x03      ; PPI 8255 (ports A & B as input, port C as output).
+  [2014-02-04]
+  - Added Bingo (1983). PCB seems bootleg, but the game looks legit.
+  - Worked from the scratch a whole set of inputs and button-lamps support for this game.
+  - Changed the poker41 description to Four in One Poker (as seen in the official brochure).
+  - Added game and technical notes.
 
+  [2008-10-14]
+  - Improved the button-lamps layouts to look more realistic.
 
-    * 8255 I/O ports *
+  [2008-08-21]
+  After an exhaustive analysis to the unknown writes, finally figured out the missing sound device.
+  - Added sound support to "Poker 4-1" and "Pull Tabs".
+  - Figured out the output ports. Documented each bit accessed.
+  - Added button lamps support. Created layouts for both games.
+  - Switched the 8255 port C to be used as output port.
+  - Adjusted the coin pulse timing.
+  - Updated technical notes.
+  - Splitted the driver to driver + video.
+  - Final clean-up.
 
-      Port A (input)   ; Input Port 0 (player buttons).
-      Port B (input)   ; Input Port 1 (player & service buttons).
-      Port C (output)  ; Output Port 1 (lamps & counters).
+  [2008-05-31]
+  - Renamed the games to "Poker 4-1" and "Pull Tabs" as shown in the ROMs stickers.
+  - Renamed the ROMs in each set according to their own stickers.
+  - Moved the driver into gametron.a group.
+  - Added the missing input port C to 8255 PPI I/O chip. Poker41 and pulltabs don't
+     make use of it, but is present in the Test/Settings Mode.
+  - Updated technical notes.
 
+  [2008-05-10]
+  - Initial release.
+  - Properly decoded graphics.
+  - Proper memory map.
+  - Added NVRAM support.
+  - Proper Inputs through 8255 PPI I/O chip.
+  - Both games are working.
+  - Added technical & game notes.
 
-*******************************************************************************
 
+  TODO:
 
-    DRIVER UPDATES:
+  - Nothing... :)
 
-
-    [2008-10-14]
-
-    - Improved the button-lamps layouts to look more realistic.
-
-
-    [2008-08-21]
-
-    After an exhaustive analysis to the unknown writes, finally figured out the missing sound device.
-
-    - Added sound support to "Poker 4-1" and "Pull Tabs".
-    - Figured out the output ports. Documented each bit accessed.
-    - Added button lamps support. Created layouts for both games.
-    - Switched the 8255 port C to be used as output port.
-    - Adjusted the coin pulse timing.
-    - Updated technical notes.
-    - Splitted the driver to driver + video.
-    - Final clean-up.
-
-
-    [2008-05-31]
-
-    - Renamed the games to "Poker 4-1" and "Pull Tabs".
-      as shown in the ROMs stickers.
-    - Renamed the ROMs in each set according to their own stickers.
-    - Moved the driver into gametron.a group.
-    - Added the missing input port C to 8255 PPI I/O chip.
-      Poker41 and pulltabs don't make use of it, but is present in the Test/Setting Mode.
-    - Updated technical notes.
-
-
-    [2008-05-10]
-
-    - Initial release.
-    - Properly decoded graphics.
-    - Proper memory map.
-    - Added NVRAM support.
-    - Proper Inputs through 8255 PPI I/O chip.
-    - Both games are working.
-    - Added technical & game notes.
-
-
-    TODO:
-
-    - Nothing... :)
-
-
-*******************************************************************************/
+*****************************************************************************************/
 
 
 #define MASTER_CLOCK    XTAL_16MHz
@@ -233,6 +298,7 @@
 #include "machine/nvram.h"
 #include "poker41.lh"
 #include "pulltabs.lh"
+#include "bingo.lh"
 #include "includes/gatron.h"
 
 
@@ -242,50 +308,74 @@
 
 WRITE8_MEMBER(gatron_state::output_port_0_w)
 {
-/*  ---------------
-    Pull Tabs lamps
-    ---------------
+/*---------------
+  Poker 4-1 lamps
+  ---------------
 
-    0x00 - Default State.
-    0x01 - Hold3.
-    0x04 - Hold5.
-    0x08 - Ante/Bet.
+  0x00 - Default State.
+  0x01 - Hold3.
+  0x02 - Hold4.
+  0x04 - Hold5/DDown.
+  0x08 - Ante/Bet.
+  0x10 - Start.
+  0x20 - Deal/Hit.
+  0x40 - Stand/FreeBonusDraw.
 
-    - bits -
-    7654 3210
-    ---------
-    .... ...x ---> Hold3.
-    .... .x.. ---> Hold5.
-    .... x... ---> Ante/Bet.
+  - bits -
+  7654 3210
+  ---------
+  .... ...x --> Hold3.
+  .... ..x. --> Hold4.
+  .... .x.. --> Hold5/DDown.
+  .... x... --> Ante/Bet.
+  ...x .... --> Start.
+  ..x. .... --> Deal/Hit.
+  .x.. .... --> Stand/FreeBonusDraw.
 
-    Tab1 = Hold1
-    Tab2 = Hold3
-    Tab3 = Hold5
+
+  ---------------
+  Pull Tabs lamps
+  ---------------
+
+  0x00 - Default State.
+  0x01 - Hold3.
+  0x04 - Hold5.
+  0x08 - Ante/Bet.
+
+  - bits -
+  7654 3210
+  ---------
+  .... ...x ---> Hold3.
+  .... .x.. ---> Hold5.
+  .... x... ---> Ante/Bet.
+
+  Tab1 = Hold1
+  Tab2 = Hold3
+  Tab3 = Hold5
 
 
-    ---------------
-    Poker 4-1 lamps
-    ---------------
+  ---------------
+  Bingo lamps
+  ---------------
 
-    0x00 - Default State.
-    0x01 - Hold3.
-    0x02 - Hold4.
-    0x04 - Hold5/DDown.
-    0x08 - Ante/Bet.
-    0x10 - Start.
-    0x20 - Deal/Hit.
-    0x40 - Stand/FreeBonusDraw.
+  0x01 - unknown.
+  0x02 - unknown.
+  0x04 - unknown.
+  0x08 - Ante/Bet.
+  0x10 - Start.
+  0x20 - Change Game / D-UP / High.
+  0x40 - Change Card / Take / Low.
 
-    - bits -
-    7654 3210
-    ---------
-    .... ...x --> Hold3.
-    .... ..x. --> Hold4.
-    .... .x.. --> Hold5/DDown.
-    .... x... --> Ante/Bet.
-    ...x .... --> Start.
-    ..x. .... --> Deal/Hit.
-    .x.. .... --> Stand/FreeBonusDraw.
+  - bits -
+  7654 3210
+  ---------
+  .... ...x --> Hold3.
+  .... ..x. --> Hold4.
+  .... .x.. --> Hold5/DDown.
+  .... x... --> Ante/Bet.
+  ...x .... --> Start.
+  ..x. .... --> Change Game / D-UP / High.
+  .x.. .... --> Change Card / Take / Low.
 
 */
 	output_set_lamp_value(0, (data) & 1);       /* hold3 lamp */
@@ -300,38 +390,22 @@ WRITE8_MEMBER(gatron_state::output_port_0_w)
 
 WRITE8_MEMBER(gatron_state::output_port_1_w)
 {
-/*  ----------------
-    Lamps & Counters
-    ----------------
+/*----------------
+  Lamps & Counters
+  ----------------
 
-    - bits -
-    7654 3210
-    ---------
-    .... ...x --> Hold2 lamp.
-    .... ..x. --> Hold1 lamp.
-    .x.. .... --> Coin counter (inverted).
-    x... .... --> Inverted pulse. Related to counters.
+  - bits -
+  7654 3210
+  ---------
+  .... ...x --> Hold2 lamp.
+  .... ..x. --> Hold1 lamp.
+  .x.. .... --> Coin counter (inverted).
+  x... .... --> Inverted pulse. Related to counters.
 
 */
 	output_set_lamp_value(7, (data) & 1);       /* hold2 lamp */
 	output_set_lamp_value(8, (data >> 1) & 1);  /* hold1 lamp */
 }
-
-
-/*************************
-*      Machine Init      *
-*************************/
-
-static I8255A_INTERFACE( ppi8255_intf )
-{
-	DEVCB_INPUT_PORT("IN0"),        /* Port A read */
-	DEVCB_NULL,                     /* Port A write */
-	DEVCB_INPUT_PORT("IN1"),        /* Port B read */
-	DEVCB_NULL,                     /* Port B write */
-	DEVCB_NULL,                     /* Port C read */
-	DEVCB_DRIVER_MEMBER(gatron_state,output_port_1_w)   /* Port C write */
-};
-
 
 /*************************
 * Memory Map Information *
@@ -340,9 +414,9 @@ static I8255A_INTERFACE( ppi8255_intf )
 static ADDRESS_MAP_START( gat_map, AS_PROGRAM, 8, gatron_state )
 	AM_RANGE(0x0000, 0x5fff) AM_ROM
 	AM_RANGE(0x6000, 0x63ff) AM_RAM_WRITE(gat_videoram_w) AM_SHARE("videoram")
-	AM_RANGE(0x8000, 0x87ff) AM_RAM AM_SHARE("nvram")   /* battery backed RAM */
-	AM_RANGE(0xa000, 0xa000) AM_DEVWRITE("snsnd", sn76496_device, write)                            /* PSG */
-	AM_RANGE(0xe000, 0xe000) AM_WRITE(output_port_0_w)                                      /* lamps */
+	AM_RANGE(0x8000, 0x87ff) AM_RAM AM_SHARE("nvram")                          /* battery backed RAM */
+	AM_RANGE(0xa000, 0xa000) AM_DEVWRITE("snsnd", sn76496_device, write)       /* PSG */
+	AM_RANGE(0xe000, 0xe000) AM_WRITE(output_port_0_w)                         /* lamps */
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( gat_portmap, AS_IO, 8, gatron_state )
@@ -357,24 +431,24 @@ ADDRESS_MAP_END
 
 static INPUT_PORTS_START( poker41 )
 	PORT_START("IN0")
-	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_POKER_HOLD4 ) PORT_NAME("Discard 4")
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_GAMBLE_BET ) PORT_NAME("Bet / Ante")
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL ) PORT_NAME("Deal / Hit")
-	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_COIN1 ) PORT_IMPULSE(2)  /* Coin A */
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_POKER_HOLD4 )  PORT_NAME("Discard 4")
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_GAMBLE_BET )   PORT_NAME("Bet / Ante")
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_GAMBLE_DEAL )  PORT_NAME("Deal / Hit")
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_COIN1 ) PORT_IMPULSE(2)
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_GAMBLE_STAND ) PORT_NAME("Free Bonus Draw / Stand")
-	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_START1 ) PORT_NAME("Start")
-	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_POKER_HOLD5 ) PORT_NAME("Discard 5 / High / Double Down")
-	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_POKER_HOLD3 ) PORT_NAME("Discard 3")
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_START1 )       PORT_NAME("Start")
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_POKER_HOLD5 )  PORT_NAME("Discard 5 / High / Double Down")
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_POKER_HOLD3 )  PORT_NAME("Discard 3")
 
 	PORT_START("IN1")
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_POKER_HOLD2 )  PORT_NAME("Discard 2")
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_GAMBLE_BOOK ) PORT_NAME("Service 2 (Test Mode Out / Coin Stuck)")
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_GAMBLE_BOOK )  PORT_NAME("Service 2 (Test Mode Out / Coin Stuck)")
 	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN )    /* Payout? */
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_GAMBLE_SERVICE ) PORT_NAME("Service 1 (Test/Settings)")
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_POKER_HOLD1 ) PORT_NAME("Discard 1 / Low")
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_POKER_HOLD1 )  PORT_NAME("Discard 1 / Low")
 INPUT_PORTS_END
 
 static INPUT_PORTS_START( pulltabs )
@@ -397,6 +471,28 @@ static INPUT_PORTS_START( pulltabs )
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_SERVICE1 ) PORT_NAME("Service 1 (Test/Settings)") PORT_CODE(KEYCODE_9)
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_BUTTON2 )  PORT_NAME("Super Star Ticket") PORT_CODE(KEYCODE_Z)
+INPUT_PORTS_END
+
+static INPUT_PORTS_START( bingo )
+	PORT_START("IN0")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_NAME("Ante") PORT_CODE(KEYCODE_1)                // bet/ante
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_NAME("Change Game / High") PORT_CODE(KEYCODE_C)  // change game (lucky game X-L-T-C-N-U) / change values in settings.
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_COIN1 )  PORT_IMPULSE(2)                                        // coin in
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_NAME("Change Card / Low")  PORT_CODE(KEYCODE_Z)  // change card / move down in settings
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_NAME("Start") PORT_CODE(KEYCODE_X)               // start
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
+
+	PORT_START("IN1")
+	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_SERVICE3 ) PORT_NAME("Service 3 (Trigger beeps in Test Mode)") PORT_CODE(KEYCODE_8) // beeps in test-settings mode
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_SERVICE2 ) PORT_NAME("Service 2 (Test Mode Out / Coin Stuck)") PORT_CODE(KEYCODE_0) // exit test-settings mode
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_SERVICE1 ) PORT_NAME("Service 1 (Test/Settings Mode)") PORT_CODE(KEYCODE_9)
+	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
 INPUT_PORTS_END
 
 
@@ -427,16 +523,6 @@ static GFXDECODE_START( gat )
 GFXDECODE_END
 
 
-//-------------------------------------------------
-//  sn76496_config psg_intf
-//-------------------------------------------------
-
-static const sn76496_config psg_intf =
-{
-	DEVCB_NULL
-};
-
-
 /*************************
 *    Machine Drivers     *
 *************************/
@@ -451,7 +537,10 @@ static MACHINE_CONFIG_START( gat, gatron_state )
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
-	MCFG_I8255A_ADD( "ppi8255", ppi8255_intf )
+	MCFG_DEVICE_ADD("ppi8255", I8255A, 0)
+	MCFG_I8255_IN_PORTA_CB(IOPORT("IN0"))
+	MCFG_I8255_IN_PORTB_CB(IOPORT("IN1"))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(gatron_state, output_port_1_w))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -460,15 +549,16 @@ static MACHINE_CONFIG_START( gat, gatron_state )
 	MCFG_SCREEN_SIZE(48*8, 16*16)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 48*8-1, 0*8, 16*16-1)
 	MCFG_SCREEN_UPDATE_DRIVER(gatron_state, screen_update_gat)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(gat)
-	MCFG_PALETTE_LENGTH(8)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", gat)
+	MCFG_PALETTE_ADD("palette", 8)
+	MCFG_PALETTE_INIT_OWNER(gatron_state, gatron)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 	MCFG_SOUND_ADD("snsnd", SN76496, MASTER_CLOCK/8 )   /* 2 MHz, guess */
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 2.00)
-	MCFG_SOUND_CONFIG(psg_intf)
 MACHINE_CONFIG_END
 
 
@@ -497,11 +587,22 @@ ROM_START( pulltabs )
 	ROM_LOAD( "pt-1r-v.u31",    0x2000, 0x1000, CRC(6d1b80f4) SHA1(f2da4b4ae1eb05f9ea02e7495ee8110698cc5d1b) )
 ROM_END
 
+ROM_START( bingo )
+	ROM_REGION( 0x10000, "maincpu", 0 )
+	ROM_LOAD( "revb.u2", 0x0000, 0x2000, CRC(0322e2b5) SHA1(e191ad00de56e448a41350e32fb6a4828050a2d4) )
+
+	ROM_REGION( 0x3000, "gfx1", 0 )
+	ROM_LOAD( "revb.u23",    0x0000, 0x1000, CRC(8d15fc35) SHA1(e66abaead70e6c024efbf177f1a4616449f2d231) )
+	ROM_LOAD( "revb.u22",    0x1000, 0x1000, CRC(60254c3b) SHA1(4b9e57a8ac9e6e2c6349d6847bbf3f46232721ad) )
+	ROM_LOAD( "revb.u21",    0x2000, 0x1000, CRC(b8cc348b) SHA1(34a4690f6464db17ee363bba8709d0ad63aa7cf1) )
+ROM_END
+
 
 /*************************
 *      Game Drivers      *
 *************************/
 
-/*     YEAR  NAME      PARENT  MACHINE  INPUT      INIT  ROT    COMPANY        FULLNAME     FLAGS  LAYOUT   */
-GAMEL( 1983, poker41,  0,      gat,     poker41, driver_device,   0,    ROT0, "Game-A-Tron", "Poker 4-1",  0,     layout_poker41  )
-GAMEL( 1983, pulltabs, 0,      gat,     pulltabs, driver_device,  0,    ROT0, "Game-A-Tron", "Pull Tabs",  0,     layout_pulltabs )
+/*     YEAR  NAME      PARENT  MACHINE  INPUT      STATE           INIT  ROT    COMPANY         FULLNAME             FLAGS  LAYOUT   */
+GAMEL( 1983, poker41,  0,      gat,     poker41,   driver_device,  0,    ROT0, "Game-A-Tron",  "Four in One Poker",  0,     layout_poker41  )
+GAMEL( 1983, pulltabs, 0,      gat,     pulltabs,  driver_device,  0,    ROT0, "Game-A-Tron",  "Pull Tabs",          0,     layout_pulltabs )
+GAMEL( 1983, bingo,    0,      gat,     bingo,     driver_device,  0,    ROT0, "Game-A-Tron",  "Bingo",              0,     layout_bingo  )

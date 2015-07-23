@@ -1,8 +1,10 @@
+// license:???
+// copyright-holders:Jarek Burczynski
 /****************************************************************************
 
     Metal Soldier Isaac II  (c) Taito 1985
 
-    driver by Jaroslaw Burczynski
+    driver by Jarek Burczynski
 
 ****************************************************************************/
 
@@ -10,8 +12,6 @@
 #include "cpu/z80/z80.h"
 #include "cpu/m6805/m6805.h"
 #include "sound/ay8910.h"
-#include "sound/msm5232.h"
-#include "machine/buggychl.h"
 #include "includes/msisaac.h"
 
 /*
@@ -81,7 +81,7 @@ WRITE8_MEMBER(msisaac_state::ms_unknown_w)
 READ8_MEMBER(msisaac_state::msisaac_mcu_r)
 {
 #ifdef USE_MCU
-	return buggychl_mcu_r(offset);
+	return m_bmcu->buggychl_mcu_r(offset);
 #else
 /*
 MCU simulation TODO:
@@ -153,7 +153,7 @@ MCU simulation TODO:
 READ8_MEMBER(msisaac_state::msisaac_mcu_status_r)
 {
 #ifdef USE_MCU
-	return buggychl_mcu_status_r(offset);
+	return m_bmcu->buggychl_mcu_status_r(offset);
 #else
 	return 3;   //mcu ready / cpu data ready
 #endif
@@ -162,7 +162,7 @@ READ8_MEMBER(msisaac_state::msisaac_mcu_status_r)
 WRITE8_MEMBER(msisaac_state::msisaac_mcu_w)
 {
 #ifdef USE_MCU
-	buggychl_mcu_w(offset,data);
+	m_bmcu->buggychl_mcu_w(offset,data);
 #else
 	//if(data != 0x0a && data != 0x42 && data != 0x02)
 	//  popmessage("PC = %04x %02x", space.device().safe_pc(), data);
@@ -173,7 +173,7 @@ WRITE8_MEMBER(msisaac_state::msisaac_mcu_w)
 static ADDRESS_MAP_START( msisaac_map, AS_PROGRAM, 8, msisaac_state )
 	AM_RANGE(0x0000, 0xdfff) AM_ROM
 	AM_RANGE(0xe000, 0xe7ff) AM_RAM
-	AM_RANGE(0xe800, 0xefff) AM_RAM_WRITE(paletteram_xxxxRRRRGGGGBBBB_byte_le_w) AM_SHARE("paletteram")
+	AM_RANGE(0xe800, 0xefff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xf000, 0xf000) AM_WRITE(msisaac_bg2_textbank_w)
 	AM_RANGE(0xf001, 0xf001) AM_WRITENOP                    //???
 	AM_RANGE(0xf002, 0xf002) AM_WRITENOP                    //???
@@ -259,7 +259,7 @@ static ADDRESS_MAP_START( msisaac_sound_map, AS_PROGRAM, 8, msisaac_state )
 	AM_RANGE(0x4000, 0x47ff) AM_RAM
 	AM_RANGE(0x8000, 0x8001) AM_DEVWRITE("ay1", ay8910_device, address_data_w)
 	AM_RANGE(0x8002, 0x8003) AM_DEVWRITE("ay2", ay8910_device, address_data_w)
-	AM_RANGE(0x8010, 0x801d) AM_DEVWRITE_LEGACY("msm", msm5232_w)
+	AM_RANGE(0x8010, 0x801d) AM_DEVWRITE("msm", msm5232_device, write)
 	AM_RANGE(0x8020, 0x8020) AM_WRITE(sound_control_0_w)
 	AM_RANGE(0x8030, 0x8030) AM_WRITE(sound_control_1_w)
 	AM_RANGE(0xc000, 0xc000) AM_READ(soundlatch_byte_r)
@@ -418,12 +418,6 @@ static GFXDECODE_START( msisaac )
 	GFXDECODE_ENTRY( "gfx2", 0, tile_layout, 0, 64 )
 GFXDECODE_END
 
-static const msm5232_interface msm5232_config =
-{
-	{ 0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6 }, /* 0.65 (???) uF capacitors (match the sample, not verified) */
-	DEVCB_NULL
-};
-
 
 /*******************************************************************************/
 
@@ -490,9 +484,11 @@ static MACHINE_CONFIG_START( msisaac, msisaac_state )
 	MCFG_SCREEN_SIZE(32*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(0, 32*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(msisaac_state, screen_update_msisaac)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(msisaac)
-	MCFG_PALETTE_LENGTH(1024)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", msisaac)
+	MCFG_PALETTE_ADD("palette", 1024)
+	MCFG_PALETTE_FORMAT(xxxxRRRRGGGGBBBB)
 
 
 	/* sound hardware */
@@ -505,7 +501,7 @@ static MACHINE_CONFIG_START( msisaac, msisaac_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.15)
 
 	MCFG_SOUND_ADD("msm", MSM5232, 2000000)
-	MCFG_SOUND_CONFIG(msm5232_config)
+	MCFG_MSM5232_SET_CAPACITORS(0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6, 0.65e-6) /* 0.65 (???) uF capacitors (match the sample, not verified) */
 	MCFG_SOUND_ROUTE(0, "mono", 1.0)    // pin 28  2'-1
 	MCFG_SOUND_ROUTE(1, "mono", 1.0)    // pin 29  4'-1
 	MCFG_SOUND_ROUTE(2, "mono", 1.0)    // pin 30  8'-1

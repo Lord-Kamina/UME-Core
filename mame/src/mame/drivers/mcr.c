@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Midway MCR systems
@@ -295,14 +297,6 @@ static UINT8 last_op4;
 
 static UINT8 dpoker_coin_status;
 static UINT8 dpoker_output;
-
-static UINT8 nflfoot_serial_out_active;
-static UINT8 nflfoot_serial_out_bits;
-static UINT8 nflfoot_serial_out_numbits;
-
-static UINT8 nflfoot_serial_in_active;
-static UINT16 nflfoot_serial_in_bits;
-static UINT8 nflfoot_serial_in_numbits;
 
 
 
@@ -645,30 +639,10 @@ WRITE8_MEMBER(mcr_state::dotron_op4_w)
  *
  *************************************/
 
-WRITE16_MEMBER(mcr_state::mcr_ipu_sio_transmit)
-{
-	logerror("ipu_sio_transmit: %02X\n", data);
-
-	/* create a 10-bit value with a '1','0' sequence for the start bit */
-	nflfoot_serial_in_active = TRUE;
-	nflfoot_serial_in_bits = (data << 2) | 1;
-	nflfoot_serial_in_numbits = 10;
-}
-
-
 READ8_MEMBER(mcr_state::nflfoot_ip2_r)
 {
 	/* bit 7 = J3-2 on IPU board = TXDA on SIO */
-	UINT8 val = 0x80;
-
-	/* we only do this if we have active data */
-	if (nflfoot_serial_in_active)
-	{
-		val = (nflfoot_serial_in_bits & 1) ? 0x00 : 0x80;
-		nflfoot_serial_in_bits >>= 1;
-		if (--nflfoot_serial_in_numbits == 0)
-			nflfoot_serial_in_active = FALSE;
-	}
+	UINT8 val = m_sio_txda << 7;
 
 	if (space.device().safe_pc() != 0x107)
 		logerror("%04X:ip2_r = %02X\n", space.device().safe_pc(), val);
@@ -678,42 +652,13 @@ READ8_MEMBER(mcr_state::nflfoot_ip2_r)
 
 WRITE8_MEMBER(mcr_state::nflfoot_op4_w)
 {
-	z80sio_device *sio = machine().device<z80sio_device>("ipu_sio");
-
-	/* bit 7 = J3-7 on IPU board = /RXDA on SIO */
 	logerror("%04X:op4_w(%d%d%d)\n", space.device().safe_pc(), (data >> 7) & 1, (data >> 6) & 1, (data >> 5) & 1);
 
-	/* look for a non-zero start bit to go active */
-	if (!nflfoot_serial_out_active && (data & 0x80))
-	{
-		nflfoot_serial_out_active = TRUE;
-		nflfoot_serial_out_bits = 0;
-		nflfoot_serial_out_numbits = 0;
-		logerror(" -- serial active\n");
-	}
-
-	/* accumulate bits as they are written */
-	else if (nflfoot_serial_out_active)
-	{
-		/* if we've accumulated less than 8, just add to the pile */
-		if (nflfoot_serial_out_numbits < 8)
-		{
-			nflfoot_serial_out_bits = (nflfoot_serial_out_bits >> 1) | (~data & 0x80);
-			nflfoot_serial_out_numbits++;
-			logerror(" -- accumulated %d bits\n", nflfoot_serial_out_numbits);
-		}
-
-		/* once we have 8, the final bit is a stop bit, feed it to the SIO */
-		else
-		{
-			logerror(" -- stop bit = %d; final value = %02X\n", (data >> 7) & 1, nflfoot_serial_out_bits);
-			nflfoot_serial_out_active = FALSE;
-			sio->receive_data(0, nflfoot_serial_out_bits);
-		}
-	}
+	/* bit 7 = J3-7 on IPU board = /RXDA on SIO */
+	m_sio->rxa_w(!((data >> 7) & 1));
 
 	/* bit 6 = J3-3 on IPU board = CTSA on SIO */
-	sio->set_cts(0, (data >> 6) & 1);
+	m_sio->ctsa_w((data >> 6) & 1);
 
 	/* bit 4 = SEL0 (J1-8) on squawk n talk board */
 	/* bits 3-0 = MD3-0 connected to squawk n talk (J1-4,3,2,1) */
@@ -763,8 +708,8 @@ static ADDRESS_MAP_START( cpu_90009_map, AS_PROGRAM, 8, mcr_state )
 	AM_RANGE(0x0000, 0x6fff) AM_ROM
 	AM_RANGE(0x7000, 0x77ff) AM_MIRROR(0x0800) AM_RAM AM_SHARE("nvram")
 	AM_RANGE(0xf000, 0xf1ff) AM_MIRROR(0x0200) AM_RAM AM_SHARE("spriteram")
-	AM_RANGE(0xf400, 0xf41f) AM_MIRROR(0x03e0) AM_WRITE(paletteram_xxxxRRRRBBBBGGGG_byte_split_lo_w) AM_SHARE("paletteram")
-	AM_RANGE(0xf800, 0xf81f) AM_MIRROR(0x03e0) AM_WRITE(paletteram_xxxxRRRRBBBBGGGG_byte_split_hi_w) AM_SHARE("paletteram2")
+	AM_RANGE(0xf400, 0xf41f) AM_MIRROR(0x03e0) AM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
+	AM_RANGE(0xf800, 0xf81f) AM_MIRROR(0x03e0) AM_DEVWRITE("palette", palette_device, write_ext) AM_SHARE("palette_ext")
 	AM_RANGE(0xfc00, 0xffff) AM_RAM_WRITE(mcr_90009_videoram_w) AM_SHARE("videoram")
 ADDRESS_MAP_END
 
@@ -820,7 +765,7 @@ static ADDRESS_MAP_START( cpu_91490_map, AS_PROGRAM, 8, mcr_state )
 	AM_RANGE(0xe000, 0xe7ff) AM_RAM AM_SHARE("nvram")
 	AM_RANGE(0xe800, 0xe9ff) AM_MIRROR(0x0200) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0xf000, 0xf7ff) AM_RAM_WRITE(mcr_91490_videoram_w) AM_SHARE("videoram")
-	AM_RANGE(0xf800, 0xf87f) AM_MIRROR(0x0780) AM_WRITE(mcr_91490_paletteram_w) AM_SHARE("paletteram")
+	AM_RANGE(0xf800, 0xf87f) AM_MIRROR(0x0780) AM_WRITE(mcr_paletteram9_w) AM_SHARE("paletteram")
 ADDRESS_MAP_END
 
 /* upper I/O map determined by PAL; only SSIO ports are verified from schematics */
@@ -853,7 +798,7 @@ static ADDRESS_MAP_START( ipu_91695_portmap, AS_IO, 8, mcr_state )
 	ADDRESS_MAP_UNMAP_HIGH
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x03) AM_MIRROR(0xe0) AM_DEVREADWRITE("ipu_pio0", z80pio_device, read, write)
-	AM_RANGE(0x04, 0x07) AM_MIRROR(0xe0) AM_DEVREADWRITE("ipu_sio", z80sio_device, read, write)
+	AM_RANGE(0x04, 0x07) AM_MIRROR(0xe0) AM_DEVREADWRITE("ipu_sio", z80dart_device, cd_ba_r, cd_ba_w)
 	AM_RANGE(0x08, 0x0b) AM_MIRROR(0xe0) AM_DEVREADWRITE("ipu_ctc", z80ctc_device, read, write)
 	AM_RANGE(0x0c, 0x0f) AM_MIRROR(0xe0) AM_DEVREADWRITE("ipu_pio1", z80pio_device, read, write)
 	AM_RANGE(0x10, 0x13) AM_MIRROR(0xe0) AM_WRITE(mcr_ipu_laserdisk_w)
@@ -1601,7 +1546,7 @@ static INPUT_PORTS_START( dotron )
 	PORT_SERVICE( 0x80, IP_ACTIVE_LOW )
 
 	PORT_START("ssio:IP1")  /* J4 10-13,15-18 */
-	PORT_BIT( 0x7f, 0x00, IPT_DIAL ) PORT_SENSITIVITY(50) PORT_KEYDELTA(10) PORT_CODE_DEC(KEYCODE_Z) PORT_CODE_INC(KEYCODE_X) PORT_REVERSE
+	PORT_BIT( 0x7f, 0x00, IPT_DIAL ) PORT_SENSITIVITY(50) PORT_KEYDELTA(10) PORT_REVERSE
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
 
 	PORT_START("ssio:IP2")  /* J5 1-8 */
@@ -1793,13 +1738,6 @@ static const char *const journey_sample_names[] =
 	0
 };
 
-static const samples_interface journey_samples_interface =
-{
-	1,
-	journey_sample_names
-};
-
-
 static const char *const twotiger_sample_names[] =
 {
 	"*twotiger",
@@ -1807,14 +1745,6 @@ static const char *const twotiger_sample_names[] =
 	"right",
 	0
 };
-
-static const samples_interface twotiger_samples_interface =
-{
-	2,
-	twotiger_sample_names
-};
-
-
 
 /*************************************
  *
@@ -1832,7 +1762,9 @@ static MACHINE_CONFIG_START( mcr_90009, mcr_state )
 	MCFG_CPU_IO_MAP(cpu_90009_portmap)
 	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", mcr_state, mcr_interrupt, "screen", 0, 1)
 
-	MCFG_Z80CTC_ADD("ctc", MAIN_OSC_MCR_I/8 /* same as "maincpu" */, mcr_ctc_intf)
+	MCFG_DEVICE_ADD("ctc", Z80CTC, MAIN_OSC_MCR_I/8 /* same as "maincpu" */)
+	MCFG_Z80CTC_INTR_CB(INPUTLINE("maincpu", INPUT_LINE_IRQ0))
+	MCFG_Z80CTC_ZC0_CB(DEVWRITELINE("ctc", z80ctc_device, trg1))
 
 	MCFG_WATCHDOG_VBLANK_INIT(16)
 	MCFG_MACHINE_START_OVERRIDE(mcr_state,mcr)
@@ -1840,17 +1772,18 @@ static MACHINE_CONFIG_START( mcr_90009, mcr_state )
 	MCFG_NVRAM_ADD_1FILL("nvram")
 
 	/* video hardware */
-	MCFG_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
-
 	MCFG_SCREEN_ADD("screen", RASTER)
+	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_BEFORE_VBLANK)
 	MCFG_SCREEN_REFRESH_RATE(30)
 	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500) /* not accurate */)
 	MCFG_SCREEN_SIZE(32*16, 30*16)
 	MCFG_SCREEN_VISIBLE_AREA(0*16, 32*16-1, 0*16, 30*16-1)
 	MCFG_SCREEN_UPDATE_DRIVER(mcr_state, screen_update_mcr)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(mcr)
-	MCFG_PALETTE_LENGTH(32)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", mcr)
+	MCFG_PALETTE_ADD("palette", 32)
+	MCFG_PALETTE_FORMAT(xxxxRRRRBBBBGGGG)
 
 	MCFG_VIDEO_START_OVERRIDE(mcr_state,mcr)
 
@@ -1880,7 +1813,9 @@ static MACHINE_CONFIG_DERIVED( mcr_90010, mcr_90009 )
 	MCFG_CPU_IO_MAP(cpu_90010_portmap)
 
 	/* video hardware */
-	MCFG_PALETTE_LENGTH(64)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(64)
+	MCFG_PALETTE_FORMAT(xxxxRRRRBBBBGGGG)
 MACHINE_CONFIG_END
 
 
@@ -1888,7 +1823,9 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( mcr_90010_tt, mcr_90010 )
 
 	/* sound hardware */
-	MCFG_SAMPLES_ADD("samples", twotiger_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(2)
+	MCFG_SAMPLES_NAMES(twotiger_sample_names)
 	MCFG_SOUND_ROUTE(0, "lspeaker", 0.25)
 	MCFG_SOUND_ROUTE(1, "rspeaker", 0.25)
 MACHINE_CONFIG_END
@@ -1898,10 +1835,14 @@ MACHINE_CONFIG_END
 static MACHINE_CONFIG_DERIVED( mcr_91475, mcr_90010 )
 
 	/* video hardware */
-	MCFG_PALETTE_LENGTH(128)
+	MCFG_PALETTE_MODIFY("palette")
+	MCFG_PALETTE_ENTRIES(128)
+	MCFG_PALETTE_FORMAT(xxxxRRRRBBBBGGGG)
 
 	/* sound hardware */
-	MCFG_SAMPLES_ADD("samples", journey_samples_interface)
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(1)
+	MCFG_SAMPLES_NAMES(journey_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.25)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.25)
 MACHINE_CONFIG_END
@@ -1944,10 +1885,19 @@ static MACHINE_CONFIG_DERIVED( mcr_91490_ipu, mcr_91490_snt )
 	MCFG_TIMER_MODIFY("scantimer")
 	MCFG_TIMER_DRIVER_CALLBACK(mcr_state, mcr_ipu_interrupt)
 
-	MCFG_Z80CTC_ADD("ipu_ctc", 7372800/2 /* same as "ipu" */, nflfoot_ctc_intf)
-	MCFG_Z80PIO_ADD("ipu_pio0", 7372800/2, nflfoot_pio_intf)
-	MCFG_Z80PIO_ADD("ipu_pio1", 7372800/2, nflfoot_pio_intf)
-	MCFG_Z80SIO_ADD("ipu_sio", 7372800/2 /* same as "ipu" */, nflfoot_sio_intf)
+	MCFG_DEVICE_ADD("ipu_ctc", Z80CTC, 7372800/2 /* same as "ipu" */)
+	MCFG_Z80CTC_INTR_CB(INPUTLINE("ipu", INPUT_LINE_IRQ0))
+
+	MCFG_DEVICE_ADD("ipu_pio0", Z80PIO, 7372800/2)
+	MCFG_Z80PIO_OUT_INT_CB(INPUTLINE("ipu", INPUT_LINE_IRQ0))
+
+	MCFG_DEVICE_ADD("ipu_pio1", Z80PIO, 7372800/2)
+	MCFG_Z80PIO_OUT_INT_CB(INPUTLINE("ipu", INPUT_LINE_IRQ0))
+
+	MCFG_Z80SIO0_ADD("ipu_sio", 7372800/2, 0, 0, 0, 0)
+	MCFG_Z80DART_OUT_INT_CB(INPUTLINE("ipu", INPUT_LINE_IRQ0))
+	MCFG_Z80DART_OUT_TXDA_CB(WRITELINE(mcr_state, sio_txda_w))
+	MCFG_Z80DART_OUT_TXDB_CB(WRITELINE(mcr_state, sio_txdb_w))
 MACHINE_CONFIG_END
 
 
@@ -2232,12 +2182,12 @@ ROM_END
 
 ROM_START( tron3 )
 	ROM_REGION( 0x10000, "maincpu", 0 ) /* ROM's located on the Super CPU Board (90010) */
-	ROM_LOAD( "scpu_pga(__0617).d2", 0x0000, 0x2000, CRC(fc33afd7) SHA1(99a2ed972c3db477f35a7162079563367864f207) )
-	ROM_LOAD( "scpu_pgb(__0617).d3", 0x2000, 0x2000, CRC(7d9e22ac) SHA1(16a6e9651d5f764e8762fd8d6e53d13fda7473de) )
-	ROM_LOAD( "scpu_pgc(__0617).d4", 0x4000, 0x2000, CRC(902011c6) SHA1(17ac768a0fd1278ae83414f0d67d6ac8337f4773) )
-	ROM_LOAD( "scpu_pgd(__0617).d5", 0x6000, 0x2000, CRC(86477e89) SHA1(196f0d3930d10bfe4ddee82ce8b28bb99324069e) )
-	ROM_LOAD( "scpu_pge(__0617).d6", 0x8000, 0x2000, CRC(ea198fa8) SHA1(d8c97ea87d504e77edc38c87c2953c8c4f1a405b) )
-	ROM_LOAD( "scpu_pgf(__0617).d7", 0xa000, 0x2000, CRC(4325fb08) SHA1(70727aa37354425315d8a8b3ca07bbe91f7e8f08) )
+	ROM_LOAD( "scpu_pga.d2", 0x0000, 0x2000, CRC(fc33afd7) SHA1(99a2ed972c3db477f35a7162079563367864f207) ) // sldh
+	ROM_LOAD( "scpu_pgb.d3", 0x2000, 0x2000, CRC(7d9e22ac) SHA1(16a6e9651d5f764e8762fd8d6e53d13fda7473de) ) // sldh
+	ROM_LOAD( "scpu_pgc.d4", 0x4000, 0x2000, CRC(902011c6) SHA1(17ac768a0fd1278ae83414f0d67d6ac8337f4773) ) // sldh
+	ROM_LOAD( "scpu_pgd.d5", 0x6000, 0x2000, CRC(86477e89) SHA1(196f0d3930d10bfe4ddee82ce8b28bb99324069e) ) // sldh
+	ROM_LOAD( "scpu_pge.d6", 0x8000, 0x2000, CRC(ea198fa8) SHA1(d8c97ea87d504e77edc38c87c2953c8c4f1a405b) ) // sldh
+	ROM_LOAD( "scpu_pgf.d7", 0xa000, 0x2000, CRC(4325fb08) SHA1(70727aa37354425315d8a8b3ca07bbe91f7e8f08) ) // sldh
 
 	ROM_REGION( 0x10000, "ssio:cpu", 0 ) /* ROM's located on the Super Sound I/O Board (90913) */
 	ROM_LOAD( "ssi_0a.a7",   0x0000, 0x1000, CRC(765e6eba) SHA1(42efeefc8571dfc237c0be3368248f1e56add92e) )
@@ -2298,6 +2248,37 @@ ROM_START( tron4 )
 	ROM_LOAD( "0066-314bx-xxqx.g12.bin", 0x0000, 0x0001, NO_DUMP)
 ROM_END
 
+ROM_START( tronger )
+	ROM_REGION( 0x10000, "maincpu", 0 ) /* ROM's located on the Super CPU Board (90010) */
+	ROM_LOAD( "pro0.d2", 0x0000, 0x2000, CRC(ba14603d) SHA1(1cc30c4ea659926314343f00ccbcfe9021f4de26) )
+	ROM_LOAD( "scpu_pgb.d3", 0x2000, 0x2000, CRC(063a748f) SHA1(aefe647e9b562d6a9da1ec32a9d403fce7e62012) )// sldh
+	ROM_LOAD( "scpu_pgc.d4", 0x4000, 0x2000, CRC(6ca50365) SHA1(76e17284da7c3ddf752d67b5e80d3c145f64068e) )// sldh
+	ROM_LOAD( "scpu_pgd.d5", 0x6000, 0x2000, CRC(b5b241c9) SHA1(4a9bde02387365912b3e9878428c8aa1f87a365a) )// sldh
+	ROM_LOAD( "scpu_pge.d6", 0x8000, 0x2000, CRC(04597abe) SHA1(7a896b9415a2479da8519329568e5fb8a429d03e) )// sldh
+	ROM_LOAD( "scpu_pgf.d7", 0xa000, 0x2000, CRC(3908e404) SHA1(d61b73c87ba4b0ab8751d9c653b663b1342d5d73) )// sldh
+
+	ROM_REGION( 0x10000, "ssio:cpu", 0 ) /* ROM's located on the Super Sound I/O Board (90913) */
+	ROM_LOAD( "ssi_0a.a7",   0x0000, 0x1000, CRC(765e6eba) SHA1(42efeefc8571dfc237c0be3368248f1e56add92e) )
+	ROM_LOAD( "ssi_0b.a8",   0x1000, 0x1000, CRC(1b90ccdd) SHA1(0876e5eeaa63bb8cc97f3634a6ddd8a29a9b012f) )
+	ROM_LOAD( "ssi_0c.a9",   0x2000, 0x1000, CRC(3a4bc629) SHA1(ce8452a99a313ae7429de471bbea39de08c9fd4b) )
+
+	ROM_REGION( 0x04000, "gfx1", 0 ) /* ROM's located on the Super CPU Board (90010) */
+	ROM_LOAD( "scpu_bgg.g3", 0x0000, 0x2000, CRC(1a9ed2f5) SHA1(b0d85b47873ac8ad475da18b9540d37232cb2b7c) )
+	ROM_LOAD( "scpu_bgh.g4", 0x2000, 0x2000, CRC(3220f974) SHA1(a38ea5f1db27f05d9689db838ce7a8de98f34837) )
+
+	ROM_REGION( 0x08000, "gfx2", 0 ) /* ROM's located on the MCR/II Video Gen Board (91399) */
+	ROM_LOAD( "vga.e1",      0x0000, 0x2000, CRC(bc036d1d) SHA1(c5d54d0b80ac768ccf6fdd32cad1ef6359fa324c) )
+	ROM_LOAD( "vgb.dc1",     0x2000, 0x2000, CRC(58ee14d3) SHA1(5fb4268c9c73bdfc3b1e866618979aea3f219bbc) )
+	ROM_LOAD( "vgc.cb1",     0x4000, 0x2000, CRC(3329f9d4) SHA1(11f4d744374e475d2c5b195a9f70888414529dd3) )
+	ROM_LOAD( "vga.a1",      0x6000, 0x2000, CRC(9743f873) SHA1(71ed80ecd8caaf9fce1d7010f95c4678c9bd7102) )
+
+	ROM_REGION( 0x0005, "scpu_pals", 0) /* PAL's located on the Super CPU Board (90010) */
+	ROM_LOAD( "0066-313bx-xxqx.a12.bin", 0x0000, 0x0001, NO_DUMP)
+	ROM_LOAD( "0066-315bx-xxqx.b12.bin", 0x0000, 0x0001, NO_DUMP)
+	ROM_LOAD( "0066-322bx-xx0x.e3.bin",  0x0000, 0x0001, NO_DUMP)
+	ROM_LOAD( "0066-316bx-xxqx.g11.bin", 0x0000, 0x0001, NO_DUMP)
+	ROM_LOAD( "0066-314bx-xxqx.g12.bin", 0x0000, 0x0001, NO_DUMP)
+ROM_END
 
 ROM_START( kroozr )
 	ROM_REGION( 0x10000, "maincpu", 0 )
@@ -2718,6 +2699,9 @@ ROM_START( nflfoot )
 	ROM_LOAD( "nflvidfg.cp7", 0x0a000, 0x2000, CRC(73f62392) SHA1(18f28be7264f8edff38f8a6aa067eeb1970f544c) )
 	ROM_LOAD( "nflvidfg.c10", 0x0c000, 0x2000, CRC(1766dcc7) SHA1(df499e3c66ae702d2d56e6cd095a754665569fcd) )
 	ROM_LOAD( "nflvidfg.cp9", 0x0e000, 0x2000, CRC(46558146) SHA1(4bedfae8cf0fcb9d837706ee13fbe3944ab47216) )
+
+	DISK_REGION( "ced_videodisc" )
+		DISK_IMAGE_READONLY( "nflfoot", 0, NO_DUMP )
 ROM_END
 
 
@@ -2914,15 +2898,8 @@ DRIVER_INIT_MEMBER(mcr_state,nflfoot)
 	machine().device<midway_ssio_device>("ssio")->set_custom_input(2, 0x80, read8_delegate(FUNC(mcr_state::nflfoot_ip2_r),this));
 	machine().device<midway_ssio_device>("ssio")->set_custom_output(4, 0xff, write8_delegate(FUNC(mcr_state::nflfoot_op4_w),this));
 
-	nflfoot_serial_out_active = FALSE;
-	nflfoot_serial_in_active = FALSE;
-
-	save_item(NAME(nflfoot_serial_out_active));
-	save_item(NAME(nflfoot_serial_out_bits));
-	save_item(NAME(nflfoot_serial_out_numbits));
-	save_item(NAME(nflfoot_serial_in_active));
-	save_item(NAME(nflfoot_serial_in_bits));
-	save_item(NAME(nflfoot_serial_in_numbits));
+	save_item(NAME(m_sio_txda));
+	save_item(NAME(m_sio_txdb));
 }
 
 
@@ -2960,6 +2937,7 @@ GAME( 1982, tron,     0,        mcr_90010,     tron, mcr_state,     mcr_90010, R
 GAME( 1982, tron2,    tron,     mcr_90010,     tron, mcr_state,     mcr_90010, ROT90, "Bally Midway", "Tron (6/25)", GAME_SUPPORTS_SAVE )
 GAME( 1982, tron3,    tron,     mcr_90010,     tron3, mcr_state,    mcr_90010, ROT90, "Bally Midway", "Tron (6/17)", GAME_SUPPORTS_SAVE | GAME_NO_COCKTAIL )
 GAME( 1982, tron4,    tron,     mcr_90010,     tron3, mcr_state,    mcr_90010, ROT90, "Bally Midway", "Tron (6/15)", GAME_SUPPORTS_SAVE | GAME_NO_COCKTAIL )
+GAME( 1982, tronger,  tron,     mcr_90010,     tron3, mcr_state,    mcr_90010, ROT90, "Bally Midway", "Tron (Germany)", GAME_SUPPORTS_SAVE | GAME_NO_COCKTAIL )
 GAME( 1982, domino,   0,        mcr_90010,     domino, mcr_state,   mcr_90010, ROT0,  "Bally Midway", "Domino Man", GAME_SUPPORTS_SAVE )
 GAME( 1982, wacko,    0,        mcr_90010,     wacko, mcr_state,    wacko,     ROT0,  "Bally Midway", "Wacko", GAME_SUPPORTS_SAVE )
 GAME( 1984, twotigerc,twotiger, mcr_90010,     twotigrc, mcr_state, mcr_90010, ROT0,  "Bally Midway", "Two Tigers (Tron conversion)", GAME_SUPPORTS_SAVE )

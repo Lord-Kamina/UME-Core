@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /* Red Corsair */
 
 /* skeleton driver */
@@ -43,6 +45,12 @@ Driver Notes:
 
 Can't do much with this, I'm pretty sure the game code is in the custom block
 so even the Main CPU is unknown, assuming the 8085 is the sound CPU
+
+Notes added 2014-09-10:
+- Rom in "user1" contains Z80 code (not 8085 code), and fits in the memory map at 4000-5FFF.
+   It contains subroutines meant to be called from elsewhere.
+- Rom in "maincpu" is not 8085 code (unless it is scrambled)
+
 
 */
 
@@ -142,9 +150,10 @@ static MACHINE_CONFIG_START( rcorsair, rcorsair_state )
 	MCFG_SCREEN_UPDATE_DRIVER(rcorsair_state, screen_update)
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 256-1, 0, 256-1)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(rcorsair)
-	MCFG_PALETTE_LENGTH(0x100)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", rcorsair)
+	MCFG_PALETTE_ADD("palette", 0x100)
 MACHINE_CONFIG_END
 
 ROM_START( rcorsair )

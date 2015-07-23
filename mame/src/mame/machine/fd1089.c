@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria, Andreas Naive, Charles MacDonald
 /***************************************************************************
 
     Hitachi FD1089A/FD1089B encryption emulation
@@ -108,18 +110,20 @@
     CPU #     Type  Status   Game              Seed   Unencrypted data range
     --------- ------- --- -------------------- ------ -----------------------------------
     317-0013A FD1089B [1] Enduro Racer         400001 030000-04ffff + 100000-1fffff
+    317-0016  FD1089? ??? Fantasy Zone         400005 ?
     317-0018  FD1089A [1] Action Fighter       400003 400000-4fffff + 840000-8dffff + c00000-c4ffff + ff0000-ffffff
+    317-0019  FD1089A [1] Outrun               400007 000000-03ffff
     317-0021  FD1089A [2] Alex Kidd            40000b ?
     317-0022  FD1089A [1] Dunk Shot            40000d 030000-ffffff
-    317-0024  FD1089B [2] Time Scanner         40000f ?
-    317-0027  FD1089B [2] SDI                  400011 ?
+    317-0024  FD1089B [1] Time Scanner         40000f 000000-02ffff
+    317-0027  FD1089B [1] SDI                  400011 000000-03ffff
     317-0028  FD1089A [2] Defense              400011 ?
     317-0033  FD1089A [1] Alien Syndrome       400013 030000-ffffff
     317-0037  FD1089B [2] Alien Syndrome       400013 030000-ffffff
     317-0034  FD1089B [1] Super Hang-On        400015 030000-06ffff + 100000-2fffff + ff0000-ffffff
+    317-0086  FD1089A [2] Wonder Boy III       400043 ?
     317-0167  FD1089A [2] Aurail               400030 010000-ffffff
     317-0168  FD1089B [1] Aurail               400030 010000-ffffff
-    317-????  FD1089A [2] Wonder Boy III       400043 ?
     317-5021  FD1089B [1] Sukeban Jansi Ryuko  40004b 000000-00ffff
 
 
@@ -204,6 +208,9 @@ const fd1089_base_device::decrypt_parameters fd1089_base_device::s_data_params_a
 	{ 0xac, 1,6,3,5,0,7,4,2 },
 };
 
+static ADDRESS_MAP_START( decrypted_opcodes_map, AS_DECRYPTED_OPCODES, 16, fd1094_device )
+	AM_RANGE(0x00000, 0xfffff) AM_ROM AM_SHARE(":fd1089_decrypted_opcodes")
+ADDRESS_MAP_END
 
 
 //**************************************************************************
@@ -214,20 +221,24 @@ const fd1089_base_device::decrypt_parameters fd1089_base_device::s_data_params_a
 //  fd1089_base_device - constructor
 //-------------------------------------------------
 
-fd1089_base_device::fd1089_base_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock)
-	: m68000_device(mconfig, M68000, tag, owner, clock)
+fd1089_base_device::fd1089_base_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock, const char *shortname, const char *source)
+	: m68000_device(mconfig, tag, owner, clock, shortname, source),
+	  m_decrypted_opcodes(*this, ":fd1089_decrypted_opcodes")
 {
 	// override the name after the m68000 initializes
-	m_name.cpy(name);
+	m_name.assign(name);
+
+	// add the decrypted opcodes map
+	m_address_map[AS_DECRYPTED_OPCODES] = ADDRESS_MAP_NAME(decrypted_opcodes_map);
 }
 
 fd1089a_device::fd1089a_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: fd1089_base_device(mconfig, FD1089A, "FD1089A", tag, owner, clock)
+	: fd1089_base_device(mconfig, FD1089A, "FD1089A", tag, owner, clock, "fd1089a", __FILE__)
 {
 }
 
 fd1089b_device::fd1089b_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: fd1089_base_device(mconfig, FD1089B, "FD1089B", tag, owner, clock)
+	: fd1089_base_device(mconfig, FD1089B, "FD1089B", tag, owner, clock, "fd1089b", __FILE__)
 {
 }
 
@@ -253,18 +264,12 @@ void fd1089_base_device::device_start()
 	// determine length and resize our internal buffers
 	UINT32 romsize = region()->bytes();
 	m_plaintext.resize(romsize/2);
-	m_decrypted_opcodes.resize(romsize/2);
 
 	// copy the plaintext
-	memcpy(m_plaintext, rombase, romsize);
+	memcpy(&m_plaintext[0], rombase, romsize);
 
 	// decrypt it, overwriting original data with the decrypted data
-	decrypt(0x000000, romsize, m_plaintext, m_decrypted_opcodes, rombase);
-
-	// mark the ROM region as decrypted, pointing to the opcodes (if it is mapped)
-	address_space &program = space(AS_PROGRAM);
-	if (program.get_read_ptr(0) != NULL)
-		program.set_decrypted_region(0x000000, romsize - 1, m_decrypted_opcodes);
+	decrypt(0x000000, romsize, &m_plaintext[0], &m_decrypted_opcodes[0], rombase);
 }
 
 

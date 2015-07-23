@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Angelo Salese, David Haywood
 /*******************************************************************************************
 
 Bingo Circus (c) 1989 Sega
@@ -44,10 +46,10 @@ public:
 		m_upd7759(*this, "upd") { }
 
 	UINT8 m_x;
-	DECLARE_READ16_MEMBER(bingoc_rand_r);
+	DECLARE_READ16_MEMBER(unknown_r);
 	DECLARE_READ8_MEMBER(sound_test_r);
 	DECLARE_WRITE16_MEMBER(main_sound_latch_w);
-	DECLARE_WRITE8_MEMBER(bingoc_play_w);
+	DECLARE_WRITE8_MEMBER(sound_play_w);
 	virtual void video_start();
 	UINT32 screen_update_bingoc(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	required_device<cpu_device> m_maincpu;
@@ -67,7 +69,7 @@ UINT32 bingoc_state::screen_update_bingoc(screen_device &screen, bitmap_ind16 &b
 	return 0;
 }
 
-READ16_MEMBER(bingoc_state::bingoc_rand_r)
+READ16_MEMBER(bingoc_state::unknown_r)
 {
 	return 0xffff;
 }
@@ -101,7 +103,7 @@ WRITE16_MEMBER(bingoc_state::main_sound_latch_w)
 }
 #endif
 
-WRITE8_MEMBER(bingoc_state::bingoc_play_w)
+WRITE8_MEMBER(bingoc_state::sound_play_w)
 {
 	/*
 	---- --x- sound rom banking
@@ -109,14 +111,14 @@ WRITE8_MEMBER(bingoc_state::bingoc_play_w)
 	*/
 	UINT8 *upd = memregion("upd")->base();
 	memcpy(&upd[0x00000], &upd[0x20000 + (((data & 2)>>1) * 0x20000)], 0x20000);
-	upd7759_start_w(m_upd7759, data & 1);
+	m_upd7759->start_w(data & 1);
 //  printf("%02x\n",data);
 }
 
 static ADDRESS_MAP_START( main_map, AS_PROGRAM, 16, bingoc_state )
 	AM_RANGE(0x000000, 0x03ffff) AM_ROM
-	AM_RANGE(0x100000, 0x10007f) AM_READ(bingoc_rand_r) //comms? lamps?
-	AM_RANGE(0x180000, 0x18007f) AM_READ(bingoc_rand_r) //comms? lamps?
+	AM_RANGE(0x100000, 0x10007f) AM_READ(unknown_r) //comms? lamps?
+	AM_RANGE(0x180000, 0x18007f) AM_READ(unknown_r) //comms? lamps?
 #if !SOUND_TEST
 	AM_RANGE(0x180010, 0x180011) AM_WRITE(main_sound_latch_w) //WRONG there...
 #endif
@@ -131,8 +133,8 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( sound_io, AS_IO, 8, bingoc_state )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x01) AM_DEVREADWRITE("ymsnd", ym2151_device, read, write)
-	AM_RANGE(0x40, 0x40) AM_WRITE(bingoc_play_w)
-	AM_RANGE(0x80, 0x80) AM_DEVWRITE_LEGACY("upd", upd7759_port_w)
+	AM_RANGE(0x40, 0x40) AM_WRITE(sound_play_w)
+	AM_RANGE(0x80, 0x80) AM_DEVWRITE("upd", upd7759_device, port_w)
 #if !SOUND_TEST
 	AM_RANGE(0xc0, 0xc0) AM_READ(soundlatch_byte_r) //soundlatch
 #else
@@ -165,8 +167,9 @@ static MACHINE_CONFIG_START( bingoc, bingoc_state )
 	MCFG_SCREEN_SIZE(512, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 512-1, 0, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(bingoc_state, screen_update_bingoc)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x100)
+	MCFG_PALETTE_ADD("palette", 0x100)
 
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker") //might just be mono...

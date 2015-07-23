@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Victor Trucco,Steve Ellenoff,Phil Stroffolino,Tatsuyuki Satoh,Tomasz Slanina,Nicola Salmoria
 /***************************************************************************
 
     Video Hardware description for Taito Gladiator
@@ -18,8 +20,7 @@ TILE_GET_INFO_MEMBER(gladiatr_state::bg_get_tile_info)
 {
 	UINT8 attr = m_colorram[tile_index];
 
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			m_videoram[tile_index] + ((attr & 0x07) << 8) + (m_bg_tile_bank << 11),
 			(attr >> 3) ^ 0x1f,
 			0);
@@ -27,8 +28,7 @@ TILE_GET_INFO_MEMBER(gladiatr_state::bg_get_tile_info)
 
 TILE_GET_INFO_MEMBER(gladiatr_state::fg_get_tile_info)
 {
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			m_textram[tile_index] + (m_fg_tile_bank << 8),
 			0,
 			0);
@@ -44,20 +44,25 @@ TILE_GET_INFO_MEMBER(gladiatr_state::fg_get_tile_info)
 
 VIDEO_START_MEMBER(gladiatr_state,ppking)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(gladiatr_state::bg_get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,32,64);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(gladiatr_state::fg_get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,32,64);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(gladiatr_state::bg_get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,32,64);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(gladiatr_state::fg_get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,32,64);
 
 	m_fg_tilemap->set_transparent_pen(0);
 
 	m_bg_tilemap->set_scroll_cols(0x10);
 
 	m_sprite_bank = 1;
+
+	save_item(NAME(m_video_attributes));
+	save_item(NAME(m_fg_scrolly));
+	save_item(NAME(m_sprite_buffer));
+	save_item(NAME(m_fg_tile_bank));
 }
 
 VIDEO_START_MEMBER(gladiatr_state,gladiatr)
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(gladiatr_state::bg_get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,32);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(gladiatr_state::fg_get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(gladiatr_state::bg_get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,32);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(gladiatr_state::fg_get_tile_info),this),TILEMAP_SCAN_ROWS,8,8,64,32);
 
 	m_fg_tilemap->set_transparent_pen(0);
 
@@ -65,6 +70,16 @@ VIDEO_START_MEMBER(gladiatr_state,gladiatr)
 	m_fg_tilemap->set_scrolldx(-0x30, 0x12f);
 
 	m_sprite_bank = 2;
+
+	save_item(NAME(m_video_attributes));
+	save_item(NAME(m_fg_scrollx));
+	save_item(NAME(m_fg_scrolly));
+	save_item(NAME(m_bg_scrollx));
+	save_item(NAME(m_bg_scrolly));
+	save_item(NAME(m_sprite_bank));
+	save_item(NAME(m_sprite_buffer));
+	save_item(NAME(m_fg_tile_bank));
+	save_item(NAME(m_bg_tile_bank));
 }
 
 
@@ -75,25 +90,25 @@ VIDEO_START_MEMBER(gladiatr_state,gladiatr)
 
 ***************************************************************************/
 
-WRITE8_MEMBER(gladiatr_state::gladiatr_videoram_w)
+WRITE8_MEMBER(gladiatr_state::videoram_w)
 {
 	m_videoram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(gladiatr_state::gladiatr_colorram_w)
+WRITE8_MEMBER(gladiatr_state::colorram_w)
 {
 	m_colorram[offset] = data;
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(gladiatr_state::gladiatr_textram_w)
+WRITE8_MEMBER(gladiatr_state::textram_w)
 {
 	m_textram[offset] = data;
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE8_MEMBER(gladiatr_state::gladiatr_paletteram_w)
+WRITE8_MEMBER(gladiatr_state::paletteram_w)
 {
 	int r,g,b;
 
@@ -108,11 +123,11 @@ WRITE8_MEMBER(gladiatr_state::gladiatr_paletteram_w)
 	g = (g << 1) + ((m_generic_paletteram_8[offset + 0x400] >> 5) & 0x01);
 	b = (b << 1) + ((m_generic_paletteram_8[offset + 0x400] >> 6) & 0x01);
 
-	palette_set_color_rgb(machine(),offset,pal5bit(r),pal5bit(g),pal5bit(b));
+	m_palette->set_pen_color(offset,pal5bit(r),pal5bit(g),pal5bit(b));
 }
 
 
-WRITE8_MEMBER(gladiatr_state::gladiatr_spritebuffer_w)
+WRITE8_MEMBER(gladiatr_state::spritebuffer_w)
 {
 	m_sprite_buffer = data & 1;
 }
@@ -227,7 +242,7 @@ void gladiatr_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 
 				int t = tile_offset[ey][ex] + tile_number;
 
-				drawgfx_transpen(bitmap,cliprect,machine().gfx[2],
+				m_gfxdecode->gfx(2)->transpen(bitmap,cliprect,
 						t,
 						color,
 						xflip, yflip,
@@ -241,7 +256,7 @@ void gladiatr_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprec
 
 UINT32 gladiatr_state::screen_update_ppking(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0,0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	draw_sprites(bitmap,cliprect);
 
 	/* the fg layer just selects the upper palette bank on underlying pixels */
@@ -288,11 +303,11 @@ UINT32 gladiatr_state::screen_update_gladiatr(screen_device &screen, bitmap_ind1
 		m_bg_tilemap->set_scrolly(0, m_bg_scrolly);
 		m_fg_tilemap->set_scrolly(0, m_fg_scrolly);
 
-		m_bg_tilemap->draw(bitmap, cliprect, 0,0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
 		draw_sprites(bitmap,cliprect);
-		m_fg_tilemap->draw(bitmap, cliprect, 0,0);
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	}
 	else
-		bitmap.fill(get_black_pen(machine()), cliprect );
+		bitmap.fill(m_palette->black_pen(), cliprect );
 	return 0;
 }

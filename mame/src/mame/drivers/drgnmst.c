@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*
 
 Dragon Master (c)1994 Unico
@@ -174,7 +176,7 @@ WRITE8_MEMBER(drgnmst_state::drgnmst_snd_control_w)
 }
 
 
-READ8_MEMBER(drgnmst_state::PIC16C5X_T0_clk_r)
+READ_LINE_MEMBER(drgnmst_state::PIC16C5X_T0_clk_r)
 {
 	return 0;
 }
@@ -197,7 +199,7 @@ static ADDRESS_MAP_START( drgnmst_main_map, AS_PROGRAM, 16, drgnmst_state )
 	AM_RANGE(0x800180, 0x800181) AM_WRITE(drgnmst_snd_command_w)
 	AM_RANGE(0x800188, 0x800189) AM_WRITE(drgnmst_snd_flag_w)
 	AM_RANGE(0x8001e0, 0x8001e1) AM_WRITENOP
-	AM_RANGE(0x900000, 0x903fff) AM_RAM_WRITE(paletteram_xxxxRRRRGGGGBBBB_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x900000, 0x903fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x904000, 0x907fff) AM_RAM_WRITE(drgnmst_md_videoram_w) AM_SHARE("md_videoram")
 	AM_RANGE(0x908000, 0x90bfff) AM_RAM_WRITE(drgnmst_bg_videoram_w) AM_SHARE("bg_videoram")
 	AM_RANGE(0x90c000, 0x90ffff) AM_RAM_WRITE(drgnmst_fg_videoram_w) AM_SHARE("fg_videoram")
@@ -205,21 +207,6 @@ static ADDRESS_MAP_START( drgnmst_main_map, AS_PROGRAM, 16, drgnmst_state )
 	AM_RANGE(0x930000, 0x9307ff) AM_RAM AM_SHARE("spriteram")   // Sprites
 	AM_RANGE(0xff0000, 0xffffff) AM_RAM
 ADDRESS_MAP_END
-
-
-
-/***************************** PIC16C55 Memory Map **************************/
-
-	/* $000 - 1FF  PIC16C55 Internal Program ROM. Note: code is 12bits wide */
-	/* $000 - 01F  PIC16C55 Internal Data RAM */
-
-static ADDRESS_MAP_START( drgnmst_sound_io_map, AS_IO, 8, drgnmst_state )
-	AM_RANGE(0x00, 0x00) AM_READWRITE(pic16c5x_port0_r, drgnmst_pcm_banksel_w)  /* 4 bit port */
-	AM_RANGE(0x01, 0x01) AM_READWRITE(drgnmst_snd_command_r, drgnmst_oki_w)
-	AM_RANGE(0x02, 0x02) AM_READWRITE(drgnmst_snd_flag_r, drgnmst_snd_control_w)
-	AM_RANGE(PIC16C5x_T0, PIC16C5x_T0) AM_READ(PIC16C5X_T0_clk_r)
-ADDRESS_MAP_END
-
 
 
 static INPUT_PORTS_START( drgnmst )
@@ -396,11 +383,15 @@ static MACHINE_CONFIG_START( drgnmst, drgnmst_state )
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", drgnmst_state,  irq2_line_hold)
 
 	MCFG_CPU_ADD("audiocpu", PIC16C55, 32000000/8)  /* Confirmed */
-	/* Program and Data Maps are internal to the MCU */
-	MCFG_CPU_IO_MAP(drgnmst_sound_io_map)
+	MCFG_PIC16C5x_READ_A_CB(READ8(drgnmst_state, pic16c5x_port0_r))
+	MCFG_PIC16C5x_WRITE_A_CB(WRITE8(drgnmst_state, drgnmst_pcm_banksel_w))
+	MCFG_PIC16C5x_READ_B_CB(READ8(drgnmst_state, drgnmst_snd_command_r))
+	MCFG_PIC16C5x_WRITE_B_CB(WRITE8(drgnmst_state, drgnmst_oki_w))
+	MCFG_PIC16C5x_READ_C_CB(READ8(drgnmst_state, drgnmst_snd_flag_r))
+	MCFG_PIC16C5x_WRITE_C_CB(WRITE8(drgnmst_state, drgnmst_snd_control_w))
+	MCFG_PIC16C5x_T0_CB(READLINE(drgnmst_state, PIC16C5X_T0_clk_r))
 
-
-	MCFG_GFXDECODE(drgnmst)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", drgnmst)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -408,9 +399,10 @@ static MACHINE_CONFIG_START( drgnmst, drgnmst_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(8*8, 56*8-1, 2*8, 30*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(drgnmst_state, screen_update_drgnmst)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x2000)
-
+	MCFG_PALETTE_ADD("palette", 0x2000)
+	MCFG_PALETTE_FORMAT(xxxxRRRRGGGGBBBB)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -545,7 +537,7 @@ DRIVER_INIT_MEMBER(drgnmst_state,drgnmst)
 			data_lo = drgnmst_asciitohex((drgnmst_PICROM_HEX[src_pos + 3]));
 			data |= (data_hi << 12) | (data_lo << 8);
 
-			pic16c5x_set_config(m_audiocpu, data);
+			m_audiocpu->pic16c5x_set_config(data);
 
 			src_pos = 0x7fff;       /* Force Exit */
 		}

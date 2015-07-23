@@ -1,8 +1,10 @@
+// license:???
+// copyright-holders:K.Wilkins, Derrick Renaud, Frank Palazzolo, Couriersud
 /************************************************************************
  *
  *  MAME - Discrete sound system emulation library
  *
- *  Written by Keith Wilkins (mame@esplexo.co.uk)
+ *  Written by K.Wilkins (mame@esplexo.co.uk)
  *
  *  (c) K.Wilkins 2000
  *
@@ -26,10 +28,10 @@
  * Core software takes care of traversing the netlist in the correct
  * order
  *
- * DEVICE_START(discrete)      - Read Node list, initialise & reset
- * DEVICE_STOP(discrete)       - Shutdown discrete sound system
- * DEVICE_RESET(discrete)      - Put sound system back to time 0
- * discrete_stream_update() - This does the real update to the sim
+ * device_start                - Read Node list, initialise & reset
+ * device_stop                 - Shutdown discrete sound system
+ * device_reset                - Put sound system back to time 0
+ * discrete_stream_update()    - This does the real update to the sim
  *
  ************************************************************************/
 
@@ -37,7 +39,16 @@
 #include "wavwrite.h"
 #include "discrete.h"
 
+// for now, make buggy GCC/Mingw STFU about I64FMT
+#if (defined(__MINGW32__) && (__GNUC__ >= 5))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat"
+#pragma GCC diagnostic ignored "-Wformat-extra-args"
+#endif
 
+
+/* for_each collides with c++ standard libraries - include it here */
+#define for_each(_T, _e, _l) for (_T _e = (_l)->begin_ptr() ;  _e <= (_l)->end_ptr(); _e++)
 
 // device type definition
 const device_type DISCRETE = &device_creator<discrete_sound_device>;
@@ -117,7 +128,7 @@ public:
 	node_step_list_t        step_list;
 
 	/* list of source nodes */
-	dynamic_array_t<input_buffer> source_list;      /* discrete_source_node */
+	vector_t<input_buffer> source_list;      /* discrete_source_node */
 
 	int                     task_group;
 
@@ -137,7 +148,7 @@ protected:
 	void check(discrete_task *dest_task);
 	void prepare_for_queue(int samples);
 
-	dynamic_array_t<output_buffer>      m_buffers;
+	vector_t<output_buffer>      m_buffers;
 	discrete_device &                   m_device;
 
 private:
@@ -153,12 +164,12 @@ private:
  *
  *************************************/
 
-#include "disc_sys.c"       /* discrete core modules and support functions */
-#include "disc_wav.c"       /* Wave sources   - SINE/SQUARE/NOISE/etc */
-#include "disc_mth.c"       /* Math Devices   - ADD/GAIN/etc */
-#include "disc_inp.c"       /* Input Devices  - INPUT/CONST/etc */
-#include "disc_flt.c"       /* Filter Devices - RCF/HPF/LPF */
-#include "disc_dev.c"       /* Popular Devices - NE555/etc */
+#include "disc_sys.inc"       /* discrete core modules and support functions */
+#include "disc_wav.inc"       /* Wave sources   - SINE/SQUARE/NOISE/etc */
+#include "disc_mth.inc"       /* Math Devices   - ADD/GAIN/etc */
+#include "disc_inp.inc"       /* Input Devices  - INPUT/CONST/etc */
+#include "disc_flt.inc"       /* Filter Devices - RCF/HPF/LPF */
+#include "disc_dev.inc"       /* Popular Devices - NE555/etc */
 
 /*************************************
  *
@@ -464,7 +475,7 @@ const double *discrete_device::node_output_ptr(int onode)
 //  discrete_log: Debug logging
 //-------------------------------------------------
 
-void CLIB_DECL ATTR_PRINTF(2,3) discrete_device::discrete_log(const char *text, ...) const
+void CLIB_DECL discrete_device::discrete_log(const char *text, ...) const
 {
 	if (DISCRETE_DEBUGLOG)
 	{
@@ -525,7 +536,7 @@ void discrete_device::discrete_build_list(const discrete_block *intf, sound_bloc
 		}
 		else if (intf[node_count].type == DSO_DELETE)
 		{
-			dynamic_array_t<int> deletethem;
+			vector_t<int> deletethem;
 
 			for (int i=0; i<block_list.count(); i++)
 			{
@@ -646,7 +657,7 @@ void discrete_device::display_profiling(void)
 		discrete_step_interface *step;
 		if ((*node)->interface(step))
 			if (step->run_time > tresh)
-				printf("%3d: %20s %8.2f %10.2f\n", (*node)->index(), (*node)->module_name(), (float) step->run_time / (float) total * 100.0, ((float) step->run_time) / (float) m_total_samples);
+				printf("%3d: %20s %8.2f %10.2f\n", (*node)->index(), (*node)->module_name(), (double) step->run_time / (double) total * 100.0, ((double) step->run_time) / (double) m_total_samples);
 	}
 
 	/* Task information */
@@ -698,7 +709,8 @@ void discrete_device::init_nodes(const sound_block_list_t &block_list)
 	{
 		const discrete_block *block = block_list[i];
 
-		discrete_base_node *node = block->factory->Create(this, block);
+		//discrete_base_node *node = block->factory->Create(this, block);
+		discrete_base_node *node = block->factory(this, block);
 		/* keep track of special nodes */
 		if (block->node == NODE_SPECIAL)
 		{
@@ -825,7 +837,7 @@ void discrete_device::static_set_intf(device_t &device, const discrete_block *in
 //-------------------------------------------------
 
 discrete_device::discrete_device(const machine_config &mconfig, device_type type, const char *name, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, type, name, tag, owner, clock),
+	: device_t(mconfig, type, name, tag, owner, clock, "discrete", __FILE__),
 		m_intf(NULL),
 		m_sample_rate(0),
 		m_sample_time(0),
@@ -858,7 +870,7 @@ void discrete_device::device_start()
 	// create the stream
 	//m_stream = machine().sound().stream_alloc(*this, 0, 2, 22257);
 
-	const discrete_block *intf_start = (m_intf != NULL) ? m_intf : (discrete_block *) static_config();
+	const discrete_block *intf_start = m_intf;
 	char name[32];
 
 	/* If a clock is specified we will use it, otherwise run at the audio sample rate. */
@@ -1130,3 +1142,8 @@ WRITE8_MEMBER( discrete_device::write )
 		discrete_log("discrete_sound_w write to non-existent NODE_%02d\n", offset-NODE_00);
 	}
 }
+
+#if (defined(__MINGW32__) && (__GNUC__ >= 5))
+#pragma GCC diagnostic pop
+#endif
+

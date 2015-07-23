@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /**********************************************************************
 
     Intel 8155/8156 - 2048-Bit Static MOS RAM with I/O Ports and Timer emulation
-
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 **********************************************************************/
 
@@ -116,7 +115,7 @@ inline UINT8 i8155_device::get_timer_mode()
 
 inline void i8155_device::timer_output()
 {
-	m_out_to_func(m_to);
+	m_out_to_cb(m_to);
 
 	if (LOG) logerror("8155 '%s' Timer Output: %u\n", tag(), m_to);
 }
@@ -162,7 +161,7 @@ inline UINT8 i8155_device::read_port(int port)
 	switch (get_port_mode(port))
 	{
 	case PORT_MODE_INPUT:
-		data = m_in_port_func[port](0);
+		data = (port == PORT_A) ? m_in_pa_cb(0) : ((port == PORT_B) ? m_in_pb_cb(0) : m_in_pc_cb(0));
 		break;
 
 	case PORT_MODE_OUTPUT:
@@ -184,7 +183,12 @@ inline void i8155_device::write_port(int port, UINT8 data)
 	{
 	case PORT_MODE_OUTPUT:
 		m_output[port] = data;
-		m_out_port_func[port](0, m_output[port]);
+		if (port == PORT_A)
+			m_out_pa_cb((offs_t)0, m_output[port]);
+		else if (port == PORT_B)
+			m_out_pb_cb((offs_t)0, m_output[port]);
+		else
+			m_out_pc_cb((offs_t)0, m_output[port]);
 		break;
 	}
 }
@@ -199,39 +203,19 @@ inline void i8155_device::write_port(int port, UINT8 data)
 //-------------------------------------------------
 
 i8155_device::i8155_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, I8155, "Intel 8155", tag, owner, clock),
+	: device_t(mconfig, I8155, "8155 RIOT", tag, owner, clock, "i8155", __FILE__),
 		device_memory_interface(mconfig, *this),
+		m_in_pa_cb(*this),
+		m_in_pb_cb(*this),
+		m_in_pc_cb(*this),
+		m_out_pa_cb(*this),
+		m_out_pb_cb(*this),
+		m_out_pc_cb(*this),
+		m_out_to_cb(*this),
 		m_command(0),
 		m_status(0),
 		m_space_config("ram", ENDIANNESS_LITTLE, 8, 8, 0, NULL, *ADDRESS_MAP_NAME(i8155))
 {
-}
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void i8155_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const i8155_interface *intf = reinterpret_cast<const i8155_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<i8155_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&in_pa_cb, 0, sizeof(in_pa_cb));
-		memset(&out_pa_cb, 0, sizeof(out_pa_cb));
-		memset(&in_pb_cb, 0, sizeof(in_pb_cb));
-		memset(&out_pb_cb, 0, sizeof(out_pb_cb));
-		memset(&in_pc_cb, 0, sizeof(in_pc_cb));
-		memset(&out_pc_cb, 0, sizeof(out_pc_cb));
-		memset(&out_to_cb, 0, sizeof(out_to_cb));
-	}
 }
 
 
@@ -242,13 +226,13 @@ void i8155_device::device_config_complete()
 void i8155_device::device_start()
 {
 	// resolve callbacks
-	m_in_port_func[0].resolve(in_pa_cb, *this);
-	m_in_port_func[1].resolve(in_pb_cb, *this);
-	m_in_port_func[2].resolve(in_pc_cb, *this);
-	m_out_port_func[0].resolve(out_pa_cb, *this);
-	m_out_port_func[1].resolve(out_pb_cb, *this);
-	m_out_port_func[2].resolve(out_pc_cb, *this);
-	m_out_to_func.resolve(out_to_cb, *this);
+	m_in_pa_cb.resolve_safe(0);
+	m_in_pb_cb.resolve_safe(0);
+	m_in_pc_cb.resolve_safe(0);
+	m_out_pa_cb.resolve_safe();
+	m_out_pb_cb.resolve_safe();
+	m_out_pc_cb.resolve_safe();
+	m_out_to_cb.resolve_safe();
 
 	// allocate timers
 	m_timer = timer_alloc();

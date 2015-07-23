@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail, Charles MacDonald, David Haywood
 /***************************************************************************
 
   Super Shanghai Dragon's Eye             (c) 1992 Hot-B
@@ -12,15 +14,14 @@
   Sound: Z80B YM2203 Y3014 M6295
   OSC  : 28.0000MHz 16.0000MHz
 
-  The original uses a protection chip which isn't fully worked out yet.
-  Sound doesn't work for the original set, probably the sound ports are inside
-  the protection area.
 
   Emulation by Bryan McPhail, mish@tendril.co.uk
+  + Charles MacDonald, David Haywood
 
   ToDo:
 
   Palette handling is somewhat hacked, see paletteram16_xbgr_word_be_sprites_w
+   - check this on the original set
 
   ----
 
@@ -51,7 +52,7 @@ Stephh's notes (based on the games M68000 code and some tests) :
 #include "sound/2203intf.h"
 #include "sound/okim6295.h"
 #include "includes/sshangha.h"
-#include "video/deco16ic.h"
+#include "machine/deco146.h"
 
 #define SSHANGHA_HACK   0
 
@@ -59,33 +60,10 @@ Stephh's notes (based on the games M68000 code and some tests) :
 
 /******************************************************************************/
 
-WRITE16_MEMBER(sshangha_state::sshangha_protection16_w)
-{
-	COMBINE_DATA(&m_prot_data[offset]);
 
-	logerror("CPU #0 PC %06x: warning - write unmapped control address %06x %04x\n",space.device().safe_pc(),offset<<1,data);
-}
 
-/* Protection/IO chip 146 */
-READ16_MEMBER(sshangha_state::sshangha_protection16_r)
-{
-	switch (offset)
-	{
-		case 0x050 >> 1:
-			return ioport("INPUTS")->read();
-		case 0x76a >> 1:
-			return ioport("SYSTEM")->read();
-		case 0x0ac >> 1:
-			return ioport("DSW")->read();
 
-		// Protection TODO
-	}
-
-	logerror("CPU #0 PC %06x: warning - read unmapped control address %06x\n",space.device().safe_pc(),offset<<1);
-	return m_prot_data[offset];
-}
-
-READ16_MEMBER(sshangha_state::sshanghb_protection16_r)
+READ16_MEMBER(sshangha_state::sshanghb_protection16_r) // bootleg inputs
 {
 	switch (offset)
 	{
@@ -116,7 +94,7 @@ void sshangha_state::machine_reset()
 
 inline void sshangha_state::sshangha_set_color_888(pen_t color, int rshift, int gshift, int bshift, UINT32 data)
 {
-	palette_set_color_rgb(machine(), color, (data >> rshift) & 0xff, (data >> gshift) & 0xff, (data >> bshift) & 0xff);
+	m_palette->set_pen_color(color, (data >> rshift) & 0xff, (data >> gshift) & 0xff, (data >> bshift) & 0xff);
 }
 
 
@@ -151,24 +129,60 @@ WRITE16_MEMBER(sshangha_state::paletteram16_xbgr_word_be_tilehigh_w)
 	sshangha_set_color_888((offset/2)+0x300, 0, 8, 16, m_tile_paletteram2[(offset) | 1] | (m_tile_paletteram2[(offset) & ~1] << 16) );
 }
 
+READ16_MEMBER( sshangha_state::sshangha_protection_region_d_146_r )
+{
+	int real_address = 0x3f4000 + (offset *2);
+	int deco146_addr = BITSWAP32(real_address, /* NC */31,30,29,28,27,26,25,24,23,22,21,20,19,18, 13,12,11,/**/      17,16,15,14,    10,9,8, 7,6,5,4, 3,2,1,0) & 0x7fff;
+	UINT8 cs = 0;
+	UINT16 data = m_deco146->read_data( deco146_addr, mem_mask, cs );
+	return data;
+}
+
+WRITE16_MEMBER( sshangha_state::sshangha_protection_region_d_146_w )
+{
+	int real_address = 0x3f4000 + (offset *2);
+	int deco146_addr = BITSWAP32(real_address, /* NC */31,30,29,28,27,26,25,24,23,22,21,20,19,18, 13,12,11,/**/      17,16,15,14,    10,9,8, 7,6,5,4, 3,2,1,0) & 0x7fff;
+	UINT8 cs = 0;
+	m_deco146->write_data( space, deco146_addr, data, mem_mask, cs );
+}
+
+READ16_MEMBER( sshangha_state::sshangha_protection_region_8_146_r )
+{
+	int real_address = 0x3e0000 + (offset *2);
+	int deco146_addr = BITSWAP32(real_address, /* NC */31,30,29,28,27,26,25,24,23,22,21,20,19,18, 13,12,11,/**/      17,16,15,14,    10,9,8, 7,6,5,4, 3,2,1,0) & 0x7fff;
+	UINT8 cs = 0;
+	UINT16 data = m_deco146->read_data( deco146_addr, mem_mask, cs );
+	return data;
+}
+
+WRITE16_MEMBER( sshangha_state::sshangha_protection_region_8_146_w )
+{
+	int real_address = 0x3e0000 + (offset *2);
+	int deco146_addr = BITSWAP32(real_address, /* NC */31,30,29,28,27,26,25,24,23,22,21,20,19,18, 13,12,11,/**/      17,16,15,14,    10,9,8, 7,6,5,4, 3,2,1,0) & 0x7fff;
+	UINT8 cs = 0;
+	m_deco146->write_data( space, deco146_addr, data, mem_mask, cs );
+}
+
+
 static ADDRESS_MAP_START( sshangha_map, AS_PROGRAM, 16, sshangha_state )
+	ADDRESS_MAP_GLOBAL_MASK(0x3fffff)
 	AM_RANGE(0x000000, 0x03ffff) AM_ROM
 	AM_RANGE(0x100000, 0x10000f) AM_RAM AM_SHARE("sound_shared")
 
-	AM_RANGE(0x200000, 0x201fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf1_data_r, deco16ic_pf1_data_w)
-	AM_RANGE(0x202000, 0x203fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf2_data_r, deco16ic_pf2_data_w)
+	AM_RANGE(0x200000, 0x201fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf1_data_r, pf1_data_w)
+	AM_RANGE(0x202000, 0x203fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf2_data_r, pf2_data_w)
 	AM_RANGE(0x204000, 0x2047ff) AM_RAM AM_SHARE("pf1_rowscroll")
 	AM_RANGE(0x206000, 0x2067ff) AM_RAM AM_SHARE("pf2_rowscroll")
 	AM_RANGE(0x206800, 0x207fff) AM_RAM
-	AM_RANGE(0x300000, 0x30000f) AM_DEVWRITE_LEGACY("tilegen1", deco16ic_pf_control_w)
+	AM_RANGE(0x300000, 0x30000f) AM_DEVWRITE("tilegen1", deco16ic_device, pf_control_w)
 	AM_RANGE(0x320000, 0x320001) AM_WRITE(sshangha_video_w)
 	AM_RANGE(0x320002, 0x320005) AM_WRITENOP
 	AM_RANGE(0x320006, 0x320007) AM_READNOP //irq ack
 
-	AM_RANGE(0x340000, 0x340fff) AM_RAM AM_SHARE("spriteram")
+	AM_RANGE(0x340000, 0x340fff) AM_RAM AM_SHARE("spriteram2")
 	AM_RANGE(0x350000, 0x350001) AM_READ(deco_71_r)
 	AM_RANGE(0x350000, 0x350007) AM_WRITENOP
-	AM_RANGE(0x360000, 0x360fff) AM_RAM AM_SHARE("spriteram2")
+	AM_RANGE(0x360000, 0x360fff) AM_RAM AM_SHARE("spriteram")
 	AM_RANGE(0x370000, 0x370001) AM_READ(deco_71_r)
 	AM_RANGE(0x370000, 0x370007) AM_WRITENOP
 
@@ -177,9 +191,9 @@ static ADDRESS_MAP_START( sshangha_map, AS_PROGRAM, 16, sshangha_state )
 	AM_RANGE(0x380800, 0x380bff) AM_RAM_WRITE(paletteram16_xbgr_word_be_sprites2_w) AM_SHARE("sprite_palram2")
 	AM_RANGE(0x380c00, 0x380fff) AM_RAM_WRITE(paletteram16_xbgr_word_be_tilelow_w) AM_SHARE("tile_palram1")
 	AM_RANGE(0x381000, 0x383fff) AM_RAM // unused palette area
-
-	AM_RANGE(0xfec000, 0xff3fff) AM_RAM
-	AM_RANGE(0xff4000, 0xff47ff) AM_READWRITE(sshangha_protection16_r,sshangha_protection16_w) AM_SHARE("prot_data")
+	AM_RANGE(0x3e0000, 0x3e3fff) AM_READWRITE(sshangha_protection_region_8_146_r,sshangha_protection_region_8_146_w)
+	AM_RANGE(0x3ec000, 0x3f3fff) AM_RAM
+	AM_RANGE(0x3f4000, 0x3f7fff) AM_READWRITE(sshangha_protection_region_d_146_r,sshangha_protection_region_d_146_w) AM_SHARE("prot_data")
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( sshanghb_map, AS_PROGRAM, 16, sshangha_state )
@@ -187,12 +201,12 @@ static ADDRESS_MAP_START( sshanghb_map, AS_PROGRAM, 16, sshangha_state )
 	AM_RANGE(0x084000, 0x0847ff) AM_READ(sshanghb_protection16_r)
 	AM_RANGE(0x101000, 0x10100f) AM_RAM AM_SHARE("sound_shared") /* the bootleg writes here */
 
-	AM_RANGE(0x200000, 0x201fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf1_data_r, deco16ic_pf1_data_w)
-	AM_RANGE(0x202000, 0x203fff) AM_DEVREADWRITE_LEGACY("tilegen1", deco16ic_pf2_data_r, deco16ic_pf2_data_w)
+	AM_RANGE(0x200000, 0x201fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf1_data_r, pf1_data_w)
+	AM_RANGE(0x202000, 0x203fff) AM_DEVREADWRITE("tilegen1", deco16ic_device, pf2_data_r, pf2_data_w)
 	AM_RANGE(0x204000, 0x2047ff) AM_RAM AM_SHARE("pf1_rowscroll")
 	AM_RANGE(0x206000, 0x2067ff) AM_RAM AM_SHARE("pf2_rowscroll")
 	AM_RANGE(0x206800, 0x207fff) AM_RAM
-	AM_RANGE(0x300000, 0x30000f) AM_DEVWRITE_LEGACY("tilegen1", deco16ic_pf_control_w)
+	AM_RANGE(0x300000, 0x30000f) AM_DEVWRITE("tilegen1", deco16ic_device, pf_control_w)
 	AM_RANGE(0x320000, 0x320001) AM_WRITE(sshangha_video_w)
 	AM_RANGE(0x320002, 0x320005) AM_WRITENOP
 	AM_RANGE(0x320006, 0x320007) AM_READNOP //irq ack
@@ -360,31 +374,10 @@ WRITE_LINE_MEMBER(sshangha_state::irqhandler)
 	m_audiocpu->set_input_line(0, state);
 }
 
-static const ay8910_interface ay8910_config =
+DECO16IC_BANK_CB_MEMBER(sshangha_state::bank_callback)
 {
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL
-};
-
-static int sshangha_bank_callback( int bank )
-{
-	bank = bank >> 4;
-	return bank * 0x1000;
+	return (bank >> 4) * 0x1000;
 }
-
-static const deco16ic_interface sshangha_deco16ic_tilegen1_intf =
-{
-	"screen",
-	0, 1,
-	0x0f, 0x0f, /* trans masks (default values) */
-	0x10, 0x00, /* color base */
-	0x0f, 0x0f, /* color masks (default values) */
-	sshangha_bank_callback,
-	sshangha_bank_callback,
-	0,1
-};
-
 
 static MACHINE_CONFIG_START( sshangha, sshangha_state )
 
@@ -406,25 +399,42 @@ static MACHINE_CONFIG_START( sshangha, sshangha_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 40*8-1, 1*8, 31*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(sshangha_state, screen_update_sshangha)
 
-	MCFG_GFXDECODE(sshangha)
-	MCFG_PALETTE_LENGTH(0x4000)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", sshangha)
+	MCFG_PALETTE_ADD("palette", 0x4000)
 
-	MCFG_DECO16IC_ADD("tilegen1", sshangha_deco16ic_tilegen1_intf)
+	MCFG_DEVICE_ADD("tilegen1", DECO16IC, 0)
+	MCFG_DECO16IC_SPLIT(0)
+	MCFG_DECO16IC_WIDTH12(1)
+	MCFG_DECO16IC_PF1_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF2_TRANS_MASK(0x0f)
+	MCFG_DECO16IC_PF1_COL_BANK(0x10)
+	MCFG_DECO16IC_PF2_COL_BANK(0x00)
+	MCFG_DECO16IC_PF1_COL_MASK(0x0f)
+	MCFG_DECO16IC_PF2_COL_MASK(0x0f)
+	MCFG_DECO16IC_BANK1_CB(sshangha_state, bank_callback)
+	MCFG_DECO16IC_BANK2_CB(sshangha_state, bank_callback)
+	MCFG_DECO16IC_PF12_8X8_BANK(0)
+	MCFG_DECO16IC_PF12_16X16_BANK(1)
+	MCFG_DECO16IC_GFXDECODE("gfxdecode")
+	MCFG_DECO16IC_PALETTE("palette")
 
 	MCFG_DEVICE_ADD("spritegen1", DECO_SPRITE, 0)
-	decospr_device::set_gfx_region(*device, 2);
+	MCFG_DECO_SPRITE_GFX_REGION(2)
+	MCFG_DECO_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_DECO_SPRITE_PALETTE("palette")
 
 	MCFG_DEVICE_ADD("spritegen2", DECO_SPRITE, 0)
-	decospr_device::set_gfx_region(*device, 2);
+	MCFG_DECO_SPRITE_GFX_REGION(2)
+	MCFG_DECO_SPRITE_GFXDECODE("gfxdecode")
+	MCFG_DECO_SPRITE_PALETTE("palette")
 
-
+	MCFG_DECO146_ADD("ioprot")
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker") /* sure it's stereo? */
 
 	MCFG_SOUND_ADD("ymsnd", YM2203, 16000000/4)
 	MCFG_YM2203_IRQ_HANDLER(WRITELINE(sshangha_state, irqhandler))
-	MCFG_YM2203_AY8910_INTF(&ay8910_config)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.33)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.33)
 
@@ -499,5 +509,5 @@ DRIVER_INIT_MEMBER(sshangha_state,sshangha)
 }
 
 
-GAME( 1992, sshangha, 0,        sshangha, sshangha, sshangha_state, sshangha, ROT0, "Hot-B",   "Super Shanghai Dragon's Eye (Japan)", GAME_UNEMULATED_PROTECTION | GAME_NOT_WORKING )
+GAME( 1992, sshangha, 0,        sshangha, sshangha, sshangha_state, sshangha, ROT0, "Hot-B",   "Super Shanghai Dragon's Eye (Japan)", 0 )
 GAME( 1992, sshanghab,sshangha, sshanghb, sshangha, sshangha_state, sshangha, ROT0, "bootleg", "Super Shanghai Dragon's Eye (World, bootleg)", 0 )

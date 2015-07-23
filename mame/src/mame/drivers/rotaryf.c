@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Barry Rodewald
 /* Rotary Fighter, 01/1979, Kasco (Kansai Seiki Seisakusho Co.)
  board KIV-101 CPU: xtal(??mhz), i8085A, 40 pin IC(i8255?), 6*ROM, 1*RAM, DIP(8 switches), ..
  board KIV-101 CRT: 2*RAM, lots of 74xx TTL
@@ -23,51 +25,30 @@ public:
 	rotaryf_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this,"maincpu"),
-		m_videoram(*this, "videoram"),
 		m_samples(*this, "samples"),
-		m_sn(*this, "snsnd")
+		m_sn(*this, "snsnd"),
+		m_videoram(*this, "videoram")
 	{ }
+
+	required_device<cpu_device> m_maincpu;
+	required_device<samples_device> m_samples;
+	required_device<sn76477_device> m_sn;
+
+	required_shared_ptr<UINT8> m_videoram;
 
 	DECLARE_READ8_MEMBER(port29_r);
 	DECLARE_WRITE8_MEMBER(port28_w);
 	DECLARE_WRITE8_MEMBER(port30_w);
+
 	bool m_flipscreen;
 	UINT8 m_last;
-	required_device<cpu_device> m_maincpu;
-	required_shared_ptr<UINT8> m_videoram;
-	required_device<samples_device> m_samples;
-	required_device<sn76477_device> m_sn;
-	UINT32 screen_update_rotaryf(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
+
+	virtual void machine_start();
+
+	UINT32 screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
+
 	TIMER_DEVICE_CALLBACK_MEMBER(rotaryf_interrupt);
 };
-
-static const sn76477_interface rotaryf_sn76477_interface =
-{
-	0,          /*  4 noise_res (N/C)        */
-	0,          /*  5 filter_res (N/C)       */
-	0,          /*  6 filter_cap (N/C)       */
-	0,          /*  7 decay_res (N/C)        */
-	0,          /*  8 attack_decay_cap (N/C) */
-	RES_K(100), /* 10 attack_res             */
-	RES_K(56),  /* 11 amplitude_res          */
-	RES_K(10),  /* 12 feedback_res           */
-	0,          /* 16 vco_voltage (N/C)      */
-	CAP_U(0.1), /* 17 vco_cap                */
-	RES_K(8.2), /* 18 vco_res                */
-	5.0,        /* 19 pitch_voltage          */
-	RES_K(120), /* 20 slf_res                */
-	CAP_U(1.0), /* 21 slf_cap                */
-	0,          /* 23 oneshot_cap (N/C)      */
-	0,          /* 24 oneshot_res (N/C)      */
-	1,          /* 22 vco                    */
-	0,          /* 26 mixer A                */
-	0,          /* 25 mixer B                */
-	0,          /* 27 mixer C                */
-	1,          /* 1  envelope 1             */
-	0,          /* 28 envelope 2             */
-	1           /* 9  enable (variable)      */
-};
-
 
 
 static const char *const rotaryf_sample_names[] =
@@ -86,11 +67,11 @@ static const char *const rotaryf_sample_names[] =
 };
 
 
-static const samples_interface rotaryf_samples_interface =
+void rotaryf_state::machine_start()
 {
-	6,  /* 6 channels */
-	rotaryf_sample_names
-};
+	save_item(NAME(m_flipscreen));
+	save_item(NAME(m_last));
+}
 
 READ8_MEMBER( rotaryf_state::port29_r )
 {
@@ -111,7 +92,7 @@ WRITE8_MEMBER( rotaryf_state::port28_w )
 	if (BIT(rising_bits, 6)) m_samples->start (2, 2);   /* Hit */
 	if (BIT(rising_bits, 7)) m_samples->start (0, 0);   /* Shoot */
 
-	sn76477_enable_w(m_sn, (data & 3) ? 1 : 0);     /* Saucer Sound */
+	m_sn->enable_w((data & 3) ? 1 : 0);     /* Saucer Sound */
 
 	if (BIT(rising_bits, 4))
 	{
@@ -160,12 +141,12 @@ TIMER_DEVICE_CALLBACK_MEMBER(rotaryf_state::rotaryf_interrupt)
  *
  *************************************/
 
-UINT32 rotaryf_state::screen_update_rotaryf(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+UINT32 rotaryf_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
 	offs_t offs;
 	pen_t pens[2];
-	pens[0] = RGB_BLACK;
-	pens[1] = RGB_WHITE;
+	pens[0] = rgb_t::black;
+	pens[1] = rgb_t::white;
 	UINT8 i,x,y,data;
 
 	for (offs = 0; offs < m_videoram.bytes(); offs++)
@@ -272,13 +253,29 @@ static MACHINE_CONFIG_START( rotaryf, rotaryf_state )
 	MCFG_SCREEN_SIZE(32*8, 262)     /* vert size is a guess, taken from mw8080bw */
 	MCFG_SCREEN_VISIBLE_AREA(1*8, 30*8-1, 0*8, 32*8-1)
 	MCFG_SCREEN_REFRESH_RATE(60)
-	MCFG_SCREEN_UPDATE_DRIVER(rotaryf_state, screen_update_rotaryf)
+	MCFG_SCREEN_UPDATE_DRIVER(rotaryf_state, screen_update)
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
+
 	MCFG_SOUND_ADD("snsnd", SN76477, 0)
-	MCFG_SOUND_CONFIG(rotaryf_sn76477_interface)
+	MCFG_SN76477_NOISE_PARAMS(0, 0, 0)                 // noise + filter: N/C
+	MCFG_SN76477_DECAY_RES(0)                          // decay_res: N/C
+	MCFG_SN76477_ATTACK_PARAMS(0, RES_K(100))          // attack_decay_cap + attack_res
+	MCFG_SN76477_AMP_RES(RES_K(56))                    // amplitude_res
+	MCFG_SN76477_FEEDBACK_RES(RES_K(10))               // feedback_res
+	MCFG_SN76477_VCO_PARAMS(0, CAP_U(0.1), RES_K(8.2)) // VCO volt + cap + res
+	MCFG_SN76477_PITCH_VOLTAGE(5.0)                    // pitch_voltage
+	MCFG_SN76477_SLF_PARAMS(CAP_U(1.0), RES_K(120))    // slf caps + res
+	MCFG_SN76477_ONESHOT_PARAMS(0, 0)                  // oneshot caps + res: N/C
+	MCFG_SN76477_VCO_MODE(1)                           // VCO mode
+	MCFG_SN76477_MIXER_PARAMS(0, 0, 0)                 // mixer A, B, C
+	MCFG_SN76477_ENVELOPE_PARAMS(1, 0)                 // envelope 1, 2
+	MCFG_SN76477_ENABLE(1)                             // enable
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.5)
-	MCFG_SAMPLES_ADD("samples", rotaryf_samples_interface)
+
+	MCFG_SOUND_ADD("samples", SAMPLES, 0)
+	MCFG_SAMPLES_CHANNELS(6)
+	MCFG_SAMPLES_NAMES(rotaryf_sample_names)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END
 
@@ -294,4 +291,4 @@ ROM_START( rotaryf )
 ROM_END
 
 
-GAME( 1979, rotaryf, 0, rotaryf, rotaryf, driver_device, 0, ROT270, "Kasco", "Rotary Fighter", GAME_IMPERFECT_SOUND )
+GAME( 1979, rotaryf, 0, rotaryf, rotaryf, driver_device, 0, ROT270, "Kasco", "Rotary Fighter", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )

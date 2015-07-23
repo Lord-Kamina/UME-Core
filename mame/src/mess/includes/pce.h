@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Charles MacDonald, Wilbert Pol, Angelo Salese
 /*****************************************************************************
  *
  * includes/pce.h
@@ -11,7 +13,7 @@
 
 #include "cdrom.h"
 #include "cpu/h6280/h6280.h"
-#include "machine/pce_slot.h"
+#include "bus/pce/pce_slot.h"
 #include "machine/pce_cd.h"
 #include "video/huc6260.h"
 

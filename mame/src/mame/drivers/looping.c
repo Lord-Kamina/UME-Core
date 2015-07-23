@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
 /*
 To Do:
 - redump COP420 internal ROM
@@ -53,7 +55,8 @@ L056-6    9A          "      "      VLI-8-4 7A         "
 */
 
 #include "emu.h"
-#include "cpu/tms9900/tms9900l.h"
+#include "cpu/tms9900/tms9995.h"
+#include "cpu/tms9900/tms9980a.h"
 #include "sound/ay8910.h"
 #include "sound/dac.h"
 #include "sound/tms5220.h"
@@ -104,13 +107,15 @@ public:
 		m_spriteram(*this, "spriteram"),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
-		m_dac(*this, "dac") { }
+		m_dac(*this, "dac"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette")  { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_colorram;
 	required_shared_ptr<UINT8> m_spriteram;
-	UINT8 *     m_cop_io;
+	UINT8 m_cop_port_l;
 
 	/* tilemaps */
 	tilemap_t * m_bg_tilemap;
@@ -119,6 +124,7 @@ public:
 	UINT8       m_sound[8];
 
 	int     m_last;
+
 	DECLARE_WRITE8_MEMBER(flip_screen_x_w);
 	DECLARE_WRITE8_MEMBER(flip_screen_y_w);
 	DECLARE_WRITE8_MEMBER(looping_videoram_w);
@@ -133,8 +139,9 @@ public:
 	DECLARE_READ8_MEMBER(adc_r);
 	DECLARE_WRITE8_MEMBER(adc_w);
 	DECLARE_WRITE8_MEMBER(plr2_w);
-	DECLARE_READ8_MEMBER(cop_io_r);
-	DECLARE_WRITE8_MEMBER(cop_io_w);
+	DECLARE_READ8_MEMBER(cop_unk_r);
+	DECLARE_READ_LINE_MEMBER(cop_serial_r);
+	DECLARE_WRITE8_MEMBER(cop_l_w);
 	DECLARE_READ8_MEMBER(protection_r);
 	DECLARE_WRITE_LINE_MEMBER(looping_spcint);
 	DECLARE_WRITE8_MEMBER(looping_sound_sw);
@@ -143,14 +150,17 @@ public:
 	DECLARE_DRIVER_INIT(looping);
 	TILE_GET_INFO_MEMBER(get_tile_info);
 	virtual void machine_start();
+	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(looping);
 	UINT32 screen_update_looping(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	INTERRUPT_GEN_MEMBER(looping_interrupt);
 	void draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect);
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
 	required_device<dac_device> m_dac;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 
@@ -161,7 +171,7 @@ public:
  *
  *************************************/
 
-void looping_state::palette_init()
+PALETTE_INIT_MEMBER(looping_state, looping)
 {
 	const UINT8 *color_prom = memregion("proms")->base();
 	static const int resistances[3] = { 1000, 470, 220 };
@@ -196,7 +206,7 @@ void looping_state::palette_init()
 		bit1 = (color_prom[i] >> 7) & 1;
 		b = combine_2_weights(bweights, bit0, bit1);
 
-		palette_set_color(machine(), i, MAKE_RGB(r, g, b));
+		palette.set_pen_color(i, rgb_t(r, g, b));
 	}
 }
 
@@ -218,7 +228,7 @@ TILE_GET_INFO_MEMBER(looping_state::get_tile_info)
 
 void looping_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(looping_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8,8, 32,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(looping_state::get_tile_info),this), TILEMAP_SCAN_ROWS, 8,8, 32,32);
 
 	m_bg_tilemap->set_scroll_cols(0x20);
 }
@@ -305,14 +315,14 @@ void looping_state::draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect
 			flipy = !flipy;
 		}
 
-		drawgfx_transpen(bitmap, cliprect, machine().gfx[1], code, color, flipx, flipy, sx, sy, 0);
+		m_gfxdecode->gfx(1)->transpen(bitmap,cliprect, code, color, flipx, flipy, sx, sy, 0);
 	}
 }
 
 
 UINT32 looping_state::screen_update_looping(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	draw_sprites(bitmap, cliprect);
 	return 0;
@@ -331,7 +341,11 @@ void looping_state::machine_start()
 	save_item(NAME(m_sound));
 }
 
-
+void looping_state::machine_reset()
+{
+	// Disable auto wait state generation by raising the READY line on reset
+	static_cast<tms9995_device*>(machine().device("maincpu"))->set_ready(ASSERT_LINE);
+}
 
 /*************************************
  *
@@ -341,26 +355,28 @@ void looping_state::machine_start()
 
 INTERRUPT_GEN_MEMBER(looping_state::looping_interrupt)
 {
-	device.execute().set_input_line_and_vector(0, ASSERT_LINE, 4);
+	m_maincpu->set_input_line(INT_9995_INT1, ASSERT_LINE);
 }
 
 
 WRITE8_MEMBER(looping_state::level2_irq_set)
 {
+	logerror("Level 2 int = %d\n", data);
 	if (!(data & 1))
-		m_maincpu->set_input_line_and_vector(0, ASSERT_LINE, 4);
+		m_maincpu->set_input_line(INT_9995_INT1, ASSERT_LINE);
 }
 
 
 WRITE8_MEMBER(looping_state::main_irq_ack_w)
 {
 	if (data == 0)
-		m_maincpu->set_input_line(0, CLEAR_LINE);
+		m_maincpu->set_input_line(INT_9995_INT1, CLEAR_LINE);
 }
 
 
 WRITE8_MEMBER(looping_state::looping_souint_clr)
 {
+	logerror("Soundint clr = %d\n", data);
 	if (data == 0)
 		m_audiocpu->set_input_line(0, CLEAR_LINE);
 }
@@ -368,17 +384,16 @@ WRITE8_MEMBER(looping_state::looping_souint_clr)
 
 WRITE_LINE_MEMBER(looping_state::looping_spcint)
 {
-	m_audiocpu->set_input_line_and_vector(0, !state, 6);
+	logerror("Speech /int = %d\n", state==ASSERT_LINE? 1:0);
+	m_audiocpu->set_input_line(INT_9980A_LEVEL4, state==ASSERT_LINE? CLEAR_LINE : ASSERT_LINE);
 }
 
 
 WRITE8_MEMBER(looping_state::looping_soundlatch_w)
 {
 	soundlatch_byte_w(space, offset, data);
-	m_audiocpu->set_input_line_and_vector(0, ASSERT_LINE, 4);
+	m_audiocpu->set_input_line(INT_9980A_LEVEL2, ASSERT_LINE);
 }
-
-
 
 /*************************************
  *
@@ -435,7 +450,7 @@ WRITE8_MEMBER(looping_state::speech_enable_w)
 WRITE8_MEMBER(looping_state::ballon_enable_w)
 {
 	if (m_last != data)
-		mame_printf_debug("ballon_enable_w = %d\n", data);
+		osd_printf_debug("ballon_enable_w = %d\n", data);
 	m_last = data;
 }
 
@@ -447,11 +462,11 @@ WRITE8_MEMBER(looping_state::ballon_enable_w)
  *
  *************************************/
 
-WRITE8_MEMBER(looping_state::out_0_w){ mame_printf_debug("out0 = %02X\n", data); }
-WRITE8_MEMBER(looping_state::out_2_w){ mame_printf_debug("out2 = %02X\n", data); }
+WRITE8_MEMBER(looping_state::out_0_w){ osd_printf_debug("out0 = %02X\n", data); }
+WRITE8_MEMBER(looping_state::out_2_w){ osd_printf_debug("out2 = %02X\n", data); }
 
-READ8_MEMBER(looping_state::adc_r){ mame_printf_debug("%04X:ADC read\n", space.device().safe_pc()); return 0xff; }
-WRITE8_MEMBER(looping_state::adc_w){ mame_printf_debug("%04X:ADC write = %02X\n", space.device().safe_pc(), data); }
+READ8_MEMBER(looping_state::adc_r){ osd_printf_debug("%04X:ADC read\n", space.device().safe_pc()); return 0xff; }
+WRITE8_MEMBER(looping_state::adc_w){ osd_printf_debug("%04X:ADC write = %02X\n", space.device().safe_pc(), data); }
 
 WRITE8_MEMBER(looping_state::plr2_w)
 {
@@ -467,16 +482,20 @@ WRITE8_MEMBER(looping_state::plr2_w)
  *
  *************************************/
 
-READ8_MEMBER(looping_state::cop_io_r)
+READ8_MEMBER(looping_state::cop_unk_r)
 {
-	// if (offset == 1) return machine().rand() & 0x01;
-	return 1; // m_cop_io[offset];
+	return 1;
 }
 
-WRITE8_MEMBER(looping_state::cop_io_w)
+READ_LINE_MEMBER(looping_state::cop_serial_r)
 {
-	m_cop_io[offset] = data;
-if (offset == 0) logerror("%02x  ",data);
+	return 1;
+}
+
+WRITE8_MEMBER(looping_state::cop_l_w)
+{
+	m_cop_port_l = data;
+	logerror("%02x  ",data);
 }
 
 READ8_MEMBER(looping_state::protection_r)
@@ -499,7 +518,7 @@ READ8_MEMBER(looping_state::protection_r)
 //        cop write randomly fc (unfortunatly) but 61,67,b7,bf,db,e1,f3,fd,ff too and only these values
 
 	// missing something
-	if(m_cop_io[0] != 0xfc) return m_cop_io[0];
+	if(m_cop_port_l != 0xfc) return m_cop_port_l;
 	return 0xff;
 }
 
@@ -567,20 +586,6 @@ static ADDRESS_MAP_START( looping_sound_io_map, AS_IO, 8, looping_state )
 ADDRESS_MAP_END
 
 
-/* standard COP420 map */
-static ADDRESS_MAP_START( looping_cop_map, AS_PROGRAM, 8, looping_state )
-	AM_RANGE(0x0000, 0x03ff) AM_ROM
-ADDRESS_MAP_END
-
-static ADDRESS_MAP_START( looping_cop_data_map, AS_DATA, 8, looping_state )
-	AM_RANGE(0x0000, 0x003f) AM_RAM
-ADDRESS_MAP_END
-
-static ADDRESS_MAP_START( looping_cop_io_map, AS_IO, 8, looping_state )
-	AM_RANGE(0x0100, 0x0107) AM_READWRITE(cop_io_r, cop_io_w)
-ADDRESS_MAP_END
-
-
 /*************************************
  *
  *  Graphics definitions
@@ -605,30 +610,6 @@ static GFXDECODE_START( looping )
 GFXDECODE_END
 
 
-
-/*************************************
- *
- *  Sound interfaces
- *
- *************************************/
-
-static const ay8910_interface ay8910_config =
-{
-	AY8910_LEGACY_OUTPUT,
-	AY8910_DEFAULT_LOADS,
-	DEVCB_DRIVER_MEMBER(driver_device, soundlatch_byte_r),
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL
-};
-
-static COP400_INTERFACE( looping_cop_intf )
-{
-	COP400_CKI_DIVISOR_16, // ???
-	COP400_CKO_OSCILLATOR_OUTPUT, // ???
-	COP400_MICROBUS_DISABLED
-};
-
 /*************************************
  *
  *  Machine drivers
@@ -637,37 +618,37 @@ static COP400_INTERFACE( looping_cop_intf )
 
 static MACHINE_CONFIG_START( looping, looping_state )
 
-	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", TMS9995L, MAIN_CPU_CLOCK)
-	MCFG_CPU_PROGRAM_MAP(looping_map)
-	MCFG_CPU_IO_MAP(looping_io_map)
+	// CPU TMS9995, standard variant; no line connections
+	MCFG_TMS99xx_ADD("maincpu", TMS9995, MAIN_CPU_CLOCK, looping_map, looping_io_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", looping_state,  looping_interrupt)
 
-	MCFG_CPU_ADD("audiocpu", TMS9980L, SOUND_CLOCK/4)
-	MCFG_CPU_PROGRAM_MAP(looping_sound_map)
-	MCFG_CPU_IO_MAP(looping_sound_io_map)
+	// CPU TMS9980A for audio subsystem; no line connections
+	MCFG_TMS99xx_ADD("audiocpu", TMS9980A,  SOUND_CLOCK/4, looping_sound_map, looping_sound_io_map)
 
 	MCFG_CPU_ADD("mcu", COP420, COP_CLOCK)
-	MCFG_CPU_PROGRAM_MAP(looping_cop_map)
-	MCFG_CPU_DATA_MAP(looping_cop_data_map)
-	MCFG_CPU_IO_MAP(looping_cop_io_map)
-	MCFG_CPU_CONFIG(looping_cop_intf)
-
+	MCFG_COP400_CONFIG( COP400_CKI_DIVISOR_16, COP400_CKO_OSCILLATOR_OUTPUT, COP400_MICROBUS_DISABLED )
+	MCFG_COP400_WRITE_L_CB(WRITE8(looping_state, cop_l_w))
+	MCFG_COP400_READ_L_CB(READ8(looping_state, cop_unk_r))
+	MCFG_COP400_READ_G_CB(READ8(looping_state, cop_unk_r))
+	MCFG_COP400_READ_IN_CB(READ8(looping_state, cop_unk_r))
+	MCFG_COP400_READ_SI_CB(READLINE(looping_state, cop_serial_r))
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_RAW_PARAMS(PIXEL_CLOCK, HTOTAL, HBEND, HBSTART, VTOTAL, VBEND, VBSTART)
 	MCFG_SCREEN_UPDATE_DRIVER(looping_state, screen_update_looping)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(looping)
-	MCFG_PALETTE_LENGTH(32)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", looping)
 
+	MCFG_PALETTE_ADD("palette", 32)
+	MCFG_PALETTE_INIT_OWNER(looping_state, looping)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("aysnd", AY8910, SOUND_CLOCK/4)
-	MCFG_SOUND_CONFIG(ay8910_config)
+	MCFG_AY8910_PORT_A_READ_CB(READ8(driver_device, soundlatch_byte_r))
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.20)
 
 	MCFG_SOUND_ADD("tms", TMS5220, TMS_CLOCK)
@@ -907,7 +888,7 @@ DRIVER_INIT_MEMBER(looping_state,looping)
 	UINT8 *rom = memregion("maincpu")->base();
 	int i;
 
-	m_cop_io = auto_alloc_array(machine(), UINT8, 0x08);
+	m_cop_port_l = 0;
 
 	/* bitswap the TMS9995 ROMs */
 	for (i = 0; i < length; i++)
@@ -925,7 +906,7 @@ DRIVER_INIT_MEMBER(looping_state,looping)
  *
  *************************************/
 
-GAME( 1982, looping,   0,        looping, looping, looping_state, looping, ROT90, "Video Games GmbH", "Looping", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
-GAME( 1982, loopingv,  looping,  looping, looping, looping_state, looping, ROT90, "Video Games GmbH (Venture Line license)", "Looping (Venture Line license, set 1)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
-GAME( 1982, loopingva, looping,  looping, looping, looping_state, looping, ROT90, "Video Games GmbH (Venture Line license)", "Looping (Venture Line license, set 2)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
-GAME( 1982, skybump,   0,        looping, skybump, looping_state, looping, ROT90, "Venture Line", "Sky Bumper", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1982, looping,   0,        looping, looping, looping_state, looping, ROT90, "Video Games GmbH", "Looping", GAME_IMPERFECT_SOUND /*| GAME_SUPPORTS_SAVE */)
+GAME( 1982, loopingv,  looping,  looping, looping, looping_state, looping, ROT90, "Video Games GmbH (Venture Line license)", "Looping (Venture Line license, set 1)", GAME_IMPERFECT_SOUND /* | GAME_SUPPORTS_SAVE */)
+GAME( 1982, loopingva, looping,  looping, looping, looping_state, looping, ROT90, "Video Games GmbH (Venture Line license)", "Looping (Venture Line license, set 2)", GAME_IMPERFECT_SOUND /* | GAME_SUPPORTS_SAVE */ )
+GAME( 1982, skybump,   0,        looping, skybump, looping_state, looping, ROT90, "Venture Line", "Sky Bumper", GAME_IMPERFECT_SOUND /* | GAME_SUPPORTS_SAVE  */)

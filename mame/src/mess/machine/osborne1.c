@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Wilbert Pol
 /***************************************************************************
 
 There are three IRQ sources:
@@ -53,7 +55,7 @@ READ8_MEMBER( osborne1_state::osborne1_2000_r )
 		switch( offset & 0x0F00 )
 		{
 		case 0x100: /* Floppy */
-			data = wd17xx_r( m_fdc, space, offset );
+			data = m_fdc->read( space, offset & 0x03 );
 			break;
 		case 0x200: /* Keyboard */
 			/* Row 0 */
@@ -104,7 +106,7 @@ WRITE8_MEMBER( osborne1_state::osborne1_2000_w )
 		switch( offset & 0x0F00 )
 		{
 		case 0x100: /* Floppy */
-			wd17xx_w( m_fdc, space, offset, data );
+			m_fdc->write(space, offset & 0x03, data );
 			break;
 		case 0x900: /* IEEE488 PIA */
 			m_pia0->write(space, offset & 0x03, data );
@@ -253,31 +255,14 @@ WRITE8_MEMBER( osborne1_state::ieee_pia_pb_w )
 }
 
 
-const pia6821_interface osborne1_ieee_pia_config =
-{
-	DEVCB_DEVICE_MEMBER(IEEE488_TAG, ieee488_device, dio_r),    /* in_a_func */
-	DEVCB_DRIVER_MEMBER(osborne1_state, ieee_pia_pb_r),             /* in_b_func */
-	DEVCB_NULL,                         /* in_ca1_func */
-	DEVCB_NULL,                         /* in_cb1_func */
-	DEVCB_NULL,                         /* in_ca2_func */
-	DEVCB_NULL,                         /* in_cb2_func */
-	DEVCB_DEVICE_MEMBER(IEEE488_TAG, ieee488_device, dio_w),    /* out_a_func */
-	DEVCB_DRIVER_MEMBER(osborne1_state, ieee_pia_pb_w),             /* out_b_func */
-	DEVCB_DEVICE_LINE_MEMBER(IEEE488_TAG, ieee488_device, ifc_w),   /* out_ca2_func */
-	DEVCB_DEVICE_LINE_MEMBER(IEEE488_TAG, ieee488_device, ren_w),   /* out_cb2_func */
-	DEVCB_DRIVER_LINE_MEMBER(osborne1_state, ieee_pia_irq_a_func),  /* irq_a_func */
-	DEVCB_NULL                          /* irq_b_func */
-};
-
-
-WRITE8_MEMBER( osborne1_state::video_pia_out_cb2_dummy )
+WRITE_LINE_MEMBER( osborne1_state::video_pia_out_cb2_dummy )
 {
 }
 
 
 WRITE8_MEMBER( osborne1_state::video_pia_port_a_w )
 {
-	wd17xx_dden_w(m_fdc, BIT(data, 0));
+	m_fdc->dden_w(BIT(data, 0));
 
 	data -= 0xea; // remove bias
 
@@ -295,10 +280,19 @@ WRITE8_MEMBER( osborne1_state::video_pia_port_b_w )
 	m_beep_state = BIT(data, 5);
 
 	if (BIT(data, 6))
-		wd17xx_set_drive( m_fdc, 0 );
+	{
+		m_fdc->set_floppy(m_floppy0);
+		m_floppy0->mon_w(0);
+	}
+	else if (BIT(data, 7))
+	{
+		m_fdc->set_floppy(m_floppy1);
+		m_floppy1->mon_w(0);
+	}
 	else
-	if (BIT(data, 7))
-		wd17xx_set_drive( m_fdc, 1 );
+	{
+		m_fdc->set_floppy(NULL);
+	}
 
 	//logerror("Video pia port b write: %02X\n", data );
 }
@@ -309,23 +303,6 @@ WRITE_LINE_MEMBER( osborne1_state::video_pia_irq_a_func )
 	m_pia_1_irq_state = state;
 	m_maincpu->set_input_line(0, ( m_pia_1_irq_state ) ? ASSERT_LINE : CLEAR_LINE);
 }
-
-
-const pia6821_interface osborne1_video_pia_config =
-{
-	DEVCB_NULL,                             /* in_a_func */
-	DEVCB_NULL,                             /* in_b_func */
-	DEVCB_NULL,                             /* in_ca1_func */
-	DEVCB_NULL,                             /* in_cb1_func */
-	DEVCB_NULL,                             /* in_ca2_func */
-	DEVCB_NULL,                             /* in_cb2_func */
-	DEVCB_DRIVER_MEMBER(osborne1_state, video_pia_port_a_w),        /* out_a_func */
-	DEVCB_DRIVER_MEMBER(osborne1_state, video_pia_port_b_w),        /* out_b_func */
-	DEVCB_NULL,                             /* out_ca2_func */
-	DEVCB_DRIVER_MEMBER(osborne1_state, video_pia_out_cb2_dummy),       /* out_cb2_func */
-	DEVCB_DRIVER_LINE_MEMBER(osborne1_state, video_pia_irq_a_func),     /* irq_a_func */
-	DEVCB_NULL                              /* irq_b_func */
-};
 
 
 //static const struct aica6850_interface osborne1_6850_config =
@@ -359,7 +336,7 @@ void osborne1_state::device_timer(emu_timer &timer, device_timer_id id, int para
 
 TIMER_CALLBACK_MEMBER(osborne1_state::osborne1_video_callback)
 {
-	int y = machine().primary_screen->vpos();
+	int y = machine().first_screen()->vpos();
 	UINT8 ra=0,chr,gfx,dim;
 	UINT16 x,ma;
 
@@ -392,14 +369,14 @@ TIMER_CALLBACK_MEMBER(osborne1_state::osborne1_video_callback)
 				gfx = m_p_chargen[ (ra << 7) | ( chr & 0x7F ) ];
 
 			/* Display a scanline of a character */
-			*p++ = BIT(gfx, 7) ? ( dim ? 1 : 2 ) : 0;
-			*p++ = BIT(gfx, 6) ? ( dim ? 1 : 2 ) : 0;
-			*p++ = BIT(gfx, 5) ? ( dim ? 1 : 2 ) : 0;
-			*p++ = BIT(gfx, 4) ? ( dim ? 1 : 2 ) : 0;
-			*p++ = BIT(gfx, 3) ? ( dim ? 1 : 2 ) : 0;
-			*p++ = BIT(gfx, 2) ? ( dim ? 1 : 2 ) : 0;
-			*p++ = BIT(gfx, 1) ? ( dim ? 1 : 2 ) : 0;
-			*p++ = BIT(gfx, 0) ? ( dim ? 1 : 2 ) : 0;
+			*p++ = BIT(gfx, 7) ? ( dim ? 2 : 1 ) : 0;
+			*p++ = BIT(gfx, 6) ? ( dim ? 2 : 1 ) : 0;
+			*p++ = BIT(gfx, 5) ? ( dim ? 2 : 1 ) : 0;
+			*p++ = BIT(gfx, 4) ? ( dim ? 2 : 1 ) : 0;
+			*p++ = BIT(gfx, 3) ? ( dim ? 2 : 1 ) : 0;
+			*p++ = BIT(gfx, 2) ? ( dim ? 2 : 1 ) : 0;
+			*p++ = BIT(gfx, 1) ? ( dim ? 2 : 1 ) : 0;
+			*p++ = BIT(gfx, 0) ? ( dim ? 2 : 1 ) : 0;
 		}
 	}
 
@@ -412,7 +389,7 @@ TIMER_CALLBACK_MEMBER(osborne1_state::osborne1_video_callback)
 		m_beep->set_state( 0 );
 	}
 
-	m_video_timer->adjust(machine().primary_screen->time_until_pos(y + 1, 0 ));
+	m_video_timer->adjust(machine().first_screen()->time_until_pos(y + 1, 0 ));
 }
 
 TIMER_CALLBACK_MEMBER(osborne1_state::setup_osborne1)
@@ -422,34 +399,8 @@ TIMER_CALLBACK_MEMBER(osborne1_state::setup_osborne1)
 	m_pia1->ca1_w(0);
 }
 
-static void osborne1_load_proc(device_image_interface &image)
-{
-	int size = image.length();
-	osborne1_state *state = image.device().machine().driver_data<osborne1_state>();
-
-	switch( size )
-	{
-	case 40 * 10 * 256:
-		wd17xx_dden_w(state->m_fdc, ASSERT_LINE);
-		break;
-	case 40 * 5 * 1024:
-		wd17xx_dden_w(state->m_fdc, CLEAR_LINE);
-		break;
-	case 40 * 8 * 512:
-		wd17xx_dden_w(state->m_fdc, ASSERT_LINE);
-		break;
-	case 40 * 18 * 128:
-		wd17xx_dden_w(state->m_fdc, ASSERT_LINE);
-		break;
-	case 40 * 9 * 512:
-		wd17xx_dden_w(state->m_fdc, CLEAR_LINE);
-		break;
-	}
-}
-
 void osborne1_state::machine_reset()
 {
-	int drive;
 	address_space& space = m_maincpu->space(AS_PROGRAM);
 	/* Initialize memory configuration */
 	osborne1_bankswitch_w( space, 0x00, 0 );
@@ -461,9 +412,6 @@ void osborne1_state::machine_reset()
 	m_p_chargen = memregion( "chargen" )->base();
 
 	memset( m_ram->pointer() + 0x10000, 0xFF, 0x1000 );
-
-	for(drive=0;drive<2;drive++)
-		floppy_install_load_proc(floppy_get_device(machine(), drive), osborne1_load_proc);
 
 	space.set_direct_update_handler(direct_update_delegate(FUNC(osborne1_state::osborne1_opbase), this));
 }
@@ -477,7 +425,7 @@ DRIVER_INIT_MEMBER(osborne1_state,osborne1)
 	/* Configure the 6850 ACIA */
 //  acia6850_config( 0, &osborne1_6850_config );
 	m_video_timer = timer_alloc(TIMER_VIDEO);
-	m_video_timer->adjust(machine().primary_screen->time_until_pos(1, 0 ));
+	m_video_timer->adjust(machine().first_screen()->time_until_pos(1, 0 ));
 
 	timer_set(attotime::zero, TIMER_SETUP);
 }
@@ -485,7 +433,7 @@ DRIVER_INIT_MEMBER(osborne1_state,osborne1)
 
 void osborne1_state::video_start()
 {
-	machine().primary_screen->register_screen_bitmap(m_bitmap);
+	machine().first_screen()->register_screen_bitmap(m_bitmap);
 }
 
 UINT32 osborne1_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
@@ -508,7 +456,7 @@ const device_type OSBORNE1_DAISY = &device_creator<osborne1_daisy_device>;
 //  z80ctc_device - constructor
 //-------------------------------------------------
 osborne1_daisy_device::osborne1_daisy_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, OSBORNE1_DAISY, "Osborne 1 daisy", tag, owner, clock),
+	: device_t(mconfig, OSBORNE1_DAISY, "Osborne 1 daisy", tag, owner, clock, "osborne1_daisy", __FILE__),
 		device_z80daisy_interface(mconfig, *this)
 {
 }

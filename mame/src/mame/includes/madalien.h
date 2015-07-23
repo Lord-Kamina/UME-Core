@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Norbert Kehrer
 /***************************************************************************
 
     Mad Alien (c) 1980 Data East Corporation
@@ -29,7 +31,9 @@ public:
 		m_scroll(*this, "scroll"),
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
-		m_discrete(*this, "discrete") { }
+		m_discrete(*this, "discrete"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_charram;
@@ -67,13 +71,15 @@ public:
 	DECLARE_PALETTE_INIT(madalien);
 	UINT32 screen_update_madalien(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	inline int scan_helper(int col, int row, int section);
-	void draw_edges(bitmap_ind16 &bitmap, const rectangle &cliprect, int flip, int scroll_mode);
+	void draw_edges(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int flip, int scroll_mode);
 	void draw_headlight(bitmap_ind16 &bitmap, const rectangle &cliprect, int flip);
-	void draw_foreground(bitmap_ind16 &bitmap, const rectangle &cliprect, int flip);
+	void draw_foreground(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int flip);
 	inline UINT8 shift_common(UINT8 hi, UINT8 lo);
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
 	required_device<discrete_device> m_discrete;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 /*----------- defined in video/madalien.c -----------*/
 

@@ -1,3 +1,5 @@
+// license:???
+// copyright-holders:K.Wilkins, Derrick Renaud, F.Palazzolo, Couriersud
 #pragma once
 
 #ifndef __DISC_CLS_H__
@@ -7,13 +9,13 @@
  *
  *  MAME - Discrete sound system emulation library
  *
- *  Written by Keith Wilkins (mame@esplexo.co.uk)
+ *  Written by K.Wilkins (mame@esplexo.co.uk)
  *
  *  (c) K.Wilkins 2000
  *
  *  Coding started in November 2000
  *
- *  Additions/bugfix February 2003 - D.Renaud, F.Palazzolo, K.Wilkins
+ *  Additions/bugfix February 2003 - Derrick Renaud, F.Palazzolo, K.Wilkins
  *  Discrete parallel tasks 2009 - Couriersud
  *  Discrete classes 2010        - Couriersud
  *
@@ -101,7 +103,7 @@ public:
 
 /*************************************
  *
- *  disc_sys.c
+ *  disc_sys.inc
  *
  *************************************/
 
@@ -137,7 +139,7 @@ DISCRETE_CLASS(dso_wavlog, 0,
 
 /*************************************
  *
- *  disc_inp.c
+ *  disc_inp.inc
  *
  *************************************/
 
@@ -230,8 +232,7 @@ public:
 	UINT32              m_stream_in_number;
 	stream_sample_t     *m_ptr;         /* current in ptr for stream */
 private:
-	static STREAM_UPDATE( static_stream_generate );
-	void stream_generate(stream_sample_t **inputs, stream_sample_t **outputs, int samples);
+	void stream_generate(sound_stream &stream, stream_sample_t **inputs, stream_sample_t **outputs, int samples);
 
 	double      m_gain;             /* node gain */
 	double      m_offset;           /* node offset */

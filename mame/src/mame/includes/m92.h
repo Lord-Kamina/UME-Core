@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Bryan McPhail
 /*************************************************************************
 
     Irem M92 hardware
@@ -7,7 +9,7 @@
 #include "video/bufsprite.h"
 #include "sound/okim6295.h"
 
-struct pf_layer_info
+struct M92_pf_layer_info
 {
 	tilemap_t *     tmap;
 	tilemap_t *     wide_tmap;
@@ -30,7 +32,10 @@ public:
 			m_spritecontrol(*this, "spritecontrol"),
 			m_maincpu(*this, "maincpu"),
 			m_soundcpu(*this, "soundcpu"),
-			m_oki(*this, "oki")
+			m_oki(*this, "oki"),
+			m_gfxdecode(*this, "gfxdecode"),
+			m_screen(*this, "screen"),
+			m_palette(*this, "palette")
 	{ }
 
 	required_device<buffered_spriteram16_device> m_spriteram;
@@ -38,6 +43,10 @@ public:
 	required_shared_ptr<UINT16> m_spritecontrol;
 	required_device<cpu_device> m_maincpu;
 	optional_device<cpu_device> m_soundcpu;
+	optional_device<okim6295_device> m_oki;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 
 	UINT16 m_sound_status;
 	UINT8 m_irq_vectorbase;
@@ -45,10 +54,11 @@ public:
 	UINT16 m_videocontrol;
 	UINT8 m_sprite_buffer_busy;
 	UINT8 m_game_kludge;
-	pf_layer_info m_pf_layer[3];
+	M92_pf_layer_info m_pf_layer[3];
 	UINT16 m_pf_master_control[4];
 	INT32 m_sprite_list;
 	UINT8 m_palette_bank;
+	std::vector<UINT16> m_paletteram;
 
 	DECLARE_READ16_MEMBER(m92_eeprom_r);
 	DECLARE_WRITE16_MEMBER(m92_eeprom_w);
@@ -85,16 +95,12 @@ public:
 	UINT32 screen_update_m92(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	UINT32 screen_update_ppan(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	TIMER_DEVICE_CALLBACK_MEMBER(m92_scanline_interrupt);
-	void draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect);
-	void ppan_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect);
+	void draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+	void ppan_draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void m92_update_scroll_positions();
-	void m92_draw_tiles(bitmap_ind16 &bitmap,const rectangle &cliprect);
+	void m92_draw_tiles(screen_device &screen, bitmap_ind16 &bitmap,const rectangle &cliprect);
 	void m92_sprite_interrupt();
-	optional_device<okim6295_device> m_oki;
 
 protected:
 	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr);
 };
-
-/*----------- defined in drivers/m92.c -----------*/
-extern void m92_sprite_interrupt(running_machine &machine);

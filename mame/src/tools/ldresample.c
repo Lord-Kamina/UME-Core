@@ -1,39 +1,10 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     ldresample.c
 
     Laserdisc audio synchronizer and resampler.
-
-****************************************************************************
-
-    Copyright Aaron Giles
-    All rights reserved.
-
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions are
-    met:
-
-        * Redistributions of source code must retain the above copyright
-          notice, this list of conditions and the following disclaimer.
-        * Redistributions in binary form must reproduce the above copyright
-          notice, this list of conditions and the following disclaimer in
-          the documentation and/or other materials provided with the
-          distribution.
-        * Neither the name 'MAME' nor the names of its contributors may be
-          used to endorse or promote products derived from this software
-          without specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL AARON GILES BE LIABLE FOR ANY DIRECT,
-    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-    STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-    IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-    POSSIBILITY OF SUCH DAMAGE.
 
 ****************************************************************************/
 
@@ -42,6 +13,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <new>
+#include <assert.h>
 #include "bitmap.h"
 #include "chd.h"
 #include "avhuff.h"
@@ -83,8 +55,8 @@ struct movie_info
 	int             channels;
 	int             interlaced;
 	bitmap_yuy16    bitmap;
-	dynamic_array<INT16> lsound;
-	dynamic_array<INT16> rsound;
+	std::vector<INT16>   lsound;
+	std::vector<INT16>   rsound;
 	UINT32          samples;
 };
 
@@ -195,7 +167,7 @@ static chd_error open_chd(chd_file &file, const char *filename, movie_info &info
 	}
 
 	// get the metadata
-	astring metadata;
+	std::string metadata;
 	chderr = file.read_metadata(AV_METADATA_TAG, 0, metadata);
 	if (chderr != CHDERR_NONE)
 	{
@@ -205,7 +177,7 @@ static chd_error open_chd(chd_file &file, const char *filename, movie_info &info
 
 	// extract the info
 	int fps, fpsfrac, width, height, interlaced, channels, rate;
-	if (sscanf(metadata, AV_METADATA_FORMAT, &fps, &fpsfrac, &width, &height, &interlaced, &channels, &rate) != 7)
+	if (sscanf(metadata.c_str(), AV_METADATA_FORMAT, &fps, &fpsfrac, &width, &height, &interlaced, &channels, &rate) != 7)
 	{
 		fprintf(stderr, "Improperly formatted metadata\n");
 		return CHDERR_INVALID_DATA;
@@ -267,10 +239,10 @@ static bool read_chd(chd_file &file, UINT32 field, movie_info &info, UINT32 soun
 	// configure the codec
 	avhuff_decompress_config avconfig;
 	avconfig.video.wrap(info.bitmap, info.bitmap.cliprect());
-	avconfig.maxsamples = info.lsound.count();
+	avconfig.maxsamples = info.lsound.size();
 	avconfig.actsamples = &info.samples;
-	avconfig.audio[0] = info.lsound + soundoffs;
-	avconfig.audio[1] = info.rsound + soundoffs;
+	avconfig.audio[0] = &info.lsound[soundoffs];
+	avconfig.audio[1] = &info.rsound[soundoffs];
 
 	// configure the decompressor for this field
 	file.codec_configure(CHD_CODEC_AVHUFF, AVHUFF_CODEC_DECOMPRESS_CONFIG, &avconfig);
@@ -295,8 +267,8 @@ static bool read_chd(chd_file &file, UINT32 field, movie_info &info, UINT32 soun
 static bool find_edge_near_field(chd_file &srcfile, UINT32 fieldnum, movie_info &info, bool report_best_field, INT32 &delta)
 {
 	// clear the sound buffers
-	memset(info.lsound, 0, info.lsound.count() * 2);
-	memset(info.rsound, 0, info.rsound.count() * 2);
+	memset(&info.lsound[0], 0, info.lsound.size() * 2);
+	memset(&info.rsound[0], 0, info.rsound.size() * 2);
 
 	// read 1 second around the target area
 	int fields_to_read = info.iframerate / 1000000;
@@ -501,11 +473,11 @@ printf("%5d: start=%10d (%5d.%03d) end=%10d (%5d.%03d)\n",
 
 	// assemble the final frame
 	dynamic_buffer buffer;
-	INT16 *sampledata[2] = { m_info.lsound, m_info.rsound };
+	INT16 *sampledata[2] = { &m_info.lsound[0], &m_info.rsound[0] };
 	avhuff_encoder::assemble_data(buffer, m_info.bitmap, m_info.channels, m_info.samples, sampledata);
-	memcpy(dest, buffer, MIN(buffer.count(), datasize));
-	if (buffer.count() < datasize)
-		memset(&dest[buffer.count()], 0, datasize - buffer.count());
+	memcpy(dest, &buffer[0], MIN(buffer.size(), datasize));
+	if (buffer.size() < datasize)
+		memset(&dest[buffer.size()], 0, datasize - buffer.size());
 }
 
 

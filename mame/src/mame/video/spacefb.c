@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Chris Hardy
 /***************************************************************************
 
     Space Firebird hardware
@@ -15,16 +17,16 @@
  *
  *************************************/
 
-WRITE8_MEMBER(spacefb_state::spacefb_port_0_w)
+WRITE8_MEMBER(spacefb_state::port_0_w)
 {
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	m_port_0 = data;
 }
 
 
-WRITE8_MEMBER(spacefb_state::spacefb_port_2_w)
+WRITE8_MEMBER(spacefb_state::port_2_w)
 {
-	machine().primary_screen->update_now();
+	m_screen->update_now();
 	m_port_2 = data;
 }
 
@@ -78,14 +80,19 @@ void spacefb_state::video_start()
 								2, resistances_b,  m_color_weights_b,  470, 0,
 								0, 0, 0, 0, 0);
 
-	width = machine().primary_screen->width();
-	height = machine().primary_screen->height();
+	width = m_screen->width();
+	height = m_screen->height();
 	m_object_present_map = auto_alloc_array(machine(), UINT8, width * height);
 
 	/* this start value positions the stars to match the flyer screen shot,
 	   but most likely, the actual star position is random as the hardware
 	   uses whatever value is on the shift register on power-up */
 	m_star_shift_reg = 0x18f89;
+
+	save_pointer(NAME(m_object_present_map), width * height);
+	save_item(NAME(m_port_0));
+	save_item(NAME(m_port_2));
+	save_item(NAME(m_star_shift_reg));
 }
 
 
@@ -99,13 +106,13 @@ void spacefb_state::video_start()
 #define NUM_STARFIELD_PENS  (0x40)
 
 
-inline void spacefb_state::shift_star_generator(spacefb_state *state)
+inline void spacefb_state::shift_star_generator()
 {
 	m_star_shift_reg = ((m_star_shift_reg << 1) | (((~m_star_shift_reg >> 16) & 0x01) ^ ((m_star_shift_reg >> 4) & 0x01))) & 0x1ffff;
 }
 
 
-void spacefb_state::get_starfield_pens(spacefb_state *state, pen_t *pens)
+void spacefb_state::get_starfield_pens(pen_t *pens)
 {
 	/* generate the pens based on the various enable bits */
 	int i;
@@ -130,18 +137,17 @@ void spacefb_state::get_starfield_pens(spacefb_state *state, pen_t *pens)
 		UINT8 g = combine_3_weights(m_color_weights_rg, 0, gb, ga);
 		UINT8 b = combine_2_weights(m_color_weights_b,     bb, ba);
 
-		pens[i] = MAKE_RGB(r, g, b);
+		pens[i] = rgb_t(r, g, b);
 	}
 }
 
 
 void spacefb_state::draw_starfield(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	spacefb_state *state = screen.machine().driver_data<spacefb_state>();
 	int y;
 	pen_t pens[NUM_STARFIELD_PENS];
 
-	get_starfield_pens(state, pens);
+	get_starfield_pens(pens);
 
 	/* the shift register is always shifting -- do the portion in the top VBLANK */
 	if (cliprect.min_y == screen.visible_area().min_y)
@@ -152,7 +158,7 @@ void spacefb_state::draw_starfield(screen_device &screen, bitmap_rgb32 &bitmap, 
 		int clock_count = (SPACEFB_HBSTART - SPACEFB_HBEND) * SPACEFB_VBEND - 1;
 
 		for (i = 0; i < clock_count; i++)
-			shift_star_generator(state);
+			shift_star_generator();
 	}
 
 	/* visible region of the screen */
@@ -174,7 +180,7 @@ void spacefb_state::draw_starfield(screen_device &screen, bitmap_rgb32 &bitmap, 
 					bitmap.pix32(y, x) = pens[0];
 			}
 
-			shift_star_generator(state);
+			shift_star_generator();
 		}
 	}
 
@@ -185,7 +191,7 @@ void spacefb_state::draw_starfield(screen_device &screen, bitmap_rgb32 &bitmap, 
 		int clock_count = (SPACEFB_HBSTART - SPACEFB_HBEND) * (SPACEFB_VTOTAL - SPACEFB_VBSTART);
 
 		for (i = 0; i < clock_count; i++)
-			shift_star_generator(state);
+			shift_star_generator();
 	}
 }
 
@@ -239,7 +245,7 @@ void spacefb_state::get_sprite_pens(pen_t *pens)
 			b = (b / fade_weight) + 0.5;
 		}
 
-		pens[i] = MAKE_RGB(r, g, b);
+		pens[i] = rgb_t(r, g, b);
 	}
 }
 
@@ -361,7 +367,7 @@ void spacefb_state::draw_objects(bitmap_rgb32 &bitmap, const rectangle &cliprect
 
 	/* since the way the schematics show the bullet color
 	   connected is impossible, just use pure red for now */
-	pen_t bullet_pen = MAKE_RGB(0xff, 0x00, 0x00);
+	pen_t bullet_pen = rgb_t(0xff, 0x00, 0x00);
 
 	get_sprite_pens(sprite_pens);
 
@@ -390,7 +396,7 @@ void spacefb_state::draw_objects(bitmap_rgb32 &bitmap, const rectangle &cliprect
  *
  *************************************/
 
-UINT32 spacefb_state::screen_update_spacefb(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
+UINT32 spacefb_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
 	draw_objects(bitmap, cliprect);
 	draw_starfield(screen, bitmap, cliprect);

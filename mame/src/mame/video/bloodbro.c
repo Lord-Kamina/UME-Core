@@ -1,6 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Carlos A. Lozano
 /***************************************************************************
 
     Video Hardware for Blood Brothers
+
+    Note:
+    - An extra layer is currently disabled via the layer enable register
+      in Seibu CRTC device (bit 2). Is it even tied to any RAM portion?
 
 ***************************************************************************/
 
@@ -17,8 +23,7 @@
 TILE_GET_INFO_MEMBER(bloodbro_state::get_bg_tile_info)
 {
 	int code = m_bgvideoram[tile_index];
-	SET_TILE_INFO_MEMBER(
-			1,
+	SET_TILE_INFO_MEMBER(1,
 			code & 0xfff,
 			(code >> 12),
 			0);
@@ -27,8 +32,7 @@ TILE_GET_INFO_MEMBER(bloodbro_state::get_bg_tile_info)
 TILE_GET_INFO_MEMBER(bloodbro_state::get_fg_tile_info)
 {
 	int code = m_fgvideoram[tile_index];
-	SET_TILE_INFO_MEMBER(
-			2,
+	SET_TILE_INFO_MEMBER(2,
 			(code & 0xfff)+0x1000,
 			(code >> 12),
 			0);
@@ -37,8 +41,7 @@ TILE_GET_INFO_MEMBER(bloodbro_state::get_fg_tile_info)
 TILE_GET_INFO_MEMBER(bloodbro_state::get_tx_tile_info)
 {
 	int code = m_txvideoram[tile_index];
-	SET_TILE_INFO_MEMBER(
-			0,
+	SET_TILE_INFO_MEMBER(0,
 			code & 0xfff,
 			code >> 12,
 			0);
@@ -54,12 +57,15 @@ TILE_GET_INFO_MEMBER(bloodbro_state::get_tx_tile_info)
 
 void bloodbro_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(bloodbro_state::get_bg_tile_info),this),TILEMAP_SCAN_ROWS,     16,16,32,16);
-	m_fg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(bloodbro_state::get_fg_tile_info),this),TILEMAP_SCAN_ROWS,16,16,32,16);
-	m_tx_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(bloodbro_state::get_tx_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8,32,32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(bloodbro_state::get_bg_tile_info),this),TILEMAP_SCAN_ROWS,16,16,32,16);
+	m_fg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(bloodbro_state::get_fg_tile_info),this),TILEMAP_SCAN_ROWS,16,16,32,16);
+	m_tx_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(bloodbro_state::get_tx_tile_info),this),TILEMAP_SCAN_ROWS, 8, 8,32,32);
 
 	m_fg_tilemap->set_transparent_pen(15);
 	m_tx_tilemap->set_transparent_pen(15);
+
+	save_item(NAME(m_scrollram));
+	save_item(NAME(m_layer_en));
 }
 
 
@@ -70,19 +76,19 @@ void bloodbro_state::video_start()
 
 ***************************************************************************/
 
-WRITE16_MEMBER(bloodbro_state::bloodbro_bgvideoram_w)
+WRITE16_MEMBER(bloodbro_state::bgvideoram_w)
 {
 	COMBINE_DATA(&m_bgvideoram[offset]);
 	m_bg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(bloodbro_state::bloodbro_fgvideoram_w)
+WRITE16_MEMBER(bloodbro_state::fgvideoram_w)
 {
 	COMBINE_DATA(&m_fgvideoram[offset]);
 	m_fg_tilemap->mark_tile_dirty(offset);
 }
 
-WRITE16_MEMBER(bloodbro_state::bloodbro_txvideoram_w)
+WRITE16_MEMBER(bloodbro_state::txvideoram_w)
 {
 	COMBINE_DATA(&m_txvideoram[offset]);
 	m_tx_tilemap->mark_tile_dirty(offset);
@@ -103,7 +109,7 @@ WRITE16_MEMBER(bloodbro_state::bloodbro_txvideoram_w)
     It has "big sprites" created by setting width or height >0. Tile
     numbers are read consecutively.
 
-      +0   x....... ........  sprite disabled if set
+    +0   x....... ........  sprite disabled if set
     +0   .x...... ........  Flip y (no evidence for this!!)
     +0   ..x..... ........  Flip x
     +0   ....x... ........  Priority (1=high)
@@ -138,7 +144,7 @@ WRITE16_MEMBER(bloodbro_state::bloodbro_txvideoram_w)
    -------X XXXXXXXX
    -------- YYYYYYYY */
 
-void bloodbro_state::bloodbro_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
+void bloodbro_state::bloodbro_draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	UINT16 *spriteram16 = m_spriteram;
 	int offs;
@@ -166,12 +172,12 @@ void bloodbro_state::bloodbro_draw_sprites(bitmap_ind16 &bitmap, const rectangle
 		{
 			for (y = 0;y <= height;y++)
 			{
-				pdrawgfx_transpen(bitmap,cliprect,machine().gfx[3],
+				m_gfxdecode->gfx(3)->prio_transpen(bitmap,cliprect,
 						tile_number++,
 						color,
 						flipx,flipy,
 						flipx ? (sx + 16*(width-x)) : (sx + 16*x),flipy ? (sy + 16*(height-y)) : (sy + 16*y),
-						machine().priority_bitmap,
+						screen.priority(),
 						pri_mask,15);
 			}
 		}
@@ -186,7 +192,7 @@ void bloodbro_state::bloodbro_draw_sprites(bitmap_ind16 &bitmap, const rectangle
    -------X XXXXXXXX
 */
 
-void bloodbro_state::weststry_draw_sprites(bitmap_ind16 &bitmap, const rectangle &cliprect)
+void bloodbro_state::weststry_draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	UINT16 *spriteram16 = m_spriteram;
 	int offs;
@@ -211,12 +217,12 @@ void bloodbro_state::weststry_draw_sprites(bitmap_ind16 &bitmap, const rectangle
 		/* Remap code 0x800 <-> 0x1000 */
 		code = (code&0x7ff) | ((code&0x800)<<1) | ((code&0x1000)>>1);
 
-		pdrawgfx_transpen(bitmap,cliprect,machine().gfx[3],
+		m_gfxdecode->gfx(3)->prio_transpen(bitmap,cliprect,
 				code,
 				color,
 				flipx,flipy,
 				sx,sy,
-				machine().priority_bitmap,
+				screen.priority(),
 				pri_mask,15);
 	}
 }
@@ -225,17 +231,21 @@ void bloodbro_state::weststry_draw_sprites(bitmap_ind16 &bitmap, const rectangle
 
 UINT32 bloodbro_state::screen_update_bloodbro(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->set_scrollx(0,m_scroll[0x10]);    /* ? */
-	m_bg_tilemap->set_scrolly(0,m_scroll[0x11]);    /* ? */
-	m_fg_tilemap->set_scrollx(0,m_scroll[0x12]);
-	m_fg_tilemap->set_scrolly(0,m_scroll[0x13]);
+	m_bg_tilemap->set_scrollx(0,m_scrollram[0]);
+	m_bg_tilemap->set_scrolly(0,m_scrollram[1]);
+	m_fg_tilemap->set_scrollx(0,m_scrollram[2]);
+	m_fg_tilemap->set_scrolly(0,m_scrollram[3]);
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0,0);
-	m_fg_tilemap->draw(bitmap, cliprect, 0,1);
-	bloodbro_draw_sprites(bitmap,cliprect);
-	m_tx_tilemap->draw(bitmap, cliprect, 0,0);
+	if(!(m_layer_en & 1))
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
+	if(!(m_layer_en & 2))
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0,1);
+	if(!(m_layer_en & 0x10))
+		bloodbro_draw_sprites(screen, bitmap,cliprect);
+	if(!(m_layer_en & 8))
+		m_tx_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	return 0;
 }
 
@@ -246,28 +256,33 @@ UINT32 bloodbro_state::screen_update_weststry(screen_device &screen, bitmap_ind1
 //  m_fg_tilemap->set_scrollx(0,m_scroll[0x12]);
 //  m_fg_tilemap->set_scrolly(0,m_scroll[0x13]);
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0,0);
-	m_fg_tilemap->draw(bitmap, cliprect, 0,1);
-	weststry_draw_sprites(bitmap,cliprect);
-	m_tx_tilemap->draw(bitmap, cliprect, 0,0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
+	m_fg_tilemap->draw(screen, bitmap, cliprect, 0,1);
+	weststry_draw_sprites(screen, bitmap,cliprect);
+	m_tx_tilemap->draw(screen, bitmap, cliprect, 0,0);
 	return 0;
 }
 
 
 UINT32 bloodbro_state::screen_update_skysmash(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->set_scrollx(0,m_scroll[0x08]);
-	m_bg_tilemap->set_scrolly(0,m_scroll[0x09]);    /* ? */
-	m_fg_tilemap->set_scrollx(0,m_scroll[0x0a]);
-	m_fg_tilemap->set_scrolly(0,m_scroll[0x0b]);    /* ? */
+	m_bg_tilemap->set_scrollx(0,m_scrollram[0]);
+	m_bg_tilemap->set_scrolly(0,m_scrollram[1]);
+	m_fg_tilemap->set_scrollx(0,m_scrollram[2]);
+	m_fg_tilemap->set_scrolly(0,m_scrollram[3]);
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
-	m_bg_tilemap->draw(bitmap, cliprect, 0,0);
-	m_fg_tilemap->draw(bitmap, cliprect, 0,1);
-	bloodbro_draw_sprites(bitmap,cliprect);
-	m_tx_tilemap->draw(bitmap, cliprect, 0,0);
+	if(!(m_layer_en & 1))
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0,0);
+	if(!(m_layer_en & 2))
+		m_fg_tilemap->draw(screen, bitmap, cliprect, 0,1);
+	if(!(m_layer_en & 0x10))
+		bloodbro_draw_sprites(screen, bitmap,cliprect);
+	if(!(m_layer_en & 8))
+		m_tx_tilemap->draw(screen, bitmap, cliprect, 0,0);
+
 	return 0;
 }

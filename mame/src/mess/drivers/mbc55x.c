@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Phill Harvey-Smith
 /*
     drivers/mbc55x.c
 
@@ -30,18 +32,6 @@ const unsigned char mbc55x_palette[SCREEN_NO_COLOURS][3] =
 	{ 0x80,0x80,0x80 }, /* light grey */
 };
 
-static const floppy_interface mbc55x_floppy_interface =
-{
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	DEVCB_NULL,
-	FLOPPY_STANDARD_5_25_DSSD_35,
-	LEGACY_FLOPPY_OPTIONS_NAME(pc),
-	"floppy_5_25",
-	NULL
-};
 
 static ADDRESS_MAP_START(mbc55x_mem, AS_PROGRAM, 8, mbc55x_state)
 	AM_RANGE( 0x00000, 0x0FFFF ) AM_RAMBANK(RAM_BANK00_TAG)
@@ -217,15 +207,32 @@ static INPUT_PORTS_START( mbc55x )
 INPUT_PORTS_END
 
 
-void mbc55x_state::palette_init()
+PALETTE_INIT_MEMBER(mbc55x_state, mbc55x)
 {
 	int colourno;
 
 	logerror("initializing palette\n");
 
 	for ( colourno = 0; colourno < SCREEN_NO_COLOURS; colourno++ )
-		palette_set_color_rgb(machine(), colourno, mbc55x_palette[colourno][RED], mbc55x_palette[colourno][GREEN], mbc55x_palette[colourno][BLUE]);
+		palette.set_pen_color(colourno, mbc55x_palette[colourno][RED], mbc55x_palette[colourno][GREEN], mbc55x_palette[colourno][BLUE]);
 }
+
+
+FLOPPY_FORMATS_MEMBER( mbc55x_state::floppy_formats )
+	FLOPPY_PC_FORMAT
+FLOPPY_FORMATS_END
+
+
+// MBC-550 : 1 x 5.25" disk-drive (160 KB)
+// MBC-555 : 2 x 5.25" disk-drive (160 KB)
+// MBC-555-2 : 2 x 5.25" disk-drive (360 KB)
+// MBC-555-3 : 2 x 5.25" disk-drive (720 KB)
+
+static SLOT_INTERFACE_START( mbc55x_floppies )
+	SLOT_INTERFACE("ssdd", FLOPPY_525_SSDD)
+	SLOT_INTERFACE("dd", FLOPPY_525_DD)
+	SLOT_INTERFACE("qd", FLOPPY_525_QD)
+SLOT_INTERFACE_END
 
 
 static MACHINE_CONFIG_START( mbc55x, mbc55x_state )
@@ -233,7 +240,7 @@ static MACHINE_CONFIG_START( mbc55x, mbc55x_state )
 	MCFG_CPU_ADD(MAINCPU_TAG, I8088, 3600000)
 	MCFG_CPU_PROGRAM_MAP(mbc55x_mem)
 	MCFG_CPU_IO_MAP(mbc55x_io)
-
+	MCFG_CPU_IRQ_ACKNOWLEDGE_DEVICE(PIC8259_TAG, pic8259_device, inta_cb)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD(SCREEN_TAG, RASTER)
@@ -241,11 +248,10 @@ static MACHINE_CONFIG_START( mbc55x, mbc55x_state )
 	MCFG_SCREEN_UPDATE_DEVICE(VID_MC6845_NAME, mc6845_device, screen_update)
 	MCFG_SCREEN_VBLANK_DRIVER(mbc55x_state, screen_eof_mbc55x)
 
-	MCFG_PALETTE_LENGTH(SCREEN_NO_COLOURS * 3)
-
+	MCFG_PALETTE_ADD("palette", SCREEN_NO_COLOURS * 3)
+	MCFG_PALETTE_INIT_OWNER(mbc55x_state, mbc55x)
 //  MCFG_SCREEN_SIZE(650, 260)
 //  MCFG_SCREEN_VISIBLE_AREA(0, 639, 0, 249)
-
 
 	MCFG_RAM_ADD(RAM_TAG)
 	MCFG_RAM_DEFAULT_SIZE("128K")
@@ -257,15 +263,41 @@ static MACHINE_CONFIG_START( mbc55x, mbc55x_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS,MONO_TAG, 0.75)
 
 	/* Devices */
-	MCFG_I8251_ADD(I8251A_KB_TAG,mbc55x_i8251a_interface)
-	MCFG_PIT8253_ADD( PIT8253_TAG, mbc55x_pit8253_config )
+	MCFG_DEVICE_ADD(I8251A_KB_TAG, I8251, 0)
+	MCFG_I8251_RXRDY_HANDLER(DEVWRITELINE(PIC8259_TAG, pic8259_device, ir3_w))
+
+	MCFG_DEVICE_ADD(PIT8253_TAG, PIT8253, 0)
+	MCFG_PIT8253_CLK0(PIT_C0_CLOCK)
+	MCFG_PIT8253_OUT0_HANDLER(DEVWRITELINE(PIC8259_TAG, pic8259_device, ir0_w))
+	MCFG_PIT8253_CLK1(PIT_C1_CLOCK)
+	MCFG_PIT8253_OUT1_HANDLER(DEVWRITELINE(PIC8259_TAG, pic8259_device, ir1_w))
+	MCFG_PIT8253_CLK2(PIT_C2_CLOCK)
+	MCFG_PIT8253_OUT2_HANDLER(WRITELINE(mbc55x_state, pit8253_t2))
+
 	MCFG_PIC8259_ADD( PIC8259_TAG, INPUTLINE(MAINCPU_TAG, INPUT_LINE_IRQ0), VCC, NULL )
-	MCFG_I8255_ADD( PPI8255_TAG, mbc55x_ppi8255_interface )
-	MCFG_MC6845_ADD(VID_MC6845_NAME, MC6845, XTAL_14_31818MHz/8, mb55x_mc6845_intf)
+
+	MCFG_DEVICE_ADD(PPI8255_TAG, I8255, 0)
+	MCFG_I8255_IN_PORTA_CB(READ8(mbc55x_state, mbc55x_ppi_porta_r))
+	MCFG_I8255_OUT_PORTA_CB(WRITE8(mbc55x_state, mbc55x_ppi_porta_w))
+	MCFG_I8255_IN_PORTB_CB(READ8(mbc55x_state, mbc55x_ppi_portb_r))
+	MCFG_I8255_OUT_PORTB_CB(WRITE8(mbc55x_state, mbc55x_ppi_portb_w))
+	MCFG_I8255_IN_PORTC_CB(READ8(mbc55x_state, mbc55x_ppi_portc_r))
+	MCFG_I8255_OUT_PORTC_CB(WRITE8(mbc55x_state, mbc55x_ppi_portc_w))
+
+	MCFG_MC6845_ADD(VID_MC6845_NAME, MC6845, SCREEN_TAG, XTAL_14_31818MHz/8)
+	MCFG_MC6845_SHOW_BORDER_AREA(false)
+	MCFG_MC6845_CHAR_WIDTH(8)
+	MCFG_MC6845_UPDATE_ROW_CB(mbc55x_state, crtc_update_row)
+	MCFG_MC6845_OUT_VSYNC_CB(WRITELINE(mbc55x_state, vid_hsync_changed))
+	MCFG_MC6845_OUT_HSYNC_CB(WRITELINE(mbc55x_state, vid_vsync_changed))
 
 	/* Backing storage */
-	MCFG_FD1793_ADD(FDC_TAG, mbc55x_wd17xx_interface )
-	MCFG_LEGACY_FLOPPY_4_DRIVES_ADD(mbc55x_floppy_interface)
+	MCFG_FD1793_ADD(FDC_TAG, XTAL_1MHz)
+
+	MCFG_FLOPPY_DRIVE_ADD(FDC_TAG ":0", mbc55x_floppies, "qd", mbc55x_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD(FDC_TAG ":1", mbc55x_floppies, "qd", mbc55x_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD(FDC_TAG ":2", mbc55x_floppies, "", mbc55x_state::floppy_formats)
+	MCFG_FLOPPY_DRIVE_ADD(FDC_TAG ":3", mbc55x_floppies, "", mbc55x_state::floppy_formats)
 
 	/* Software list */
 	MCFG_SOFTWARE_LIST_ADD("disk_list","mbc55x")

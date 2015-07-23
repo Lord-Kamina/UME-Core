@@ -1,9 +1,8 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /***************************************************************************
 
     Motorola MC2661/MC68661 Enhanced Programmable Communications Interface
-
-    Copyright the MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
 
 ***************************************************************************/
 
@@ -26,6 +25,11 @@ const device_type MC2661 = &device_creator<mc2661_device>;
 #define LOG 0
 
 
+UINT32 baud_rates[16] =
+{
+	50, 75, 110, 135 /*134.5*/, 150, 300, 600, 1200, 1800, 2000, 2400, 3600, 4800, 7200, 9600, 19200
+};
+
 enum
 {
 	REGISTER_HOLDING = 0,
@@ -43,15 +47,6 @@ enum
 #define MODE_TRANSPARENT    BIT(m_mr[0], 6)
 #define MODE_SINGLE_SYN     BIT(m_mr[0], 7)
 #define MODE_STOP_BITS      ((m_mr[0] >> 6) & 0x03)
-
-
-enum
-{
-	STOP_BITS_INVALID = 0,
-	STOP_BITS_1,
-	STOP_BITS_1_5,
-	STOP_BITS_2
-};
 
 
 #define SYN1            m_sync[0]
@@ -99,39 +94,21 @@ enum
 //  mc2661_device - constructor
 //-------------------------------------------------
 
-mc2661_device::mc2661_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, MC2661, "MC2661", tag, owner, clock),
-		device_serial_interface(mconfig, *this)
+mc2661_device::mc2661_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
+	device_t(mconfig, MC2661, "MC2661", tag, owner, clock, "mc2661", __FILE__),
+	device_serial_interface(mconfig, *this),
+	m_write_txd(*this),
+	m_write_rxrdy(*this),
+	m_write_txrdy(*this),
+	m_write_rts(*this),
+	m_write_dtr(*this),
+	m_write_txemt_dschg(*this),
+	m_write_bkdet(*this),
+	m_write_xsync(*this),
+	m_rxc(0),
+	m_txc(0),
+	m_sr(0)
 {
-}
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void mc2661_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const mc2661_interface *intf = reinterpret_cast<const mc2661_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<mc2661_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_in_rxd_cb, 0, sizeof(m_in_rxd_cb));
-		memset(&m_out_txd_cb, 0, sizeof(m_out_txd_cb));
-		memset(&m_out_rxrdy_cb, 0, sizeof(m_out_rxrdy_cb));
-		memset(&m_out_txrdy_cb, 0, sizeof(m_out_txrdy_cb));
-		memset(&m_out_rts_cb, 0, sizeof(m_out_rts_cb));
-		memset(&m_out_dtr_cb, 0, sizeof(m_out_dtr_cb));
-		memset(&m_out_txemt_dschg_cb, 0, sizeof(m_out_txemt_dschg_cb));
-		memset(&m_out_bkdet_cb, 0, sizeof(m_out_bkdet_cb));
-		memset(&m_out_xsync_cb, 0, sizeof(m_out_xsync_cb));
-	}
 }
 
 
@@ -142,15 +119,14 @@ void mc2661_device::device_config_complete()
 void mc2661_device::device_start()
 {
 	// resolve callbacks
-	m_in_rxd_func.resolve(m_in_rxd_cb, *this);
-	m_out_txd_func.resolve(m_out_txd_cb, *this);
-	m_out_rxrdy_func.resolve(m_out_rxrdy_cb, *this);
-	m_out_txrdy_func.resolve(m_out_txrdy_cb, *this);
-	m_out_rts_func.resolve(m_out_rts_cb, *this);
-	m_out_dtr_func.resolve(m_out_dtr_cb, *this);
-	m_out_txemt_dschg_func.resolve(m_out_txemt_dschg_cb, *this);
-	m_out_bkdet_func.resolve(m_out_bkdet_cb, *this);
-	m_out_xsync_func.resolve(m_out_xsync_cb, *this);
+	m_write_txd.resolve_safe();
+	m_write_rxrdy.resolve_safe();
+	m_write_txrdy.resolve_safe();
+	m_write_rts.resolve_safe();
+	m_write_dtr.resolve_safe();
+	m_write_txemt_dschg.resolve_safe();
+	m_write_bkdet.resolve_safe();
+	m_write_xsync.resolve_safe();
 
 	// create the timers
 	if (m_rxc > 0)
@@ -192,14 +168,14 @@ void mc2661_device::device_reset()
 	m_mode_index = 0;
 	m_sync_index = 0;
 
-	m_out_txd_func(1);
-	m_out_rxrdy_func(CLEAR_LINE);
-	m_out_txrdy_func(CLEAR_LINE);
-	m_out_rts_func(1);
-	m_out_dtr_func(1);
-	m_out_txemt_dschg_func(CLEAR_LINE);
-	m_out_bkdet_func(0);
-	m_out_xsync_func(0);
+	m_write_txd(1);
+	m_write_rxrdy(CLEAR_LINE);
+	m_write_txrdy(CLEAR_LINE);
+	m_write_rts(1);
+	m_write_dtr(1);
+	m_write_txemt_dschg(CLEAR_LINE);
+	m_write_bkdet(0);
+	m_write_xsync(0);
 }
 
 
@@ -209,10 +185,7 @@ void mc2661_device::device_reset()
 
 void mc2661_device::tra_callback()
 {
-	if (m_out_txd_func.isnull())
-		transmit_register_send_bit();
-	else
-		m_out_txd_func(transmit_register_get_data_bit());
+	m_write_txd(transmit_register_get_data_bit());
 }
 
 
@@ -223,19 +196,8 @@ void mc2661_device::tra_callback()
 void mc2661_device::tra_complete()
 {
 	// TODO
-}
-
-
-//-------------------------------------------------
-//  rcv_callback -
-//-------------------------------------------------
-
-void mc2661_device::rcv_callback()
-{
-	if (m_in_rxd_func.isnull())
-		receive_register_update_bit(get_in_data_bit());
-	else
-		receive_register_update_bit(m_in_rxd_func());
+	m_sr |= STATUS_TXRDY;
+	m_write_txrdy(ASSERT_LINE);
 }
 
 
@@ -246,16 +208,10 @@ void mc2661_device::rcv_callback()
 void mc2661_device::rcv_complete()
 {
 	// TODO
-}
-
-
-//-------------------------------------------------
-//  input_callback -
-//-------------------------------------------------
-
-void mc2661_device::input_callback(UINT8 state)
-{
-	m_input_state = state;
+	receive_register_extract();
+	m_rhr = get_received_char();
+	m_sr |= STATUS_RXRDY;
+	m_write_rxrdy(ASSERT_LINE);
 }
 
 
@@ -271,6 +227,8 @@ READ8_MEMBER( mc2661_device::read )
 	{
 	case REGISTER_HOLDING:
 		data = m_rhr;
+		m_sr &= ~STATUS_RXRDY;
+		m_write_rxrdy(CLEAR_LINE);
 		break;
 
 	case REGISTER_STATUS:
@@ -282,6 +240,7 @@ READ8_MEMBER( mc2661_device::read )
 
 		m_mode_index++;
 		m_mode_index &= 0x01;
+
 		break;
 
 	case REGISTER_COMMAND:
@@ -308,6 +267,19 @@ WRITE8_MEMBER( mc2661_device::write )
 		if (LOG) logerror("MC2661 '%s' Transmit Holding Register: %02x\n", tag(), data);
 
 		m_thr = data;
+		if(COMMAND_TXEN)
+		{
+			if(COMMAND_MODE != 0x02)
+				transmit_register_setup(m_thr);
+			m_sr &= ~STATUS_TXRDY;
+			m_write_txrdy(CLEAR_LINE);
+		}
+		if(COMMAND_MODE == 0x02)  // loopback - the Wicat will set this after enabling the transmitter
+		{
+			m_rhr = data;
+			m_sr |= STATUS_RXRDY; // pcd expects this
+			m_write_rxrdy(ASSERT_LINE);
+		}
 		break;
 
 	case REGISTER_SYNC:
@@ -326,22 +298,84 @@ WRITE8_MEMBER( mc2661_device::write )
 
 		if (m_mode_index == 0)
 		{
-			int word_length = 5 + MODE_CHARACTER;
-			float stop_bits = 0;
-			int parity_code;
+			int data_bit_count = 5 + MODE_CHARACTER;
+			parity_t parity;
+
+			if (!MODE_PARITY) parity = PARITY_NONE;
+			else if (MODE_PARITY_EVEN) parity = PARITY_EVEN;
+			else parity = PARITY_ODD;
+
+			stop_bits_t stop_bits;
 
 			switch (MODE_STOP_BITS)
 			{
-			case STOP_BITS_1:   stop_bits = 1;      break;
-			case STOP_BITS_1_5: stop_bits = 1.5;    break;
-			case STOP_BITS_2:   stop_bits = 2;      break;
+			case 0:
+			default:
+				stop_bits = STOP_BITS_0;
+				break;
+
+			case 1:
+				stop_bits = STOP_BITS_1;
+				break;
+
+			case 2:
+				stop_bits = STOP_BITS_1_5;
+				break;
+
+			case 3:
+				stop_bits = STOP_BITS_2;
+				break;
 			}
 
-			if (!MODE_PARITY) parity_code = SERIAL_PARITY_NONE;
-			else if (MODE_PARITY_EVEN) parity_code = SERIAL_PARITY_EVEN;
-			else parity_code = SERIAL_PARITY_ODD;
+			set_data_frame(1, data_bit_count, parity, stop_bits);
+		}
+		if(m_mode_index == 1)
+		{
+			UINT32 rx_baud = baud_rates[data & 0x0f];
+			UINT32 tx_baud = baud_rates[data & 0x0f];
+			if(data & 0x10)  // internal receiver clock
+			{
+//              if((m_mr[0] & 0x03) != 0)
+//                  rx_baud *= 16;
+			}
+			else  // external receiver clock
+			{
+				switch(m_mr[0] & 0x03)
+				{
+				case 0x02:
+					rx_baud *= 16;
+					break;
+				case 0x03:
+					rx_baud *= 64;
+					break;
+				default:
+					// x1
+					break;
+				}
+			}
+			if(data & 0x20)  // internal transmitter clock
+			{
+//              if((m_mr[0] & 0x03) != 0)
+//                  tx_baud *= 16;
+			}
+			else  // external transmitter clock
+			{
+				switch(m_mr[0] & 0x03)
+				{
+				case 0x02:
+					tx_baud *= 16;
+					break;
+				case 0x03:
+					tx_baud *= 64;
+					break;
+				default:
+					// x1
+					break;
+				}
+			}
 
-			set_data_frame(word_length, stop_bits, parity_code);
+			set_rcv_rate(rx_baud);
+			set_tra_rate(tx_baud);
 		}
 
 		m_mode_index++;
@@ -353,37 +387,43 @@ WRITE8_MEMBER( mc2661_device::write )
 
 		m_cr = data & 0xef;
 
+		m_write_dtr(!COMMAND_DTR);
+		m_write_rts(!COMMAND_RTS);
+
+		if (COMMAND_MODE == 0x02)  // local loopback
+		{
+			if(COMMAND_DTR && COMMAND_RTS)  // CR1 and CR5 must be set to 1 to use local loopback
+			{
+				// probably much more to it that this, but this is enough for the Wicat to be happy
+				m_rhr = m_thr;
+				m_sr |= STATUS_RXRDY;
+				m_write_rxrdy(ASSERT_LINE);
+				return;
+			}
+		}
+
+		if (COMMAND_TXEN)
+		{
+			m_sr |= STATUS_TXRDY;
+			m_write_txrdy(ASSERT_LINE);
+		}
+		else
+		{
+			m_sr &= ~STATUS_TXRDY;
+			m_write_txrdy(CLEAR_LINE);
+		}
+		if (!COMMAND_RXEN)
+		{
+			m_sr &= ~STATUS_RXRDY;
+			m_write_rxrdy(CLEAR_LINE);
+		}
 		if (COMMAND_RESET)
 		{
 			m_sr &= ~(STATUS_FE | STATUS_OVERRUN | STATUS_PE);
 		}
-
-		m_out_dtr_func(!COMMAND_DTR);
-		m_out_rts_func(!COMMAND_RTS);
 		break;
 	}
 }
-
-
-//-------------------------------------------------
-//  rxc_w - receiver clock
-//-------------------------------------------------
-
-WRITE_LINE_MEMBER( mc2661_device::rxc_w )
-{
-	rcv_clock();
-}
-
-
-//-------------------------------------------------
-//  txc_w - transmitter clock
-//-------------------------------------------------
-
-WRITE_LINE_MEMBER( mc2661_device::txc_w )
-{
-	tra_clock();
-}
-
 
 //-------------------------------------------------
 //  dsr_w - data set ready
@@ -450,4 +490,10 @@ READ_LINE_MEMBER( mc2661_device::rxrdy_r )
 READ_LINE_MEMBER( mc2661_device::txemt_r )
 {
 	return (m_sr & STATUS_TXEMT) ? ASSERT_LINE : CLEAR_LINE;
+}
+
+
+void mc2661_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+{
+	device_serial_interface::device_timer(timer, id, param, ptr);
 }

@@ -1,3 +1,14 @@
+// license:BSD-3-Clause
+// copyright-holders:Phil Stroffolino
+/***************************************************************************
+
+    Namco NA-1 System hardware
+
+***************************************************************************/
+
+#include "machine/eeprompar.h"
+#include "sound/c140.h"
+
 enum
 {
 	NAMCO_CGANGPZL,
@@ -13,8 +24,6 @@ enum
 	NAMCO_XDAY2
 };
 
-#define NA1_NVRAM_SIZE (0x800)
-#define NAMCONA1_NUM_TILEMAPS 4
 
 class namcona1_state : public driver_device
 {
@@ -23,25 +32,47 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this,"maincpu"),
 		m_mcu(*this,"mcu"),
-		m_videoram(*this,"videoram"),
-		m_spriteram(*this,"spriteram"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette"),
+		m_c140(*this, "c140"),
+		m_muxed_inputs(*this, muxed_inputs),
+		m_io_p3(*this, "P3"),
 		m_workram(*this,"workram"),
 		m_vreg(*this,"vreg"),
-		m_scroll(*this,"scroll")
-		{ }
+		m_paletteram(*this, "paletteram"),
+		m_cgram(*this, "cgram"),
+		m_videoram(*this,"videoram"),
+		m_scroll(*this,"scroll"),
+		m_spriteram(*this,"spriteram")
+	{ }
 
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_mcu;
-	required_shared_ptr<UINT16> m_videoram;
-	required_shared_ptr<UINT16> m_spriteram;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
+	required_device<c140_device> m_c140;
+
+	DECLARE_IOPORT_ARRAY(muxed_inputs);
+	required_ioport_array<4> m_muxed_inputs;
+	required_ioport          m_io_p3;
+
 	required_shared_ptr<UINT16> m_workram;
 	required_shared_ptr<UINT16> m_vreg;
+	required_shared_ptr<UINT16> m_paletteram;
+	required_shared_ptr<UINT16> m_cgram;
+	required_shared_ptr<UINT16> m_videoram;
 	required_shared_ptr<UINT16> m_scroll;
-	UINT16 *m_mpBank0;
-	UINT16 *m_mpBank1;
+	required_shared_ptr<UINT16> m_spriteram;
+
+	// this has to be UINT8 to be in the right byte order for the tilemap system
+	std::vector<UINT8> m_shaperam;
+
+	UINT16 *m_prgrom;
+	UINT16 *m_maskrom;
 	int m_mEnableInterrupts;
 	int m_gametype;
-	UINT8 m_nvmem[NA1_NVRAM_SIZE];
 	UINT16 m_count;
 	UINT32 m_keyval;
 	UINT16 m_mcu_mailbox[8];
@@ -49,22 +80,12 @@ public:
 	UINT8 m_mcu_port5;
 	UINT8 m_mcu_port6;
 	UINT8 m_mcu_port8;
-	UINT16 *m_shaperam;
-	UINT16 *m_cgram;
-	tilemap_t *m_roz_tilemap;
-	int m_roz_palette;
-	tilemap_t *m_bg_tilemap[NAMCONA1_NUM_TILEMAPS];
-	int m_tilemap_palette_bank[NAMCONA1_NUM_TILEMAPS];
+	tilemap_t *m_bg_tilemap[4+1];
 	int m_palette_is_dirty;
-	UINT8 m_mask_data[8];
-	UINT8 m_conv_data[9];
 
-	DECLARE_READ16_MEMBER(namcona1_nvram_r);
-	DECLARE_WRITE16_MEMBER(namcona1_nvram_w);
 	DECLARE_READ16_MEMBER(custom_key_r);
 	DECLARE_WRITE16_MEMBER(custom_key_w);
-	DECLARE_READ16_MEMBER(namcona1_vreg_r);
-	DECLARE_WRITE16_MEMBER(namcona1_vreg_w);
+	DECLARE_WRITE16_MEMBER(vreg_w);
 	DECLARE_READ16_MEMBER(mcu_mailbox_r);
 	DECLARE_WRITE16_MEMBER(mcu_mailbox_w_68k);
 	DECLARE_WRITE16_MEMBER(mcu_mailbox_w_mcu);
@@ -81,15 +102,22 @@ public:
 	DECLARE_READ8_MEMBER(port8_r);
 	DECLARE_WRITE8_MEMBER(port8_w);
 	DECLARE_READ8_MEMBER(portana_r);
+	void simulate_mcu();
 	void write_version_info();
-	DECLARE_WRITE16_MEMBER(namcona1_videoram_w);
-	DECLARE_READ16_MEMBER(namcona1_videoram_r);
-	DECLARE_READ16_MEMBER(namcona1_paletteram_r);
-	DECLARE_WRITE16_MEMBER(namcona1_paletteram_w);
-	DECLARE_READ16_MEMBER(namcona1_gfxram_r);
-	DECLARE_WRITE16_MEMBER(namcona1_gfxram_w);
+	int transfer_dword(UINT32 dest, UINT32 source);
+	void blit();
+	void UpdatePalette(int offset);
+	DECLARE_WRITE16_MEMBER(videoram_w);
+	DECLARE_WRITE16_MEMBER(paletteram_w);
+	DECLARE_READ16_MEMBER(gfxram_r);
+	DECLARE_WRITE16_MEMBER(gfxram_w);
+	void pdraw_tile( screen_device &screen, bitmap_ind16 &dest_bmp, const rectangle &clip, UINT32 code, int color,
+		int sx, int sy, int flipx, int flipy, int priority, int bShadow, int bOpaque, int gfx_region );
+	void draw_sprites(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+	void draw_background(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int which, int primask );
 	DECLARE_READ16_MEMBER(snd_r);
 	DECLARE_WRITE16_MEMBER(snd_w);
+
 	DECLARE_DRIVER_INIT(bkrtmaq);
 	DECLARE_DRIVER_INIT(quiztou);
 	DECLARE_DRIVER_INIT(emeralda);
@@ -102,15 +130,21 @@ public:
 	DECLARE_DRIVER_INIT(xday2);
 	DECLARE_DRIVER_INIT(exbania);
 	DECLARE_DRIVER_INIT(emeraldj);
+	virtual void machine_start();
+	virtual void machine_reset();
+	virtual void video_start();
+
 	TILE_GET_INFO_MEMBER(tilemap_get_info0);
 	TILE_GET_INFO_MEMBER(tilemap_get_info1);
 	TILE_GET_INFO_MEMBER(tilemap_get_info2);
 	TILE_GET_INFO_MEMBER(tilemap_get_info3);
 	TILE_GET_INFO_MEMBER(roz_get_info);
-	virtual void machine_start();
-	virtual void machine_reset();
-	virtual void video_start();
-	UINT32 screen_update_namcona1(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
-	TIMER_DEVICE_CALLBACK_MEMBER(namcona1_interrupt);
-	TIMER_DEVICE_CALLBACK_MEMBER(mcu_interrupt);
+
+	UINT32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+
+	TIMER_DEVICE_CALLBACK_MEMBER(interrupt);
+	void postload();
+
+private:
+	void tilemap_get_info(tile_data &tileinfo, int tile_index, const UINT16 *tilemap_videoram, bool use_4bpp_gfx);
 };

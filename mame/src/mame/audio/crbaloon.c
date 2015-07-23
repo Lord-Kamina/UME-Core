@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /***************************************************************************
 
     Taito Crazy Balloon hardware
@@ -8,8 +10,6 @@
 
 #include "emu.h"
 #include "includes/crbaloon.h"
-#include "sound/sn76477.h"
-#include "sound/discrete.h"
 
 
 /* timing sources */
@@ -32,41 +32,41 @@
 
 WRITE8_MEMBER(crbaloon_state::crbaloon_audio_set_music_freq)
 {
-	discrete_sound_w(m_discrete, space, CRBALOON_MUSIC_DATA, data);
+	m_discrete->write(space, CRBALOON_MUSIC_DATA, data);
 }
 
 
 WRITE8_MEMBER(crbaloon_state::crbaloon_audio_set_music_enable)
 {
-	discrete_sound_w(m_discrete, space, CRBALOON_MUSIC_EN, data);
+	m_discrete->write(space, CRBALOON_MUSIC_EN, data);
 }
 
 
-void crbaloon_audio_set_explosion_enable(device_t *sn, int enabled)
+void crbaloon_state::crbaloon_audio_set_explosion_enable(int enabled)
 {
-	sn76477_enable_w(sn, enabled);
+	m_sn->enable_w(enabled);
 }
 
 
-void crbaloon_audio_set_breath_enable(device_t *sn, int enabled)
+void crbaloon_state::crbaloon_audio_set_breath_enable(int enabled)
 {
 	/* changes slf_res to 10k (middle of two 10k resistors)
 	   it also puts a tantal capacitor against GND on the output,
 	   but this section of the schematics is not readable. */
-	sn76477_slf_res_w(sn, enabled ? RES_K(10) : RES_K(20) );
+	m_sn->slf_res_w(enabled ? RES_K(10) : RES_K(20) );
 }
 
 
-void crbaloon_audio_set_appear_enable(device_t *sn, int enabled)
+void crbaloon_state::crbaloon_audio_set_appear_enable(int enabled)
 {
 	/* APPEAR is connected to MIXER B */
-	sn76477_mixer_b_w(sn, enabled);
+	m_sn->mixer_b_w(enabled);
 }
 
 
 WRITE8_MEMBER(crbaloon_state::crbaloon_audio_set_laugh_enable)
 {
-	discrete_sound_w(m_discrete, space, CRBALOON_LAUGH_EN, data);
+	m_discrete->write(space, CRBALOON_LAUGH_EN, data);
 }
 
 
@@ -137,45 +137,27 @@ static DISCRETE_SOUND_START(crbaloon)
 DISCRETE_SOUND_END
 
 
-
-static const sn76477_interface crbaloon_sn76477_interface =
-{
-	RES_K( 47), /*  4 noise_res          */
-	RES_K(330), /*  5 filter_res         */
-	CAP_P(470), /*  6 filter_cap         */
-	RES_K(220), /*  7 decay_res          */
-	CAP_U(1.0), /*  8 attack_decay_cap   */
-	RES_K(4.7), /* 10 attack_res         */
-	RES_M(  1), /* 11 amplitude_res      */
-	RES_K(200), /* 12 feedback_res       */
-	5.0,        /* 16 vco_voltage        */
-	CAP_P(470), /* 17 vco_cap            */
-	RES_K(330), /* 18 vco_res            */
-	5.0,        /* 19 pitch_voltage      */
-	RES_K( 20), /* 20 slf_res (variable) */
-	CAP_P(420), /* 21 slf_cap            */
-	CAP_U(1.0), /* 23 oneshot_cap        */
-	RES_K( 47), /* 24 oneshot_res        */
-	0,          /* 22 vco                */
-	0,          /* 26 mixer A            */
-	0,          /* 25 mixer B (variable) */
-	1,          /* 27 mixer C            */
-	1,          /* 1  envelope 1         */
-	0,          /* 28 envelope 2         */
-	0           /* 9  enable (variable)  */
-};
-
-
-
 MACHINE_CONFIG_FRAGMENT( crbaloon_audio )
 
 	MCFG_SPEAKER_STANDARD_MONO("mono")
 
 	MCFG_SOUND_ADD("snsnd", SN76477, 0)
-	MCFG_SOUND_CONFIG(crbaloon_sn76477_interface)
+	MCFG_SN76477_NOISE_PARAMS(RES_K(47), RES_K(330), CAP_P(470)) // noise + filter
+	MCFG_SN76477_DECAY_RES(RES_K(220))                   // decay_res
+	MCFG_SN76477_ATTACK_PARAMS(CAP_U(1.0), RES_K(4.7))   // attack_decay_cap + attack_res
+	MCFG_SN76477_AMP_RES(RES_M(1))                       // amplitude_res
+	MCFG_SN76477_FEEDBACK_RES(RES_K(200))                // feedback_res
+	MCFG_SN76477_VCO_PARAMS(5.0, CAP_P(470), RES_K(330)) // VCO volt + cap + res
+	MCFG_SN76477_PITCH_VOLTAGE(5.0)                      // pitch_voltage
+	MCFG_SN76477_SLF_PARAMS(CAP_P(420), RES_K(20))       // slf caps + res
+	MCFG_SN76477_ONESHOT_PARAMS(CAP_U(1.0), RES_K(47))   // oneshot caps + res
+	MCFG_SN76477_VCO_MODE(0)                             // VCO mode
+	MCFG_SN76477_MIXER_PARAMS(0, 0, 1)                   // mixer A, B, C
+	MCFG_SN76477_ENVELOPE_PARAMS(1, 0)                   // envelope 1, 2
+	MCFG_SN76477_ENABLE(0)                               // enable
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 2.0)
 
 	MCFG_SOUND_ADD("discrete", DISCRETE, 0)
-	MCFG_SOUND_CONFIG_DISCRETE(crbaloon)
+	MCFG_DISCRETE_INTF(crbaloon)
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_CONFIG_END

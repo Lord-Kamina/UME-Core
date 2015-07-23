@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood
 /*
 
     Black Touch '96
@@ -102,7 +104,9 @@ public:
 		m_spriteram5(*this, "spriteram5"),
 		m_spriteram6(*this, "spriteram6"),
 		m_spriteram7(*this, "spriteram7"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	required_shared_ptr<UINT16> m_tilemapram;
 	required_shared_ptr<UINT16> m_spriteram0;
@@ -115,7 +119,7 @@ public:
 	required_shared_ptr<UINT16> m_spriteram7;
 	DECLARE_WRITE16_MEMBER(blackt96_c0000_w);
 	DECLARE_WRITE16_MEMBER(blackt96_80000_w);
-	DECLARE_READ8_MEMBER(PIC16C5X_T0_clk_r);
+	DECLARE_READ_LINE_MEMBER(PIC16C5X_T0_clk_r);
 	DECLARE_WRITE8_MEMBER(blackt96_soundio_port00_w);
 	DECLARE_READ8_MEMBER(blackt96_soundio_port01_r);
 	DECLARE_WRITE8_MEMBER(blackt96_soundio_port01_w);
@@ -153,6 +157,8 @@ public:
 	void draw_strip(bitmap_ind16 &bitmap, const rectangle &cliprect, int page, int column);
 	void draw_page(bitmap_ind16 &bitmap, const rectangle &cliprect, int page);
 	required_device<cpu_device> m_maincpu;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };
 
 #define GET_INFO( ram ) \
@@ -183,14 +189,14 @@ WRITE16_MEMBER(blackt96_state::bg_videoram7_w) { COMBINE_DATA(&m_spriteram7[offs
 
 void blackt96_state::video_start()
 {
-	m_bg_tilemap[0] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blackt96_state::get_bg0_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_bg_tilemap[1] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blackt96_state::get_bg1_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_bg_tilemap[2] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blackt96_state::get_bg2_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_bg_tilemap[3] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blackt96_state::get_bg3_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_bg_tilemap[4] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blackt96_state::get_bg4_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_bg_tilemap[5] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blackt96_state::get_bg5_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_bg_tilemap[6] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blackt96_state::get_bg6_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
-	m_bg_tilemap[7] = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(blackt96_state::get_bg7_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_bg_tilemap[0] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blackt96_state::get_bg0_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_bg_tilemap[1] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blackt96_state::get_bg1_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_bg_tilemap[2] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blackt96_state::get_bg2_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_bg_tilemap[3] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blackt96_state::get_bg3_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_bg_tilemap[4] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blackt96_state::get_bg4_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_bg_tilemap[5] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blackt96_state::get_bg5_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_bg_tilemap[6] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blackt96_state::get_bg6_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
+	m_bg_tilemap[7] = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(blackt96_state::get_bg7_tile_info),this), TILEMAP_SCAN_COLS, 16, 16, 32, 32);
 
 	m_spriteram[0] = m_spriteram0;
 	m_spriteram[1] = m_spriteram1;
@@ -205,8 +211,8 @@ void blackt96_state::video_start()
 void blackt96_state::draw_strip(bitmap_ind16 &bitmap, const rectangle &cliprect, int page, int column)
 {
 	/* the very first 'page' in the spriteram contains the x/y positions for each tile strip */
-	gfx_element *gfxbg = machine().gfx[0];
-	gfx_element *gfxspr = machine().gfx[1];
+	gfx_element *gfxbg = m_gfxdecode->gfx(0);
+	gfx_element *gfxspr = m_gfxdecode->gfx(1);
 
 	int base = column * (0x80/2);
 	base += page * 2;
@@ -236,11 +242,11 @@ void blackt96_state::draw_strip(bitmap_ind16 &bitmap, const rectangle &cliprect,
 
 		if (tile&0x2000)
 		{
-			drawgfx_transpen(bitmap,cliprect,gfxbg,tile&0x1fff,colour>>4,flipx,0,xx,yy+y*16,0);
+			gfxbg->transpen(bitmap,cliprect,tile&0x1fff,colour>>4,flipx,0,xx,yy+y*16,0);
 		}
 		else
 		{
-			drawgfx_transpen(bitmap,cliprect,gfxspr,tile&0x1fff,colour,flipx,0,xx,yy+y*16,0);
+			gfxspr->transpen(bitmap,cliprect,tile&0x1fff,colour,flipx,0,xx,yy+y*16,0);
 		}
 	}
 }
@@ -255,7 +261,7 @@ void blackt96_state::draw_page(bitmap_ind16 &bitmap, const rectangle &cliprect, 
 
 UINT32 blackt96_state::screen_update_blackt96(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	bitmap.fill(get_black_pen(machine()), cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
 
 	draw_page(bitmap, cliprect, 2); // bg
 	draw_page(bitmap, cliprect, 3); // lower pri sprites
@@ -265,7 +271,7 @@ UINT32 blackt96_state::screen_update_blackt96(screen_device &screen, bitmap_ind1
 	/* Text Layer */
 	int count = 0;
 	int x,y;
-	gfx_element *gfx = machine().gfx[2];
+	gfx_element *gfx = m_gfxdecode->gfx(2);
 
 	for (x=0;x<64;x++)
 	{
@@ -273,7 +279,7 @@ UINT32 blackt96_state::screen_update_blackt96(screen_device &screen, bitmap_ind1
 		{
 			UINT16 tile = (m_tilemapram[count*2]&0xff);
 			tile += m_txt_bank * 0x100;
-			drawgfx_transpen(bitmap,cliprect,gfx,tile,0,0,0,x*8,-16+y*8,0);
+			gfx->transpen(bitmap,cliprect,tile,0,0,0,x*8,-16+y*8,0);
 			count++;
 		}
 	}
@@ -325,7 +331,7 @@ static ADDRESS_MAP_START( blackt96_map, AS_PROGRAM, 16, blackt96_state )
 	AM_RANGE(0x207000, 0x207fff) AM_RAM_WRITE(bg_videoram7_w) AM_SHARE("spriteram7")
 
 
-	AM_RANGE(0x400000, 0x400fff) AM_RAM_WRITE(paletteram_xxxxRRRRGGGGBBBB_word_w) AM_SHARE("paletteram")
+	AM_RANGE(0x400000, 0x400fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0xc00000, 0xc03fff) AM_RAM // main ram
 
 ADDRESS_MAP_END
@@ -556,7 +562,7 @@ static GFXDECODE_START( blackt96 )
 GFXDECODE_END
 
 
-READ8_MEMBER(blackt96_state::PIC16C5X_T0_clk_r)
+READ_LINE_MEMBER(blackt96_state::PIC16C5X_T0_clk_r)
 {
 	return 0;
 }
@@ -583,13 +589,6 @@ WRITE8_MEMBER(blackt96_state::blackt96_soundio_port02_w)
 {
 }
 
-static ADDRESS_MAP_START( sound_io_map, AS_IO, 8, blackt96_state )
-	AM_RANGE(0x00, 0x00) AM_WRITE(blackt96_soundio_port00_w )
-	AM_RANGE(0x01, 0x01) AM_READWRITE(blackt96_soundio_port01_r, blackt96_soundio_port01_w )
-	AM_RANGE(0x02, 0x02) AM_READWRITE(blackt96_soundio_port02_r, blackt96_soundio_port02_w )
-	AM_RANGE(PIC16C5x_T0, PIC16C5x_T0) AM_READ(PIC16C5X_T0_clk_r)
-ADDRESS_MAP_END
-
 
 
 static MACHINE_CONFIG_START( blackt96, blackt96_state )
@@ -598,9 +597,14 @@ static MACHINE_CONFIG_START( blackt96, blackt96_state )
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", blackt96_state,  irq1_line_hold)
 
 	MCFG_CPU_ADD("audiocpu", PIC16C57, 8000000) /* ? */
-	MCFG_CPU_IO_MAP(sound_io_map)
+	MCFG_PIC16C5x_WRITE_A_CB(WRITE8(blackt96_state, blackt96_soundio_port00_w))
+	MCFG_PIC16C5x_READ_B_CB(READ8(blackt96_state, blackt96_soundio_port01_r))
+	MCFG_PIC16C5x_WRITE_B_CB(WRITE8(blackt96_state, blackt96_soundio_port01_w))
+	MCFG_PIC16C5x_READ_C_CB(READ8(blackt96_state, blackt96_soundio_port02_r))
+	MCFG_PIC16C5x_WRITE_C_CB(WRITE8(blackt96_state, blackt96_soundio_port02_w))
+	MCFG_PIC16C5x_T0_CB(READLINE(blackt96_state, PIC16C5X_T0_clk_r))
 
-	MCFG_GFXDECODE(blackt96)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", blackt96)
 
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_REFRESH_RATE(60)
@@ -609,8 +613,10 @@ static MACHINE_CONFIG_START( blackt96, blackt96_state )
 //  MCFG_SCREEN_VISIBLE_AREA(0*8, 16*32-1, 0*8, 16*32-1)
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 256-1, 0*8, 224-1)
 	MCFG_SCREEN_UPDATE_DRIVER(blackt96_state, screen_update_blackt96)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x800)
+	MCFG_PALETTE_ADD("palette", 0x800)
+	MCFG_PALETTE_FORMAT(xxxxRRRRGGGGBBBB)
 
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")

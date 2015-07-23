@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Paul Priest, David Haywood
 /* Magical Cat Adventure / Nostradamus Video Hardware */
 
 /*
@@ -46,7 +48,7 @@ WRITE16_MEMBER(mcatadv_state::mcatadv_videoram2_w)
 }
 
 
-void mcatadv_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect )
+void mcatadv_state::draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
 	UINT16 *source = m_spriteram_old;
 	UINT16 *finish = source + (m_spriteram.bytes() / 2) /2;
@@ -117,7 +119,7 @@ void mcatadv_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprec
 				if ((drawypos >= cliprect.min_y) && (drawypos <= cliprect.max_y))
 				{
 					destline = &bitmap.pix16(drawypos);
-					priline = &machine().priority_bitmap.pix8(drawypos);
+					priline = &screen.priority().pix8(drawypos);
 
 					for (xcnt = xstart; xcnt != xend; xcnt += xinc)
 					{
@@ -151,7 +153,7 @@ void mcatadv_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprec
 	}
 }
 
-void mcatadv_state::mcatadv_draw_tilemap_part( UINT16* current_scroll, UINT16* current_videoram1, int i, tilemap_t* current_tilemap, bitmap_ind16 &bitmap, const rectangle &cliprect )
+void mcatadv_state::mcatadv_draw_tilemap_part( screen_device &screen, UINT16* current_scroll, UINT16* current_videoram1, int i, tilemap_t* current_tilemap, bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
 	int flip;
 	UINT32 drawline;
@@ -191,7 +193,7 @@ void mcatadv_state::mcatadv_draw_tilemap_part( UINT16* current_scroll, UINT16* c
 		current_tilemap->set_scrolly(0, scrolly);
 		current_tilemap->set_flip(flip);
 
-		current_tilemap->draw(bitmap, clip, i, i);
+		current_tilemap->draw(screen, bitmap, clip, i, i);
 	}
 }
 
@@ -199,8 +201,8 @@ UINT32 mcatadv_state::screen_update_mcatadv(screen_device &screen, bitmap_ind16 
 {
 	int i;
 
-	bitmap.fill(get_black_pen(machine()), cliprect);
-	machine().priority_bitmap.fill(0, cliprect);
+	bitmap.fill(m_palette->black_pen(), cliprect);
+	screen.priority().fill(0, cliprect);
 
 	if (m_scroll1[2] != m_palette_bank1)
 	{
@@ -227,29 +229,29 @@ UINT32 mcatadv_state::screen_update_mcatadv(screen_device &screen, bitmap_ind16 
 	#ifdef MAME_DEBUG
 			if (!machine().input().code_pressed(KEYCODE_Q))
 	#endif
-			mcatadv_draw_tilemap_part(m_scroll1,  m_videoram1, i, m_tilemap1, bitmap, cliprect);
+			mcatadv_draw_tilemap_part(screen, m_scroll1,  m_videoram1, i, m_tilemap1, bitmap, cliprect);
 
 	#ifdef MAME_DEBUG
 			if (!machine().input().code_pressed(KEYCODE_W))
 	#endif
-				mcatadv_draw_tilemap_part(m_scroll2, m_videoram2, i, m_tilemap2, bitmap, cliprect);
+				mcatadv_draw_tilemap_part(screen, m_scroll2, m_videoram2, i, m_tilemap2, bitmap, cliprect);
 	}
 
 	g_profiler.start(PROFILER_USER1);
 #ifdef MAME_DEBUG
 	if (!machine().input().code_pressed(KEYCODE_E))
 #endif
-		draw_sprites (bitmap, cliprect);
+		draw_sprites (screen, bitmap, cliprect);
 	g_profiler.stop();
 	return 0;
 }
 
 void mcatadv_state::video_start()
 {
-	m_tilemap1 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(mcatadv_state::get_mcatadv_tile_info1),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 32);
+	m_tilemap1 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(mcatadv_state::get_mcatadv_tile_info1),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 32);
 	m_tilemap1->set_transparent_pen(0);
 
-	m_tilemap2 = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(mcatadv_state::get_mcatadv_tile_info2),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 32);
+	m_tilemap2 = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(mcatadv_state::get_mcatadv_tile_info2),this), TILEMAP_SCAN_ROWS, 16, 16, 32, 32);
 	m_tilemap2->set_transparent_pen(0);
 
 	m_spriteram_old = auto_alloc_array_clear(machine(), UINT16, m_spriteram.bytes() / 2);

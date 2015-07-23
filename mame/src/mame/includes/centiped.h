@@ -1,9 +1,12 @@
+// license:BSD-3-Clause
+// copyright-holders:Nicola Salmoria
 /*************************************************************************
 
     Atari Centipede hardware
 
 *************************************************************************/
-#include "machine/eeprom.h"
+
+#include "machine/eepromser.h"
 
 class centiped_state : public driver_device
 {
@@ -13,13 +16,18 @@ public:
 		m_rambase(*this, "rambase"),
 		m_videoram(*this, "videoram"),
 		m_spriteram(*this, "spriteram"),
+		m_paletteram(*this, "paletteram"),
 		m_bullsdrt_tiles_bankram(*this, "bullsdrt_bank"),
 		m_maincpu(*this, "maincpu"),
-		m_eeprom(*this, "eeprom") { }
+		m_eeprom(*this, "eeprom"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_screen(*this, "screen"),
+		m_palette(*this, "palette") { }
 
 	optional_shared_ptr<UINT8> m_rambase;
 	required_shared_ptr<UINT8> m_videoram;
 	required_shared_ptr<UINT8> m_spriteram;
+	optional_shared_ptr<UINT8> m_paletteram;
 	optional_shared_ptr<UINT8> m_bullsdrt_tiles_bankram;
 
 	UINT8 m_oldpos[4];
@@ -47,7 +55,7 @@ public:
 	DECLARE_WRITE8_MEMBER(led_w);
 	DECLARE_WRITE8_MEMBER(coin_count_w);
 	DECLARE_WRITE8_MEMBER(bullsdrt_coin_count_w);
-	DECLARE_READ8_MEMBER(caterplr_rand_r);
+	DECLARE_READ8_MEMBER(caterplr_unknown_r);
 	DECLARE_WRITE8_MEMBER(caterplr_AY8910_w);
 	DECLARE_READ8_MEMBER(caterplr_AY8910_r);
 	DECLARE_READ8_MEMBER(multiped_eeprom_r);
@@ -87,5 +95,8 @@ public:
 	void milliped_set_color(offs_t offset, UINT8 data);
 	inline int read_trackball(int idx, int switch_port);
 	required_device<cpu_device> m_maincpu;
-	optional_device<eeprom_device> m_eeprom;
+	optional_device<eeprom_serial_93cxx_device> m_eeprom;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 };

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
 /***************************************************************************
 
     Atari vector hardware
@@ -16,7 +18,7 @@ const device_type ATARIVGEAROM = &device_creator<atari_vg_earom_device>;
 //-------------------------------------------------
 
 atari_vg_earom_device::atari_vg_earom_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, ATARIVGEAROM, "ATARI VG EAROM", tag, owner, clock),
+	: device_t(mconfig, ATARIVGEAROM, "Atari VG EAROM", tag, owner, clock, "atari_vg_earom", __FILE__),
 		device_nvram_interface(mconfig, *this)
 {
 }

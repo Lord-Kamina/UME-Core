@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mike Coates
 /***************************************************************************
 
   circus.c video
@@ -36,7 +38,7 @@ TILE_GET_INFO_MEMBER(circus_state::get_bg_tile_info)
 
 void circus_state::video_start()
 {
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(circus_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(circus_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 }
 
 void circus_state::draw_line( bitmap_ind16 &bitmap, const rectangle &cliprect, int x1, int y1, int x2, int y2, int dotted )
@@ -60,7 +62,7 @@ void circus_state::draw_line( bitmap_ind16 &bitmap, const rectangle &cliprect, i
 
 void circus_state::draw_sprite_collision( bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	gfx_element *sprite_gfx = machine().gfx[1];
+	gfx_element *sprite_gfx = m_gfxdecode->gfx(1);
 	const UINT8 *sprite_data = sprite_gfx->get_data(m_clown_z);
 	int sx, sy, dx, dy;
 	int pixel, collision = 0;
@@ -80,7 +82,7 @@ void circus_state::draw_sprite_collision( bitmap_ind16 &bitmap, const rectangle 
 					if (pixel)
 					{
 						collision |= bitmap.pix16(dy, dx);
-						bitmap.pix16(dy, dx) = machine().pens[pixel];
+						bitmap.pix16(dy, dx) = m_palette->pen(pixel);
 					}
 				}
 			}
@@ -109,7 +111,7 @@ void circus_state::circus_draw_fg( bitmap_ind16 &bitmap, const rectangle &clipre
 
 UINT32 circus_state::screen_update_circus(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	circus_draw_fg(bitmap, cliprect);
 	draw_sprite_collision(bitmap, cliprect);
 	return 0;
@@ -168,8 +170,8 @@ void circus_state::robotbwl_draw_bowling_alley( bitmap_ind16 &bitmap, const rect
 
 void circus_state::robotbwl_draw_ball( bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	drawgfx_transpen(bitmap,/* Y is horizontal position */
-			cliprect,machine().gfx[1],
+	m_gfxdecode->gfx(1)->transpen(bitmap,/* Y is horizontal position */
+			cliprect,
 			m_clown_z,
 			0,
 			0,0,
@@ -178,7 +180,7 @@ void circus_state::robotbwl_draw_ball( bitmap_ind16 &bitmap, const rectangle &cl
 
 UINT32 circus_state::screen_update_robotbwl(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	robotbwl_draw_scoreboard(bitmap, cliprect);
 	robotbwl_draw_bowling_alley(bitmap, cliprect);
 	robotbwl_draw_ball(bitmap, cliprect);
@@ -187,8 +189,8 @@ UINT32 circus_state::screen_update_robotbwl(screen_device &screen, bitmap_ind16 
 
 void circus_state::crash_draw_car( bitmap_ind16 &bitmap, const rectangle &cliprect )
 {
-	drawgfx_transpen(bitmap,/* Y is horizontal position */
-		cliprect,machine().gfx[1],
+	m_gfxdecode->gfx(1)->transpen(bitmap,/* Y is horizontal position */
+		cliprect,
 		m_clown_z,
 		0,
 		0,0,
@@ -197,14 +199,14 @@ void circus_state::crash_draw_car( bitmap_ind16 &bitmap, const rectangle &clipre
 
 UINT32 circus_state::screen_update_crash(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	crash_draw_car(bitmap, cliprect);
 	return 0;
 }
 
 UINT32 circus_state::screen_update_ripcord(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
-	m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+	m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 	draw_sprite_collision(bitmap, cliprect);
 	return 0;
 }

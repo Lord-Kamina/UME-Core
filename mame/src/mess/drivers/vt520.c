@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Miodrag Milanovic, Jonathan Gevaryahu
 /***************************************************************************
 
         DEC VT520
@@ -31,7 +33,7 @@ static ADDRESS_MAP_START(vt520_mem, AS_PROGRAM, 8, vt520_state)
 ADDRESS_MAP_END
 
 /*
-    On the boardthere is TC160G41AF (1222) custom chip
+    On the board there is TC160G41AF (1222) custom chip
     doing probably all video/uart logic
     there is 43.430MHz xtal near by
 */
@@ -84,8 +86,9 @@ static MACHINE_CONFIG_START( vt520, vt520_state )
 	MCFG_SCREEN_SIZE(802, 480)
 	MCFG_SCREEN_VISIBLE_AREA(0, 802-1, 0, 480-1)
 	MCFG_SCREEN_UPDATE_DRIVER(vt520_state, screen_update_vt520)
-	MCFG_PALETTE_LENGTH(2)
-	MCFG_PALETTE_INIT(black_and_white)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_PALETTE_ADD_BLACK_AND_WHITE("palette")
 
 	// On the board there are two M5M44256BJ-7 chips
 	// Which are DRAM 256K x 4bit

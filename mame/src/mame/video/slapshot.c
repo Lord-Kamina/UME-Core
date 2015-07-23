@@ -1,24 +1,19 @@
+// license:BSD-3-Clause
+// copyright-holders:David Graves
 #include "emu.h"
-#include "video/taitoic.h"
 #include "includes/slapshot.h"
 
 /**********************************************************/
 
 void slapshot_state::video_start()
 {
-	int i;
-
 	m_spriteram_delayed = auto_alloc_array(machine(), UINT16, m_spriteram.bytes() / 2);
 	m_spriteram_buffered = auto_alloc_array(machine(), UINT16, m_spriteram.bytes() / 2);
 	m_spritelist = auto_alloc_array(machine(), struct slapshot_tempsprite, 0x400);
 
-	for (i = 0; i < 8; i ++)
-		m_spritebank[i] = 0x400 * i;
-
 	m_sprites_disabled = 1;
 	m_sprites_active_area = 0;
 
-	save_item(NAME(m_spritebank));
 	save_item(NAME(m_sprites_disabled));
 	save_item(NAME(m_sprites_active_area));
 	save_item(NAME(m_sprites_master_scrollx));
@@ -33,7 +28,7 @@ void slapshot_state::video_start()
             SPRITE DRAW ROUTINES
 ************************************************************/
 
-void slapshot_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, int *primasks, int y_offset )
+void slapshot_state::draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int *primasks, int y_offset )
 {
 	/*
 	    Sprite format:
@@ -331,7 +326,7 @@ void slapshot_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 		{
 			sprite_ptr->code = code;
 			sprite_ptr->color = color;
-			if (machine().gfx[0]->granularity() == 64)    /* Final Blow, Slapshot are 6bpp */
+			if (m_gfxdecode->gfx(0)->granularity() == 64)    /* Final Blow, Slapshot are 6bpp */
 				sprite_ptr->color /= 4;
 			sprite_ptr->flipx = flipx;
 			sprite_ptr->flipy = flipy;
@@ -348,7 +343,7 @@ void slapshot_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 			}
 			else
 			{
-				drawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+				m_gfxdecode->gfx(0)->zoom_transpen(bitmap,cliprect,
 						sprite_ptr->code,
 						sprite_ptr->color,
 						sprite_ptr->flipx,sprite_ptr->flipy,
@@ -364,13 +359,13 @@ void slapshot_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 	{
 		sprite_ptr--;
 
-		pdrawgfxzoom_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->prio_zoom_transpen(bitmap,cliprect,
 				sprite_ptr->code,
 				sprite_ptr->color,
 				sprite_ptr->flipx,sprite_ptr->flipy,
 				sprite_ptr->x,sprite_ptr->y,
 				sprite_ptr->zoomx,sprite_ptr->zoomy,
-				machine().priority_bitmap,sprite_ptr->primask,0);
+				screen.priority(),sprite_ptr->primask,0);
 	}
 }
 
@@ -451,7 +446,7 @@ One exception is the "puck" in early attract which is
 a bg layer given priority over some sprites.
 ********************************************************************/
 
-UINT32 slapshot_state::screen_update_slapshot(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+UINT32 slapshot_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	address_space &space = machine().driver_data()->generic_space();
 	UINT8 layer[5];
@@ -493,9 +488,9 @@ UINT32 slapshot_state::screen_update_slapshot(screen_device &screen, bitmap_ind1
 
 	taito_handle_sprite_buffering();
 
-	tc0480scp_tilemap_update(m_tc0480scp);
+	m_tc0480scp->tilemap_update();
 
-	priority = tc0480scp_get_bg_priority(m_tc0480scp);
+	priority = m_tc0480scp->get_bg_priority();
 
 	layer[0] = (priority & 0xf000) >> 12;   /* tells us which bg layer is bottom */
 	layer[1] = (priority & 0x0f00) >>  8;
@@ -503,41 +498,41 @@ UINT32 slapshot_state::screen_update_slapshot(screen_device &screen, bitmap_ind1
 	layer[3] = (priority & 0x000f) >>  0;   /* tells us which is top */
 	layer[4] = 4;   /* text layer always over bg layers */
 
-	tilepri[0] = tc0360pri_r(m_tc0360pri, space, 4) & 0x0f;     /* bg0 */
-	tilepri[1] = tc0360pri_r(m_tc0360pri, space, 4) >> 4;       /* bg1 */
-	tilepri[2] = tc0360pri_r(m_tc0360pri, space, 5) & 0x0f;     /* bg2 */
-	tilepri[3] = tc0360pri_r(m_tc0360pri, space, 5) >> 4;       /* bg3 */
+	tilepri[0] = m_tc0360pri->read(space, 4) & 0x0f;     /* bg0 */
+	tilepri[1] = m_tc0360pri->read(space, 4) >> 4;       /* bg1 */
+	tilepri[2] = m_tc0360pri->read(space, 5) & 0x0f;     /* bg2 */
+	tilepri[3] = m_tc0360pri->read(space, 5) >> 4;       /* bg3 */
 
 /* we actually assume text layer is on top of everything anyway, but FWIW... */
-	tilepri[layer[4]] = tc0360pri_r(m_tc0360pri, space, 7) & 0x0f;    /* fg (text layer) */
+	tilepri[layer[4]] = m_tc0360pri->read(space, 7) & 0x0f;    /* fg (text layer) */
 
-	spritepri[0] = tc0360pri_r(m_tc0360pri, space, 6) & 0x0f;
-	spritepri[1] = tc0360pri_r(m_tc0360pri, space, 6) >> 4;
-	spritepri[2] = tc0360pri_r(m_tc0360pri, space, 7) & 0x0f;
-	spritepri[3] = tc0360pri_r(m_tc0360pri, space, 7) >> 4;
+	spritepri[0] = m_tc0360pri->read(space, 6) & 0x0f;
+	spritepri[1] = m_tc0360pri->read(space, 6) >> 4;
+	spritepri[2] = m_tc0360pri->read(space, 7) & 0x0f;
+	spritepri[3] = m_tc0360pri->read(space, 7) >> 4;
 
-	machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 	bitmap.fill(0, cliprect);
 
 #ifdef MAME_DEBUG
 	if (m_dislayer[layer[0]] == 0)
 #endif
-		tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[0], 0, 1);
+		m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[0], 0, 1);
 
 #ifdef MAME_DEBUG
 	if (m_dislayer[layer[1]] == 0)
 #endif
-		tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[1], 0, 2);
+		m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 2);
 
 #ifdef MAME_DEBUG
 	if (m_dislayer[layer[2]] == 0)
 #endif
-		tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[2], 0, 4);
+		m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 4);
 
 #ifdef MAME_DEBUG
 	if (m_dislayer[layer[3]] == 0)
 #endif
-		tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[3], 0, 8);
+		m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[3], 0, 8);
 
 	{
 		int primasks[4] = {0,0,0,0};
@@ -551,7 +546,7 @@ UINT32 slapshot_state::screen_update_slapshot(screen_device &screen, bitmap_ind1
 			if (spritepri[i] < tilepri[(layer[3])]) primasks[i] |= 0xff00;
 		}
 
-		draw_sprites(bitmap,cliprect,primasks,0);
+		draw_sprites(screen,bitmap,cliprect,primasks,0);
 	}
 
 	/*
@@ -563,6 +558,6 @@ UINT32 slapshot_state::screen_update_slapshot(screen_device &screen, bitmap_ind1
 #ifdef MAME_DEBUG
 	if (m_dislayer[layer[4]] == 0)
 #endif
-	tc0480scp_tilemap_draw(m_tc0480scp, bitmap, cliprect, layer[4], 0, 0);
+	m_tc0480scp->tilemap_draw(screen, bitmap, cliprect, layer[4], 0, 0);
 	return 0;
 }

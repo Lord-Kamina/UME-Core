@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Mathis Rosenhauer
 #include "emu.h"
 #include "cpu/m6809/m6809.h"
 #include "machine/6522via.h"
@@ -28,14 +30,6 @@
 
     TODO: find a better way to attach ca2 read to beezer_line_r
     */
-const via6522_interface b_via_0_interface =
-{
-	/*inputs : A/B         */ DEVCB_DRIVER_MEMBER(beezer_state,b_via_0_pa_r), DEVCB_DRIVER_MEMBER(beezer_state,b_via_0_pb_r),
-	/*inputs : CA/B1,CA/B2 */ DEVCB_NULL, DEVCB_DEVICE_LINE_MEMBER("via6522_1", via6522_device, read_ca2), DEVCB_DRIVER_LINE_MEMBER(beezer_state, b_via_0_ca2_r), DEVCB_DEVICE_LINE_MEMBER("via6522_1", via6522_device, read_ca1),
-	/*outputs: A/B         */ DEVCB_DRIVER_MEMBER(beezer_state,b_via_0_pa_w), DEVCB_DRIVER_MEMBER(beezer_state,b_via_0_pb_w),
-	/*outputs: CA/B1,CA/B2 */ DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_DEVICE_LINE_MEMBER("via6522_1", via6522_device, write_ca1),
-	/*irq                  */ DEVCB_CPU_INPUT_LINE("maincpu", M6809_IRQ_LINE)
-};
 
 /* VIA 1 (U18 @3C on schematics)
     port A:
@@ -60,20 +54,6 @@ const via6522_interface b_via_0_interface =
     TODO: the entirety of port B, much needs tracing
     TODO: ports CB1 and CB2, need tracing; ports CA1 and CA2 could use verify as well
     */
-const via6522_interface b_via_1_interface =
-{
-	/*inputs : A/B         */ DEVCB_DRIVER_MEMBER(beezer_state,b_via_1_pa_r), DEVCB_DRIVER_MEMBER(beezer_state,b_via_1_pb_r),
-	/*inputs : CA/B1,CA/B2 */ DEVCB_DEVICE_LINE_MEMBER("via6522_0", via6522_device, read_cb2), DEVCB_NULL, DEVCB_DEVICE_LINE_MEMBER("via6522_0", via6522_device, read_cb1), DEVCB_NULL,
-	/*outputs: A/B         */ DEVCB_DRIVER_MEMBER(beezer_state,b_via_1_pa_w), DEVCB_DRIVER_MEMBER(beezer_state,b_via_1_pb_w),
-	/*outputs: CA/B1,CA/B2 */ DEVCB_NULL, DEVCB_NULL, DEVCB_DEVICE_LINE_MEMBER("via6522_0", via6522_device, write_cb1), DEVCB_NULL,
-	/*irq                  */ DEVCB_CPU_INPUT_LINE("audiocpu", M6809_IRQ_LINE)
-};
-
-READ_LINE_MEMBER(beezer_state::b_via_0_ca2_r)
-{
-	return 0; // TODO: TDISP on schematic, same as D5 bit of scanline count from 74LS161 counter at 7A; attach properly
-
-}
 
 READ8_MEMBER(beezer_state::b_via_0_pa_r)
 {
@@ -124,7 +104,7 @@ READ8_MEMBER(beezer_state::b_via_1_pa_r)
 
 READ8_MEMBER(beezer_state::b_via_1_pb_r)
 {
-	return 0x1F | (beezer_noise_r(machine().device("custom"), space, 0)?0x40:0);
+	return 0x1F | (m_custom->noise_r(space, 0)?0x40:0);
 }
 
 WRITE8_MEMBER(beezer_state::b_via_1_pa_w)
@@ -134,7 +114,7 @@ WRITE8_MEMBER(beezer_state::b_via_1_pa_w)
 
 WRITE8_MEMBER(beezer_state::b_via_1_pb_w)
 {
-	beezer_timer1_w(machine().device("custom"), space, 0, data&0x80);
+	m_custom->timer1_w(space, 0, data&0x80);
 	//if ((data&0x1f) != 0x01)
 	//  popmessage("via1 pb low write of 0x%02x is not supported! contact mamedev!", data&0x1f);
 }

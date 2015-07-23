@@ -1,8 +1,13 @@
+// license:BSD-3-Clause
+// copyright-holders:Luca Elia, Olivier Galibert
 /***************************************************************************
 
     Galivan - Cosmo Police
 
 ***************************************************************************/
+
+#include "includes/nb1414m4.h"
+#include "video/bufsprite.h"
 
 class galivan_state : public driver_device
 {
@@ -11,12 +16,14 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_videoram(*this, "videoram"),
 		m_spriteram(*this, "spriteram"),
-		m_maincpu(*this, "maincpu") { }
+		m_maincpu(*this, "maincpu"),
+		m_nb1414m4(*this, "nb1414m4"),
+		m_gfxdecode(*this, "gfxdecode"),
+		m_palette(*this, "palette") { }
 
 	/* memory pointers */
 	required_shared_ptr<UINT8> m_videoram;
-//  UINT8 *     m_colorram;
-	required_shared_ptr<UINT8> m_spriteram;
+	required_device<buffered_spriteram8_device> m_spriteram;
 
 	/* video-related */
 	tilemap_t     *m_bg_tilemap;
@@ -24,7 +31,6 @@ public:
 	UINT16       m_scrollx;
 	UINT16       m_scrolly;
 	UINT8       m_galivan_scrollx[2],m_galivan_scrolly[2];
-	UINT8       m_flipscreen;
 	UINT8       m_write_layers;
 	UINT8       m_layers;
 	UINT8       m_ninjemak_dispdisable;
@@ -50,7 +56,7 @@ public:
 	TILE_GET_INFO_MEMBER(get_tx_tile_info);
 	TILE_GET_INFO_MEMBER(ninjemak_get_bg_tile_info);
 	TILE_GET_INFO_MEMBER(ninjemak_get_tx_tile_info);
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(galivan);
 	DECLARE_MACHINE_START(galivan);
 	DECLARE_MACHINE_RESET(galivan);
 	DECLARE_VIDEO_START(galivan);
@@ -61,4 +67,7 @@ public:
 	UINT32 screen_update_ninjemak(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect );
 	required_device<cpu_device> m_maincpu;
+	optional_device<nb1414m4_device> m_nb1414m4;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<palette_device> m_palette;
 };

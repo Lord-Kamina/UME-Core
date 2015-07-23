@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Juergen Buchmueller
 /*************************************************************/
 /*                                                           */
 /* Lazer Command video handler                               */
@@ -67,7 +69,7 @@ UINT32 lazercmd_state::screen_update_lazercmd(screen_device &screen, bitmap_ind1
 		sx *= HORZ_CHR;
 		sy *= VERT_CHR;
 
-		drawgfx_opaque(bitmap, cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->opaque(bitmap,cliprect,
 				m_videoram[i], video_inverted ? 1 : 0,
 				0,0,
 				sx,sy);

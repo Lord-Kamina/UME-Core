@@ -1,3 +1,5 @@
+// license:GPL-2.0+
+// copyright-holders:Juergen Buchmueller, David Haywood
 #ifdef MAME_DEBUG
 #define LOGLEVEL  5
 #else
@@ -6,6 +8,7 @@
 #define LOG(n,x)  do { if (LOGLEVEL >= n) logerror x; } while (0)
 
 #include "machine/decocass_tape.h"
+#include "cpu/mcs48/mcs48.h"
 
 #define T1PROM 1
 #define T1DIRECT 2
@@ -27,7 +30,10 @@ public:
 			m_colorram(*this, "colorram"),
 			m_tileram(*this, "tileram"),
 			m_objectram(*this, "objectram"),
-			m_paletteram(*this, "paletteram")
+			m_paletteram(*this, "paletteram"),
+			m_gfxdecode(*this, "gfxdecode"),
+			m_screen(*this, "screen"),
+			m_palette(*this, "palette")
 	{
 		m_type1_map = 0;
 	}
@@ -35,7 +41,7 @@ public:
 	/* devices */
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
-	required_device<cpu_device> m_mcu;
+	required_device<upi41_cpu_device> m_mcu;
 	required_device<decocass_tape_device> m_cassette;
 
 	/* memory pointers */
@@ -47,12 +53,16 @@ public:
 	required_shared_ptr<UINT8> m_tileram;
 	required_shared_ptr<UINT8> m_objectram;
 	required_shared_ptr<UINT8> m_paletteram;
+	required_device<gfxdecode_device> m_gfxdecode;
+	required_device<screen_device> m_screen;
+	required_device<palette_device> m_palette;
 	size_t    m_bgvideoram_size;
 
 	/* video-related */
 	tilemap_t   *m_fg_tilemap;
 	tilemap_t   *m_bg_tilemap_l;
 	tilemap_t   *m_bg_tilemap_r;
+	UINT8     m_empty_tile[16*16];
 	INT32     m_watchdog_count;
 	INT32     m_watchdog_flip;
 	INT32     m_color_missiles;
@@ -129,7 +139,7 @@ public:
 	virtual void machine_start();
 	virtual void machine_reset();
 	virtual void video_start();
-	virtual void palette_init();
+	DECLARE_PALETTE_INIT(decocass);
 	DECLARE_MACHINE_RESET(ctsttape);
 	DECLARE_MACHINE_RESET(cprogolfj);
 	DECLARE_MACHINE_RESET(cdsteljn);

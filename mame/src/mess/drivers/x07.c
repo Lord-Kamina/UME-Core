@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Sandro Ronco
 /***************************************************************************
 
     Canon X-07
@@ -25,7 +27,6 @@
     More info: http://www.silicium.org/oldskool/calc/x07/
 
 ****************************************************************************/
-
 
 #include "includes/x07.h"
 
@@ -262,9 +263,20 @@ void x07_state::t6834_cmd (UINT8 cmd)
 
 			for(int x = 0, y = p3; x <= sqrt((double)(p3 * p3) / 2) ; x++)
 			{
-				UINT32 d1 = (x * x + y * y) - p3 * p3;
-				UINT32 d2 = (x * x + (y - 1) * (y - 1)) - p3 * p3;
-				if(abs((double)d1) > abs((double)d2))
+				/*
+				 * The old code produced results most likely not intended:
+				 * UINT32 d1 = (x * x + y * y) - p3 * p3;
+				 * UINT32 d2 = (x * x + (y - 1) * (y - 1)) - p3 * p3;
+				 * if(abs((double)d1) > abs((double)d2))
+				 *
+				 * (double)(-1) = 4294967294.000000
+				 * abs((double)(-1)) = -2147483648;
+				 *
+				 * Therefore changed.
+				 */
+				INT32 d1 = (x * x + y * y) - p3 * p3;
+				INT32 d2 = (x * x + (y - 1) * (y - 1)) - p3 * p3;
+				if (abs(d1) > abs(d2))
 					y--;
 				draw_point(x + p1, y + p2, 0x01);
 				draw_point(x + p1, -y + p2, 0x01);
@@ -1036,41 +1048,32 @@ inline void x07_state::draw_udk()
 
 DEVICE_IMAGE_LOAD_MEMBER( x07_state, x07_card )
 {
-	address_space &space = m_maincpu->space( AS_PROGRAM );
-	UINT16 ram_size = m_ram->size();
+	UINT32 size = m_card->common_get_size("rom");
 
-	if (image.software_entry() == NULL)
-	{
-		UINT8 *rom = machine().memory().region_alloc( "card", image.length(), 1, ENDIANNESS_LITTLE )->base();
-		image.fread(rom, image.length());
-
-		space.install_ram(ram_size, ram_size + 0xfff);
-		space.install_rom(0x6000, 0x7fff, rom);
-	}
-	else
+	// check card type
+	if (image.software_entry() != NULL)
 	{
 		const char *card_type = image.get_feature("card_type");
 
-		if (!strcmp(card_type, "xp140"))
+		if (strcmp(card_type, "xp140"))
 		{
-			// 0x4000 - 0x4fff   4KB RAM
-			// 0x6000 - 0x7fff   8KB ROM
-			space.install_ram(ram_size, ram_size + 0xfff);
-			space.install_rom(0x6000, 0x7fff, image.get_software_region("rom"));
-		}
-		else
-		{
+			image.seterror(IMAGE_ERROR_UNSPECIFIED, "Unsupported card type");
 			return IMAGE_INIT_FAIL;
 		}
 	}
 
+	m_card->rom_alloc(size, GENERIC_ROM8_WIDTH, ENDIANNESS_BIG);
+	m_card->common_load_rom(m_card->get_rom_base(), size, "rom");
+
+	m_card->ram_alloc(0x1000);
+
 	return IMAGE_INIT_PASS;
 }
 
-void x07_state::palette_init()
+PALETTE_INIT_MEMBER(x07_state, x07)
 {
-	palette_set_color(machine(), 0, MAKE_RGB(138, 146, 148));
-	palette_set_color(machine(), 1, MAKE_RGB(92, 83, 88));
+	palette.set_pen_color(0, rgb_t(138, 146, 148));
+	palette.set_pen_color(1, rgb_t(92, 83, 88));
 }
 
 
@@ -1321,37 +1324,10 @@ static INPUT_PORTS_START( x07 )
 INPUT_PORTS_END
 
 
-static NVRAM_HANDLER( x07 )
+void x07_state::nvram_init(nvram_device &nvram, void *data, size_t size)
 {
-	x07_state *state = machine.driver_data<x07_state>();
-
-	if (read_or_write)
-	{
-		file->write(state->m_t6834_ram, sizeof(state->m_t6834_ram));
-		file->write(state->m_ram->pointer(), state->m_ram->size());
-	}
-	else
-	{
-		if (file)
-		{
-			file->read(state->m_t6834_ram, sizeof(state->m_t6834_ram));
-			file->read(state->m_ram->pointer(), state->m_ram->size());
-			state->m_warm_start = 1;
-		}
-		else
-		{
-			memset(state->m_t6834_ram, 0, sizeof(state->m_t6834_ram));
-			memset(state->m_ram->pointer(), 0, state->m_ram->size());
-
-			for(int i = 0; i < 12; i++)
-				strcpy((char*)state->m_t6834_ram + udk_offset[i], udk_ini[i]);
-
-			//copy default chars in the UDC
-			memcpy(state->m_t6834_ram + 0x200, (UINT8*)machine.root_device().memregion("gfx1")->base() + 0x400, 0x100);
-			memcpy(state->m_t6834_ram + 0x300, (UINT8*)machine.root_device().memregion("gfx1")->base() + 0x700, 0x100);
-			state->m_warm_start = 0;
-		}
-	}
+	memcpy(data, memregion("default")->base(), size);
+	m_warm_start = 0;
 }
 
 TIMER_DEVICE_CALLBACK_MEMBER(x07_state::blink_timer)
@@ -1394,11 +1370,15 @@ GFXDECODE_END
 
 void x07_state::machine_start()
 {
+	UINT32 ram_size = m_ram->size();
 	m_rsta_clear = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(x07_state::rsta_clear),this));
 	m_rstb_clear = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(x07_state::rstb_clear),this));
 	m_beep_stop = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(x07_state::beep_stop),this));
 	m_cass_poll = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(x07_state::cassette_poll),this));
 	m_cass_tick = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(x07_state::cassette_tick),this));
+
+	m_nvram1->set_base(&m_t6834_ram, 0x800);
+	m_nvram2->set_base(m_ram->pointer(), ram_size);
 
 	/* Save State */
 	save_item(NAME(m_sleep));
@@ -1441,9 +1421,21 @@ void x07_state::machine_start()
 	save_item(NAME(m_cursor.y));
 	save_item(NAME(m_cursor.on));
 
-	/* install RAM */
+	// install RAM
 	address_space &program = m_maincpu->space(AS_PROGRAM);
-	program.install_ram(0x0000, m_ram->size() - 1, m_ram->pointer());
+	program.install_ram(0x0000, ram_size - 1, m_ram->pointer());
+
+	// card
+	if (m_card->exists())
+	{
+		// 0x4000 - 0x4fff   4KB RAM
+		// 0x6000 - 0x7fff   8KB ROM
+		program.install_read_handler(ram_size, ram_size + 0xfff, read8_delegate(FUNC(generic_slot_device::read_ram),(generic_slot_device*)m_card));
+		program.install_write_handler(ram_size, ram_size + 0xfff, write8_delegate(FUNC(generic_slot_device::write_ram),(generic_slot_device*)m_card));
+		program.install_read_handler(0x6000, 0x7fff, read8_delegate(FUNC(generic_slot_device::read_rom),(generic_slot_device*)m_card));
+
+		m_card->save_ram();
+	}
 }
 
 void x07_state::machine_reset()
@@ -1480,15 +1472,6 @@ void x07_state::machine_reset()
 	m_maincpu->set_state_int(Z80_PC, 0xc3c3);
 }
 
-static const cassette_interface x07_cassette_interface =
-{
-	x07_cassette_formats,
-	NULL,
-	(cassette_state)(CASSETTE_PLAY | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED),
-	"x07_cass",
-	NULL
-};
-
 static MACHINE_CONFIG_START( x07, x07_state )
 
 	/* basic machine hardware */
@@ -1503,9 +1486,12 @@ static MACHINE_CONFIG_START( x07, x07_state )
 	MCFG_SCREEN_UPDATE_DRIVER(x07_state, screen_update)
 	MCFG_SCREEN_SIZE(120, 32)
 	MCFG_SCREEN_VISIBLE_AREA(0, 120-1, 0, 32-1)
-	MCFG_PALETTE_LENGTH(2)
+	MCFG_SCREEN_PALETTE("palette")
+
+	MCFG_PALETTE_ADD("palette", 2)
+	MCFG_PALETTE_INIT_OWNER(x07_state, x07)
 	MCFG_DEFAULT_LAYOUT(layout_lcd)
-	MCFG_GFXDECODE(x07)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", x07)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO( "mono" )
@@ -1515,11 +1501,12 @@ static MACHINE_CONFIG_START( x07, x07_state )
 	MCFG_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
 
 	/* printer */
-	MCFG_PRINTER_ADD("printer")
+	MCFG_DEVICE_ADD("printer", PRINTER, 0)
 
 	MCFG_TIMER_DRIVER_ADD_PERIODIC("blink_timer", x07_state, blink_timer, attotime::from_msec(300))
 
-	MCFG_NVRAM_HANDLER( x07 )
+	MCFG_NVRAM_ADD_CUSTOM_DRIVER("nvram1", x07_state, nvram_init)   // t6834 RAM
+	MCFG_NVRAM_ADD_0FILL("nvram2") // RAM banks
 
 	/* internal ram */
 	MCFG_RAM_ADD(RAM_TAG)
@@ -1532,17 +1519,19 @@ static MACHINE_CONFIG_START( x07, x07_state )
 	MCFG_RAM_EXTRA_OPTIONS("8K,12K,20K,24k")
 
 	/* Memory Card */
-	MCFG_CARTSLOT_ADD("card")
-	MCFG_CARTSLOT_EXTENSION_LIST("rom,bin")
-	MCFG_CARTSLOT_NOT_MANDATORY
-	MCFG_CARTSLOT_LOAD(x07_state,x07_card)
-	MCFG_CARTSLOT_INTERFACE("x07_card")
+	MCFG_GENERIC_CARTSLOT_ADD("cardslot", generic_romram_plain_slot, "x07_card")
+	MCFG_GENERIC_EXTENSIONS("rom,bin")
+	MCFG_GENERIC_LOAD(x07_state, x07_card)
 
 	/* cassette */
-	MCFG_CASSETTE_ADD( "cassette", x07_cassette_interface )
+	MCFG_CASSETTE_ADD("cassette")
+	MCFG_CASSETTE_FORMATS(x07_cassette_formats)
+	MCFG_CASSETTE_DEFAULT_STATE(CASSETTE_PLAY | CASSETTE_MOTOR_DISABLED | CASSETTE_SPEAKER_ENABLED)
+	MCFG_CASSETTE_INTERFACE("x07_cass")
 
 	/* Software lists */
 	MCFG_SOFTWARE_LIST_ADD("card_list", "x07_card")
+	MCFG_SOFTWARE_LIST_ADD("cass_list", "x07_cass")
 MACHINE_CONFIG_END
 
 /* ROM definition */
@@ -1555,9 +1544,25 @@ ROM_START( x07 )
 
 	ROM_REGION( 0x0800, "gfx1", 0 )
 	ROM_LOAD( "charset.rom", 0x0000, 0x0800, BAD_DUMP CRC(b1e59a6e) SHA1(b0c06315a2d5c940a8f288fb6a3428d738696e69) )
+
+	ROM_REGION( 0x0800, "default", ROMREGION_ERASE00 )
 ROM_END
+
+DRIVER_INIT_MEMBER(x07_state, x07)
+{
+	UINT8 *RAM = memregion("default")->base();
+	UINT8 *GFX = memregion("gfx1")->base();
+
+	for (int i = 0; i < 12; i++)
+		strcpy((char *)RAM + udk_offset[i], udk_ini[i]);
+
+	//copy default chars in the UDC
+	memcpy(RAM + 0x200, GFX + 0x400, 0x100);
+	memcpy(RAM + 0x300, GFX + 0x700, 0x100);
+}
+
 
 /* Driver */
 
-/*    YEAR  NAME    PARENT  COMPAT   MACHINE    INPUT    INIT    COMPANY   FULLNAME    FLAGS */
-COMP( 1983, x07,    0,      0,       x07,       x07, driver_device,     0,      "Canon",  "X-07",     GAME_SUPPORTS_SAVE)
+/*    YEAR  NAME    PARENT  COMPAT   MACHINE    INPUT    INIT                COMPANY   FULLNAME    FLAGS */
+COMP( 1983, x07,    0,      0,       x07,       x07,     x07_state,   x07,   "Canon",  "X-07",     GAME_SUPPORTS_SAVE)

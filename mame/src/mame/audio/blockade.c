@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Frank Palazzolo
 
 #include "emu.h"
 #include "includes/blockade.h"
@@ -38,32 +40,26 @@ DISCRETE_SOUND_END
 
 WRITE8_MEMBER(blockade_state::blockade_sound_freq_w)
 {
-	discrete_sound_w(m_discrete,space,BLOCKADE_NOTE_DATA, data);
+	m_discrete->write(space,BLOCKADE_NOTE_DATA, data);
 	return;
 }
 
 WRITE8_MEMBER(blockade_state::blockade_env_on_w)
 {
-	if (BLOCKADE_LOG) mame_printf_debug("Boom Start\n");
+	if (BLOCKADE_LOG) osd_printf_debug("Boom Start\n");
 	m_samples->start(0,0);
 	return;
 }
 
 WRITE8_MEMBER(blockade_state::blockade_env_off_w)
 {
-	if (BLOCKADE_LOG) mame_printf_debug("Boom End\n");
+	if (BLOCKADE_LOG) osd_printf_debug("Boom End\n");
 	return;
 }
 
-static const char *const blockade_sample_names[] =
+const char *const blockade_sample_names[] =
 {
 	"*blockade",
 	"boom",
 	0
-};
-
-const samples_interface blockade_samples_interface =
-{
-	1,  /* 1 channel */
-	blockade_sample_names
 };

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Ryan Holtz
 /*
     Nintendo 64
 
@@ -11,8 +13,10 @@
 #include "cpu/rsp/rsp.h"
 #include "cpu/mips/mips3.h"
 #include "sound/dmadac.h"
-#include "imagedev/cartslot.h"
 #include "includes/n64.h"
+#include "bus/generic/slot.h"
+#include "bus/generic/carts.h"
+#include "imagedev/snapquik.h"
 
 class n64_mess_state : public n64_state
 {
@@ -26,6 +30,8 @@ public:
 	INTERRUPT_GEN_MEMBER(n64_reset_poll);
 	DECLARE_DEVICE_IMAGE_LOAD_MEMBER(n64_cart);
 	void mempak_format(UINT8* pak);
+	int quickload(device_image_interface &image, const char *file_type, int quickload_size);
+	DECLARE_QUICKLOAD_LOAD_MEMBER( n64dd );
 };
 
 READ32_MEMBER(n64_mess_state::dd_null_r)
@@ -38,8 +44,8 @@ static ADDRESS_MAP_START( n64_map, AS_PROGRAM, 32, n64_mess_state )
 	AM_RANGE(0x03f00000, 0x03f00027) AM_DEVREADWRITE("rcp", n64_periphs, rdram_reg_r, rdram_reg_w)
 	AM_RANGE(0x04000000, 0x04000fff) AM_RAM AM_SHARE("rsp_dmem")                    // RSP DMEM
 	AM_RANGE(0x04001000, 0x04001fff) AM_RAM AM_SHARE("rsp_imem")                    // RSP IMEM
-	AM_RANGE(0x04040000, 0x040fffff) AM_DEVREADWRITE_LEGACY("rsp", n64_sp_reg_r, n64_sp_reg_w)  // RSP
-	AM_RANGE(0x04100000, 0x041fffff) AM_DEVREADWRITE_LEGACY("rsp", n64_dp_reg_r, n64_dp_reg_w)  // RDP
+	AM_RANGE(0x04040000, 0x040fffff) AM_DEVREADWRITE("rcp", n64_periphs, sp_reg_r, sp_reg_w)  // RSP
+	AM_RANGE(0x04100000, 0x041fffff) AM_DEVREADWRITE("rcp", n64_periphs, dp_reg_r, dp_reg_w)  // RDP
 	AM_RANGE(0x04300000, 0x043fffff) AM_DEVREADWRITE("rcp", n64_periphs, mi_reg_r, mi_reg_w)    // MIPS Interface
 	AM_RANGE(0x04400000, 0x044fffff) AM_DEVREADWRITE("rcp", n64_periphs, vi_reg_r, vi_reg_w)    // Video Interface
 	AM_RANGE(0x04500000, 0x045fffff) AM_DEVREADWRITE("rcp", n64_periphs, ai_reg_r, ai_reg_w)    // Audio Interface
@@ -58,8 +64,8 @@ static ADDRESS_MAP_START( n64dd_map, AS_PROGRAM, 32, n64_mess_state )
 	AM_RANGE(0x03f00000, 0x03f00027) AM_DEVREADWRITE("rcp", n64_periphs, rdram_reg_r, rdram_reg_w)
 	AM_RANGE(0x04000000, 0x04000fff) AM_RAM AM_SHARE("rsp_dmem")                    // RSP DMEM
 	AM_RANGE(0x04001000, 0x04001fff) AM_RAM AM_SHARE("rsp_imem")                    // RSP IMEM
-	AM_RANGE(0x04040000, 0x040fffff) AM_DEVREADWRITE_LEGACY("rsp", n64_sp_reg_r, n64_sp_reg_w)  // RSP
-	AM_RANGE(0x04100000, 0x041fffff) AM_DEVREADWRITE_LEGACY("rsp", n64_dp_reg_r, n64_dp_reg_w)  // RDP
+	AM_RANGE(0x04040000, 0x040fffff) AM_DEVREADWRITE("rcp", n64_periphs, sp_reg_r, sp_reg_w)  // RSP
+	AM_RANGE(0x04100000, 0x041fffff) AM_DEVREADWRITE("rcp", n64_periphs, dp_reg_r, dp_reg_w)  // RDP
 	AM_RANGE(0x04300000, 0x043fffff) AM_DEVREADWRITE("rcp", n64_periphs, mi_reg_r, mi_reg_w)    // MIPS Interface
 	AM_RANGE(0x04400000, 0x044fffff) AM_DEVREADWRITE("rcp", n64_periphs, vi_reg_r, vi_reg_w)    // Video Interface
 	AM_RANGE(0x04500000, 0x045fffff) AM_DEVREADWRITE("rcp", n64_periphs, ai_reg_r, ai_reg_w)    // Audio Interface
@@ -82,9 +88,28 @@ static ADDRESS_MAP_START( rsp_map, AS_PROGRAM, 32, n64_mess_state )
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START( n64 )
+	PORT_START("input")
+	PORT_CONFNAME(0x03, 0x01, "Controller Port 0 Device")
+	PORT_CONFSETTING(0x00, "None")
+	PORT_CONFSETTING(0x01, "Joypad")
+	PORT_CONFSETTING(0x02, "Mouse")
+	PORT_CONFNAME(0x0C, 0x00, "Controller Port 1 Device")
+	PORT_CONFSETTING(0x00, "None")
+	PORT_CONFSETTING(0x04, "Joypad")
+	PORT_CONFSETTING(0x08, "Mouse")
+	PORT_CONFNAME(0x30, 0x00, "Controller Port 2 Device")
+	PORT_CONFSETTING(0x00, "None")
+	PORT_CONFSETTING(0x10, "Joypad")
+	PORT_CONFSETTING(0x20, "Mouse")
+	PORT_CONFNAME(0xC0, 0x00, "Controller Port 3 Device")
+	PORT_CONFSETTING(0x00, "None")
+	PORT_CONFSETTING(0x40, "Joypad")
+	PORT_CONFSETTING(0x80, "Mouse")
+
+	//Player 1
 	PORT_START("P1")
-	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON2 )        PORT_PLAYER(1) PORT_NAME("P1 Button A")
-	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON1 )        PORT_PLAYER(1) PORT_NAME("P1 Button B")
+	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON2 )        PORT_PLAYER(1) PORT_NAME("P1 Button A / Left Click")
+	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON1 )        PORT_PLAYER(1) PORT_NAME("P1 Button B / Right Click")
 	PORT_BIT( 0x2000, IP_ACTIVE_HIGH, IPT_BUTTON3 )        PORT_PLAYER(1) PORT_NAME("P1 Button Z")
 	PORT_BIT( 0x1000, IP_ACTIVE_HIGH, IPT_START )          PORT_PLAYER(1) PORT_NAME("P1 Start")
 	PORT_BIT( 0x0800, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP )    PORT_PLAYER(1) PORT_NAME("P1 Joypad \xE2\x86\x91") /* Up */
@@ -105,9 +130,16 @@ static INPUT_PORTS_START( n64 )
 	PORT_START("P1_ANALOG_Y")
 	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(1) PORT_REVERSE
 
+	PORT_START("P1_MOUSE_X")
+	PORT_BIT( 0xffff, 0x0000, IPT_MOUSE_X ) PORT_MINMAX(0x0000,0xffff) PORT_SENSITIVITY(100) PORT_KEYDELTA(0) PORT_PLAYER(1)
+
+	PORT_START("P1_MOUSE_Y")
+	PORT_BIT( 0xffff, 0x0000, IPT_MOUSE_Y ) PORT_MINMAX(0x0000,0xffff) PORT_SENSITIVITY(100) PORT_KEYDELTA(0) PORT_PLAYER(1) PORT_REVERSE
+
+	//Player 2
 	PORT_START("P2")
-	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON2 )        PORT_PLAYER(2) PORT_NAME("P2 Button A")
-	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON1 )        PORT_PLAYER(2) PORT_NAME("P2 Button B")
+	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON2 )        PORT_PLAYER(2) PORT_NAME("P2 Button A / Left Click")
+	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON1 )        PORT_PLAYER(2) PORT_NAME("P2 Button B / Right Click")
 	PORT_BIT( 0x2000, IP_ACTIVE_HIGH, IPT_BUTTON3 )        PORT_PLAYER(2) PORT_NAME("P2 Button Z")
 	PORT_BIT( 0x1000, IP_ACTIVE_HIGH, IPT_START )          PORT_PLAYER(2) PORT_NAME("P2 Start")
 	PORT_BIT( 0x0800, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP )    PORT_PLAYER(2) PORT_NAME("P2 Joypad \xE2\x86\x91") /* Up */
@@ -128,12 +160,79 @@ static INPUT_PORTS_START( n64 )
 	PORT_START("P2_ANALOG_Y")
 	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(2) PORT_REVERSE
 
+	PORT_START("P2_MOUSE_X")
+	PORT_BIT( 0xffff, 0x0000, IPT_MOUSE_X ) PORT_MINMAX(0x0000,0xffff) PORT_SENSITIVITY(100) PORT_KEYDELTA(0) PORT_PLAYER(2)
+
+	PORT_START("P2_MOUSE_Y")
+	PORT_BIT( 0xffff, 0x0000, IPT_MOUSE_Y ) PORT_MINMAX(0x0000,0xffff) PORT_SENSITIVITY(100) PORT_KEYDELTA(0) PORT_PLAYER(2) PORT_REVERSE
+
+	//Player 3
+	PORT_START("P3")
+	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON2 )        PORT_PLAYER(3) PORT_NAME("P3 Button A / Left Click")
+	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON1 )        PORT_PLAYER(3) PORT_NAME("P3 Button B / Right Click")
+	PORT_BIT( 0x2000, IP_ACTIVE_HIGH, IPT_BUTTON3 )        PORT_PLAYER(3) PORT_NAME("P3 Button Z")
+	PORT_BIT( 0x1000, IP_ACTIVE_HIGH, IPT_START )          PORT_PLAYER(3) PORT_NAME("P3 Start")
+	PORT_BIT( 0x0800, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP )    PORT_PLAYER(3) PORT_NAME("P3 Joypad \xE2\x86\x91") /* Up */
+	PORT_BIT( 0x0400, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN )  PORT_PLAYER(3) PORT_NAME("P3 Joypad \xE2\x86\x93") /* Down */
+	PORT_BIT( 0x0200, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT )  PORT_PLAYER(3) PORT_NAME("P3 Joypad \xE2\x86\x90") /* Left */
+	PORT_BIT( 0x0100, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(3) PORT_NAME("P3 Joypad \xE2\x86\x92") /* Right */
+	PORT_BIT( 0x00c0, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x0020, IP_ACTIVE_HIGH, IPT_BUTTON4 )        PORT_PLAYER(3) PORT_NAME("P3 Button L")
+	PORT_BIT( 0x0010, IP_ACTIVE_HIGH, IPT_BUTTON5 )        PORT_PLAYER(3) PORT_NAME("P3 Button R")
+	PORT_BIT( 0x0008, IP_ACTIVE_HIGH, IPT_BUTTON6 )        PORT_PLAYER(3) PORT_NAME("P3 Button C \xE2\x86\x91") /* Up */
+	PORT_BIT( 0x0004, IP_ACTIVE_HIGH, IPT_BUTTON7 )        PORT_PLAYER(3) PORT_NAME("P3 Button C \xE2\x86\x93") /* Down */
+	PORT_BIT( 0x0002, IP_ACTIVE_HIGH, IPT_BUTTON8 )        PORT_PLAYER(3) PORT_NAME("P3 Button C \xE2\x86\x90") /* Left */
+	PORT_BIT( 0x0001, IP_ACTIVE_HIGH, IPT_BUTTON9 )        PORT_PLAYER(3) PORT_NAME("P3 Button C \xE2\x86\x92") /* Right */
+
+	PORT_START("P3_ANALOG_X")
+	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_X ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(3)
+
+	PORT_START("P3_ANALOG_Y")
+	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(3) PORT_REVERSE
+
+	PORT_START("P3_MOUSE_X")
+	PORT_BIT( 0xffff, 0x0000, IPT_MOUSE_X ) PORT_MINMAX(0x0000,0xffff) PORT_SENSITIVITY(100) PORT_KEYDELTA(0) PORT_PLAYER(3)
+
+	PORT_START("P3_MOUSE_Y")
+	PORT_BIT( 0xffff, 0x0000, IPT_MOUSE_Y ) PORT_MINMAX(0x0000,0xffff) PORT_SENSITIVITY(100) PORT_KEYDELTA(0) PORT_PLAYER(3) PORT_REVERSE
+
+	//Player 4
+	PORT_START("P4")
+	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_BUTTON2 )        PORT_PLAYER(4) PORT_NAME("P4 Button A / Left Click")
+	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON1 )        PORT_PLAYER(4) PORT_NAME("P4 Button B / Right Click")
+	PORT_BIT( 0x2000, IP_ACTIVE_HIGH, IPT_BUTTON3 )        PORT_PLAYER(4) PORT_NAME("P4 Button Z")
+	PORT_BIT( 0x1000, IP_ACTIVE_HIGH, IPT_START )          PORT_PLAYER(4) PORT_NAME("P4 Start")
+	PORT_BIT( 0x0800, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP )    PORT_PLAYER(4) PORT_NAME("P4 Joypad \xE2\x86\x91") /* Up */
+	PORT_BIT( 0x0400, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN )  PORT_PLAYER(4) PORT_NAME("P4 Joypad \xE2\x86\x93") /* Down */
+	PORT_BIT( 0x0200, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT )  PORT_PLAYER(4) PORT_NAME("P4 Joypad \xE2\x86\x90") /* Left */
+	PORT_BIT( 0x0100, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(4) PORT_NAME("P4 Joypad \xE2\x86\x92") /* Right */
+	PORT_BIT( 0x00c0, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x0020, IP_ACTIVE_HIGH, IPT_BUTTON4 )        PORT_PLAYER(4) PORT_NAME("P4 Button L")
+	PORT_BIT( 0x0010, IP_ACTIVE_HIGH, IPT_BUTTON5 )        PORT_PLAYER(4) PORT_NAME("P4 Button R")
+	PORT_BIT( 0x0008, IP_ACTIVE_HIGH, IPT_BUTTON6 )        PORT_PLAYER(4) PORT_NAME("P4 Button C \xE2\x86\x91") /* Up */
+	PORT_BIT( 0x0004, IP_ACTIVE_HIGH, IPT_BUTTON7 )        PORT_PLAYER(4) PORT_NAME("P4 Button C \xE2\x86\x93") /* Down */
+	PORT_BIT( 0x0002, IP_ACTIVE_HIGH, IPT_BUTTON8 )        PORT_PLAYER(4) PORT_NAME("P4 Button C \xE2\x86\x90") /* Left */
+	PORT_BIT( 0x0001, IP_ACTIVE_HIGH, IPT_BUTTON9 )        PORT_PLAYER(4) PORT_NAME("P4 Button C \xE2\x86\x92") /* Right */
+
+	PORT_START("P4_ANALOG_X")
+	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_X ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(4)
+
+	PORT_START("P4_ANALOG_Y")
+	PORT_BIT( 0xff, 0x80, IPT_AD_STICK_Y ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(30) PORT_KEYDELTA(30) PORT_PLAYER(4) PORT_REVERSE
+
+	PORT_START("P4_MOUSE_X")
+	PORT_BIT( 0xffff, 0x0000, IPT_MOUSE_X ) PORT_MINMAX(0x0000,0xffff) PORT_SENSITIVITY(100) PORT_KEYDELTA(0) PORT_PLAYER(4)
+
+	PORT_START("P4_MOUSE_Y")
+	PORT_BIT( 0xffff, 0x0000, IPT_MOUSE_Y ) PORT_MINMAX(0x0000,0xffff) PORT_SENSITIVITY(100) PORT_KEYDELTA(0) PORT_PLAYER(4) PORT_REVERSE
+
 	PORT_START("RESET")
 	PORT_BIT( 0xfffe, IP_ACTIVE_HIGH, IPT_UNUSED )
 	PORT_BIT( 0x0001, IP_ACTIVE_HIGH, IPT_OTHER )        PORT_NAME("Warm Reset") PORT_CODE(KEYCODE_3)
 
 INPUT_PORTS_END
 
+#if 0
 /* ?? */
 static const mips3_config config =
 {
@@ -141,6 +240,7 @@ static const mips3_config config =
 	8192,               /* data cache size */
 	62500000            /* system clock */
 };
+#endif
 
 void n64_mess_state::mempak_format(UINT8* pak)
 {
@@ -181,7 +281,7 @@ DEVICE_IMAGE_LOAD_MEMBER(n64_mess_state,n64_cart)
 
 	if (image.software_entry() == NULL)
 	{
-		length = image.fread( cart, 0x4000000);
+		length = image.fread(cart, 0x4000000);
 	}
 	else
 	{
@@ -249,7 +349,7 @@ DEVICE_IMAGE_LOAD_MEMBER(n64_mess_state,n64_cart)
 MACHINE_START_MEMBER(n64_mess_state,n64dd)
 {
 	machine_start();
-
+	machine().device<n64_periphs>("rcp")->dd_present = true;
 	UINT8 *ipl = memregion("ddipl")->base();
 
 	for (int i = 0; i < 0x400000; i += 4)
@@ -265,6 +365,20 @@ MACHINE_START_MEMBER(n64_mess_state,n64dd)
 	}
 }
 
+QUICKLOAD_LOAD_MEMBER(n64_mess_state,n64dd)
+{
+	return quickload(image, file_type, quickload_size);
+}
+
+int n64_mess_state::quickload(device_image_interface &image, const char *file_type, int quickload_size)
+{
+	image.fseek(0, SEEK_SET);
+	image.fread(memregion("disk")->base(), quickload_size);
+	machine().device<n64_periphs>("rcp")->disk_present = true;
+	return IMAGE_INIT_PASS;
+}
+
+
 INTERRUPT_GEN_MEMBER(n64_mess_state::n64_reset_poll)
 {
 	n64_periphs *periphs = machine().device<n64_periphs>("rcp");
@@ -275,12 +389,17 @@ static MACHINE_CONFIG_START( n64, n64_mess_state )
 
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", VR4300BE, 93750000)
+	MCFG_FORCE_NO_DRC()
 	MCFG_CPU_CONFIG(config)
 	MCFG_CPU_PROGRAM_MAP(n64_map)
 	MCFG_CPU_VBLANK_INT_DRIVER("screen", n64_mess_state, n64_reset_poll)
 
 	MCFG_CPU_ADD("rsp", RSP, 62500000)
-	MCFG_CPU_CONFIG(n64_rsp_config)
+	MCFG_RSP_DP_REG_R_CB(DEVREAD32("rcp",n64_periphs, dp_reg_r))
+	MCFG_RSP_DP_REG_W_CB(DEVWRITE32("rcp",n64_periphs, dp_reg_w))
+	MCFG_RSP_SP_REG_R_CB(DEVREAD32("rcp",n64_periphs, sp_reg_r))
+	MCFG_RSP_SP_REG_W_CB(DEVWRITE32("rcp",n64_periphs, sp_reg_w))
+	MCFG_RSP_SP_SET_STATUS_CB(DEVWRITE32("rcp",n64_periphs, sp_set_status))
 	MCFG_CPU_PROGRAM_MAP(rsp_map)
 
 	//MCFG_QUANTUM_TIME(attotime::from_hz(1000000))
@@ -293,9 +412,9 @@ static MACHINE_CONFIG_START( n64, n64_mess_state )
 	MCFG_SCREEN_SIZE(640, 525)
 	MCFG_SCREEN_VISIBLE_AREA(0, 639, 0, 239)
 	MCFG_SCREEN_UPDATE_DRIVER(n64_state, screen_update_n64)
+	MCFG_SCREEN_VBLANK_DRIVER(n64_state, screen_eof_n64)
 
-	MCFG_PALETTE_LENGTH(0x1000)
-
+	MCFG_PALETTE_ADD("palette", 0x1000)
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
 
@@ -307,14 +426,15 @@ static MACHINE_CONFIG_START( n64, n64_mess_state )
 	MCFG_N64_PERIPHS_ADD("rcp");
 
 	/* cartridge */
-	MCFG_CARTSLOT_ADD("cart")
-	MCFG_CARTSLOT_EXTENSION_LIST("v64,z64,rom,n64,bin")
-	MCFG_CARTSLOT_MANDATORY
-	MCFG_CARTSLOT_INTERFACE("n64_cart")
-	MCFG_CARTSLOT_LOAD(n64_mess_state,n64_cart)
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "n64_cart")
+	MCFG_GENERIC_EXTENSIONS("v64,z64,rom,n64,bin")
+	MCFG_GENERIC_MANDATORY
+	MCFG_GENERIC_LOAD(n64_mess_state, n64_cart)
 
 	/* software lists */
-	MCFG_SOFTWARE_LIST_ADD("cart_list","n64")
+	MCFG_SOFTWARE_LIST_ADD("cart_list", "n64")
+
+	MCFG_FORCE_NO_DRC()
 MACHINE_CONFIG_END
 
 static MACHINE_CONFIG_DERIVED( n64dd, n64 )
@@ -323,8 +443,15 @@ static MACHINE_CONFIG_DERIVED( n64dd, n64 )
 
 	MCFG_MACHINE_START_OVERRIDE(n64_mess_state, n64dd)
 
-	MCFG_CARTSLOT_MODIFY("cart")
-	MCFG_CARTSLOT_NOT_MANDATORY
+	MCFG_DEVICE_REMOVE("cartslot")
+	MCFG_GENERIC_CARTSLOT_ADD("cartslot", generic_plain_slot, "n64_cart")
+	MCFG_GENERIC_EXTENSIONS("v64,z64,rom,n64,bin")
+	MCFG_GENERIC_LOAD(n64_mess_state, n64_cart)
+
+	MCFG_QUICKLOAD_ADD("quickload", n64_mess_state, n64dd, "bin,dsk", 0)
+	MCFG_QUICKLOAD_INTERFACE("n64dd_disk")
+
+	MCFG_SOFTWARE_LIST_ADD("dd_list", "n64dd")
 MACHINE_CONFIG_END
 
 ROM_START( n64 )
@@ -352,6 +479,8 @@ ROM_START( n64dd )
 
 	ROM_REGION32_BE( 0x400000, "ddipl", ROMREGION_ERASEFF)
 	ROM_LOAD( "64ddipl.bin", 0x000000, 0x400000, CRC(7f933ce2) SHA1(bf861922dcb78c316360e3e742f4f70ff63c9bc3) )
+
+	ROM_REGION32_LE( 0x4400000, "disk", ROMREGION_ERASEFF)
 
 	ROM_REGION16_BE( 0x80, "normpoint", 0 )
 	ROM_LOAD( "normpnt.rom", 0x00, 0x80, CRC(e7f2a005) SHA1(c27b4a364a24daeee6e99fd286753fd6216362b4) )

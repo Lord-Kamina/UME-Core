@@ -1,11 +1,18 @@
+// license:BSD-3-Clause
+// copyright-holders:Curt Coder
 /***************************************************************************
 
     Zilog Z80 Parallel Input/Output Controller implementation
 
-    Copyright Nicola Salmoria and the MAME Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
-
 ***************************************************************************/
+
+/*
+
+    TODO:
+
+    - if port A is bidirectional, port B does not issue interrupts in bit mode
+
+*/
 
 #include "emu.h"
 #include "z80pio.h"
@@ -17,30 +24,6 @@
 //**************************************************************************
 
 #define LOG 0
-
-enum
-{
-	MODE_OUTPUT = 0,
-	MODE_INPUT,
-	MODE_BIDIRECTIONAL,
-	MODE_BIT_CONTROL
-};
-
-enum
-{
-	ANY = 0,
-	IOR,
-	MASK
-};
-
-const int ICW_ENABLE_INT    = 0x80;
-const int ICW_AND_OR        = 0x40;
-const int ICW_AND           = 0x40;
-const int ICW_OR            = 0x00;
-const int ICW_HIGH_LOW      = 0x20;
-const int ICW_HIGH          = 0x20;
-const int ICW_LOW           = 0x00;
-const int ICW_MASK_FOLLOWS  = 0x10;
 
 
 
@@ -55,37 +38,17 @@ const device_type Z80PIO = &device_creator<z80pio_device>;
 //  z80pio_device - constructor
 //-------------------------------------------------
 
-z80pio_device::z80pio_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, Z80PIO, "Z8420", tag, owner, clock),
-		device_z80daisy_interface(mconfig, *this)
+z80pio_device::z80pio_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock) :
+	device_t(mconfig, Z80PIO, "Z80 PIO", tag, owner, clock, "z80pio", __FILE__),
+	device_z80daisy_interface(mconfig, *this),
+	m_out_int_cb(*this),
+	m_in_pa_cb(*this),
+	m_out_pa_cb(*this),
+	m_out_ardy_cb(*this),
+	m_in_pb_cb(*this),
+	m_out_pb_cb(*this),
+	m_out_brdy_cb(*this)
 {
-}
-
-
-//-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
-//-------------------------------------------------
-
-void z80pio_device::device_config_complete()
-{
-	// inherit a copy of the static data
-	const z80pio_interface *intf = reinterpret_cast<const z80pio_interface *>(static_config());
-	if (intf != NULL)
-		*static_cast<z80pio_interface *>(this) = *intf;
-
-	// or initialize to defaults if none provided
-	else
-	{
-		memset(&m_out_int_cb, 0, sizeof(m_out_int_cb));
-		memset(&m_in_pa_cb, 0, sizeof(m_in_pa_cb));
-		memset(&m_out_pa_cb, 0, sizeof(m_out_pa_cb));
-		memset(&m_out_ardy_cb, 0, sizeof(m_out_ardy_cb));
-		memset(&m_in_pb_cb, 0, sizeof(m_in_pb_cb));
-		memset(&m_out_pb_cb, 0, sizeof(m_out_pb_cb));
-		memset(&m_out_brdy_cb, 0, sizeof(m_out_brdy_cb));
-	}
 }
 
 
@@ -95,11 +58,17 @@ void z80pio_device::device_config_complete()
 
 void z80pio_device::device_start()
 {
-	m_port[PORT_A].start(this, PORT_A, m_in_pa_cb, m_out_pa_cb, m_out_ardy_cb);
-	m_port[PORT_B].start(this, PORT_B, m_in_pb_cb, m_out_pb_cb, m_out_brdy_cb);
+	m_port[PORT_A].start(this, PORT_A);
+	m_port[PORT_B].start(this, PORT_B);
 
 	// resolve callbacks
-	m_out_int_func.resolve(m_out_int_cb, *this);
+	m_out_int_cb.resolve_safe();
+	m_in_pa_cb.resolve_safe(0);
+	m_out_pa_cb.resolve_safe();
+	m_out_ardy_cb.resolve_safe();
+	m_in_pb_cb.resolve_safe(0);
+	m_out_pb_cb.resolve_safe();
+	m_out_brdy_cb.resolve_safe();
 }
 
 
@@ -162,7 +131,7 @@ int z80pio_device::z80daisy_irq_ack()
 
 		if (port.m_ip)
 		{
-			if (LOG) logerror("Z80PIO '%s' Interrupt Acknowledge\n", tag());
+			if (LOG) logerror("Z80PIO '%s' Port %c Interrupt Acknowledge\n", tag(), 'A' + index);
 
 			// clear interrupt pending flag
 			port.m_ip = false;
@@ -176,7 +145,7 @@ int z80pio_device::z80daisy_irq_ack()
 		}
 	}
 
-	logerror("z80pio_irq_ack: failed to find an interrupt to ack!\n");
+	//logerror("z80pio_irq_ack: failed to find an interrupt to ack!\n");
 
 	return 0;
 }
@@ -195,7 +164,7 @@ void z80pio_device::z80daisy_irq_reti()
 
 		if (port.m_ius)
 		{
-			if (LOG) logerror("Z80PIO '%s' Return from Interrupt\n", tag());
+			if (LOG) logerror("Z80PIO '%s' Port %c Return from Interrupt\n", tag(), 'A' + index);
 
 			// clear interrupt under service flag
 			port.m_ius = false;
@@ -205,7 +174,7 @@ void z80pio_device::z80daisy_irq_reti()
 		}
 	}
 
-	logerror("z80pio_irq_reti: failed to find an interrupt to clear IEO on!\n");
+	//logerror("z80pio_irq_reti: failed to find an interrupt to clear IEO on!\n");
 }
 
 
@@ -278,12 +247,21 @@ UINT8 z80pio_device::control_read()
 void z80pio_device::check_interrupts()
 {
 	int state = CLEAR_LINE;
+	bool ius = (m_port[PORT_A].m_ius || m_port[PORT_B].m_ius);
 
 	for (int index = PORT_A; index < PORT_COUNT; index++)
-		if (m_port[index].interrupt_signalled())
-			state = ASSERT_LINE;
+	{
+		if (LOG) logerror("Z80PIO '%s' Port %c IE %s IP %s IUS %s\n", tag(), 'A' + index, m_port[index].m_ie ? "1":"0", m_port[index].m_ip ? "1":"0", m_port[index].m_ius ? "1":"0");
 
-	m_out_int_func(state);
+		if (!ius && m_port[index].m_ie && m_port[index].m_ip)
+		{
+			state = ASSERT_LINE;
+		}
+	}
+
+	if (LOG) logerror("Z80PIO '%s' INT %u\n", tag(), state);
+
+	m_out_int_cb(state);
 }
 
 
@@ -296,27 +274,24 @@ void z80pio_device::check_interrupts()
 //  pio_port - constructor
 //-------------------------------------------------
 
-z80pio_device::pio_port::pio_port()
-	: m_device(NULL),
-		m_index(0),
-		m_mode(0),
-		m_next_control_word(0),
-		m_input(0),
-		m_output(0),
-		m_ior(0),
-		m_rdy(false),
-		m_stb(false),
-		m_ie(false),
-		m_ip(false),
-		m_ius(false),
-		m_icw(0),
-		m_vector(0),
-		m_mask(0),
-		m_match(false)
+z80pio_device::pio_port::pio_port() :
+	m_device(NULL),
+	m_index(0),
+	m_mode(0),
+	m_next_control_word(0),
+	m_input(0),
+	m_output(0),
+	m_ior(0),
+	m_rdy(false),
+	m_stb(false),
+	m_ie(false),
+	m_ip(false),
+	m_ius(false),
+	m_icw(0),
+	m_vector(0),
+	m_mask(0),
+	m_match(false)
 {
-	memset(&m_in_p_func, 0, sizeof(m_in_p_func));
-	memset(&m_out_p_func, 0, sizeof(m_out_p_func));
-	memset(&m_out_rdy_func, 0, sizeof(m_out_rdy_func));
 }
 
 
@@ -324,15 +299,10 @@ z80pio_device::pio_port::pio_port()
 //  start - set up a port during device startup
 //-------------------------------------------------
 
-void z80pio_device::pio_port::start(z80pio_device *device, int index, const devcb_read8 &infunc, const devcb_write8 &outfunc, const devcb_write_line &rdyfunc)
+void z80pio_device::pio_port::start(z80pio_device *device, int index)
 {
 	m_device = device;
 	m_index = index;
-
-	// resolve callbacks
-	m_in_p_func.resolve(infunc, *m_device);
-	m_out_p_func.resolve(outfunc, *m_device);
-	m_out_rdy_func.resolve(rdyfunc, *m_device);
 
 	// register for state saving
 	m_device->save_item(NAME(m_mode), m_index);
@@ -383,41 +353,6 @@ void z80pio_device::pio_port::reset()
 
 
 //-------------------------------------------------
-//  interrupt_signalled - return true if an
-//  interrupt is signalled
-//-------------------------------------------------
-
-bool z80pio_device::pio_port::interrupt_signalled()
-{
-	if (m_mode == MODE_BIT_CONTROL)
-	{
-		// fetch input data (ignore output lines)
-		UINT8 data = (m_input & m_ior) | (m_output & ~m_ior);
-		UINT8 mask = ~m_mask;
-		bool match = false;
-
-		data &= mask;
-
-		if ((m_icw & 0x60) == 0 && data != mask) match = true;
-		else if ((m_icw & 0x60) == 0x20 && data != 0) match = true;
-		else if ((m_icw & 0x60) == 0x40 && data == 0) match = true;
-		else if ((m_icw & 0x60) == 0x60 && data == mask) match = true;
-
-		if (!m_match && match)
-		{
-			// trigger interrupt
-			m_ip = true;
-			if (LOG) logerror("Z80PIO '%s' Port %c Interrupt Pending\n", m_device->tag(), 'A' + m_index);
-		}
-
-		m_match = match;
-	}
-
-	return (m_ie && m_ip && !m_ius);
-}
-
-
-//-------------------------------------------------
 //  trigger_interrupt - trigger an interrupt from
 //  this port
 //-------------------------------------------------
@@ -425,7 +360,7 @@ bool z80pio_device::pio_port::interrupt_signalled()
 void z80pio_device::pio_port::trigger_interrupt()
 {
 	m_ip = true;
-	if (LOG) logerror("Z80PIO '%s' Port %c Interrupt Pending\n", m_device->tag(), 'A' + m_index);
+	if (LOG) logerror("Z80PIO '%s' Port %c Transfer Mode Interrupt Pending\n", m_device->tag(), 'A' + m_index);
 
 	check_interrupts();
 }
@@ -442,7 +377,10 @@ void z80pio_device::pio_port::set_rdy(bool state)
 	if (LOG) logerror("Z80PIO '%s' Port %c Ready: %u\n", m_device->tag(), 'A' + m_index, state);
 
 	m_rdy = state;
-	m_out_rdy_func(state);
+	if (m_index == PORT_A)
+		m_device->m_out_ardy_cb(state);
+	else
+		m_device->m_out_brdy_cb(state);
 }
 
 
@@ -458,7 +396,10 @@ void z80pio_device::pio_port::set_mode(int mode)
 	{
 	case MODE_OUTPUT:
 		// enable data output
-		m_out_p_func(0, m_output);
+		if (m_index == PORT_A)
+			m_device->m_out_pa_cb((offs_t)0, m_output);
+		else
+			m_device->m_out_pb_cb((offs_t)0, m_output);
 
 		// assert ready line
 		set_rdy(true);
@@ -523,9 +464,9 @@ void z80pio_device::pio_port::strobe(bool state)
 			if (m_stb && !state) // falling edge
 			{
 				if (m_index == PORT_A)
-					m_out_p_func(0, m_output);
+					m_device->m_out_pa_cb((offs_t)0, m_output);
 				else
-					m_device->m_port[PORT_A].m_input = m_device->m_port[PORT_A].m_in_p_func(0);
+					m_device->m_port[PORT_A].m_input = m_device->m_in_pa_cb(0);
 			}
 			else if (!m_stb && state) // rising edge
 			{
@@ -557,7 +498,10 @@ void z80pio_device::pio_port::strobe(bool state)
 			if (!state)
 			{
 				// input port data
-				m_input = m_in_p_func(0);
+				if (m_index == PORT_A)
+					m_input = m_device->m_in_pa_cb(0);
+				else
+					m_input = m_device->m_in_pb_cb(0);
 			}
 			else if (!m_stb && state) // rising edge
 			{
@@ -612,6 +556,28 @@ void z80pio_device::pio_port::write(UINT8 data)
 	{
 		// latch data
 		m_input = data;
+
+		// fetch input data (ignore output lines)
+		UINT8 data = (m_input & m_ior) | (m_output & ~m_ior);
+		UINT8 mask = ~m_mask;
+		bool match = false;
+
+		data &= mask;
+
+		if ((m_icw & 0x60) == 0 && data != mask) match = true;
+		else if ((m_icw & 0x60) == 0x20 && data != 0) match = true;
+		else if ((m_icw & 0x60) == 0x40 && data == 0) match = true;
+		else if ((m_icw & 0x60) == 0x60 && data == mask) match = true;
+
+		if (!m_match && match && !m_ius)
+		{
+			// trigger interrupt
+			m_ip = true;
+			if (LOG) logerror("Z80PIO '%s' Port %c Bit Control Mode Interrupt Pending\n", m_device->tag(), 'A' + m_index);
+		}
+
+		m_match = match;
+
 		check_interrupts();
 	}
 }
@@ -670,6 +636,12 @@ void z80pio_device::pio_port::control_write(UINT8 data)
 
 					// next word is mask control
 					m_next_control_word = MASK;
+				}
+				else
+				{
+					// set interrupt enable
+					m_ie = BIT(m_icw, 7) ? true : false;
+					check_interrupts();
 				}
 				break;
 
@@ -733,7 +705,10 @@ UINT8 z80pio_device::pio_port::data_read()
 		if (!m_stb)
 		{
 			// input port data
-			m_input = m_in_p_func(0);
+			if (m_index == PORT_A)
+				m_input = m_device->m_in_pa_cb(0);
+			else
+				m_input = m_device->m_in_pb_cb(0);
 		}
 
 		data = m_input;
@@ -757,7 +732,10 @@ UINT8 z80pio_device::pio_port::data_read()
 
 	case MODE_BIT_CONTROL:
 		// input port data
-		m_input = m_in_p_func(0);
+		if (m_index == PORT_A)
+			m_input = m_device->m_in_pa_cb(0);
+		else
+			m_input = m_device->m_in_pb_cb(0);
 
 		data = (m_input & m_ior) | (m_output & (m_ior ^ 0xff));
 		break;
@@ -783,7 +761,10 @@ void z80pio_device::pio_port::data_write(UINT8 data)
 		m_output = data;
 
 		// output data to port
-		m_out_p_func(0, data);
+		if (m_index == PORT_A)
+			m_device->m_out_pa_cb((offs_t)0, m_output);
+		else
+			m_device->m_out_pb_cb((offs_t)0, m_output);
 
 		// assert ready line
 		set_rdy(true);
@@ -804,7 +785,10 @@ void z80pio_device::pio_port::data_write(UINT8 data)
 		if (!m_stb)
 		{
 			// output data to port
-			m_out_p_func(0, data);
+			if (m_index == PORT_A)
+				m_device->m_out_pa_cb((offs_t)0, data);
+			else
+				m_device->m_out_pb_cb((offs_t)0, data);
 		}
 
 		// assert ready line
@@ -816,7 +800,10 @@ void z80pio_device::pio_port::data_write(UINT8 data)
 		m_output = data;
 
 		// output data to port
-		m_out_p_func(0, m_ior | (m_output & (m_ior ^ 0xff)));
+		if (m_index == PORT_A)
+			m_device->m_out_pa_cb((offs_t)0, m_ior | (m_output & (m_ior ^ 0xff)));
+		else
+			m_device->m_out_pb_cb((offs_t)0, m_ior | (m_output & (m_ior ^ 0xff)));
 		break;
 	}
 }

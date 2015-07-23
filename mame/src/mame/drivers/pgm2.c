@@ -1,50 +1,65 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, ???
 /* PGM 2 hardware.
 
- Motherboard is bare bones stuff, probably only contains the video processor, no ROMs.
+    Motherboard is bare bones stuff, and does not contain any ROMs.
+    The IGS036 used by the games is an ARM based CPU, like IGS027A used on PGM1 it has internal ROM.
+    Decryption should be correct in most cases, but the ARM mode code at the start of the external
+    ROMs is a bit weird, with many BNV instructions rather than jumps.  Maybe the ARM is customized,
+    the code has been 'NOPPED' out this way (BNV is Branch Never) or it's a different type of ARM?
 
- Makes use of internal ROM ASICS, newer than those found on the best protected PGM games.
- Games actually boot to a warning screen even if you remove all program roms!
+     - Some of the THUMB code looks like THUMB2 code
+      eg
+        f004 BL (HI) 00004000
+        e51f B #fffffa3e
+        0434 LSL R4, R6, 16
+        0000 LSL R0, R0, 0
 
- Encrypted.
-
- Likely ARM based, but until we can obtain decrypted data, we will not know for sure.
+        should be a 32-bit branch instruction with the 2nd dword used as data.
 
 
-PGM2 Motherboard Components:
+    We need to determine where VRAM etc. map in order to attempt tests on the PCBs.
 
- IS61LV25616AL(SRAM)
- IGS037(GFX PROCESSOR)
- YMZ774-S(SOUND)
- R5F21256SN(extra MCU for protection and ICcard communication)
 
-Cartridges
- IGS036 (MAIN CPU) (differs per game, internal code)
- ROMs
- Custom program ROM module (KOV3 only)
- QFP100 chip (Xlinx CPLD)
+    PGM2 Motherboard Components:
 
- Single PCB versions of some of the titles were also available
+     IS61LV25616AL(SRAM)
+     IGS037(GFX PROCESSOR)
+     YMZ774-S(SOUND)
+     R5F21256SN(extra MCU for protection and ICcard communication)
+      - Appears to be referred to by the games as MPU
 
-Only 5 Games were released for this platform, 3 of which are just updates / re-releases of older titles!
-The platform has since been superseded by PGM3 (HD system uses flash cards etc.)
+    Cartridges
+     IGS036 (MAIN CPU) (differs per game, internal code)
+     ROMs
+     Custom program ROM module (KOV3 only)
+      - on some games ROM socket contains Flash ROM + SRAM
 
-Oriental Legend 2
-The King of Fighters '98 - Ultimate Match - Hero  (NOT DUMPED)
-Knights of Valour 2 New Legend
-Dodonpachi Daioujou Tamashii
-Knights of Valour 3
+     QFP100 chip (Xlinx CPLD)
 
-NO internal ROMs are dumped.
+     Single PCB versions of some of the titles were also available
+
+    Only 5 Games were released for this platform, 3 of which are just updates / re-releases of older titles!
+    The platform has since been superseded by PGM3 (HD system uses flash cards etc.)
+
+    Oriental Legend 2
+    The King of Fighters '98 - Ultimate Match - Hero  (NOT DUMPED)
+    Knights of Valour 2 New Legend
+    Dodonpachi Daioujou Tamashii
+    Knights of Valour 3
+
+    These were only released as single board PGM2 based hardware, seen for sale in Japan for around $250-$300
+
+    Jigsaw World Arena
+    Puzzle of Ocha / Ochainu No Pazuru
 
 */
-
-// document these exist, but leave disabled for now, can't be doing with the drama
-// #define OTHER_PGM2_SETS 1
 
 #include "emu.h"
 #include "cpu/arm7/arm7.h"
 #include "cpu/arm7/arm7core.h"
 #include "sound/ymz770.h"
+#include "machine/igs036crypt.h"
 
 class pgm2_state : public driver_device
 {
@@ -64,10 +79,15 @@ public:
 	UINT32 screen_update_pgm2(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void screen_eof_pgm2(screen_device &screen, bool state);
 	required_device<cpu_device> m_maincpu;
+
+	void pgm_create_dummy_internal_arm_region(int addr);
 };
 
 static ADDRESS_MAP_START( pgm2_map, AS_PROGRAM, 32, pgm2_state )
-	AM_RANGE(0x00000000, 0x00003fff) AM_ROM
+	AM_RANGE(0x00000000, 0x00003fff) AM_ROM //AM_REGION("user1", 0x00000) // internal ROM
+	AM_RANGE(0x08000000, 0x087fffff) AM_ROM AM_REGION("user1", 0) // not 100% sure it maps here.
+	AM_RANGE(0xffff0000, 0xffffffff) AM_RAM
+
 ADDRESS_MAP_END
 
 static INPUT_PORTS_START( pgm2 )
@@ -121,6 +141,7 @@ static const gfx_layout tiles32x32x8_layout =
 	256*32
 };
 
+#if 0
 /* sprites aren't tile based, this is variable width 1bpp data, colour data is almost certainly in sprites b */
 /* there don't seem to be any indexes into the colour data, probably provided by the program, or the colour data references the bitmaps (reverse of PGM) */
 static const gfx_layout tiles32x8x1_layout =
@@ -133,29 +154,59 @@ static const gfx_layout tiles32x8x1_layout =
 	{ 0*32,1*32,2*32,3*32,4*32,5*32,6*32,7*32 },
 	8*32
 };
-
+#endif
 
 
 
 static GFXDECODE_START( pgm2 )
 	GFXDECODE_ENTRY( "tiles", 0, tiles8x8_layout, 0, 16 )
 	GFXDECODE_ENTRY( "bgtile", 0, tiles32x32x8_layout, 0, 16 )
+#if 0
 	// not tile based
 	GFXDECODE_ENTRY( "spritesa", 0, tiles32x8x1_layout, 0, 16 )
 	GFXDECODE_ENTRY( "spritesb", 0, tiles32x8x1_layout, 0, 16 )
+#endif
 GFXDECODE_END
+
+
+void pgm2_state::pgm_create_dummy_internal_arm_region(int addr)
+{
+	UINT16 *temp16 = (UINT16 *)memregion("maincpu")->base();
+	int i;
+	for (i=0;i<0x4000/2;i+=2)
+	{
+		temp16[i] = 0xFFFE;
+		temp16[i+1] = 0xEAFF;
+
+	}
+	int base = 0;
+
+	// just do a jump to 0x080003c9  because there is some valid thumb code there with the current hookup..
+	// i'd expect valid non-thumb code at 0x08000000 tho?
+
+	temp16[(base) / 2] = 0x0004; base += 2;
+	temp16[(base) / 2] = 0xe59f; base += 2;
+	temp16[(base) / 2] = 0x0000; base += 2;
+	temp16[(base) / 2] = 0xe590; base += 2;
+	temp16[(base) / 2] = 0xff10; base += 2;
+	temp16[(base) / 2] = 0xe12f; base += 2;
+	temp16[(base) / 2] = 0x0010; base += 2;
+	temp16[(base) / 2] = 0x0000; base += 2;
+
+	temp16[(base) / 2] = addr&0xffff; base += 2;
+	temp16[(base) / 2] = (addr>>16)&0xffff; base += 2;
+}
 
 
 
 static MACHINE_CONFIG_START( pgm2, pgm2_state )
 
 	/* basic machine hardware */
-	MCFG_CPU_ADD("maincpu", ARM7, 20000000) // ?? unknown CPU, has internal ROM.
+	MCFG_CPU_ADD("maincpu", ARM9, 20000000) // ?? ARM baesd CPU, has internal ROM.
 	MCFG_CPU_PROGRAM_MAP(pgm2_map)
 //  MCFG_DEVICE_DISABLE()
 
 
-	MCFG_GFXDECODE(pgm2)
 
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
@@ -165,8 +216,10 @@ static MACHINE_CONFIG_START( pgm2, pgm2_state )
 	MCFG_SCREEN_VISIBLE_AREA(0*8, 56*8-1, 0*8, 28*8-1)
 	MCFG_SCREEN_UPDATE_DRIVER(pgm2_state, screen_update_pgm2)
 	MCFG_SCREEN_VBLANK_DRIVER(pgm2_state, screen_eof_pgm2)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_PALETTE_LENGTH(0x1000)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", pgm2)
+	MCFG_PALETTE_ADD("palette", 0x1000)
 
 
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -207,6 +260,32 @@ ROM_START( orleg2o )
 
 	ROM_REGION( 0x800000, "user1", 0 )
 	ROM_LOAD( "xyj2_v103cn.u7",  0x000000, 0x800000, CRC(21c1fae8) SHA1(36eeb7a5e8dc8ee7c834f3ff1173c28cf6c2f1a3) )
+
+	ROM_REGION( 0x200000, "tiles", ROMREGION_ERASEFF )
+	ROM_LOAD( "ig-a_text.u4",            0x00000000, 0x0200000, CRC(fa444c32) SHA1(31e5e3efa92d52bf9ab97a0ece51e3b77f52ce8a) )
+
+	ROM_REGION( 0x1000000, "bgtile", 0 )
+	ROM_LOAD32_WORD( "ig-a_bgl.u35",     0x00000000, 0x0800000, CRC(083a8315) SHA1(0dba25e132fbb12faa59ced648c27b881dc73478) )
+	ROM_LOAD32_WORD( "ig-a_bgh.u36",     0x00000002, 0x0800000, CRC(e197221d) SHA1(5574b1e3da4b202db725be906dd868edc2fd4634) )
+
+	ROM_REGION( 0x2000000, "spritesa", 0 ) // 1bpp sprite mask data
+	ROM_LOAD32_WORD( "ig-a_bml.u12",     0x00000000, 0x1000000, CRC(113a331c) SHA1(ee6b31bb2b052cc8799573de0d2f0a83f0ab4f6a) )
+	ROM_LOAD32_WORD( "ig-a_bmh.u16",     0x00000002, 0x1000000, CRC(fbf411c8) SHA1(5089b5cc9bbf6496ef1367c6255e63e9ab895117) )
+
+	ROM_REGION( 0x4000000, "spritesb", 0 ) // sprite colour data
+	ROM_LOAD32_WORD( "ig-a_cgl.u18",     0x00000000, 0x2000000, CRC(43501fa6) SHA1(58ccce6d393964b771fec3f5c583e3ede57482a3) )
+	ROM_LOAD32_WORD( "ig-a_cgh.u26",     0x00000002, 0x2000000, CRC(7051d020) SHA1(3d9b24c6fda4c9699bb9f00742e0888059b623e1) )
+
+	ROM_REGION( 0x1000000, "ymz770", ROMREGION_ERASEFF ) /* ymz770 */
+	ROM_LOAD16_WORD_SWAP( "ig-a_sp.u2",              0x00000000, 0x1000000, CRC(8250688c) SHA1(d2488477afc528aeee96826065deba2bce4f0a7d) )
+ROM_END
+
+ROM_START( orleg2oa )
+	ROM_REGION( 0x04000, "maincpu", 0 )
+	ROM_LOAD( "xyj2_igs036.rom",         0x00000000, 0x0004000, NO_DUMP )
+
+	ROM_REGION( 0x800000, "user1", 0 )
+	ROM_LOAD( "orleg2_xyj2_v101cn.u7",  0x000000, 0x800000, CRC(45805b53) SHA1(f2a8399c821b75fadc53e914f6f318707e70787c) )
 
 	ROM_REGION( 0x200000, "tiles", ROMREGION_ERASEFF )
 	ROM_LOAD( "ig-a_text.u4",            0x00000000, 0x0200000, CRC(fa444c32) SHA1(31e5e3efa92d52bf9ab97a0ece51e3b77f52ce8a) )
@@ -279,7 +358,32 @@ ROM_START( kov2nlo )
 	ROM_LOAD16_WORD_SWAP( "ig-a3_sp.u37",            0x00000000, 0x2000000, CRC(45cdf422) SHA1(8005d284bcee73cff37a147fcd1c3e9f039a7203) )
 ROM_END
 
-#ifdef OTHER_PGM2_SETS
+ROM_START( kov2nloa )
+	ROM_REGION( 0x04000, "maincpu", 0 )
+	ROM_LOAD( "gsyx_igs036.rom",         0x00000000, 0x0004000, NO_DUMP )
+
+	ROM_REGION( 0x800000, "user1", 0 )
+	ROM_LOAD( "kov2nl_gsyx_v300tw.u7",  0x000000, 0x800000, CRC(08da7552) SHA1(303b97d7694405474c8133a259303ccb49db48b1) )
+
+	ROM_REGION( 0x200000, "tiles", ROMREGION_ERASEFF )
+	ROM_LOAD( "ig-a3_text.u4",           0x00000000, 0x0200000, CRC(214530ff) SHA1(4231a02054b0345392a077042b95779fd45d6c22) )
+
+	ROM_REGION( 0x1000000, "bgtile", 0 )
+	ROM_LOAD32_WORD( "ig-a3_bgl.u35",    0x00000000, 0x0800000, CRC(2d46b1f6) SHA1(ea8c805eda6292e86a642e9633d8fee7054d10b1) )
+	ROM_LOAD32_WORD( "ig-a3_bgh.u36",    0x00000002, 0x0800000, CRC(df710c36) SHA1(f826c3f496c4f17b46d18af1d8e02cac7b7027ac) )
+
+	ROM_REGION( 0x2000000, "spritesa", 0 ) // 1bpp sprite mask data
+	ROM_LOAD32_WORD( "ig-a3_bml.u12",    0x00000000, 0x1000000, CRC(0bf63836) SHA1(b8e4f1951f8074b475b795bd7840c5a375b6f5ef) )
+	ROM_LOAD32_WORD( "ig-a3_bmh.u16",    0x00000002, 0x1000000, CRC(4a378542) SHA1(5d06a8a8796285a786ebb690c34610f923ef5570) )
+
+	ROM_REGION( 0x4000000, "spritesb", 0 ) // sprite colour data
+	ROM_LOAD32_WORD( "ig-a3_cgl.u18",    0x00000000, 0x2000000, CRC(8d923e1f) SHA1(14371cf385dd8857017d3111cd4710f4291b1ae2) )
+	ROM_LOAD32_WORD( "ig-a3_cgh.u26",    0x00000002, 0x2000000, CRC(5b6fbf3f) SHA1(d1f52e230b91ee6cde939d7c2b74da7fd6527e73) )
+
+	ROM_REGION( 0x2000000, "ymz770", ROMREGION_ERASEFF ) /* ymz770 */
+	ROM_LOAD16_WORD_SWAP( "ig-a3_sp.u37",            0x00000000, 0x2000000, CRC(45cdf422) SHA1(8005d284bcee73cff37a147fcd1c3e9f039a7203) )
+ROM_END
+
 ROM_START( ddpdojh )
 	ROM_REGION( 0x04000, "maincpu", 0 )
 	ROM_LOAD( "ddpdoj_igs036.rom",       0x00000000, 0x0004000, NO_DUMP )
@@ -304,8 +408,8 @@ ROM_START( ddpdojh )
 
 	ROM_REGION( 0x1000000, "ymz770", ROMREGION_ERASEFF ) /* ymz770 */
 	ROM_LOAD16_WORD_SWAP( "ddpdoj_wave0.u12",        0x00000000, 0x1000000, CRC(2b71a324) SHA1(f69076cc561f40ca564d804bc7bd455066f8d77c) )
-
 ROM_END
+
 
 ROM_START( kov3 )
 	ROM_REGION( 0x04000, "maincpu", 0 )
@@ -337,7 +441,7 @@ ROM_START( kov3 )
 	ROM_REGION( 0x4000000, "ymz770", ROMREGION_ERASEFF ) /* ymz770 */
 	ROM_LOAD16_WORD_SWAP( "kov3_wave0.u13",              0x00000000, 0x4000000, CRC(aa639152) SHA1(2314c6bd05524525a31a2a4668a36a938b924ba4) )
 ROM_END
-#endif
+
 
 static void iga_u16_decode(UINT16 *rom, int len, int ixor)
 {
@@ -395,6 +499,11 @@ DRIVER_INIT_MEMBER(pgm2_state,orleg2)
 
 	iga_u12_decode(src, 0x2000000, 0x4761);
 	iga_u16_decode(src, 0x2000000, 0xc79f);
+
+	igs036_decryptor decrypter(orleg2_key);
+	decrypter.decrypter_rom(memregion("user1"));
+
+	pgm_create_dummy_internal_arm_region(0x80003c9);
 }
 
 DRIVER_INIT_MEMBER(pgm2_state,kov2nl)
@@ -403,6 +512,11 @@ DRIVER_INIT_MEMBER(pgm2_state,kov2nl)
 
 	iga_u12_decode(src, 0x2000000, 0xa193);
 	iga_u16_decode(src, 0x2000000, 0xb780);
+
+	igs036_decryptor decrypter(kov2_key);
+	decrypter.decrypter_rom(memregion("user1"));
+
+	pgm_create_dummy_internal_arm_region(0x8000069);
 }
 
 DRIVER_INIT_MEMBER(pgm2_state,ddpdojh)
@@ -412,7 +526,10 @@ DRIVER_INIT_MEMBER(pgm2_state,ddpdojh)
 	iga_u12_decode(src, 0x800000, 0x1e96);
 	iga_u16_decode(src, 0x800000, 0x869c);
 
+	igs036_decryptor decrypter(ddpdoj_key);
+	decrypter.decrypter_rom(memregion("user1"));
 
+	pgm_create_dummy_internal_arm_region(0x80003c9);
 }
 
 DRIVER_INIT_MEMBER(pgm2_state,kov3)
@@ -421,18 +538,31 @@ DRIVER_INIT_MEMBER(pgm2_state,kov3)
 
 	iga_u12_decode(src, 0x2000000, 0x956d);
 	iga_u16_decode(src, 0x2000000, 0x3d17);
+
+	igs036_decryptor decrypter(kov3_key);
+	decrypter.decrypter_rom(memregion("user1"));
+
+	pgm_create_dummy_internal_arm_region(0x80003c9);
 }
 
 
 /* PGM2 */
 GAME( 2007, orleg2,       0,         pgm2,    pgm2, pgm2_state,     orleg2,       ROT0, "IGS", "Oriental Legend 2 (V104, China)", GAME_IS_SKELETON )
 GAME( 2007, orleg2o,      orleg2,    pgm2,    pgm2, pgm2_state,     orleg2,       ROT0, "IGS", "Oriental Legend 2 (V103, China)", GAME_IS_SKELETON )
+GAME( 2007, orleg2oa,     orleg2,    pgm2,    pgm2, pgm2_state,     orleg2,       ROT0, "IGS", "Oriental Legend 2 (V101, China)", GAME_IS_SKELETON )
+// should be earlier verisons too.
 
 GAME( 2008, kov2nl,       0,         pgm2,    pgm2, pgm2_state,     kov2nl,       ROT0, "IGS", "Knights of Valour 2 New Legend (V302, China)", GAME_IS_SKELETON )
 GAME( 2008, kov2nlo,      kov2nl,    pgm2,    pgm2, pgm2_state,     kov2nl,       ROT0, "IGS", "Knights of Valour 2 New Legend (V301, China)", GAME_IS_SKELETON )
+GAME( 2008, kov2nloa,     kov2nl,    pgm2,    pgm2, pgm2_state,     kov2nl,       ROT0, "IGS", "Knights of Valour 2 New Legend (V300, Taiwan)", GAME_IS_SKELETON )
+// should be earlier verisons too.
 
-#ifdef OTHER_PGM2_SETS
-GAME( 2009, ddpdojh,      0,    pgm2,    pgm2, pgm2_state,     ddpdojh,    ROT270, "IGS", "Dodonpachi Daioujou Tamashii (V201, China)", GAME_IS_SKELETON )
+GAME( 2010, ddpdojh,      0,    pgm2,    pgm2, pgm2_state,     ddpdojh,    ROT270, "IGS", "Dodonpachi Daioujou Tamashii (V201, China)", GAME_IS_SKELETON )
+// should be earlier verisons too.
 
-GAME( 2009, kov3,         0,    pgm2,    pgm2, pgm2_state,     kov3,       ROT0, "IGS", "Knights of Valour 3 (V102, China)", GAME_IS_SKELETON )
-#endif
+GAME( 2011, kov3,         0,    pgm2,    pgm2, pgm2_state,     kov3,       ROT0, "IGS", "Knights of Valour 3 (V102, China)", GAME_IS_SKELETON )
+// should be earlier verisons too.
+
+// The King of Fighters '98 - Ultimate Match - Hero
+// Jigsaw World Arena
+//Puzzle of Ocha / Ochainu No Pazuru

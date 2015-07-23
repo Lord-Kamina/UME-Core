@@ -1,10 +1,11 @@
+// license:BSD-3-Clause
+// copyright-holders:Fabrice Frances, Nicola Salmoria, Aaron Giles
 /***************************************************************************
 
     Gottlieb hardware
 
 ***************************************************************************/
 
-#include "emu.h"
 #include "includes/gottlieb.h"
 #include "video/resnet.h"
 
@@ -32,7 +33,7 @@ WRITE8_MEMBER(gottlieb_state::gottlieb_paletteram_w)
 
 	/* alpha is set to 0 if laserdisc video is enabled */
 	a = (m_transparent0 && offset / 2 == 0) ? 0 : 255;
-	palette_set_color(machine(), offset / 2, MAKE_ARGB(a, r, g, b));
+	m_palette->set_pen_color(offset / 2, rgb_t(a, r, g, b));
 }
 
 
@@ -47,22 +48,14 @@ WRITE8_MEMBER(gottlieb_state::gottlieb_video_control_w)
 {
 	/* bit 0 controls foreground/background priority */
 	if (m_background_priority != (data & 0x01))
-		machine().primary_screen->update_partial(machine().primary_screen->vpos());
+		m_screen->update_partial(m_screen->vpos());
 	m_background_priority = data & 0x01;
 
-	/* bit 1 controls horizonal flip screen */
-	if (flip_screen_x() != (data & 0x02))
-	{
-		flip_screen_x_set(data & 0x02);
-		machine().tilemap().mark_all_dirty();
-	}
+	/* bit 1 controls horizontal flip screen */
+	flip_screen_x_set(data & 0x02);
 
-	/* bit 2 controls horizonal flip screen */
-	if (flip_screen_y() != (data & 0x04))
-	{
-		flip_screen_y_set(data & 0x04);
-		machine().tilemap().mark_all_dirty();
-	}
+	/* bit 2 controls vertical flip screen */
+	flip_screen_y_set(data & 0x04);
 }
 
 
@@ -105,7 +98,7 @@ WRITE8_MEMBER(gottlieb_state::gottlieb_charram_w)
 	if (m_charram[offset] != data)
 	{
 		m_charram[offset] = data;
-		machine().gfx[0]->mark_dirty(offset / 32);
+		m_gfxdecode->gfx(0)->mark_dirty(offset / 32);
 	}
 }
 
@@ -152,11 +145,10 @@ void gottlieb_state::video_start()
 	m_transparent0 = FALSE;
 
 	/* configure the background tilemap */
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(gottlieb_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(gottlieb_state::get_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 	m_bg_tilemap->set_transparent_pen(0);
-	m_bg_tilemap->set_scrolldx(0, 318 - 256);
 
-	machine().gfx[0]->set_source(m_charram);
+	m_gfxdecode->gfx(0)->set_source(m_charram);
 
 	/* save some state */
 	save_item(NAME(m_background_priority));
@@ -178,11 +170,10 @@ VIDEO_START_MEMBER(gottlieb_state,screwloo)
 	m_transparent0 = FALSE;
 
 	/* configure the background tilemap */
-	m_bg_tilemap = &machine().tilemap().create(tilemap_get_info_delegate(FUNC(gottlieb_state::get_screwloo_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
+	m_bg_tilemap = &machine().tilemap().create(m_gfxdecode, tilemap_get_info_delegate(FUNC(gottlieb_state::get_screwloo_bg_tile_info),this), TILEMAP_SCAN_ROWS, 8, 8, 32, 32);
 	m_bg_tilemap->set_transparent_pen(0);
-	m_bg_tilemap->set_scrolldx(0, 318 - 256);
 
-	machine().gfx[0]->set_source(m_charram);
+	m_gfxdecode->gfx(0)->set_source(m_charram);
 
 	/* save some state */
 	save_item(NAME(m_background_priority));
@@ -217,10 +208,10 @@ void gottlieb_state::draw_sprites(bitmap_rgb32 &bitmap, const rectangle &cliprec
 		int code = (255 ^ spriteram[offs + 2]) + 256 * m_spritebank;
 
 		if (flip_screen_x()) sx = 233 - sx;
-		if (flip_screen_y()) sy = 244 - sy;
+		if (flip_screen_y()) sy = 228 - sy;
 
-		drawgfx_transpen(bitmap, clip,
-			machine().gfx[2],
+
+			m_gfxdecode->gfx(2)->transpen(bitmap,clip,
 			code, 0,
 			flip_screen_x(), flip_screen_y(),
 			sx,sy, 0);
@@ -239,16 +230,16 @@ UINT32 gottlieb_state::screen_update_gottlieb(screen_device &screen, bitmap_rgb3
 {
 	/* if the background has lower priority, render it first, else clear the screen */
 	if (!m_background_priority)
-		m_bg_tilemap->draw(bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, TILEMAP_DRAW_OPAQUE, 0);
 	else
-		bitmap.fill(machine().pens[0], cliprect);
+		bitmap.fill(m_palette->pen(0), cliprect);
 
 	/* draw the sprites */
 	draw_sprites(bitmap, cliprect);
 
 	/* if the background has higher priority, render it now */
 	if (m_background_priority)
-		m_bg_tilemap->draw(bitmap, cliprect, 0, 0);
+		m_bg_tilemap->draw(screen, bitmap, cliprect, 0, 0);
 
 	return 0;
 }

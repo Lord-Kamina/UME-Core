@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:David Haywood, R. Belmont
 /* The Legend of Silk Road - Unico 1999 */
 
 /* Preliminary Driver by David Haywood */
@@ -130,7 +132,7 @@ ROM15.BIN       MX29F1610, SOP44 Surface Mounted Mask ROM /
 WRITE32_MEMBER(silkroad_state::paletteram32_xRRRRRGGGGGBBBBB_dword_w)
 {
 	COMBINE_DATA(&m_generic_paletteram_32[offset]);
-	palette_set_color_rgb(machine(),offset,pal5bit(m_generic_paletteram_32[offset] >> (10+16)),pal5bit(m_generic_paletteram_32[offset] >> (5+16)),pal5bit(m_generic_paletteram_32[offset] >> (0+16)));
+	m_palette->set_pen_color(offset,pal5bit(m_generic_paletteram_32[offset] >> (10+16)),pal5bit(m_generic_paletteram_32[offset] >> (5+16)),pal5bit(m_generic_paletteram_32[offset] >> (0+16)));
 }
 
 WRITE32_MEMBER(silkroad_state::silk_6295_bank_w)
@@ -282,9 +284,10 @@ static MACHINE_CONFIG_START( silkroad, silkroad_state )
 	MCFG_SCREEN_SIZE(64*8, 32*8)
 	MCFG_SCREEN_VISIBLE_AREA(6*8+2, 64*8-1-(10*8)-2, 2*8, 32*8-1-(2*8))
 	MCFG_SCREEN_UPDATE_DRIVER(silkroad_state, screen_update_silkroad)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(silkroad)
-	MCFG_PALETTE_LENGTH(0x2000)
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", silkroad)
+	MCFG_PALETTE_ADD("palette", 0x2000)
 
 
 	/* sound hardware */
@@ -387,5 +390,5 @@ ROM_START( silkroada )
 ROM_END
 
 
-GAME( 1999, silkroad,         0, silkroad, silkroad, driver_device, 0, ROT0, "Unico", "The Legend of Silkroad", 0 )
-GAME( 1999, silkroada, silkroad, silkroad, silkroad, driver_device, 0, ROT0, "Unico", "The Legend of Silkroad (larger ROMs)", 0 ) // same content but fewer GFX roms of a larger size
+GAME( 1999, silkroad,         0, silkroad, silkroad, driver_device, 0, ROT0, "Unico", "The Legend of Silkroad", GAME_SUPPORTS_SAVE )
+GAME( 1999, silkroada, silkroad, silkroad, silkroad, driver_device, 0, ROT0, "Unico", "The Legend of Silkroad (larger ROMs)", GAME_SUPPORTS_SAVE ) // same content but fewer GFX roms of a larger size

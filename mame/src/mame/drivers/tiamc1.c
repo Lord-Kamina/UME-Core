@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Eugene Sandulenko
 /*****************************************************************************
 
   TIA-MC1 driver
@@ -7,13 +9,14 @@
 
   Games supported:
       * Billiard
-      * Konek-Gorbunok
-      * Snezhnaja Koroleva
+      * Konek-Gorbunok (Little Humpbacked Horse)
+      * Snezhnaja Koroleva (Snow Queen)
       * S.O.S.
 
   Other games known to exist on this hardware (interchangeable by the ROM swap):
       * Avtogonki
       * Istrebitel'
+      * Gorodki
       * Kot-Rybolov
       * Kotigoroshko
       * Ostrov Drakona
@@ -109,7 +112,7 @@
    TODO:
      - Use machine/pit8253.c in sound
      - Check sprites priorities on the real hardware
-     - Check background scrolling on the real hardware
+     - Check vertical background scrolling on the real hardware
      - What charset control is used for?
 
 */
@@ -144,8 +147,8 @@ static ADDRESS_MAP_START( tiamc1_io_map, AS_IO, 8, tiamc1_state )
 	AM_RANGE(0x60, 0x6f) AM_WRITE(tiamc1_sprite_n_w) /* sprites # */
 	AM_RANGE(0x70, 0x7f) AM_WRITE(tiamc1_sprite_a_w) /* sprites attributes */
 	AM_RANGE(0xa0, 0xaf) AM_WRITE(tiamc1_palette_w)  /* color ram */
-	AM_RANGE(0xbc, 0xbc) AM_WRITE(tiamc1_bg_hshift_w)/* background H scroll */
-	AM_RANGE(0xbd, 0xbd) AM_WRITE(tiamc1_bg_vshift_w)/* background V scroll */
+	AM_RANGE(0xbc, 0xbc) AM_WRITE(tiamc1_bg_vshift_w)/* background V scroll */
+	AM_RANGE(0xbd, 0xbd) AM_WRITE(tiamc1_bg_hshift_w)/* background H scroll */
 	AM_RANGE(0xbe, 0xbe) AM_WRITE(tiamc1_bankswitch_w) /* VRAM selector */
 	AM_RANGE(0xbf, 0xbf) AM_WRITENOP                 /* charset control */
 	AM_RANGE(0xc0, 0xc3) AM_DEVWRITE("2x8253", tiamc1_sound_device, tiamc1_timer0_w)   /* timer 0 */
@@ -234,10 +237,11 @@ static MACHINE_CONFIG_START( tiamc1, tiamc1_state )
 	MCFG_SCREEN_SIZE(256, 256)
 	MCFG_SCREEN_VISIBLE_AREA(0, 256-1, 0, 256-1)
 	MCFG_SCREEN_UPDATE_DRIVER(tiamc1_state, screen_update_tiamc1)
+	MCFG_SCREEN_PALETTE("palette")
 
-	MCFG_GFXDECODE(tiamc1)
-	MCFG_PALETTE_LENGTH(16)
-
+	MCFG_GFXDECODE_ADD("gfxdecode", "palette", tiamc1)
+	MCFG_PALETTE_ADD("palette", 16)
+	MCFG_PALETTE_INIT_OWNER(tiamc1_state, tiamc1)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_MONO("mono")
@@ -292,19 +296,19 @@ ROM_END
 
 ROM_START( koroleva )
 	ROM_REGION( 0x10000, "maincpu", 0 )
-	ROM_LOAD( "04.1g", 0x00000, 0x2000, CRC(C3701225) SHA1(AC059116521B06CB5347741D3EE2778C2E68A74E) )
-	ROM_LOAD( "05.2g", 0x02000, 0x2000, CRC(1B3742CE) SHA1(908AD9EB0E79BAAC53EED195355D0D1BDF6B5A25) )
-	ROM_LOAD( "06.3g", 0x04000, 0x2000, CRC(48074786) SHA1(145749053CD00C8547024C9AFE3AB0FF7D8F5FF9) )
-	ROM_LOAD( "07.4g", 0x06000, 0x2000, CRC(41A4ADB5) SHA1(CDBDF6884307DD0F1FC991E6E1BC4C4FDC351AB1) )
-	ROM_LOAD( "08.5g", 0x08000, 0x2000, CRC(8F379D95) SHA1(0EA70BC14C52B1F4B38B0D14E4249252A2577F2A) )
+	ROM_LOAD( "04.1g", 0x00000, 0x2000, CRC(c3701225) SHA1(ac059116521b06cb5347741d3ee2778c2e68a74e) )
+	ROM_LOAD( "05.2g", 0x02000, 0x2000, CRC(1b3742ce) SHA1(908ad9eb0e79baac53eed195355d0d1bdf6b5a25) )
+	ROM_LOAD( "06.3g", 0x04000, 0x2000, CRC(48074786) SHA1(145749053cd00c8547024c9afe3ab0ff7d8f5ff9) )
+	ROM_LOAD( "07.4g", 0x06000, 0x2000, CRC(41a4adb5) SHA1(cdbdf6884307dd0f1fc991e6e1bc4c4fdc351ab1) )
+	ROM_LOAD( "08.5g", 0x08000, 0x2000, CRC(8f379d95) SHA1(0ea70bc14c52b1f4b38b0d14e4249252a2577f2a) )
 	ROM_FILL( 0xa000, 0x2000, 0x00 ) /* 09.6g is unpopulated */
-	ROM_LOAD( "10.7g", 0x0c000, 0x2000, CRC(397F41F8) SHA1(2D07462AFAD39DDA067114CE8D47E64D6A854283) )
+	ROM_LOAD( "10.7g", 0x0c000, 0x2000, CRC(397f41f8) SHA1(2d07462afad39dda067114ce8d47e64d6a854283) )
 
 	ROM_REGION( 0x8000, "gfx1", 0 )
-	ROM_LOAD( "00.2a", 0x00000, 0x2000, CRC(125C72F0) SHA1(A4991F20E6992C272BC7322922E7BEBE7170F7E7) )
-	ROM_LOAD( "01.3a", 0x02000, 0x2000, CRC(7BDFDD19) SHA1(8B971689050F9D608225226EB5CADBB4050C7D1F) )
-	ROM_LOAD( "02.5a", 0x04000, 0x2000, CRC(97770B0F) SHA1(CF4605E31F8C57A76BFDA6A7EA329058DA8B8C9C) )
-	ROM_LOAD( "03.6a", 0x06000, 0x2000, CRC(9B0A686A) SHA1(F02910DB9F862EC017BB3834C58E96E780FB6322) )
+	ROM_LOAD( "00.2a", 0x00000, 0x2000, CRC(6f39f8be) SHA1(2b20cdab7064851c552d92d5bc9084df854eafd1) )
+	ROM_LOAD( "01.3a", 0x02000, 0x2000, CRC(7bdfdd19) SHA1(8b971689050f9d608225226eb5cadbb4050c7d1f) )
+	ROM_LOAD( "02.5a", 0x04000, 0x2000, CRC(97770b0f) SHA1(cf4605e31f8c57a76bfda6a7ea329058da8b8c9c) )
+	ROM_LOAD( "03.6a", 0x06000, 0x2000, CRC(9b0a686a) SHA1(f02910db9f862ec017bb3834c58e96e780fb6322) )
 
 ROM_END
 
@@ -325,7 +329,7 @@ ROM_START( bilyard )
 	ROM_LOAD( "03.6a", 0x06000, 0x2000, CRC(8bfc0b15) SHA1(221efdce516274d3b1d9009d11dc9ed6cd67ef12) )
 ROM_END
 
-GAME( 1988, konek, 0, tiamc1, tiamc1, driver_device, 0, ROT0, "Terminal", "Konek-Gorbunok", GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
-GAME( 1988, sosterm, 0, tiamc1, tiamc1, driver_device, 0, ROT0, "Terminal", "S.O.S.", GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
-GAME( 1988, koroleva, 0, tiamc1, tiamc1, driver_device, 0, ROT0, "Terminal", "Snezhnaja Koroleva", GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
-GAME( 1988, bilyard, 0, tiamc1, tiamc1, driver_device, 0, ROT0, "Terminal", "Billiard", GAME_IMPERFECT_GRAPHICS | GAME_SUPPORTS_SAVE )
+GAME( 1988, konek, 0, tiamc1, tiamc1, driver_device, 0, ROT0, "Terminal", "Konek-Gorbunok", GAME_SUPPORTS_SAVE )
+GAME( 1988, sosterm, 0, tiamc1, tiamc1, driver_device, 0, ROT0, "Terminal", "S.O.S.", GAME_SUPPORTS_SAVE )
+GAME( 1988, koroleva, 0, tiamc1, tiamc1, driver_device, 0, ROT0, "Terminal", "Snezhnaja Koroleva", GAME_SUPPORTS_SAVE )
+GAME( 1988, bilyard, 0, tiamc1, tiamc1, driver_device, 0, ROT0, "Terminal", "Billiard", GAME_SUPPORTS_SAVE )

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /* C140.h */
 
 #pragma once
@@ -23,16 +25,13 @@ enum
 #define MCFG_C140_REPLACE(_tag, _clock) \
 	MCFG_DEVICE_REPLACE(_tag, C140, _clock)
 
+#define MCFG_C140_BANK_TYPE(_type) \
+	c140_device::set_bank_type(*device, _type);
+
 
 //**************************************************************************
 //  TYPE DEFINITIONS
 //**************************************************************************
-
-struct c140_interface
-{
-	int banking_type;
-};
-
 
 struct C140_VOICE
 {
@@ -52,23 +51,23 @@ struct C140_VOICE
 		sample_end(0),
 		sample_loop(0) {}
 
-	long    ptoffset;
-	long    pos;
-	long    key;
+	INT32    ptoffset;
+	INT32    pos;
+	INT32    key;
 	//--work
-	long    lastdt;
-	long    prevdt;
-	long    dltdt;
+	INT32    lastdt;
+	INT32    prevdt;
+	INT32    dltdt;
 	//--reg
-	long    rvol;
-	long    lvol;
-	long    frequency;
-	long    bank;
-	long    mode;
+	INT32    rvol;
+	INT32    lvol;
+	INT32    frequency;
+	INT32    bank;
+	INT32    mode;
 
-	long    sample_start;
-	long    sample_end;
-	long    sample_loop;
+	INT32    sample_start;
+	INT32    sample_end;
+	INT32    sample_loop;
 };
 
 
@@ -80,6 +79,9 @@ class c140_device : public device_t,
 public:
 	c140_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock);
 	~c140_device() { }
+
+	// static configuration
+	static void set_bank_type(device_t &device, int bank) { downcast<c140_device &>(device).m_banking_type = bank; }
 
 protected:
 	// device-level overrides
@@ -108,7 +110,7 @@ private:
 	INT16 *m_mixer_buffer_right;
 
 	int m_baserate;
-	void *m_pRom;
+	INT8 *m_pRom;
 	UINT8 m_REG[0x200];
 
 	INT16 m_pcmtbl[8];        //2000.06.26 CAB

@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:R. Belmont
 /**********************************************************************
 
     rtc4543.c - Epson R4543 real-time clock chip emulation
@@ -28,8 +30,9 @@ const device_type RTC4543 = &device_creator<rtc4543_device>;
 //-------------------------------------------------
 
 rtc4543_device::rtc4543_device(const machine_config &mconfig, const char *tag, device_t *owner, UINT32 clock)
-	: device_t(mconfig, RTC4543, "Epson R4543", tag, owner, clock),
-		device_rtc_interface(mconfig, *this)
+	: device_t(mconfig, RTC4543, "R4543 RTC", tag, owner, clock, "rtc4543", __FILE__),
+		device_rtc_interface(mconfig, *this),
+		data_cb(*this)
 {
 }
 
@@ -40,6 +43,8 @@ rtc4543_device::rtc4543_device(const machine_config &mconfig, const char *tag, d
 
 void rtc4543_device::device_start()
 {
+	data_cb.resolve_safe();
+
 	// allocate timers
 	m_clock_timer = timer_alloc();
 	m_clock_timer->adjust(attotime::from_hz(clock() / 32768), 0, attotime::from_hz(clock() / 32768));
@@ -49,6 +54,7 @@ void rtc4543_device::device_start()
 	save_item(NAME(m_clk));
 	save_item(NAME(m_wr));
 	save_item(NAME(m_data));
+	save_item(NAME(m_shiftreg));
 	save_item(NAME(m_regs));
 	save_item(NAME(m_curreg));
 }
@@ -66,7 +72,9 @@ void rtc4543_device::device_reset()
 	m_wr = 0;
 	m_clk = 0;
 	m_data = 0;
+	m_shiftreg = 0;
 	m_curreg = 0;
+	m_curbit = 0;
 }
 
 
@@ -93,16 +101,16 @@ void rtc4543_device::rtc_clock_updated(int year, int month, int day, int day_of_
 {
 	static const int weekday[7] = { 7, 1, 2, 3, 4, 5, 6 };
 
-	m_regs[0] = make_bcd(second);               // seconds (BCD, 0-59) in bits 0-6, bit 7 = battery low
-	m_regs[1] = make_bcd(minute);               // minutes (BCD, 0-59)
-	m_regs[2] = make_bcd(hour);                 // hour (BCD, 0-23)
-	m_regs[3] = make_bcd(weekday[day_of_week-1]);   // low nibble = day of the week
-	m_regs[3] |= (make_bcd(day) & 0x0f)<<4;     // high nibble = low digit of day
-	m_regs[4] = (make_bcd(day) >> 4);           // low nibble = high digit of day
-	m_regs[4] |= (make_bcd(month & 0x0f)<<4);   // high nibble = low digit of month
-	m_regs[5] = make_bcd(month & 0x0f) >> 4;    // low nibble = high digit of month
-	m_regs[5] |= (make_bcd(year % 10) << 4);    // high nibble = low digit of year
-	m_regs[6] = make_bcd(year % 100) >> 4;  // low nibble = tens digit of year (BCD, 0-9)
+	m_regs[0] = make_bcd(second);                   // seconds (BCD, 0-59) in bits 0-6, bit 7 = battery low
+	m_regs[1] = make_bcd(minute);                   // minutes (BCD, 0-59)
+	m_regs[2] = make_bcd(hour);                     // hour (BCD, 0-23)
+	m_regs[3] = make_bcd(weekday[day_of_week - 1]); // low nibble = day of the week
+	m_regs[3] |= (make_bcd(day) & 0x0f) << 4;       // high nibble = low digit of day
+	m_regs[4] = (make_bcd(day) >> 4);               // low nibble = high digit of day
+	m_regs[4] |= (make_bcd(month & 0x0f) << 4);     // high nibble = low digit of month
+	m_regs[5] = make_bcd(month & 0x0f) >> 4;        // low nibble = high digit of month
+	m_regs[5] |= (make_bcd(year % 10) << 4);        // high nibble = low digit of year
+	m_regs[6] = make_bcd(year % 100) >> 4;          // low nibble = tens digit of year (BCD, 0-9)
 }
 
 //-------------------------------------------------
@@ -113,13 +121,13 @@ WRITE_LINE_MEMBER( rtc4543_device::ce_w )
 {
 	if (VERBOSE) printf("RTC4543 '%s' CE: %u\n", tag(), state);
 
-	if (!state && m_ce)         // complete transfer
+	if (!state && m_ce) // complete transfer
 	{
 	}
-	else if (state && !m_ce)    // start new data transfer
+	else if (state && !m_ce) // start new data transfer
 	{
 		m_curreg = 0;
-		m_bit = 8;      // force immediate reload of output data
+		m_curbit = 0; // force immediate reload of output data
 	}
 
 	m_ce = state;
@@ -146,22 +154,30 @@ WRITE_LINE_MEMBER( rtc4543_device::clk_w )
 
 	if (!m_ce) return;
 
-	if (!m_clk && state) // rising edge - read data becomes valid here
+	// rising edge - read data becomes valid here
+	if (!m_clk && state)
 	{
-		if (m_bit > 7)  // reload data?
+		if (!m_wr)
 		{
-			m_bit = 0;
-			m_data = m_regs[m_curreg++];
-		}
-		else            // no reload, just continue with the current byte
-		{
-			m_data <<= 1;
-		}
+			// reload data?
+			if ((m_curbit & 7) == 0)
+			{
+				m_shiftreg = m_regs[m_curreg++];
 
-		m_bit++;
-	}
-	else if (m_clk && !state) // falling edge - write data becomes valid here
-	{
+				if (VERBOSE)
+					logerror("RTC4543 '%s' sending byte: %02x\n", tag(), m_shiftreg);
+			}
+
+			// shift data bit
+			// note: output data does not change when clk at final bit
+			if (m_curbit != 55)
+			{
+				m_data = m_shiftreg & 1;
+				m_curbit++;
+				m_shiftreg >>= 1;
+				data_cb(m_data);
+			}
+		}
 	}
 
 	m_clk = state;
@@ -176,7 +192,7 @@ WRITE_LINE_MEMBER( rtc4543_device::data_w )
 {
 	if (VERBOSE) logerror("RTC4543 '%s' I/O: %u\n", tag(), state);
 
-	m_data |= (state & 1);
+	m_data = state & 1;
 }
 
 
@@ -186,5 +202,5 @@ WRITE_LINE_MEMBER( rtc4543_device::data_w )
 
 READ_LINE_MEMBER( rtc4543_device::data_r )
 {
-	return (m_data & 0x80) ? 1 : 0;
+	return m_data;
 }

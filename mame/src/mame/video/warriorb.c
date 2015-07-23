@@ -1,23 +1,14 @@
+// license:BSD-3-Clause
+// copyright-holders:David Graves
 #include "emu.h"
-#include "video/taitoic.h"
 #include "includes/warriorb.h"
-
-/**********************************************************/
-
-void warriorb_state::video_start()
-{
-	/* Ensure palette from correct TC0110PCR used for each screen */
-	tc0100scn_set_colbanks(m_tc0100scn_1, 0x0, 0x100, 0x0);
-}
-
 
 /************************************************************
             SPRITE DRAW ROUTINE
 ************************************************************/
 
-void warriorb_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &cliprect, int x_offs, int y_offs )
+void warriorb_state::draw_sprites( screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int x_offs, int y_offs )
 {
-	UINT16 *spriteram = m_spriteram;
 	int offs, data, data2, tilenum, color, flipx, flipy;
 	int x, y, priority, pri_mask;
 
@@ -28,14 +19,14 @@ void warriorb_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 	/* pdrawgfx() needs us to draw sprites front to back */
 	for (offs = 0; offs < m_spriteram.bytes() / 2; offs += 4)
 	{
-		data = spriteram[offs + 1];
+		data = m_spriteram[offs + 1];
 		tilenum = data & 0x7fff;
 
-		data = spriteram[offs + 0];
+		data = m_spriteram[offs + 0];
 		y = (-(data & 0x1ff) - 24) & 0x1ff; /* (inverted y adjusted for vis area) */
 		flipy = (data & 0x200) >> 9;
 
-		data2 = spriteram[offs + 2];
+		data2 = m_spriteram[offs + 2];
 		/* 8,4 also seen in msbyte */
 		priority = (data2 & 0x0100) >> 8; // 1 = low
 
@@ -46,7 +37,7 @@ void warriorb_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 
 		color = (data2 & 0x7f);
 
-		data = spriteram[offs + 3];
+		data = m_spriteram[offs + 3];
 		x = (data & 0x3ff);
 		flipx = (data & 0x400) >> 10;
 
@@ -62,12 +53,12 @@ void warriorb_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
 		if (x > 0x3c0) x -= 0x400;
 		if (y > 0x180) y -= 0x200;
 
-		pdrawgfx_transpen(bitmap,cliprect,machine().gfx[0],
+		m_gfxdecode->gfx(0)->prio_transpen(bitmap,cliprect,
 					tilenum,
 					color,
 					flipx,flipy,
 					x,y,
-					machine().priority_bitmap,pri_mask,0);
+					screen.priority(),pri_mask,0);
 	}
 
 #ifdef MAME_DEBUG
@@ -81,37 +72,37 @@ void warriorb_state::draw_sprites( bitmap_ind16 &bitmap, const rectangle &clipre
                 SCREEN REFRESH
 **************************************************************/
 
-UINT32 warriorb_state::update_screen(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int xoffs, device_t *tc0100scn)
+UINT32 warriorb_state::update_screen(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect, int xoffs, tc0100scn_device *tc0100scn)
 {
 	UINT8 layer[3], nodraw;
 
-	tc0100scn_tilemap_update(tc0100scn);
+	tc0100scn->tilemap_update();
 
-	layer[0] = tc0100scn_bottomlayer(tc0100scn);
+	layer[0] = tc0100scn->bottomlayer();
 	layer[1] = layer[0] ^ 1;
 	layer[2] = 2;
 
 	/* Clear priority bitmap */
-	screen.machine().priority_bitmap.fill(0, cliprect);
+	screen.priority().fill(0, cliprect);
 
 	/* chip 0 does tilemaps on the left, chip 1 does the ones on the right */
 	// draw bottom layer
-	nodraw  = tc0100scn_tilemap_draw(tc0100scn, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);    /* left */
+	nodraw  = tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[0], TILEMAP_DRAW_OPAQUE, 0);    /* left */
 
 	/* Ensure screen blanked even when bottom layers not drawn due to disable bit */
 	if (nodraw)
-		bitmap.fill(get_black_pen(machine()), cliprect);
+		bitmap.fill(m_palette->black_pen(), cliprect);
 
 	// draw middle layer
-	tc0100scn_tilemap_draw(tc0100scn, bitmap, cliprect, layer[1], 0, 1);
+	tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[1], 0, 1);
 
 	/* Sprites can be under/over the layer below text layer */
-	draw_sprites(bitmap, cliprect, xoffs, 8); // draw sprites
+	draw_sprites(screen, bitmap, cliprect, xoffs, 8); // draw sprites
 
 	// draw top(text) layer
-	tc0100scn_tilemap_draw(tc0100scn, bitmap, cliprect, layer[2], 0, 0);
+	tc0100scn->tilemap_draw(screen, bitmap, cliprect, layer[2], 0, 0);
 	return 0;
 }
 
-UINT32 warriorb_state::screen_update_warriorb_left(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect){ return update_screen(screen, bitmap, cliprect, 40 * 8 * 0, machine().driver_data<warriorb_state>()->m_tc0100scn_1); }
-UINT32 warriorb_state::screen_update_warriorb_right(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect){ return update_screen(screen, bitmap, cliprect, 40 * 8 * 1, machine().driver_data<warriorb_state>()->m_tc0100scn_2); }
+UINT32 warriorb_state::screen_update_left(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect){ return update_screen(screen, bitmap, cliprect, 40 * 8 * 0, m_tc0100scn_1); }
+UINT32 warriorb_state::screen_update_right(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect){ return update_screen(screen, bitmap, cliprect, 40 * 8 * 1, m_tc0100scn_2); }
