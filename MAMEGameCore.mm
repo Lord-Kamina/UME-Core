@@ -30,11 +30,11 @@
 #import <OpenGL/gl.h>
 
 #include "emu.h"
-#include "emuopts.h"
+
 #include "audit.h"
 #include "mame.h"
 
-#include "sdl/sdlsync.h"
+#include "osdsync.h"
 
 #include "osx_osd_interface.h"
 
@@ -90,12 +90,15 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
 
 + (void)initialize
 {
-    mame_set_output_channel(OUTPUT_CHANNEL_ERROR, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OUTPUT_CHANNEL_WARNING, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OUTPUT_CHANNEL_INFO, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OUTPUT_CHANNEL_DEBUG, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OUTPUT_CHANNEL_VERBOSE, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OUTPUT_CHANNEL_LOG, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+    //mame_set_output_channel was inititally renamed to osd_set_output_channel in commit https://github.com/mamedev/mame/commit/67663501d7a646a5d4f43fc9c054d99bf3ce2544 and then, removed entirely in favor of a newer osd_output::push in commit https://github.com/mamedev/mame/commit/98a6781c271b004174052bbd1750351149bf91ce
+    
+    
+    mame_set_output_channel(OSD_OUTPUT_CHANNEL_ERROR, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+    mame_set_output_channel(OSD_OUTPUT_CHANNEL_WARNING, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+    mame_set_output_channel(OSD_OUTPUT_CHANNEL_INFO, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+    mame_set_output_channel(OSD_OUTPUT_CHANNEL_DEBUG, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+    mame_set_output_channel(OSD_OUTPUT_CHANNEL_VERBOSE, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+    mame_set_output_channel(OSD_OUTPUT_CHANNEL_LOG, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
 }
 
 - (id)init
@@ -141,7 +144,7 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
 
     _target = _machine->render().target_alloc();
 
-    _frameInterval = (NSTimeInterval) ATTOSECONDS_PER_SECOND / _machine->primary_screen->refresh_attoseconds();
+    _frameInterval = (NSTimeInterval) ATTOSECONDS_PER_SECOND / _machine->first_screen()->refresh_attoseconds();
     NSLog(@"Refresh rate set to %f Hz", _frameInterval);
     
     INT32 width = 0, height = 0;
@@ -207,7 +210,7 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
     // Easily broken by misnamed ROM archives
     _driverName = [[path lastPathComponent] stringByDeletingPathExtension];
 
-    astring err;
+    std::string err;
     emu_options options = emu_options();
     options.set_value(OPTION_MEDIAPATH, [_romDir UTF8String], OPTION_PRIORITY_HIGH, err);
 
@@ -226,9 +229,9 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
         }
         else
         {
-            astring *output = new astring();
+            std::string *output = new std::string();
             auditor.summarize(drivlist.driver().name, output);
-            NSLog(@"MAME: Audit failed with output:\n%s", output->cstr());
+            NSLog(@"MAME: Audit failed with output:\n%s", output->c_str());
             delete output;
         }
     }
@@ -283,7 +286,7 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
 
 - (void)mameEmuThread
 {
-    astring err;
+    std::string err;
 
     emu_options options = emu_options();    
     options.set_value(OPTION_MEDIAPATH, [_romDir UTF8String], OPTION_PRIORITY_HIGH, err);
@@ -295,9 +298,6 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
                       OPTION_PRIORITY_HIGH, err);
     options.set_value(OPTION_NVRAM_DIRECTORY,
                       [[[self supportDirectoryPath] stringByAppendingPathComponent:@"nvram"]UTF8String],
-                      OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_MEMCARD_DIRECTORY,
-                      [[[self supportDirectoryPath] stringByAppendingPathComponent:@"memcard"] UTF8String],
                       OPTION_PRIORITY_HIGH, err);
     options.set_value(OPTION_INPUT_DIRECTORY,
                       [[[self supportDirectoryPath] stringByAppendingPathComponent:@"inp"] UTF8String],
