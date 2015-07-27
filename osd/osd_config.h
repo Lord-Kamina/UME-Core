@@ -30,6 +30,8 @@
 #define SDLMAME_DARWIN 1
 #define SDLMAME_UNIX 1
 #define SDLMAME_MACOSX 1
+#define SDLMAME_SDL2 1
+
 
 #if __LITTLE_ENDIAN__
 # define LSB_FIRST 1
@@ -41,7 +43,17 @@
 #define strnicmp strncasecmp
 #define _scalb scalb
 #define CRLF 2
-
 #define PTR64 1
+#define __DYNAMIC__ 1
+#define FLAC__NO_DLL 1
+#define SDLMAME_NO_X11 1
+#define USE_XINPUT 0
+#define USE_OPENGL 1
+#define USE_BGFX 1
+#define USE_QTDEBUG 0
+#define USE_NETWORK 1
+#define OSD_NET_USE_PCAP 1
+#define OSD_SDL 1
+#define SUBTARGET "arcade"
 
 #endif
