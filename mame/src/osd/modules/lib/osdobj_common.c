@@ -151,7 +151,6 @@ osd_options::osd_options()
 //-------------------------------------------------
 //  osd_interface - constructor
 //-------------------------------------------------
-
 osd_common_t::osd_common_t(osd_options &options)
 	: osd_output(), m_machine(NULL),
 		m_options(options),

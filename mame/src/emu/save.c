@@ -122,6 +122,27 @@ void save_manager::register_presave(save_prepost_delegate func)
 
 
 //-------------------------------------------------
+//  register_postsave - register a post-save
+//  function callback
+//-------------------------------------------------
+
+void save_manager::register_postsave(save_prepost_delegate func)
+{
+    // check for invalid timing
+    if (!m_reg_allowed)
+        fatalerror("Attempt to register callback function after state registration is closed!\n");
+    
+    // scan for duplicates and push through to the end
+    for (state_callback *cb = m_postsave_list.first(); cb != NULL; cb = cb->next())
+        if (cb->m_func == func)
+            fatalerror("Duplicate save state function (%s/%s)\n", cb->m_func.name(), func.name());
+    
+    // allocate a new entry
+    m_postsave_list.append(*auto_alloc(machine(), state_callback(func)));
+}
+
+
+//-------------------------------------------------
 //  state_save_register_postload -
 //  register a post-load function callback
 //-------------------------------------------------
@@ -317,8 +338,14 @@ save_error save_manager::write_file(emu_file &file)
 		if (file.write(entry->m_data, totalsize) != totalsize)
 			return STATERR_WRITE_ERROR;
 	}
+    
+    // call the post-save functions
+    for (state_callback *func = m_postsave_list.first(); func != NULL; func = func->next())
+        func->m_func();
+
 	return STATERR_NONE;
 }
+
 
 
 //-------------------------------------------------

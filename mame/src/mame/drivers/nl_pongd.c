@@ -282,7 +282,7 @@ CIRCUIT_LAYOUT( pongdoubles )
 	SWITCH2(DIPSW1)
 	SWITCH2(DIPSW2)
 #ifdef DEBUG
-	CHIP("LOG1", VCD_LOG, &vcd_log_desc)
+//	CHIP("LOG1", VCD_LOG, &vcd_log_desc)
 #endif
 
 	// Not used, need to be connected

@@ -105,6 +105,7 @@ public:
 	// function registration
 	void register_presave(save_prepost_delegate func);
 	void register_postload(save_prepost_delegate func);
+    void register_postsave(save_prepost_delegate func);
 
 	// callback dispatching
 	void dispatch_presave();
@@ -186,6 +187,7 @@ private:
 	simple_list<state_entry> m_entry_list;          // list of reigstered entries
 	simple_list<state_callback> m_presave_list;     // list of pre-save functions
 	simple_list<state_callback> m_postload_list;    // list of post-load functions
+    simple_list<state_callback> m_postsave_list;    // list of post-save functions
 };
 
 
