@@ -27,6 +27,7 @@
 #import "MAMEGameCore.h"
 
 #include "osx_osd_interface.h"
+#include "osdobj_common.h"
 
 osx_osd_interface::osx_osd_interface(MAMEGameCore *core) {
     m_core = core;

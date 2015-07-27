@@ -24,12 +24,15 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "options.h"
 #include "osdepend.h"
+#include "modules/lib/osdobj_common.h"
 
 @class MAMEGameCore;
 
-class osx_osd_interface : public osd_interface
-{
+//osx_osd_interface cannot be osd_interface anymore as that class does not work the same anymore. Perhaps osd_common_t, or sdl_osd_interface? Those take osd_options as a parameter and neither of those have a default constructor, though.
+
+class osx_osd_interface : public osd_interface {
 public:
     osx_osd_interface(MAMEGameCore *);
     MAMEGameCore *core() const { return m_core; }

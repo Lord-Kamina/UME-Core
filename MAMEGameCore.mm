@@ -30,7 +30,7 @@
 #import <OpenGL/gl.h>
 
 #include "emu.h"
-
+#include "emuopts.h"
 #include "audit.h"
 #include "mame.h"
 
@@ -92,13 +92,15 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
 {
     //mame_set_output_channel was inititally renamed to osd_set_output_channel in commit https://github.com/mamedev/mame/commit/67663501d7a646a5d4f43fc9c054d99bf3ce2544 and then, removed entirely in favor of a newer osd_output::push in commit https://github.com/mamedev/mame/commit/98a6781c271b004174052bbd1750351149bf91ce
     
-    
-    mame_set_output_channel(OSD_OUTPUT_CHANNEL_ERROR, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OSD_OUTPUT_CHANNEL_WARNING, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OSD_OUTPUT_CHANNEL_INFO, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OSD_OUTPUT_CHANNEL_DEBUG, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OSD_OUTPUT_CHANNEL_VERBOSE, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
-    mame_set_output_channel(OSD_OUTPUT_CHANNEL_LOG, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+//    mame_set_output_channel(OSD_OUTPUT_CHANNEL_ERROR, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+//    mame_set_output_channel(OSD_OUTPUT_CHANNEL_WARNING, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+//    mame_set_output_channel(OSD_OUTPUT_CHANNEL_INFO, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+//    mame_set_output_channel(OSD_OUTPUT_CHANNEL_DEBUG, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+//    mame_set_output_channel(OSD_OUTPUT_CHANNEL_VERBOSE, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+//    mame_set_output_channel(OSD_OUTPUT_CHANNEL_LOG, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
+
+//   Just playing here. 
+    osd_output::push(NULL);
 }
 
 - (id)init
@@ -317,6 +319,7 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
     options.set_value(OPTION_LOG, true, OPTION_PRIORITY_HIGH, err);
 #endif
 
+//    mame_execute does not exist anymore. Perhaps osd_common_t::execute_command()?
     osx_osd_interface interface = osx_osd_interface(self);
 
     NSLog(@"MAME: Starting game execution thread");
