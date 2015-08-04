@@ -27,7 +27,7 @@
 #include "options.h"
 #include "modules/lib/osdobj_common.h"
 
-//osx_osd_interface cannot be osd_interface anymore as that class does not work the same anymore. Perhaps osd_common_t, or sdl_osd_interface? Those take osd_options as a parameter and neither of those have a default constructor, though.
+//osx_osd_interface now has to be osd_common_t instead of osd_interface.
 
 @class MAMEGameCore;
 

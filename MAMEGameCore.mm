@@ -90,7 +90,7 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
 
 + (void)initialize
 {
-    //mame_set_output_channel was inititally renamed to osd_set_output_channel in commit https://github.com/mamedev/mame/commit/67663501d7a646a5d4f43fc9c054d99bf3ce2544 and then, removed entirely in favor of a newer osd_output::push in commit https://github.com/mamedev/mame/commit/98a6781c271b004174052bbd1750351149bf91ce
+    //mame_set_output_channel was inititally renamed to osd_set_output_channel in commit https://github.com/mamedev/mame/commit/67663501d7a646a5d4f43fc9c054d99bf3ce2544 and then, removed entirely in favor of a newer osd_output class in commit https://github.com/mamedev/mame/commit/98a6781c271b004174052bbd1750351149bf91ce
     
 //    mame_set_output_channel(OSD_OUTPUT_CHANNEL_ERROR, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
 //    mame_set_output_channel(OSD_OUTPUT_CHANNEL_WARNING, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
@@ -317,7 +317,7 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
     emu_options.set_value(OPTION_LOG, true, OPTION_PRIORITY_HIGH, err);
 #endif
 
-//    mame_execute does not exist anymore. Perhaps osd_common_t::execute_command()?
+//    mame_execute does not exist anymore; I believe the equivalent is machine_manager::execute() but I evidently have no idea how to properly call it.
     osx_osd_interface interface = osx_osd_interface(self, *osx_osd_options);
     NSLog(@"self Object description is %@",[ICHObjectPrinter descriptionForObject:self]);
     machine_manager *manager = machine_manager::instance(emu_options, interface);
