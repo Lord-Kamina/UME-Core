@@ -25,7 +25,7 @@
  */
 
 #import "MAMEGameCore.h"
-
+#import "ICHObjectPrinter.h"
 #import <OpenEmuBase/OERingBuffer.h>
 #import <OpenGL/gl.h>
 
