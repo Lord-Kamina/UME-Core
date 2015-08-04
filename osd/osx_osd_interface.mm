@@ -27,14 +27,15 @@
 #import "MAMEGameCore.h"
 
 #include "osx_osd_interface.h"
-#include "osdobj_common.h"
 
-osx_osd_interface::osx_osd_interface(MAMEGameCore *core) {
+osx_osd_interface::osx_osd_interface(MAMEGameCore *core, osd_options &osx_osd_options) : osd_common_t(osx_osd_options), m_options(osx_osd_options)
+{
     m_core = core;
+    m_options = osx_osd_options;
 }
 
-void osx_osd_interface::init(running_machine &machine) {
-    [m_core osd_init:&machine];
+void osx_osd_interface::init(running_machine &machine, osd_options &osx_osd_options) {
+    [m_core osd_init:&machine osd_options:&osx_osd_options];
 }
 
 void osx_osd_interface::update(bool skip_redraw) {

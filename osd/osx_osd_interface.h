@@ -25,21 +25,23 @@
  */
 
 #include "options.h"
-#include "osdepend.h"
 #include "modules/lib/osdobj_common.h"
-
-@class MAMEGameCore;
 
 //osx_osd_interface cannot be osd_interface anymore as that class does not work the same anymore. Perhaps osd_common_t, or sdl_osd_interface? Those take osd_options as a parameter and neither of those have a default constructor, though.
 
-class osx_osd_interface : public osd_interface {
+@class MAMEGameCore;
+
+class osx_osd_interface : public osd_common_t {
 public:
-    osx_osd_interface(MAMEGameCore *);
+    osx_osd_interface(MAMEGameCore *, osd_options &);
     MAMEGameCore *core() const { return m_core; }
-    void init(running_machine &machine);
+    osd_options &osx_osd_options() { return m_options; }
+    
+    void init(running_machine &machine, osd_options &osx_osd_options);
     void update(bool skip_redraw);
     void update_audio_stream(const INT16 *buffer, int samples_this_frame);
 
 private:
+    osd_options &m_options;
     MAMEGameCore *m_core;
 };
