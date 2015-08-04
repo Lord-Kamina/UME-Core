@@ -47,7 +47,7 @@
     INT32 _axes[8][INPUT_MAX_AXIS];
     osd_event *_renderEvent;
     osd_event *_exitEvent;
-
+    osd_options *_osd_options;
     GLuint _texture;
     GLuint _textureWidth;
     GLuint _textureHeight;
@@ -70,7 +70,7 @@ static void output_callback(delegate_late_bind *param, const char *format, va_li
 
 static void error_callback(running_machine &machine, const char *string)
 {
-    //NSLog(@"MAME: %s", string);
+    NSLog(@"MAME: %s", string);
 }
 
 static void mame_did_exit(running_machine *machine)
@@ -100,7 +100,7 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
 //    mame_set_output_channel(OSD_OUTPUT_CHANNEL_LOG, output_delegate(FUNC(output_callback), (delegate_late_bind *)NULL));
 
 //   Just playing here. 
-    osd_output::push(NULL);
+//    osd_output::push(NULL); This is wrong, big nice crash.
 }
 
 - (id)init
@@ -135,15 +135,14 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
     }
 }
 
-- (void)osd_init:(running_machine *)machine
-{
+- (void)osd_init:(running_machine *)machine osd_options:(osd_options *)osx_osd_options {
     _machine = machine;
+    _osd_options = osx_osd_options;
 
     _machine->add_notifier(MACHINE_NOTIFY_EXIT, machine_notify_delegate(FUNC(mame_did_exit), machine));
     _machine->add_logerror_callback(error_callback);
     _machine->save().register_postsave(save_prepost_delegate(FUNC(_OESaveStateCallback), machine));
     _machine->save().register_postload(save_prepost_delegate(FUNC(_OESaveStateCallback), machine));
-
     _target = _machine->render().target_alloc();
 
     _frameInterval = (NSTimeInterval) ATTOSECONDS_PER_SECOND / _machine->first_screen()->refresh_attoseconds();
@@ -213,11 +212,11 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
     _driverName = [[path lastPathComponent] stringByDeletingPathExtension];
 
     std::string err;
-    emu_options options = emu_options();
-    options.set_value(OPTION_MEDIAPATH, [_romDir UTF8String], OPTION_PRIORITY_HIGH, err);
+    emu_options emu_options = emu_options::emu_options();
+    emu_options.set_value(OPTION_MEDIAPATH, [_romDir UTF8String], OPTION_PRIORITY_HIGH, err);
 
     game_driver driver;
-    driver_enumerator drivlist(options, [_driverName UTF8String]);
+    driver_enumerator drivlist(emu_options, [_driverName UTF8String]);
     media_auditor auditor(drivlist);
 
     BOOL verified = NO;
@@ -289,43 +288,41 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
 - (void)mameEmuThread
 {
     std::string err;
-
-    emu_options options = emu_options();    
-    options.set_value(OPTION_MEDIAPATH, [_romDir UTF8String], OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_SAMPLEPATH, 
+    emu_options emu_options = emu_options::emu_options();
+    osd_options *osx_osd_options = _osd_options;
+    emu_options.set_value(OPTION_MEDIAPATH, [_romDir UTF8String], OPTION_PRIORITY_HIGH, err);
+    emu_options.set_value(OPTION_SAMPLEPATH,
                       [[[self supportDirectoryPath] stringByAppendingPathComponent:@"samples"] UTF8String], 
                       OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_CFG_DIRECTORY,
+    emu_options.set_value(OPTION_CFG_DIRECTORY,
                       [[[self supportDirectoryPath] stringByAppendingPathComponent:@"cfg"] UTF8String],
                       OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_NVRAM_DIRECTORY,
+    emu_options.set_value(OPTION_NVRAM_DIRECTORY,
                       [[[self supportDirectoryPath] stringByAppendingPathComponent:@"nvram"]UTF8String],
                       OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_INPUT_DIRECTORY,
+    emu_options.set_value(OPTION_INPUT_DIRECTORY,
                       [[[self supportDirectoryPath] stringByAppendingPathComponent:@"inp"] UTF8String],
                       OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_DIFF_DIRECTORY,
+    emu_options.set_value(OPTION_DIFF_DIRECTORY,
                       [[[self supportDirectoryPath] stringByAppendingPathComponent:@"diff"] UTF8String],
                       OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_COMMENT_DIRECTORY,
+    emu_options.set_value(OPTION_COMMENT_DIRECTORY,
                       [[[self supportDirectoryPath] stringByAppendingPathComponent:@"comments"] UTF8String],
                       OPTION_PRIORITY_HIGH, err);
-
-    options.set_value(OPTION_SYSTEMNAME, [_driverName UTF8String], OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_SAMPLERATE, (int)[self audioSampleRate], OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_SKIP_GAMEINFO, true, OPTION_PRIORITY_HIGH, err);
+    emu_options.set_value(OPTION_SYSTEMNAME, [_driverName UTF8String], OPTION_PRIORITY_HIGH, err);
+    emu_options.set_value(OPTION_SAMPLERATE, (int)[self audioSampleRate], OPTION_PRIORITY_HIGH, err);
+    emu_options.set_value(OPTION_SKIP_GAMEINFO, true, OPTION_PRIORITY_HIGH, err);
 #ifdef DEBUG
-    options.set_value(OPTION_VERBOSE, true, OPTION_PRIORITY_HIGH, err);
-    options.set_value(OPTION_LOG, true, OPTION_PRIORITY_HIGH, err);
+    emu_options.set_value(OPTION_VERBOSE, true, OPTION_PRIORITY_HIGH, err);
+    emu_options.set_value(OPTION_LOG, true, OPTION_PRIORITY_HIGH, err);
 #endif
 
 //    mame_execute does not exist anymore. Perhaps osd_common_t::execute_command()?
-    osx_osd_interface interface = osx_osd_interface(self);
-
+    osx_osd_interface interface = osx_osd_interface(self, *osx_osd_options);
+    NSLog(@"self Object description is %@",[ICHObjectPrinter descriptionForObject:self]);
+    machine_manager *manager = machine_manager::instance(emu_options, interface);
     NSLog(@"MAME: Starting game execution thread");
-    
-    mame_execute(options, interface);
-
+    manager->execute();
     NSLog(@"MAME: Game execution thread exiting");
 }
 
