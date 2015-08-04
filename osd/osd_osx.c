@@ -18,7 +18,7 @@
 #include <pthread.h>
 
 #include "osdcore.h"
-#include "mame/src/osd/modules/sync/osdsync.h"
+#include "modules/sync/osdsync.h"
 
 struct hidden_mutex_t {
 	pthread_mutex_t id;
