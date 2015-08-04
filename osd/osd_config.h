@@ -34,7 +34,7 @@
 
 
 #if __LITTLE_ENDIAN__
-# define LSB_FIRST 1
+#define LSB_FIRST 1
 #endif
 
 #define INLINE static __inline__
@@ -55,5 +55,5 @@
 #define OSD_NET_USE_PCAP 1
 #define OSD_SDL 1
 #define SUBTARGET "arcade"
-
+#define SYNC_IMPLEMENTATION "ntc"
 #endif
