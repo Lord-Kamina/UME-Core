@@ -30,13 +30,20 @@
 #include "modules/lib/osdobj_common.h"
 
 class running_machine;
+class machine_manager;
+
+class osx_output : public osd_output {
+public:
+    void output_callback(delegate_late_bind *param, const char *format, va_list argptr);
+};
 
 OE_EXPORTED_CLASS
 @interface MAMEGameCore : OEGameCore
 
-- (void)osd_init:(running_machine *)machine osd_options:(osd_options *)osx_osd_options;
-- (void)osd_exit:(running_machine *)machine;
+- (void)osd_init:(machine_manager *)manager running_machine:(running_machine *)machine osd_options:(osd_options *)osx_osd_options;
+- (void)osd_exit:(machine_manager *)manager running_machine:(running_machine *)machine;
 - (void)osd_update:(bool)skip_redraw;
 - (void)osd_update_audio_stream:(const INT16 *)buffer samples:(int)samples_this_frame;
 
 @end
+

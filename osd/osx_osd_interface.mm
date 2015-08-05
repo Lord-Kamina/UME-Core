@@ -34,8 +34,8 @@ osx_osd_interface::osx_osd_interface(MAMEGameCore *core, osd_options &osx_osd_op
     m_options = osx_osd_options;
 }
 
-void osx_osd_interface::init(running_machine &machine, osd_options &osx_osd_options) {
-    [m_core osd_init:&machine osd_options:&osx_osd_options];
+void osx_osd_interface::init(machine_manager &manager, running_machine &machine, osd_options &osx_osd_options) {
+    [m_core osd_init:&manager running_machine:&machine osd_options:&osx_osd_options];
 }
 
 void osx_osd_interface::update(bool skip_redraw) {

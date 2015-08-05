@@ -38,8 +38,9 @@
 
 #include "osx_osd_interface.h"
 
-@interface MAMEGameCore () <OEArcadeSystemResponderClient>
+@interface MAMEGameCore () <OEArcadeSystemResponderClient, NSObject>
 {
+    machine_manager *_manager;
     running_machine *_machine;
     render_target *_target;
     render_target *_uiTarget;
@@ -63,7 +64,8 @@
 }
 @end
 
-static void output_callback(delegate_late_bind *param, const char *format, va_list argptr)
+
+void osx_output::output_callback(delegate_late_bind *param, const char *format, va_list argptr)
 {
     NSLog(@"MAME: %@", [[NSString alloc] initWithFormat:[NSString stringWithUTF8String:format] arguments:argptr]);
 }
@@ -73,10 +75,10 @@ static void error_callback(running_machine &machine, const char *string)
     NSLog(@"MAME: %s", string);
 }
 
-static void mame_did_exit(running_machine *machine)
+static void mame_did_exit(machine_manager *manager, running_machine *machine)
 {
     osx_osd_interface &interface = dynamic_cast<osx_osd_interface &>(machine->osd());
-    [interface.core() osd_exit:machine];
+    [interface.core() osd_exit:manager running_machine:machine];
 }
 
 static INT32 joystick_get_state(void *device_internal, void *item_internal)
@@ -135,11 +137,12 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
     }
 }
 
-- (void)osd_init:(running_machine *)machine osd_options:(osd_options *)osx_osd_options {
+- (void)osd_init:(machine_manager *)manager running_machine:(running_machine *)machine osd_options:(osd_options *)osx_osd_options {
     _machine = machine;
     _osd_options = osx_osd_options;
-
-    _machine->add_notifier(MACHINE_NOTIFY_EXIT, machine_notify_delegate(FUNC(mame_did_exit), machine));
+    _manager = manager;
+    
+//    _machine->add_notifier(MACHINE_NOTIFY_EXIT, machine_notify_delegate(FUNC(mame_did_exit), manager));
     _machine->add_logerror_callback(error_callback);
     _machine->save().register_postsave(save_prepost_delegate(FUNC(_OESaveStateCallback), machine));
     _machine->save().register_postload(save_prepost_delegate(FUNC(_OESaveStateCallback), machine));
@@ -319,10 +322,9 @@ static INT32 joystick_get_state(void *device_internal, void *item_internal)
 
 //    mame_execute does not exist anymore; I believe the equivalent is machine_manager::execute() but I evidently have no idea how to properly call it.
     osx_osd_interface interface = osx_osd_interface(self, *osx_osd_options);
-    NSLog(@"self Object description is %@",[ICHObjectPrinter descriptionForObject:self]);
     machine_manager *manager = machine_manager::instance(emu_options, interface);
     NSLog(@"MAME: Starting game execution thread");
-    manager->execute();
+//    manager->execute();
     NSLog(@"MAME: Game execution thread exiting");
 }
 

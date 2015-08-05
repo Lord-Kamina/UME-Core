@@ -37,7 +37,7 @@ public:
     MAMEGameCore *core() const { return m_core; }
     osd_options &osx_osd_options() { return m_options; }
     
-    void init(running_machine &machine, osd_options &osx_osd_options);
+    void init(machine_manager &manager, running_machine &machine, osd_options &osx_osd_options);
     void update(bool skip_redraw);
     void update_audio_stream(const INT16 *buffer, int samples_this_frame);
 
